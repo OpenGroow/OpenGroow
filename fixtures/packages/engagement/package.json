@@ -1,0 +1,7 @@
+{
+  "name": "@opengroow/engagement",
+  "version": "0.0.1",
+  "openclaw": {
+    "claw": "CLAW.md"
+  }
+}

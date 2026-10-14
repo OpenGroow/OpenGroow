@@ -1,0 +1,17 @@
+{
+  "name": "@opengroow/openclaw-runtime-worker",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opengroow/hmac": "workspace:*",
+    "@opengroow/protocol": "workspace:*",
+    "@types/ws": "^8.5.12",
+    "ws": "^8.17.1"
+  }
+}

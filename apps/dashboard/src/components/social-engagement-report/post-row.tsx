@@ -1,0 +1,171 @@
+/**
+ * One observed post in the Engagement Report: who posted it, what the agent
+ * decided and why, and the comment it posted if any.
+ *
+ * Reads the canonical nested shape only — `normalizeReport` has already
+ * folded a flat-written post back into it before this renders.
+ */
+"use client";
+
+import { useState } from "react";
+import { DecisionBadge, ScoreBadge } from "./report-badges";
+import type { AnchorRepair, ReportPost } from "./report-schema";
+
+/** The resource-id without its package prefix: "com.x:id/g6s" -> "g6s". */
+function shortId(resourceId: string | null | undefined): string {
+  return resourceId ? resourceId.slice(resourceId.lastIndexOf("/") + 1) : "?";
+}
+
+function describeRepair(repair: AnchorRepair): string {
+  const confidence = typeof repair.confidence === "number" ? ` (${repair.confidence.toFixed(2)})` : "";
+  if (repair.outcome === "persisted") {
+    return `Anchor repaired · ${repair.field ?? "?"} ${shortId(repair.from)} → ${shortId(repair.to)}${confidence}`;
+  }
+  const proposal = repair.to ? ` ${shortId(repair.to)}${confidence}` : "";
+  return `Anchor repair failed · ${repair.field ?? "?"}${proposal} (${repair.outcome ?? "unknown"})`;
+}
+
+type PostRowProps = {
+  post: ReportPost;
+};
+
+export function PostRow({ post }: PostRowProps) {
+  const [expanded, setExpanded] = useState(false);
+  // `post` arrives already reshaped into the canonical nested shape by
+  // normalizeReport — a report written with these fields flat on the post
+  // has been folded back into postSummary/agentEvaluation there.
+  const accountHandle = post.postSummary?.accountHandle;
+  const decision = post.agentEvaluation?.decision;
+  const caption = post.postSummary?.caption;
+  const relevanceScore = post.agentEvaluation?.relevanceScore;
+  const relevanceReason = post.agentEvaluation?.relevanceReason;
+  const classifier = post.classifierEvaluation;
+  const visualDescription = post.visualDescription;
+  const visualDescriptionStatus = post.visualDescriptionStatus;
+  // Legacy actions-based comment (pre-commentAction schema, see LegacyPostAction)
+  const legacyCommentAction = Array.isArray(post.actions)
+    ? post.actions.find((a) => a.type === "comment")
+    : undefined;
+  const commentAction = post.agentEvaluation?.commentAction;
+
+  return (
+    <div className="rounded-[1.35rem] border border-[rgba(0,38,27,0.08)] bg-white p-4">
+      <div className="flex gap-3">
+        {/* Content */}
+        <div className="min-w-0 flex-1 grid gap-1.5">
+          {/* Top row: username + decision */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-[0.92rem] text-[var(--dashboard-ink)]">
+              @{accountHandle ?? "—"}
+            </span>
+            <DecisionBadge decision={decision} />
+            <ScoreBadge score={relevanceScore} />
+          </div>
+
+          {/* Caption (truncated unless expanded) */}
+          {caption && (
+            <p
+              className={`text-[0.85rem] leading-5 text-[var(--dashboard-ink-soft)] ${expanded ? "" : "line-clamp-2"}`}
+            >
+              {caption}
+            </p>
+          )}
+
+          {/* jev's answer for this post: the two probabilities, or why there
+              are none. Absent for reports written before jev was recorded. */}
+          {classifier && (
+            <p className="text-[0.78rem] font-medium text-[var(--dashboard-ink-muted)]">
+              {classifier.status === "available" &&
+              classifier.shouldLikeScore !== undefined &&
+              classifier.shouldCommentScore !== undefined
+                ? `jev · like ${classifier.shouldLikeScore.toFixed(2)} · comment ${classifier.shouldCommentScore.toFixed(2)}`
+                : `jev unavailable${classifier.failureReason ? ` (${classifier.failureReason})` : ""}`}
+            </p>
+          )}
+
+          {/* Drifted app anchors re-resolved (or not) while handling this post. */}
+          {post.anchorRepairs?.map((repair, i) => (
+            <p key={i} className="text-[0.78rem] font-medium text-[var(--dashboard-ink-muted)]">
+              {describeRepair(repair)}
+            </p>
+          ))}
+
+          {/* Visual Description: what the local VLM read off the post's media,
+              or why it produced nothing (Ollama down, no crop area...). Absent
+              entirely when the run never asked for one. */}
+          {(visualDescription || visualDescriptionStatus?.ok === false) && (
+            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2">
+              <p className="text-[0.82rem] text-[var(--dashboard-ink-soft)]">
+                <span className="font-semibold">Visual description: </span>
+                {visualDescription ? (
+                  <span
+                    className={`whitespace-pre-line text-[var(--dashboard-ink)] ${expanded ? "" : "line-clamp-3"}`}
+                  >
+                    {visualDescription}
+                  </span>
+                ) : (
+                  <span className="italic text-[var(--dashboard-ink-muted)]">
+                    unavailable{visualDescriptionStatus?.reason ? ` (${visualDescriptionStatus.reason})` : ""}
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
+
+          {/* Relevance reason */}
+          {relevanceReason && (
+            <p className="text-[0.82rem] italic text-[var(--dashboard-ink-soft)]">
+              {relevanceReason}
+            </p>
+          )}
+
+          {/* Comment action (agentEvaluation.commentAction). Also render when
+              only commentPostReason is set: a comment flow that was entered but
+              posted nothing still needs to show *why* it didn't. */}
+          {commentAction && (commentAction.commentsLiked?.length || commentAction.commentPosted || commentAction.commentPostReason) && (
+            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2 grid gap-1.5">
+              {commentAction.commentsLiked && commentAction.commentsLiked.length > 0 && (
+                <p className="text-[0.82rem] text-[var(--dashboard-ink-soft)]">
+                  <span className="font-semibold">Liked comments: </span>
+                  {commentAction.commentsLiked.map((i) => `#${i + 1}`).join(", ")}
+                </p>
+              )}
+              {commentAction.commentPosted && (
+                <p className="text-[0.82rem] text-[var(--dashboard-ink)]">
+                  <span className="font-semibold text-[var(--dashboard-ink-soft)]">Comment posted: </span>
+                  {commentAction.commentPosted}
+                </p>
+              )}
+              {commentAction.commentPostReason && (
+                <p className="text-[0.82rem] italic text-[var(--dashboard-ink-muted)]">
+                  {commentAction.commentPostReason}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Legacy comment posted (pre-commentAction schema) */}
+          {!commentAction && legacyCommentAction?.commentPosted && (
+            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2">
+              <p className="text-[0.82rem] text-[var(--dashboard-ink)]">
+                <span className="font-semibold text-[var(--dashboard-ink-soft)]">Comment: </span>
+                {legacyCommentAction.commentPosted}
+              </p>
+            </div>
+          )}
+
+          {/* Expand / collapse */}
+          {((caption && caption.length > 80) || (visualDescription && visualDescription.length > 160)) && (
+            <button
+              type="button"
+              onClick={() => { setExpanded((v) => !v); }}
+              className="self-start text-[0.78rem] font-semibold text-[var(--dashboard-primary)] hover:underline"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

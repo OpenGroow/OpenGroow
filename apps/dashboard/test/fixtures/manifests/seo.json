@@ -1,0 +1,202 @@
+{
+  "id": "@opengroow/seo",
+  "name": "SEO Agent",
+  "description": "A specialised marketing agent for search engine optimisation: site audits, SERP analysis, keyword research, article generation, and image generation.",
+  "category": "marketing",
+  "mcpServers": [
+    {
+      "name": "article-mcp",
+      "transport": "streamable-http",
+      "url": "http://host.docker.internal:4000/mcp",
+      "activationUrl": "http://localhost:4000/mcp",
+      "publicBaseUrl": "http://localhost:4000",
+      "callTimeout": 600000
+    }
+  ],
+  "requirements": [
+    {
+      "key": "apiKey",
+      "type": "password",
+      "label": "API key",
+      "required": true,
+      "immutable": true
+    }
+  ],
+  "runContext": {
+    "heading": "SEO Runtime Context",
+    "lines": [
+      "runId: `{run.id}`",
+      "sinceDate: `{date.today-7d}` (today - 7 days, for internal_linking missions)"
+    ]
+  },
+  "statusCheck": {
+    "server": "article-mcp",
+    "mcpTool": "get_project_status"
+  },
+  "missionTypes": [
+    {
+      "type": "create_article",
+      "agentsMd": "create_article.md",
+      "label": "Create article",
+      "payload": "{\"keyword\":\"\"}",
+      "review": {
+        "kind": "markdown",
+        "server": "article-mcp",
+        "path": "/articles/{id}",
+        "coverPath": "/images/{id}/cover",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Approve",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/articles/{id}/approve"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "inputs": [
+              {
+                "key": "publishDate",
+                "label": "Publish date",
+                "type": "datetime-local",
+                "required": false
+              }
+            ],
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/articles/{id}/publish",
+              "body": {
+                "publishDate": "{input.publishDate}"
+              },
+              "responseIndexingField": "indexing"
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      },
+      "blockers": [
+        {
+          "code": "keyword_batch_pending",
+          "label": "Keyword batch pending human validation",
+          "resolutionKind": "link"
+        }
+      ]
+    },
+    {
+      "type": "internal_linking",
+      "agentsMd": "internal_linking.md",
+      "label": "Internal linking",
+      "payload": "{\"since\":\"\"}",
+      "review": {
+        "kind": "markdown",
+        "server": "article-mcp",
+        "path": "/linking-jobs/{id}",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Validate",
+            "requiredStatus": "to_validate",
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Merge",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/linking-jobs/{id}/merge"
+            },
+            "transition": "done"
+          }
+        ]
+      }
+    }
+  ],
+  "generativeMcpCall": {
+    "create_article": { "toolName": "generate_article" }
+  },
+  "externalJobsByMissionType": {
+    "create_article": {
+      "plan_article": {
+        "server": "article-mcp",
+        "mcpTool": "get_plan_status",
+        "statusField": "status",
+        "terminalStates": {
+          "completed": [
+            "completed",
+            "skipped"
+          ],
+          "failed": [
+            "failed"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "markdown",
+        "onComplete": "resume_mission"
+      },
+      "generate_article": {
+        "server": "article-mcp",
+        "mcpTool": "get_article_status",
+        "statusField": "status",
+        "resultIdField": "articleId",
+        "terminalStates": {
+          "completed": [
+            "completed"
+          ],
+          "failed": [
+            "failed",
+            "skipped"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "markdown",
+        "onComplete": "terminal"
+      }
+    },
+    "internal_linking": {
+      "generate_internal_links": {
+        "server": "article-mcp",
+        "mcpTool": "get_internal_linking_status",
+        "statusField": "status",
+        "resultIdField": "jobId",
+        "terminalStates": {
+          "completed": [
+            "completed"
+          ],
+          "failed": [
+            "failed"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "markdown",
+        "onComplete": "terminal"
+      }
+    }
+  }
+}

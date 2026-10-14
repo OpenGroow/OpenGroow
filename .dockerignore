@@ -1,0 +1,49 @@
+# VCS
+.git
+.gitignore
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+.next
+**/.next
+dist
+**/dist
+build
+**/build
+coverage
+**/coverage
+
+# Caches
+.turbo
+.pnpm-store
+.cache
+**/.cache
+.parcel-cache
+**/.parcel-cache
+
+# Logs and temp
+*.log
+tmp
+temp
+.DS_Store
+
+# Local dev-generated mission artifacts (screenshots, etc.) — never needed
+# in an image build, and large enough to bloat the build context/cache.
+apps/openclaw-connect/missions
+apps/openclaw-connect/*.jpg
+apps/openclaw-connect/output/*.jpg
+
+# Local env / editor state
+.env
+**/.env
+.env.*
+**/.env.*
+!.env.local.example
+!**/.env.local.example
+!.env.production.example
+!**/.env.production.example
+.idea
+.vscode

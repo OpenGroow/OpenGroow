@@ -1,0 +1,5 @@
+{
+  "name": "@acme/seo",
+  "version": "0.0.1",
+  "openclaw": { "claw": "CLAW.md" }
+}

@@ -1,0 +1,425 @@
+{
+  "id": "@opengroow/video-demo",
+  "name": "Video Demo Agent",
+  "description": "Produces videos through video-mcp: LYM letter and marketing videos and chat-mock videos, from authored Letter or chat manifests.",
+  "category": "marketing",
+  "mcpServers": [
+    {
+      "name": "video-mcp",
+      "transport": "streamable-http",
+      "url": "http://host.docker.internal:4100/mcp",
+      "activationUrl": "http://localhost:4100/mcp",
+      "publicBaseUrl": "http://localhost:4100",
+      "callTimeout": 600000
+    }
+  ],
+  "requirements": [
+    {
+      "key": "apiKey",
+      "type": "password",
+      "label": "API key",
+      "required": true,
+      "immutable": true
+    }
+  ],
+  "runContext": {
+    "heading": "Video Runtime Context",
+    "lines": [
+      "runId: `{run.id}`",
+      "defaultFormat: `{config.defaultFormat}`"
+    ]
+  },
+  "missionTypes": [
+    {
+      "type": "lym_create_letter_video",
+      "agentsMd": "lym_create_letter_video.md",
+      "label": "Create letter video",
+      "payload": "{\"platforms\":[\"tiktok\",\"instagram\"],\"format\":\"hook-plus-letter\"}",
+      "fields": [
+        {
+          "key": "format",
+          "label": "Format",
+          "type": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "hook-plus-letter",
+              "label": "Hook + letter"
+            },
+            {
+              "value": "letter-only",
+              "label": "Letter only"
+            }
+          ]
+        }
+      ],
+      "review": {
+        "kind": "video",
+        "server": "video-mcp",
+        "path": "/videos/{id}/final",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Validate",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/validate"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/publish",
+              "body": {
+                "platforms": "{payload.platforms}"
+              }
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject with feedback",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    },
+    {
+      "type": "lym_create_marketing_video",
+      "agentsMd": "lym_create_marketing_video.md",
+      "label": "Create marketing video",
+      "payload": "{\"platforms\":[\"tiktok\",\"instagram\"],\"category\":\"\",\"occasion\":\"\"}",
+      "fields": [
+        {
+          "key": "category",
+          "label": "Category",
+          "type": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "love-letter",
+              "label": "Love letter"
+            },
+            {
+              "value": "anniversary",
+              "label": "Anniversary"
+            },
+            {
+              "value": "apology",
+              "label": "Apology"
+            },
+            {
+              "value": "birthday",
+              "label": "Birthday"
+            },
+            {
+              "value": "long-distance",
+              "label": "Long distance"
+            },
+            {
+              "value": "missing-you",
+              "label": "Missing you"
+            },
+            {
+              "value": "encouragement",
+              "label": "Encouragement"
+            },
+            {
+              "value": "congratulations",
+              "label": "Congratulations"
+            },
+            {
+              "value": "proposal",
+              "label": "Proposal"
+            },
+            {
+              "value": "new-beginning",
+              "label": "New beginning"
+            }
+          ]
+        },
+        {
+          "key": "occasion",
+          "label": "Occasion",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "review": {
+        "kind": "video",
+        "server": "video-mcp",
+        "path": "/videos/{id}/final",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Validate",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/validate"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/publish",
+              "body": {
+                "platforms": "{payload.platforms}"
+              }
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject with feedback",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_chat_mock_video",
+      "agentsMd": "create_chat_mock_video.md",
+      "label": "Create chat mock video",
+      "payload": "{\"platforms\":[\"tiktok\",\"instagram\"],\"theme\":\"\",\"personaDescriptionA\":\"\",\"personaDescriptionB\":\"\",\"avatarLabelA\":\"\",\"avatarLabelB\":\"\",\"turnCount\":8,\"language\":\"en\"}",
+      "fields": [
+        {
+          "key": "theme",
+          "label": "Theme",
+          "type": "select",
+          "options": [
+            {
+              "value": "hurt",
+              "label": "Hurt"
+            },
+            {
+              "value": "pattern",
+              "label": "Pattern"
+            },
+            {
+              "value": "decide",
+              "label": "Decide"
+            },
+            {
+              "value": "dialogue",
+              "label": "Dialogue"
+            },
+            {
+              "value": "overwhelming",
+              "label": "Overwhelming"
+            }
+          ]
+        },
+        {
+          "key": "personaDescriptionA",
+          "label": "Partner A — situation & intent",
+          "type": "text"
+        },
+        {
+          "key": "personaDescriptionB",
+          "label": "Partner B — situation & intent",
+          "type": "text"
+        },
+        {
+          "key": "avatarLabelA",
+          "label": "Partner A — display name",
+          "type": "text"
+        },
+        {
+          "key": "avatarLabelB",
+          "label": "Partner B — display name",
+          "type": "text"
+        },
+        {
+          "key": "turnCount",
+          "label": "Number of turns",
+          "type": "number",
+          "required": true,
+          "min": 3,
+          "max": 8
+        },
+        {
+          "key": "language",
+          "label": "Language",
+          "type": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "en",
+              "label": "English"
+            },
+            {
+              "value": "fr",
+              "label": "French"
+            }
+          ]
+        }
+      ],
+      "review": {
+        "kind": "video",
+        "server": "video-mcp",
+        "path": "/videos/{id}/final",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Validate",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/validate"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "video-mcp",
+              "method": "POST",
+              "path": "/videos/{id}/publish",
+              "body": {
+                "platforms": "{payload.platforms}"
+              }
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject with feedback",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    }
+  ],
+  "generativeMcpCall": {
+    "lym_create_letter_video": {
+      "toolName": "produce_video"
+    },
+    "lym_create_marketing_video": {
+      "toolName": "produce_video"
+    },
+    "create_chat_mock_video": {
+      "toolName": "produce_video"
+    }
+  },
+  "externalJobsByMissionType": {
+    "lym_create_letter_video": {
+      "produce_video": {
+        "server": "video-mcp",
+        "mcpTool": "get_run_status",
+        "statusField": "status",
+        "terminalStates": {
+          "completed": [
+            "completed",
+            "success"
+          ],
+          "failed": [
+            "failed",
+            "error"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "video",
+        "onComplete": "terminal",
+        "onFail": "resume_mission"
+      }
+    },
+    "lym_create_marketing_video": {
+      "produce_video": {
+        "server": "video-mcp",
+        "mcpTool": "get_run_status",
+        "statusField": "status",
+        "terminalStates": {
+          "completed": [
+            "completed",
+            "success"
+          ],
+          "failed": [
+            "failed",
+            "error"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "video",
+        "onComplete": "terminal",
+        "onFail": "resume_mission"
+      }
+    },
+    "create_chat_mock_video": {
+      "produce_video": {
+        "server": "video-mcp",
+        "mcpTool": "get_run_status",
+        "statusField": "status",
+        "terminalStates": {
+          "completed": [
+            "completed",
+            "success"
+          ],
+          "failed": [
+            "failed",
+            "error"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "video",
+        "onComplete": "terminal",
+        "onFail": "resume_mission"
+      }
+    }
+  }
+}

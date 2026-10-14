@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+  - plugins/*
+allowBuilds:
+  '@google/genai': false
+  '@parcel/watcher': true
+  esbuild: true
+  koffi: false
+  msgpackr-extract: true
+  openclaw: false
+  protobufjs: false
+  sharp: true
+  tree-sitter-bash: false

@@ -1,0 +1,27 @@
+{
+  "name": "@opengroow/convex-app",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cd ../.. && npx convex dev",
+    "codegen": "cd ../.. && npx convex codegen",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "convex": "^1.32.0",
+    "convex-test": "^0.0.51"
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "^0.11.2",
+    "@convex-dev/migrations": "^0.3.5",
+    "@opengroow/agent-templates": "workspace:*",
+    "@opengroow/hmac": "workspace:*",
+    "@opengroow/protocol": "workspace:*",
+    "@opengroow/reliability": "workspace:*",
+    "better-auth": "1.5.3",
+    "convex-helpers": "^0.1.119",
+    "zod": "^4.4.3"
+  }
+}

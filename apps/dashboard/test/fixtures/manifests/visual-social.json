@@ -1,0 +1,73 @@
+{
+  "id": "@opengroow/visual-social",
+  "name": "Visual social fixture",
+  "description": "A carousel producer fixture.",
+  "category": "marketing",
+  "mcpServers": [
+    {
+      "name": "visual-mcp",
+      "transport": "streamable-http",
+      "url": "http://localhost:4200/mcp"
+    }
+  ],
+  "requirements": [
+    {
+      "key": "apiKey",
+      "type": "password",
+      "label": "Project API key",
+      "required": true,
+      "immutable": true
+    }
+  ],
+  "statusCheck": {
+    "server": "visual-mcp",
+    "mcpTool": "status_check"
+  },
+  "missionTypes": [
+    {
+      "type": "create_carousel",
+      "label": "Create carousel",
+      "agentsMd": "create_carousel.md",
+      "contextProviders": [
+        "observation-production-source"
+      ],
+      "payload": "{}",
+      "review": {
+        "kind": "image",
+        "server": "visual-mcp",
+        "path": "/carousels/{id}",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Approve and publish",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "visual-mcp",
+              "method": "POST",
+              "path": "/carousels/{id}/publish"
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject with feedback",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    }
+  ]
+}

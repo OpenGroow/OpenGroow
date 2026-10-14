@@ -1,0 +1,22 @@
+{
+  "name": "@opengroow/broker",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@types/ws": "^8.5.12",
+    "@opengroow/hmac": "workspace:*",
+    "@opengroow/protocol": "workspace:*",
+    "tsx": "^4.19.2",
+    "ws": "^8.17.1",
+    "hono": "^4.6.15",
+    "convex": "^1.0.0"
+  }
+}

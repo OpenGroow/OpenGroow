@@ -1,0 +1,8 @@
+# The index decides what installs on users' deployments, and workflows hold the
+# release permissions: both need a reviewer who is a code owner (enable
+# "Require review from Code Owners" in the branch protection of main).
+# Replace the team below with the organisation's maintainers.
+/index.json        @zgababa
+/.github/          @zgababa
+/tools/            @zgababa
+/packages/         @zgababa

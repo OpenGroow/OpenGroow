@@ -1,0 +1,58 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "nodes": {
+      "commands": {
+        "allow": ["system.run", "system.run.prepare", "system.which"]
+      }
+    }
+  },
+
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+
+  "agents": {
+    "defaults": {
+      "heartbeat": { "every": "0m" }
+    }
+  },
+
+  "tools": {
+    "exec": {
+      "notifyOnExit": false
+    },
+    "web": {
+      "search": {
+        "enabled": false
+      },
+      "fetch": {
+        "enabled": true
+      }
+    }
+  },
+
+  "plugins": {
+    "allow": ["social-engagement-report-sync"],
+    "entries": {
+      "memory-core": {
+        "config": {
+          "dreaming": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+
+  "logging": {
+    "level": "info",
+    "consoleLevel": "info"
+  }
+}

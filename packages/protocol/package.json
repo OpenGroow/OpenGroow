@@ -1,0 +1,12 @@
+{
+  "name": "@opengroow/protocol",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runtime-workspace": "./src/runtime-workspace.ts",
+    "./optional-plugins": "./src/optional-plugins.ts"
+  }
+}

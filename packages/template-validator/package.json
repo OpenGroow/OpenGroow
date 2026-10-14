@@ -1,0 +1,27 @@
+{
+  "name": "@opengroow/template-validator",
+  "version": "0.1.0",
+  "description": "Validate OpenGroow Template packages and hub indexes with the reader the product uses at installation",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "opengroow-template-validate": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/cli.js \"--banner:js=#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && chmod +x dist/cli.js",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "yaml": "^2.9.1"
+  }
+}

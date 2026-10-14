@@ -1,0 +1,69 @@
+# `pnpm start` overlay (#718): the whole stack in Docker from PUBLISHED images.
+# Nothing is built: `scripts/start.sh` runs `docker compose pull` then `up`.
+#
+# Stacked after the two other fragments (scripts/start.sh):
+#   -f apps/convex/docker/docker-compose.yml -f docker-compose.yml -f docker-compose.start.yml
+#
+# Image references come from OPENCLAW_IMAGE_REGISTRY (registry + organization,
+# e.g. ghcr.io/<org>, no trailing slash) and OPENCLAW_IMAGE_TAG (default
+# latest). There is deliberately no default registry: `scripts/start-check.mjs`
+# refuses to start without it.
+services:
+  convex-bootstrap:
+    build: !reset null
+    image: ${OPENCLAW_IMAGE_REGISTRY:?set OPENCLAW_IMAGE_REGISTRY in .env}/opengroow-convex-bootstrap:${OPENCLAW_IMAGE_TAG:-latest}
+    environment:
+      # openclaw-local-control is a container of this stack here (not a host
+      # process as under `pnpm dev`), reached by its service name.
+      - OPENCLAW_CONTROL_URL=http://openclaw-local-control:4610
+      # Same secret as openclaw-local-control's key "convex" (never the dev default).
+      - OPENCLAW_CONTROL_KEY_ID=convex
+      - OPENCLAW_CONTROL_SECRET=${OPENCLAW_START_CONTROL_SECRET:?run pnpm run setup}
+    depends_on:
+      openclaw-local-control:
+        condition: service_started
+
+  broker:
+    build: !reset null
+    image: ${OPENCLAW_IMAGE_REGISTRY:?set OPENCLAW_IMAGE_REGISTRY in .env}/opengroow-broker:${OPENCLAW_IMAGE_TAG:-latest}
+
+  openclaw-connect:
+    build: !reset null
+    image: ${OPENCLAW_IMAGE_REGISTRY:?set OPENCLAW_IMAGE_REGISTRY in .env}/opengroow-openclaw-connect:${OPENCLAW_IMAGE_TAG:-latest}
+
+  dashboard:
+    build: !reset null
+    image: ${OPENCLAW_IMAGE_REGISTRY:?set OPENCLAW_IMAGE_REGISTRY in .env}/opengroow-dashboard:${OPENCLAW_IMAGE_TAG:-latest}
+
+  # Creates one OpenClaw Instance per Project by running `docker compose -p
+  # openclaw-<id> up -d` against the HOST Docker daemon.
+  #
+  # WHY THE DOCKER SOCKET IS MOUNTED: this service must create, restart and
+  # delete the containers of every Project, and `docker cp`/restart the broker.
+  # Access to /var/run/docker.sock is root-equivalent on this machine (anyone
+  # who can call it can start a privileged container mounting the host
+  # filesystem). Acceptable for self-hosting, where you own the machine; do
+  # not expose this stack to untrusted users. Not published on any host port:
+  # only convex-backend reaches it, on the compose network, with HMAC auth.
+  # A socket proxy was evaluated and rejected, see docs/START.md.
+  openclaw-local-control:
+    image: ${OPENCLAW_IMAGE_REGISTRY:?set OPENCLAW_IMAGE_REGISTRY in .env}/opengroow-openclaw-local-control:${OPENCLAW_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - ${OPENCLAW_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      # Same absolute path inside and outside the container (see docs/START.md,
+      # "compose path identity"): `docker compose` runs here but the daemon
+      # resolves paths on the host. scripts/start.sh exports the host path.
+      - ${OPENCLAW_HOST_DOCKER_DIR:?run through scripts/start.sh (pnpm start)}:${OPENCLAW_HOST_DOCKER_DIR}:ro
+    environment:
+      OPENCLAW_LOCAL_CONTROL_DOCKER_DIR: ${OPENCLAW_HOST_DOCKER_DIR}
+      OPENCLAW_LOCAL_CONTROL_PORT: "4610"
+      # Built from the generated secret (`pnpm run setup` writes it to .env);
+      # no default, and the image refuses the built-in "convex-secret" anyway.
+      OPENCLAW_LOCAL_CONTROL_REQUIRE_KEYS: "1"
+      OPENCLAW_LOCAL_CONTROL_KEYS: '{"convex":{"secret":"${OPENCLAW_START_CONTROL_SECRET:?run pnpm run setup (generates OPENCLAW_START_CONTROL_SECRET in .env)}"}}'
+      OPENCLAW_LOCAL_GATEWAY_IMAGE_TAG: ${OPENCLAW_IMAGE_REGISTRY}/openclaw-gateway:${OPENCLAW_IMAGE_TAG:-latest}
+      OPENCLAW_LOCAL_RUNTIME_WORKER_IMAGE_TAG: ${OPENCLAW_IMAGE_REGISTRY}/openclaw-runtime-worker:${OPENCLAW_IMAGE_TAG:-latest}
+      # Instances are separate Compose projects: they reach the broker through
+      # the host (published on 127.0.0.1:4300), as under `pnpm dev`.
+      BROKER_WS_URL: ${BROKER_WS_URL:-ws://host.docker.internal:4300/openclaw}

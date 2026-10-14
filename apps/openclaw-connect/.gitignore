@@ -1,0 +1,5 @@
+*.jpg
+*.png
+*.b64
+.session
+missions/

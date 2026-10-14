@@ -1,0 +1,405 @@
+schemaVersion: 1
+category: social
+mcpServers:
+  - name: feed-mcp
+    transport: streamable-http
+    url: http://host.docker.internal:4400/mcp
+    activationUrl: http://localhost:4400/mcp
+    callTimeout: 120000
+requirements:
+  - key: apiKey
+    type: password
+    label: Enrichment API key
+    required: true
+    immutable: true
+  - key: classifierApiKey
+    type: password
+    label: Classifier API key
+    required: true
+    deliveredToInstance: true
+  - key: accountBio
+    type: textarea
+    label: Account description
+    required: true
+    placeholder: A cooking account sharing quick weeknight recipes.
+  - key: likeWhen
+    type: textarea
+    label: Like when
+    required: true
+    placeholder: Quick recipes, one-pan meals, kitchen tips...
+  - key: avoid
+    type: textarea
+    label: Avoid even if related
+    required: false
+    placeholder: Sponsored posts, even when the topic is related.
+  - key: commentWhen
+    label: Comment when
+    type: textarea
+    required: false
+    placeholder: Describe the cases where commenting adds genuine value...
+reconfigurable: true
+missionTypes:
+  - type: engage
+    label: Engage
+    agentsMd: engage.md
+    payload: '{"variant": "a", "sessionDurationMs": 480000}'
+    fields:
+      - key: variant
+        label: Variant
+        type: select
+        required: true
+        options:
+          - value: a
+            label: Variant A
+          - value: b
+            label: Variant B
+    sessionDurationMs:
+      min: 480000
+      max: 480000
+    blockers:
+      - code: account_unavailable
+        label: Account unavailable
+        resolutionKind: execution_device
+      - code: device_blocked
+        label: Device blocked by an unexpected screen
+        resolutionKind: execution_device
+exclusiveResources:
+  shared-device:
+    - engage
+jobTypes:
+  - type: source_ingestion
+    sourceTypes:
+      - video-post
+      - image-post
+sources:
+  - type: video-post
+    label: Video post
+    family: social-video
+    agentsMd: sources/video-post.md
+    analysisSchema:
+      type: object
+      properties:
+        postUrl:
+          type: string
+          minLength: 1
+          title: Post URL
+        accountHandle:
+          type: string
+          minLength: 1
+          title: Account handle
+        caption:
+          type: string
+          title: Caption
+        hashtags:
+          type: array
+          items:
+            type: string
+          title: Hashtags
+        decision:
+          type: string
+          enum:
+            - liked
+            - commented
+            - liked_and_commented
+          title: Agent decision
+        likeCount:
+          type: integer
+          minimum: 0
+          title: Likes
+        viewCount:
+          type: integer
+          minimum: 0
+          title: Views
+        commentCount:
+          type: integer
+          minimum: 0
+          title: Comments
+        shareCount:
+          type: integer
+          minimum: 0
+          title: Shares
+        saveCount:
+          type: integer
+          minimum: 0
+          title: Saves
+        creativeFeatures:
+          type: object
+          title: Creative features
+          properties:
+            mediaType:
+              type: string
+              enum:
+                - video
+                - image
+                - carousel
+              title: Media type
+            format:
+              type: string
+              title: Format
+            duration:
+              type: number
+              minimum: 0
+              title: Duration (seconds)
+            hasTextOverlay:
+              type: boolean
+              title: Text overlay
+            facecam:
+              type: boolean
+              title: Facecam
+            visualStyle:
+              type: array
+              items:
+                type: string
+              title: Visual style
+            textStrategy:
+              type: object
+              title: Text strategy
+              properties:
+                persistence:
+                  type: string
+                  enum:
+                    - static
+                    - changing
+                  title: Persistence
+                position:
+                  type: string
+                  title: Position
+              required:
+                - persistence
+              additionalProperties: false
+            mediaStructure:
+              type: string
+              title: Media structure
+          additionalProperties: false
+        structureType:
+          type: string
+          enum:
+            - narrative
+            - montage
+            - other
+          title: Structure type
+        hook:
+          type: string
+          title: Hook
+        pacing:
+          type: string
+          title: Pacing
+        narrativeStructure:
+          type: string
+          title: Narrative structure
+        payoff:
+          type: string
+          title: Payoff
+        cta:
+          type: string
+          title: Call to action
+        transcriptRef:
+          type: string
+          title: Transcript reference
+        frameRefs:
+          type: array
+          items:
+            type: string
+          title: Frame references
+        relevanceReason:
+          type: string
+          title: Why it was retained
+        trigger:
+          type: string
+          enum:
+            - liked
+            - saved
+            - commented
+            - high_performance
+          title: Trigger
+        creativeMechanic:
+          type: string
+          title: Creative mechanic
+        informationCarrier:
+          type: array
+          items:
+            type: string
+            enum:
+              - text
+              - visuals
+              - speech
+          title: Information carrier
+      required:
+        - postUrl
+        - accountHandle
+        - decision
+      additionalProperties: false
+  - type: image-post
+    label: Image post
+    family: social-video
+    agentsMd: sources/image-post.md
+    analysisSchema:
+      type: object
+      properties:
+        postUrl:
+          type: string
+          minLength: 1
+          title: Post URL
+        accountHandle:
+          type: string
+          minLength: 1
+          title: Account handle
+        caption:
+          type: string
+          title: Caption
+        hashtags:
+          type: array
+          items:
+            type: string
+          title: Hashtags
+        decision:
+          type: string
+          enum:
+            - liked
+            - commented
+            - liked_and_commented
+          title: Agent decision
+        likeCount:
+          type: integer
+          minimum: 0
+          title: Likes
+        viewCount:
+          type: integer
+          minimum: 0
+          title: Views
+        commentCount:
+          type: integer
+          minimum: 0
+          title: Comments
+        shareCount:
+          type: integer
+          minimum: 0
+          title: Shares
+        saveCount:
+          type: integer
+          minimum: 0
+          title: Saves
+        creativeFeatures:
+          type: object
+          title: Creative features
+          properties:
+            mediaType:
+              type: string
+              enum:
+                - video
+                - image
+                - carousel
+              title: Media type
+            format:
+              type: string
+              title: Format
+            duration:
+              type: number
+              minimum: 0
+              title: Duration (seconds)
+            hasTextOverlay:
+              type: boolean
+              title: Text overlay
+            facecam:
+              type: boolean
+              title: Facecam
+            visualStyle:
+              type: array
+              items:
+                type: string
+              title: Visual style
+            textStrategy:
+              type: object
+              title: Text strategy
+              properties:
+                persistence:
+                  type: string
+                  enum:
+                    - static
+                    - changing
+                  title: Persistence
+                position:
+                  type: string
+                  title: Position
+              required:
+                - persistence
+              additionalProperties: false
+            mediaStructure:
+              type: string
+              title: Media structure
+          additionalProperties: false
+        structureType:
+          type: string
+          enum:
+            - narrative
+            - montage
+            - other
+          title: Structure type
+        hook:
+          type: string
+          title: Hook
+        pacing:
+          type: string
+          title: Pacing
+        narrativeStructure:
+          type: string
+          title: Narrative structure
+        payoff:
+          type: string
+          title: Payoff
+        cta:
+          type: string
+          title: Call to action
+        transcriptRef:
+          type: string
+          title: Transcript reference
+        frameRefs:
+          type: array
+          items:
+            type: string
+          title: Frame references
+        relevanceReason:
+          type: string
+          title: Why it was retained
+        trigger:
+          type: string
+          enum:
+            - liked
+            - saved
+            - commented
+            - high_performance
+          title: Trigger
+        creativeMechanic:
+          type: string
+          title: Creative mechanic
+        informationCarrier:
+          type: array
+          items:
+            type: string
+            enum:
+              - text
+              - visuals
+              - speech
+          title: Information carrier
+      required:
+        - postUrl
+        - accountHandle
+        - decision
+      additionalProperties: false
+externalJobsBySource:
+  video-post:
+    analyze_video:
+      server: feed-mcp
+      mcpTool: get_analyze_video_status
+      statusField: status
+      outputIsRoot: true
+      terminalStates:
+        completed:
+          - completed
+        failed:
+          - failed
+      unavailableErrorCodes:
+        - video_unavailable
+        - video_private
+openclawProfile:
+  execNode: My Computer

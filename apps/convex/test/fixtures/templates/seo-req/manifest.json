@@ -1,0 +1,67 @@
+{
+  "id": "seo-req",
+  "name": "SEO Agent (required-input fixture)",
+  "description": "Test fixture: an SEO-like template with one required action input.",
+  "category": "test",
+  "visibility": "development",
+  "mcpServers": [
+    {
+      "name": "article-mcp",
+      "transport": "streamable-http",
+      "url": "http://host.docker.internal:4000/mcp",
+      "activationUrl": "http://localhost:4000/mcp"
+    }
+  ],
+  "missionTypes": [
+    {
+      "type": "create_article",
+      "label": "Create article",
+      "agentsMd": "create_article.md",
+      "payload": "{}",
+      "review": {
+        "kind": "markdown",
+        "server": "article-mcp",
+        "path": "/articles/{id}",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Approve with Note",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "note",
+                "label": "Approval note",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/articles/{id}/approve"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "reject",
+            "label": "Reject",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    }
+  ]
+}

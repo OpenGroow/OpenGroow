@@ -1,0 +1,16 @@
+services:
+  openclaw-gateway:
+    volumes:
+      - openclaw-local-home:/home/node/.openclaw
+      - openclaw-local-workspace:/home/node/.openclaw/workspace
+      - openclaw-runtime-sock:/home/node/.openclaw/runtime
+
+  openclaw-runtime-worker:
+    volumes:
+      - openclaw-local-home:/home/node/.openclaw
+      - openclaw-local-workspace:/home/node/.openclaw/workspace
+      - openclaw-runtime-sock:/home/node/.openclaw/runtime
+
+volumes:
+  openclaw-local-home:
+  openclaw-local-workspace:

@@ -1,0 +1,64 @@
+name: Release
+
+# Pushing a tag `<name>@<version>` (e.g. seo@1.2.0) releases packages/<name>:
+# `pnpm pack` it, attach the .tgz to a GitHub Release, and open a
+# PR that points the package's entry in index.json at the new asset and digest.
+# The PR is the human gate: the index decides what installs on users'
+# deployments. No secret is used; only the workflow's own GITHUB_TOKEN.
+
+on:
+  push:
+    tags:
+      - "*@*"
+
+# Nothing by default; the job asks for exactly what it needs.
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release, push the index branch
+      pull-requests: write # open the index PR
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Read the tag
+        id: tag
+        run: |
+          if ! [[ "$TAG" =~ ^([a-z0-9][a-z0-9-]*)@([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::Tag \"$TAG\" is not <name>@<semver>"
+            exit 1
+          fi
+          echo "name=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true # needed to push the index branch below
+      - name: Pack
+        id: pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/dist"
+          npm pack "./packages/${{ steps.tag.outputs.name }}" --pack-destination "$RUNNER_TEMP/dist"
+          file=$(ls "$RUNNER_TEMP"/dist/*.tgz)
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "sha256:$(sha256sum "$file" | cut -d' ' -f1)"
+      - name: Create the release with the asset
+        run: |
+          gh release create "$TAG" "${{ steps.pack.outputs.file }}" --title "$TAG" \
+            --notes "Release asset: $(basename '${{ steps.pack.outputs.file }}')"
+      - name: Point index.json at the release (PR)
+        run: |
+          git fetch origin main
+          git switch -c "release/$TAG" origin/main
+          node tools/update-index.mjs --index index.json \
+            --package "packages/${{ steps.tag.outputs.name }}" \
+            --repository "$GITHUB_REPOSITORY" --tag "$TAG" \
+            --file "${{ steps.pack.outputs.file }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release $TAG"
+          git push origin "release/$TAG"
+          gh pr create --base main --head "release/$TAG" \
+            --title "Release $TAG" \
+            --body "Points the index entry at the new release asset. The digest is the sha256 of the asset attached to the $TAG release; review it against the release before merging."

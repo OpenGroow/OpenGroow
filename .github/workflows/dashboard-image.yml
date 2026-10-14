@@ -1,0 +1,72 @@
+name: Build Dashboard Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/dashboard/**"
+      - "apps/convex/**"
+      - "packages/hmac/**"
+      - "packages/protocol/**"
+      - "packages/agent-templates/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/dashboard-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # Registry + organization the image is published to. Set the repository
+  # variable IMAGE_REGISTRY (e.g. ghcr.io/<org>) to publish elsewhere; the
+  # default is GHCR under this repository's owner. For a registry other than
+  # GHCR, also set the secrets REGISTRY_USERNAME / REGISTRY_PASSWORD.
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY || format('ghcr.io/{0}', github.repository_owner) }}
+  IMAGE_NAME: opengroow-dashboard
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image reference
+        id: image
+        run: |
+          registry="${IMAGE_REGISTRY,,}"
+          echo "host=${registry%%/*}" >> "$GITHUB_OUTPUT"
+          echo "ref=${registry}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.image.outputs.host }}
+          username: ${{ secrets.REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.ref }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

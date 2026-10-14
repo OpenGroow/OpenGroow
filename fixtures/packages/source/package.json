@@ -1,0 +1,7 @@
+{
+  "name": "@opengroow/source",
+  "version": "1.0.0",
+  "openclaw": {
+    "claw": "CLAW.md"
+  }
+}

@@ -1,0 +1,5 @@
+# ADR-037: Agent Templates declare their blockers through one generic contract
+
+**Status:** Accepted
+
+Blocking conditions belong to the Mission type that can produce them, not to a platform-wide list: the SEO Template can declare a pending keyword-batch validation for `create_article`, while the Social Engagement Template can declare an unavailable Instagram account for `engage`. Every Mission type therefore declares its own blocker vocabulary and resolution kind inside its `missionTypes[]` entry, and a Run carries the selected blocker code, its runtime message, and any resolution data. Megaclaw validates the Agent's `blockerCode` against that declaration, stores this common result shape, maps it to the Mission's `blocked` status, and renders a generic Blocked surface; it does not contain per-Template blocker branches or arbitrary custom UI. The existing SEO dashboard blocker and the new Instagram account blocker must use this same contract. A new resolution kind may require one generic renderer, but never a new platform branch for each Agent.

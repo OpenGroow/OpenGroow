@@ -1,0 +1,122 @@
+{
+  "id": "@opengroow/openmontage-agent",
+  "name": "Reel producer fixture",
+  "description": "A reel producer fixture.",
+  "category": "marketing",
+  "mcpServers": [
+    {
+      "name": "media-mcp",
+      "transport": "streamable-http",
+      "url": "http://localhost:4500/mcp"
+    }
+  ],
+  "requirements": [
+    {
+      "key": "apiKey",
+      "type": "password",
+      "label": "Project API key",
+      "required": true,
+      "immutable": true
+    }
+  ],
+  "missionTypes": [
+    {
+      "type": "create_reel",
+      "label": "Create reel",
+      "agentsMd": "create_reel.md",
+      "contextProviders": [
+        "observation-production-source"
+      ],
+      "payload": "{\"shots\":[],\"voiceover\":null,\"music\":{\"moodPrompt\":\"\"},\"publish\":{\"platforms\":[\"instagram\"],\"title\":\"\",\"description\":\"\"}}",
+      "review": {
+        "kind": "video",
+        "server": "media-mcp",
+        "path": "/videos/{id}/final",
+        "actions": [
+          {
+            "key": "approve",
+            "label": "Validate",
+            "requiredStatus": "to_validate",
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "media-mcp",
+              "method": "POST",
+              "path": "/publish",
+              "body": {
+                "project_id": "{id}",
+                "caption": "{payload.publish.description}",
+                "platforms": "{payload.publish.platforms}"
+              }
+            },
+            "transition": "done"
+          },
+          {
+            "key": "reject",
+            "label": "Reject with feedback",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          }
+        ]
+      }
+    }
+  ],
+  "generativeMcpCall": {
+    "create_reel": {
+      "toolName": "generate_assets"
+    }
+  },
+  "externalJobsByMissionType": {
+    "create_reel": {
+      "generate_assets": {
+        "server": "media-mcp",
+        "mcpTool": "get_job_status",
+        "statusField": "status",
+        "terminalStates": {
+          "completed": [
+            "completed"
+          ],
+          "failed": [
+            "failed"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "video",
+        "onComplete": "resume_mission"
+      },
+      "render_video": {
+        "server": "media-mcp",
+        "mcpTool": "get_job_status",
+        "statusField": "status",
+        "resultIdField": "project_id",
+        "terminalStates": {
+          "completed": [
+            "completed"
+          ],
+          "failed": [
+            "failed"
+          ]
+        },
+        "resultStatus": "needs_human_review",
+        "artifactKind": "video",
+        "onComplete": "terminal"
+      }
+    }
+  }
+}

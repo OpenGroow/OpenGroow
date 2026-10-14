@@ -1,0 +1,10 @@
+{
+  "name": "@opengroow/hmac",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

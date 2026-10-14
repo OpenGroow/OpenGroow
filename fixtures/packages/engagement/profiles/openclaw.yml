@@ -1,0 +1,6 @@
+schemaVersion: 1
+agent:
+  tools:
+    deny:
+      - sessions_spawn
+      - sessions_yield

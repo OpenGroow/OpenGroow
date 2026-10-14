@@ -1,0 +1,40 @@
+{
+  "name": "opengroow",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "./scripts/dev-local.sh",
+    "dev:down": "docker compose --env-file .env -f apps/convex/docker/docker-compose.yml -f docker-compose.yml -f docker-compose.local-convex.yml --profile convex-docker down",
+    "dev:docker": "./scripts/dev.sh",
+    "start": "./scripts/start.sh",
+    "start:logs": "./scripts/start.sh logs",
+    "start:down": "./scripts/start.sh down",
+    "typecheck": "turbo run typecheck",
+    "template:add": "pnpm --filter @opengroow/agent-templates template:add",
+    "template:link": "pnpm --filter @opengroow/agent-templates template:link",
+    "template:add-git": "pnpm --filter @opengroow/agent-templates template:add-git",
+    "template:machine-tool": "pnpm --filter @opengroow/agent-templates template:machine-tool",
+    "template:validate": "pnpm --filter @opengroow/agent-templates template:validate",
+    "template:validate-index": "pnpm --filter @opengroow/agent-templates template:validate-index",
+    "setup": "node scripts/setup.mjs",
+    "convex:codegen": "npx convex codegen",
+    "convex:dashboard": "./scripts/selfhost-convex-dashboard.sh",
+    "openclaw-connect:node-run": "pnpm --filter @opengroow/openclaw-connect node-run",
+    "openclaw:local-control": "pnpm --filter @opengroow/openclaw-local-control dev",
+    "openclaw:image:gateway": "dotenv -e .env -- ./apps/openclaw-docker-config/scripts/build-and-push.sh",
+    "openclaw:image:runtime-worker": "dotenv -e .env -- ./apps/openclaw-docker-config/scripts/build-and-push-runtime-worker.sh",
+    "openclaw:local": "bash ./apps/openclaw-docker-config/scripts/local-stack.sh",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "convex": "^1.32.0",
+    "dotenv-cli": "^11.0.0",
+    "tsx": "^4.19.3",
+    "turbo": "^2.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^1.6.0"
+  }
+}

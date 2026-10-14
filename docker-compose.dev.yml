@@ -1,0 +1,143 @@
+# Dev-mode override (issue #302): hot-reload for every service backed by
+# repo source in this stack — `dashboard`, `convex-bootstrap`, `broker`,
+# `openclaw-connect` — via `docker compose watch`, syncing local source
+# edits into the running containers instead of requiring a full image
+# rebuild. This stack has no OpenClaw gateway/runtime-worker of its own (see
+# docker-compose.yml's file-level comment) — editing
+# apps/openclaw-docker-config's control-socket scripts or the runtime-worker
+# is a separate loop: `pnpm openclaw:local` rebuilds their image and rolls
+# it out to every already-running local-multi Project.
+#
+# NOT part of the default COMPOSE_FILE list in .env.example — opt in by
+# appending this file's path to COMPOSE_FILE, then running
+# `docker compose watch` (or `docker compose up --watch`) instead of a plain
+# `docker compose up`. Leaving COMPOSE_FILE untouched keeps the default
+# production-style stack unchanged, as required by issue #302.
+#
+# Relative paths below are resolved against the directory of the *first*
+# COMPOSE_FILE entry (apps/convex/docker), not this file's own location —
+# see docker-compose.yml's file-level comment for why.
+services:
+  # `pnpm dev` redeploys Convex on every save, so history piles up fast
+  # (7 GB after two days). Keep document/index history for 1h instead of the
+  # backend's default (2 days). Dev-only: the production-style stack keeps
+  # the default.
+  convex-backend:
+    environment:
+      - DOCUMENT_RETENTION_DELAY=${CONVEX_DOCUMENT_RETENTION_DELAY:-3600}
+      - INDEX_RETENTION_DELAY=${CONVEX_INDEX_RETENTION_DELAY:-3600}
+
+  dashboard:
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      # Browser-facing URLs, read at request time by the dashboard server
+      # (src/lib/public-urls.ts). Same defaults as docker-compose.yml.
+      PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL:-http://127.0.0.1:3210}
+      PUBLIC_APP_URL: ${DASHBOARD_URL:-http://localhost:3912}
+      PUBLIC_SEO_MCP_URL: ${NEXT_PUBLIC_SEO_MCP_URL:-http://127.0.0.1:3500}
+    develop:
+      watch:
+        # Fast path: `next dev`'s own file watcher picks these up, no
+        # container restart needed.
+        - path: ../../../apps/dashboard
+          target: /app/apps/dashboard
+          action: sync
+          ignore:
+            - node_modules/
+            - .next/
+        - path: ../../../packages
+          target: /app/packages
+          action: sync
+          ignore:
+            - "*/node_modules/"
+        # Dependency changes need a fresh `pnpm install`, so rebuild the
+        # image instead of just syncing files.
+        - path: ../../../apps/dashboard/package.json
+          action: rebuild
+        - path: ../../../pnpm-lock.yaml
+          action: rebuild
+
+  convex-bootstrap:
+    develop:
+      watch:
+        # convex-bootstrap is a one-shot `restart: "no"` container (runs
+        # entrypoint.sh's `convex deploy` + migrations once, then exits) —
+        # `action: rebuild` here, not `sync+restart`: `sync+restart` targets
+        # the specific container ID watch started with, so if that container
+        # is ever recreated by anything else (a manual `docker compose up`,
+        # a Docker Desktop restart, the host waking from sleep), watch keeps
+        # syncing into a container ID that no longer exists and silently
+        # stops working (only a `level=warning` "container ... is not
+        # running" line in its own log — nothing surfaces this failure).
+        # `rebuild` instead always goes through `docker compose up --build`,
+        # which resolves the service's *current* container through compose's
+        # own bookkeeping rather than a cached ID, so it can't desync this
+        # way. The extra rebuild latency doesn't cost anything real here:
+        # entrypoint.sh's re-run is idempotent, and this container has no
+        # in-place dev-server state worth preserving between runs anyway.
+        - path: ../../../apps/convex
+          action: rebuild
+          ignore:
+            - node_modules/
+            - test/
+        - path: ../../../packages
+          action: rebuild
+          ignore:
+            - "*/node_modules/"
+
+  # broker and openclaw-connect are plain tsx processes (no build step, even
+  # in production — see their package.json `start` scripts), so the only
+  # thing dev mode changes is *what* docker-entrypoint.sh execs at the end:
+  # `pnpm dev` (tsx watch) instead of the image's default `pnpm start`.
+  # tsx watch reloads in-process on a synced change, no container restart.
+  broker:
+    build:
+      # The final image is a flattened pnpm deploy rooted at /app. Dev watch
+      # syncs the monorepo paths below, so it must run from the pre-deploy
+      # build stage where /app/apps and /app/packages still exist.
+      target: build
+    working_dir: /app/apps/broker
+    entrypoint: ["sh", "./docker-entrypoint.sh"]
+    command: ["pnpm", "dev"]
+    develop:
+      watch:
+        - path: ../../../apps/broker
+          target: /app/apps/broker
+          action: sync
+          ignore:
+            - node_modules/
+        - path: ../../../packages
+          target: /app/packages
+          action: sync
+          ignore:
+            - "*/node_modules/"
+        - path: ../../../apps/broker/package.json
+          action: rebuild
+        - path: ../../../pnpm-lock.yaml
+          action: rebuild
+
+  openclaw-connect:
+    build:
+      # Keep the workspace layout for the same reason as broker above.
+      target: build
+    working_dir: /app/apps/openclaw-connect
+    entrypoint: ["sh", "./docker-entrypoint.sh"]
+    command: ["pnpm", "dev"]
+    develop:
+      watch:
+        - path: ../../../apps/openclaw-connect
+          target: /app/apps/openclaw-connect
+          action: sync
+          ignore:
+            - node_modules/
+        - path: ../../../packages
+          target: /app/packages
+          action: sync
+          ignore:
+            - "*/node_modules/"
+        - path: ../../../apps/openclaw-connect/package.json
+          action: rebuild
+        - path: ../../../pnpm-lock.yaml
+          action: rebuild

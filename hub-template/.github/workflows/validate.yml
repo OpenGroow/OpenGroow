@@ -1,0 +1,32 @@
+name: Validate
+
+# The whole repository is scanned for secrets. Packages are validated by hand
+# from a OpenGroow checkout before tagging (see README).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The CLI image rather than gitleaks-action: the action needs a paid
+      # licence on organisation repositories, the scanner itself is MIT.
+      - name: Scan the history for secrets
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
+            detect --source /repo --redact --no-banner --verbose

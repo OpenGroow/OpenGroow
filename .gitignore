@@ -1,0 +1,37 @@
+node_modules
+.next
+*.tsbuildinfo
+
+# Secrets: every .env variant, except the committed *.example templates
+.env*
+**/.env*
+!.env.example
+!**/.env*.example
+.env copy*
+.openclaude-profile.json
+
+*.turbo
+apps/broker/dist/
+
+.pnpm-store
+.DS_STORE
+
+# Runtime state
+.session
+apps/openclaw-connect/missions/
+
+# Personal agent config (not part of the product)
+.claude/*
+!.claude/skills
+.agents/skills/*
+!.agents/skills/openclaw-runtime-feature
+
+# Agent tooling plans (internal, not carried to the public repository)
+.kilo/
+packages/template-validator/dist/
+
+# Personal agent config (not part of the product)
+.claude/
+.agents/
+.openclaude/
+.kilo/

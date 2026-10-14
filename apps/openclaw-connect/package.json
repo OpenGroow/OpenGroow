@@ -1,0 +1,26 @@
+{
+  "name": "@opengroow/openclaw-connect",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "tsx watch src/server.ts",
+    "node-run": "node --import tsx src/node-run.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@opengroow/reliability": "workspace:*",
+    "convex": "^1.0.0",
+    "hono": "^4.6.15",
+    "openclaw": "2026.9.1",
+    "tsx": "^4.19.3",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.12"
+  }
+}

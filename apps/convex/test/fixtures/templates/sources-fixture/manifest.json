@@ -1,0 +1,57 @@
+{
+  "id": "sources-fixture",
+  "name": "Sources fixture",
+  "description": "Test fixture: a Template declaring two Sources, one with enrichment.",
+  "category": "test",
+  "visibility": "development",
+  "mcpServers": [
+    {
+      "name": "analysis-mcp",
+      "transport": "streamable-http",
+      "url": "http://host.docker.internal:4000/mcp",
+      "activationUrl": "http://localhost:4000/mcp"
+    }
+  ],
+  "missionTypes": [],
+  "jobTypes": [
+    { "type": "source_ingestion", "sourceTypes": ["keyword", "reel"] }
+  ],
+  "sources": [
+    {
+      "type": "keyword",
+      "label": "Search keyword",
+      "family": "search",
+      "agentsMd": "sources/keyword.md",
+      "analysisSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "minLength": 1, "maxLength": 50 },
+          "volume": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "type": "reel",
+      "label": "Video post",
+      "family": "social-video",
+      "agentsMd": "sources/reel.md",
+      "analysisSchema": {
+        "type": "object",
+        "properties": { "hook": { "type": "string" } },
+        "required": ["hook"]
+      }
+    }
+  ],
+  "externalJobsBySource": {
+    "reel": {
+      "analyze": {
+        "server": "analysis-mcp",
+        "mcpTool": "get_status",
+        "statusField": "status",
+        "terminalStates": { "completed": ["completed"], "failed": ["failed"] }
+      }
+    }
+  }
+}

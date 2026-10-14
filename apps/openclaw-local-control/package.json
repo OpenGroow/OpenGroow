@@ -1,0 +1,19 @@
+{
+  "name": "@opengroow/openclaw-local-control",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_ENV=development tsx watch src/server.ts",
+    "dev:docker-events": "NODE_ENV=development OPENCLAW_LOCAL_CONTROL_DOCKER_EVENTS=1 tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "rollout": "tsx src/rollout-cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.4",
+    "@opengroow/hmac": "workspace:*",
+    "hono": "^4.6.15"
+  }
+}

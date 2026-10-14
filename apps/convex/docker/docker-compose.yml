@@ -1,0 +1,106 @@
+# Explicit project name: without it, Compose derives one from the containing
+# directory's basename ("docker"), which collides with any other compose
+# file in a same-named "docker/" directory elsewhere in the repo (e.g.
+# apps/openclaw-docker-config/docker/) and misattributes their containers as
+# orphans of this project.
+name: opengroow-convex-selfhost
+
+services:
+  # Official self-hosted Convex images: https://github.com/get-convex/convex-backend
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    restart: unless-stopped
+    ports:
+      - "${CONVEX_PORT:-3210}:3210"
+      - "${CONVEX_SITE_PROXY_PORT:-3211}:3211"
+    # Node actions (e.g. instance_provisioning/local.ts) run inside this same
+    # backend process and reach apps/openclaw-local-control via
+    # host.docker.internal — a native host process, by design (issue #303).
+    # Docker Desktop (Mac/Windows) resolves this on its own; Linux needs the
+    # host-gateway mapping spelled out explicitly.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - convex-data:/convex/data
+    environment:
+      - CONVEX_CLOUD_ORIGIN=${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:${CONVEX_PORT:-3210}}
+      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN:-http://127.0.0.1:${CONVEX_SITE_PROXY_PORT:-3211}}
+      - DISABLE_BEACON=true
+      # run_backend.sh defaults TMPDIR to /convex/data/tmp, i.e. inside the
+      # persistent volume. The backend leaks a .tmpXXXX dir per run/deploy
+      # there (2.2 GB / 1,364 dirs observed after two days of `pnpm dev`),
+      # so keep temporaries in the container's ephemeral filesystem instead.
+      - TMPDIR=/tmp
+    healthcheck:
+      test: curl -f http://localhost:3210/version
+      interval: 5s
+      # Convex bootstraps SQLite and its indexes before opening port 3210.
+      # A persisted database can take around 90s to reopen under Docker I/O
+      # pressure, so keep startup failures out of the retry budget for 2m.
+      start_period: 2m
+      timeout: 5s
+      retries: 5
+
+  # Convex's own admin UI (distinct from the OpenGroow product dashboard).
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    restart: unless-stopped
+    ports:
+      - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:${CONVEX_PORT:-3210}}
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+
+  # One-shot: generates the admin key exactly once and persists it to the
+  # data volume (issue #264). `generate_admin_key.sh` is not deterministic
+  # (repeated calls with the same instance secret produce different, equally
+  # valid keys), so this step only ever runs the generator when no key file
+  # exists yet — that's what keeps the key stable across `docker compose up`
+  # re-runs, not any property of the generator itself. See ADR-028 for why
+  # this and the deploy step below are two separate one-shot services rather
+  # than one: this one needs the convex-backend image's own generator
+  # binary, the next one needs Node + the OpenGroow Convex app source.
+  convex-admin-key:
+    image: ghcr.io/get-convex/convex-backend:latest
+    restart: "no"
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+    volumes:
+      - convex-data:/convex/data
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        KEY_FILE=/convex/data/opengroow-admin-key
+        if [ -s "$$KEY_FILE" ]; then
+          echo "Convex admin key already present, reusing."
+        else
+          echo "Generating Convex admin key..."
+          ./generate_admin_key.sh | tail -n1 > "$$KEY_FILE"
+          echo "Convex admin key generated and persisted."
+        fi
+
+  # One-shot: pushes OpenGroow's Convex schema/functions using the key from
+  # the step above. Re-runs on every `docker compose up` (including after an
+  # image update) — `convex deploy` is itself safe to re-run against an
+  # unchanged or updated schema.
+  convex-bootstrap:
+    build:
+      context: ../../..
+      dockerfile: apps/convex/docker/bootstrap/Dockerfile
+    restart: "no"
+    depends_on:
+      convex-admin-key:
+        condition: service_completed_successfully
+      convex-backend:
+        condition: service_healthy
+    volumes:
+      - convex-data:/convex/data:ro
+    environment:
+      - CONVEX_SELF_HOSTED_URL=${CONVEX_SELF_HOSTED_URL:-http://convex-backend:3210}
+
+volumes:
+  convex-data:

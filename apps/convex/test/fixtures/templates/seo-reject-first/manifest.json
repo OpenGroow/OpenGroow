@@ -1,0 +1,70 @@
+{
+  "id": "seo-reject-first",
+  "name": "SEO Agent (reject-first fixture)",
+  "description": "Test fixture: review actions declared with \"reject\" before \"approve\", both gated on to_validate.",
+  "category": "test",
+  "visibility": "development",
+  "mcpServers": [
+    {
+      "name": "article-mcp",
+      "transport": "streamable-http",
+      "url": "http://host.docker.internal:4000/mcp",
+      "activationUrl": "http://localhost:4000/mcp"
+    }
+  ],
+  "missionTypes": [
+    {
+      "type": "create_article",
+      "label": "Create Article",
+      "agentsMd": "create_article.md",
+      "payload": "{}",
+      "review": {
+        "kind": "markdown",
+        "server": "article-mcp",
+        "path": "/articles/{id}",
+        "actions": [
+          {
+            "key": "reject",
+            "label": "Reject",
+            "requiredStatus": "to_validate",
+            "inputs": [
+              {
+                "key": "feedback",
+                "label": "Review Feedback",
+                "type": "text",
+                "required": true
+              }
+            ],
+            "effect": {
+              "kind": "revision_run",
+              "feedbackKey": "feedback"
+            },
+            "transition": "doing"
+          },
+          {
+            "key": "approve",
+            "label": "Approve",
+            "requiredStatus": "to_validate",
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/articles/{id}/approve"
+            },
+            "transition": "approved"
+          },
+          {
+            "key": "publish",
+            "label": "Publish",
+            "requiredStatus": "approved",
+            "effect": {
+              "server": "article-mcp",
+              "method": "POST",
+              "path": "/articles/{id}/publish"
+            },
+            "transition": "done"
+          }
+        ]
+      }
+    }
+  ]
+}

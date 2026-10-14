@@ -1,0 +1,32 @@
+{
+  "name": "@opengroow/agent-templates",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "template:add": "tsx scripts/template-add.ts",
+    "template:link": "tsx scripts/template-link.ts",
+    "template:add-git": "tsx scripts/template-add-git.ts",
+    "template:machine-tool": "tsx scripts/machine-tool.ts",
+    "template:validate": "tsx scripts/validate-package.ts",
+    "template:validate-index": "tsx scripts/validate-hub-index.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./requirements": "./src/requirements.ts",
+    "./installation-plan": "./src/installation-plan.ts",
+    "./update-plan": "./src/update-plan.ts",
+    "./skills": "./src/skills.ts",
+    "./review-contract": "./src/review-contract.ts",
+    "./registry": "./src/registry.ts",
+    "./hub-index": "./src/hub-index.ts",
+    "./folder-files": "./src/folder-files.ts",
+    "./git-archive": "./src/git-archive.ts",
+    "./pinned-source": "./src/pinned-source.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

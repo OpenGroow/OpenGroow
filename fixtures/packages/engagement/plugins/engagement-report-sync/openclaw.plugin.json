@@ -1,0 +1,14 @@
+{
+  "id": "engagement-report-sync",
+  "name": "Engagement Report Sync",
+  "description": "A no-op plugin shipped by the generic test package, so the engine tests can exercise the packaged plugin install.",
+  "activation": {
+    "onStartup": true
+  },
+  "enabledByDefault": true,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

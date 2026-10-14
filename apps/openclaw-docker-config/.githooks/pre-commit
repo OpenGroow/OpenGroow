@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "Running pre-commit checks ..."
+echo ""
+
+# Validate config
+if ! "$REPO_ROOT/scripts/validate-config.sh"; then
+  echo ""
+  echo "Pre-commit check failed: config validation. Fix the errors above and retry."
+  exit 1
+fi
+
+echo ""
+
+# Check for secrets
+if ! "$REPO_ROOT/scripts/check-secrets.sh"; then
+  echo ""
+  echo "Pre-commit check failed: secrets detected. Remove them and retry."
+  exit 1
+fi
+
+echo ""
+echo "All pre-commit checks passed."

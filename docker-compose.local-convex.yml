@@ -1,0 +1,50 @@
+# Surcouche « Convex local » (dev) : Convex tourne sur l'hôte avec `npx convex dev`
+# (déploiement local anonyme, comme dans les autres projets) au lieu des services
+# Docker convex-backend / convex-dashboard / convex-admin-key / convex-bootstrap.
+# Le Dashboard tourne aussi sur l'hôte (`next dev`). Restent dans Docker : le
+# broker (openclaw-local-control le pilote par `docker cp`/`docker restart` sur
+# `opengroow-broker-1`) et openclaw-connect.
+#   pnpm dev   (scripts/dev-local.sh, qui exporte CONVEX_DOCKER_URL et CONVEX_TOKEN)
+#
+# À empiler après les deux autres fragments, dans cet ordre (cf. scripts/dev-local.sh) :
+#   -f apps/convex/docker/docker-compose.yml -f docker-compose.yml -f docker-compose.local-convex.yml
+# Les services Convex et le Dashboard sont désactivés par un profil jamais activé
+# plutôt que supprimés : les chemins relatifs de ce fragment restent ceux du premier
+# fichier de la liste, comme dans docker-compose.yml.
+services:
+  convex-backend:
+    profiles: [convex-docker]
+  convex-dashboard:
+    profiles: [convex-docker]
+  convex-admin-key:
+    profiles: [convex-docker]
+  convex-bootstrap:
+    profiles: [convex-docker]
+  dashboard:
+    profiles: [convex-docker]
+
+  broker:
+    depends_on: !override
+      broker-secrets-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      CONVEX_URL: ${CONVEX_DOCKER_URL:-}
+      CONVEX_TOKEN: ${CONVEX_TOKEN:-}
+    # Plus de volume convex-data (la clé d'admin arrive par CONVEX_TOKEN).
+    volumes: !override
+      - broker-secrets:/run/broker-secrets:ro
+      - openclaw-secrets:/run/openclaw-secrets
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  openclaw-connect:
+    depends_on: !override
+      broker:
+        condition: service_started
+    environment:
+      CONVEX_URL: ${CONVEX_DOCKER_URL:-}
+      CONVEX_TOKEN: ${CONVEX_TOKEN:-}
+    volumes: !override
+      - broker-secrets:/run/broker-secrets:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

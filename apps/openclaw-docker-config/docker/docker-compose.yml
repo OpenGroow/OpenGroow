@@ -1,0 +1,76 @@
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE_REF:?OPENCLAW_IMAGE_REF is required}
+    # required: false — the unified self-host stack (issue #266) includes
+    # this fragment without a sibling apps/openclaw-docker-config/docker/.env
+    # (its own env vars come from the root .env via the `environment:` block
+    # below instead); standalone/remote-VM usage of this fragment still loads
+    # its own .env here exactly as before when the file is present.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    environment:
+      HOME: /home/node
+      NODE_ENV: production
+      TERM: xterm-256color
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_GATEWAY_PORT: ${OPENCLAW_GATEWAY_PORT:-18789}
+      OPENCLAW_GATEWAY_BIND: ${OPENCLAW_GATEWAY_BIND:-0.0.0.0}
+      OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+      OPENCLAW_CONTROL_SOCKET_PATH: ${OPENCLAW_CONTROL_SOCKET_PATH:-/home/node/.openclaw/runtime/control.sock}
+      # Comma-separated optional plugins to install at start (codex, whatsapp).
+      OPENCLAW_OPTIONAL_PLUGINS: ${OPENCLAW_OPTIONAL_PLUGINS:-}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-/home/openclaw/.openclaw}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-/home/openclaw/.openclaw/workspace}:/home/node/.openclaw/workspace
+      # Named volume for the runtime socket dir — avoids VirtioFS ENOTSUP on
+      # socket unlink (bind mounts on Docker Desktop Mac have this limitation).
+      - openclaw-runtime-sock:/home/node/.openclaw/runtime
+    ports:
+      - "127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+    command: openclaw gateway --bind lan --port 18789
+
+  openclaw-runtime-worker:
+    image: ${OPENCLAW_RUNTIME_WORKER_IMAGE_REF:?OPENCLAW_RUNTIME_WORKER_IMAGE_REF is required}
+    # required: false — the unified self-host stack (issue #266) includes
+    # this fragment without a sibling apps/openclaw-docker-config/docker/.env
+    # (its own env vars come from the root .env via the `environment:` block
+    # below instead); standalone/remote-VM usage of this fragment still loads
+    # its own .env here exactly as before when the file is present.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+    depends_on:
+      - openclaw-gateway
+    environment:
+      HOME: /home/node
+      NODE_ENV: production
+      # Empty defaults (`:-`) only to silence Compose's "variable is not set"
+      # warning at parse time — these come from the host env on a remote VM and,
+      # on self-host, from openclaw-local-control's own generated per
+      # -instance credentials (buildComposeUpEnv), passed as `docker compose
+      # up` env, never from `.env`. The root compose fragment overrides
+      # BROKER_WS_URL with a concrete value.
+      BROKER_WS_URL: ${BROKER_WS_URL:-}
+      OPENCLAW_KEY_ID: ${OPENCLAW_KEY_ID:-}
+      OPENCLAW_SECRET: ${OPENCLAW_SECRET:-}
+      OPENCLAW_INSTANCE_ID: ${OPENCLAW_INSTANCE_ID:-}
+      OPENCLAW_GATEWAY_CONTAINER_NAME: ${OPENCLAW_GATEWAY_CONTAINER_NAME:-}
+      OPENCLAW_GATEWAY_UPSTREAM_HOST: ${OPENCLAW_GATEWAY_UPSTREAM_HOST:-openclaw-gateway}
+      OPENCLAW_GATEWAY_UPSTREAM_PORT: ${OPENCLAW_GATEWAY_UPSTREAM_PORT:-18789}
+      OPENCLAW_GATEWAY_LOCAL_PORT: ${OPENCLAW_GATEWAY_LOCAL_PORT:-18789}
+      OPENCLAW_CONTROL_SOCKET_PATH: ${OPENCLAW_CONTROL_SOCKET_PATH:-/home/node/.openclaw/runtime/control.sock}
+      OPENCLAW_CONFIG_DIR: /home/node/.openclaw
+      OPENCLAW_WORKSPACE_DIR: /home/node/.openclaw/workspace
+      RUNTIME_ALLOWED_COMMANDS: ${RUNTIME_ALLOWED_COMMANDS:-runtime.nodes.pending.list,runtime.nodes.approve,runtime.health.check,runtime.openclaw.exec,runtime.whatsapp.config.set,runtime.whatsapp.pair.start,runtime.whatsapp.pair.wait,runtime.telegram.config.set,runtime.ai.config.set,runtime.speech_to_text.config.set,runtime.auth.start,runtime.auth.status,runtime.auth.input,runtime.auth.cancel,runtime.workspace.list,runtime.workspace.file.read,runtime.workspace.file.delete,runtime.workspace.create,runtime.workspace.file.write,runtime.mcp.servers.merge,runtime.mcp.servers.remove,runtime.plugins.install}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-/home/openclaw/.openclaw}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-/home/openclaw/.openclaw/workspace}:/home/node/.openclaw/workspace
+      - openclaw-runtime-sock:/home/node/.openclaw/runtime
+
+volumes:
+  openclaw-runtime-sock:
