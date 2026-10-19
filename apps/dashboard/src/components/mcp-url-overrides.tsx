@@ -4,8 +4,10 @@ import * as React from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { AgentManifest } from "@convex/template_manifest_contract";
-import { Button } from "@/components/ui/button";
+import { Database } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { SettingsPanel } from "@/components/opengroow/settings-panel";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
 type Props = {
@@ -26,14 +28,9 @@ export function McpUrlOverrides({ instanceId, manifest }: Props) {
   });
   if (overrides === undefined) return null;
   return (
-    <section className="grid max-w-3xl gap-3">
-      <h2 className="m-0 text-lg font-semibold text-foreground">MCP server URLs</h2>
-      <p className="m-0 text-sm text-muted-foreground">
-        Override the URL a server of this Template is reached at. Leave it empty to use the URL the Template declares.
-        A localhost URL is reachable from the OpenClaw container.
-      </p>
+    <>
       {manifest.mcpServers.map((server) => (
-        <McpUrlRow
+        <McpServerPanel
           key={server.name}
           instanceId={instanceId}
           templateId={manifest.id}
@@ -42,11 +39,11 @@ export function McpUrlOverrides({ instanceId, manifest }: Props) {
           declaredUrl={server.url}
         />
       ))}
-    </section>
+    </>
   );
 }
 
-function McpUrlRow({
+function McpServerPanel({
   instanceId,
   templateId,
   serverName,
@@ -84,11 +81,27 @@ function McpUrlRow({
 
   const inputId = `mcp-url-${serverName}`;
   return (
-    <div className="grid gap-1.5">
-      <label htmlFor={inputId} className="text-xs font-medium text-muted-foreground">
-        {serverName}
-      </label>
-      <div className="flex gap-2">
+    <SettingsPanel
+      icon={Database}
+      tone="cyan"
+      title="MCP server configuration"
+      description="Configure the MCP server used by this Agent. Leave the URL empty to use the default from the Template."
+      dirty={value.trim() !== saved}
+      saving={busy}
+      error={error}
+      onSave={() => void save()}
+      onCancel={() => {
+        setValue(saved);
+        setError(undefined);
+      }}
+    >
+      <div className="grid gap-2">
+        <Label htmlFor={`${inputId}-name`}>Server name</Label>
+        <Input id={`${inputId}-name`} value={serverName} readOnly />
+        <p className="m-0 text-sm text-muted-foreground">Defined by the Template.</p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={inputId}>Custom URL (optional)</Label>
         <Input
           id={inputId}
           value={value}
@@ -96,11 +109,8 @@ function McpUrlRow({
           onChange={(event) => setValue(event.target.value)}
           disabled={busy}
         />
-        <Button type="button" disabled={busy || value.trim() === saved} onClick={() => void save()}>
-          Save
-        </Button>
+        <p className="m-0 text-sm text-muted-foreground">A localhost URL is reachable from the OpenClaw container.</p>
       </div>
-      {error ? <p className="m-0 text-xs text-destructive">{error}</p> : null}
-    </div>
+    </SettingsPanel>
   );
 }

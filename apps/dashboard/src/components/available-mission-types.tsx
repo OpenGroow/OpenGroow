@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import type { MissionType } from "@convex/template_manifest_contract";
-import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SettingsPanel } from "@/components/opengroow/settings-panel";
 
 /**
  * Lets the operator choose which of the Template's Mission types this Agent
@@ -39,42 +40,36 @@ export function AvailableMissionTypes({
   }
 
   return (
-    <fieldset className="m-0 grid gap-3 rounded-xl border border-border px-4 py-3">
-      <legend className="px-1 text-xs font-semibold text-muted-foreground">
-        Available Mission types
-      </legend>
-      <p className="m-0 text-sm text-muted-foreground">
-        Unchecked types are not offered in Create Mission and Create Schedule, and their instructions are removed from
-        the workspace.
-      </p>
-      {missionTypes.map((missionType) => (
-        <label key={missionType.type} className="flex items-start gap-2.5 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-border focus:ring-2 focus:ring-ring disabled:opacity-50"
-            checked={draft.includes(missionType.type)}
-            disabled={saving}
-            onChange={(event) => toggle(missionType.type, event.target.checked)}
-          />
-          {missionType.label}
-        </label>
-      ))}
-      <div>
-        <Button variant="outline" size="lg"
-          type="button"
-          disabled={saving || !changed}
-          onClick={() => onApply(nextHidden)}
-        >
-          {saving ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="size-4 animate-spin" />
-              Applying…
-            </span>
-          ) : (
-            "Apply"
-          )}
-        </Button>
-      </div>
-    </fieldset>
+    <SettingsPanel
+      icon={ListChecks}
+      tone="violet"
+      title="Available Mission types"
+      description="Choose which Missions this Agent can perform. Unchecked types are not offered in Create Mission and Create Schedule, and their instructions are removed from the workspace."
+      dirty={changed}
+      saving={saving}
+      onSave={() => onApply(nextHidden)}
+      onCancel={() => setDraft(storedVisible)}
+    >
+      <ul className="m-0 grid list-none gap-5 rounded-xl border border-border p-5">
+        {missionTypes.map((missionType) => (
+          <li key={missionType.type}>
+            <label className="flex items-start gap-3 text-base text-foreground">
+              <Checkbox
+                className="mt-0.5"
+                checked={draft.includes(missionType.type)}
+                disabled={saving}
+                onCheckedChange={(checked) => toggle(missionType.type, checked)}
+              />
+              <span className="grid gap-0.5">
+                <span>{missionType.label}</span>
+                {missionType.description ? (
+                  <span className="text-sm text-muted-foreground">{missionType.description}</span>
+                ) : null}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </SettingsPanel>
   );
 }

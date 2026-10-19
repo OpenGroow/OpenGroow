@@ -583,6 +583,42 @@ export const listDoneByInstance = query({
   },
 });
 
+// Recent Missions and status counts of one Agent, for its Overview page. The
+// counts cover the most recent `OVERVIEW_SCAN_CAP` Missions only (an unbounded
+// per-status count has no index for a single Template), so `truncated` tells
+// the dashboard to show them as "N+".
+const OVERVIEW_SCAN_CAP = 200;
+const OVERVIEW_RECENT = 5;
+
+export const overviewByTemplate = query({
+  args: { instanceId: v.string(), templateId: v.string() },
+  handler: async (ctx, args) => {
+    const empty = { recent: [], counts: { doing: 0, toValidate: 0, failed: 0 }, truncated: false };
+    const ownerId = await readOwnerId(ctx, args.instanceId);
+    if (ownerId === null) return empty;
+    const missions = await ctx.db
+      .query("missions")
+      .withIndex("by_instance_template_owner_updated", (q) =>
+        q.eq("instanceId", args.instanceId).eq("templateId", args.templateId).eq("ownerId", ownerId),
+      )
+      .order("desc")
+      .take(OVERVIEW_SCAN_CAP);
+    const count = (status: Doc<"missions">["status"]) => missions.filter((m) => m.status === status).length;
+    return {
+      recent: missions.slice(0, OVERVIEW_RECENT).map((m) => ({
+        _id: m._id,
+        type: m.type,
+        name: m.name,
+        number: m.number,
+        status: m.status,
+        updatedAt: m.updatedAt,
+      })),
+      counts: { doing: count("doing"), toValidate: count("to_validate"), failed: count("failed") },
+      truncated: missions.length === OVERVIEW_SCAN_CAP,
+    };
+  },
+});
+
 // Written exclusively by the Agent via REST HMAC tool. Only `summary` is
 // patched — status is always derived from the Run lifecycle, never from here.
 export const writeSummary = internalMutation({

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { TabNav } from "@/components/opengroow/tab-nav";
 
 const SETTINGS_PAGES = [
   { segment: "overview", label: "Overview" },
@@ -17,28 +16,9 @@ const SETTINGS_PAGES = [
 export function SettingsTabs({ projectId }: { projectId: string }) {
   const pathname = usePathname();
   const base = `/projects/${encodeURIComponent(projectId)}/settings`;
+  const items = SETTINGS_PAGES.map(({ segment, label }) => ({ label, href: `${base}/${segment}` }));
+  // Detail pages (e.g. a single workspace) keep their section highlighted.
+  const current = items.find(({ href }) => pathname === href || pathname.startsWith(`${href}/`))?.href;
 
-  return (
-    <nav className="flex flex-wrap gap-2" aria-label="Settings sections">
-      {SETTINGS_PAGES.map(({ segment, label }) => {
-        const href = `${base}/${segment}`;
-        const current = pathname === href || pathname.startsWith(`${href}/`);
-        return (
-          <Link
-            key={segment}
-            href={href}
-            aria-current={current ? "page" : undefined}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-sm font-semibold",
-              current
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-accent",
-            )}
-          >
-            {label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  return <TabNav items={items} current={current} label="Settings sections" />;
 }

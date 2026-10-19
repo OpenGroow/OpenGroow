@@ -9,20 +9,25 @@ import { AvailableMissionTypes } from "../src/components/available-mission-types
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 const LYM = "Create letter video";
 const CHAT_MOCK = "Create chat mock video";
 
-function checkbox(label: string): HTMLInputElement {
+function checkbox(label: string): HTMLElement {
   const el = Array.from(document.querySelectorAll("label"))
-    .find((l) => l.textContent?.trim() === label)
-    ?.querySelector("input");
-  if (!(el instanceof HTMLInputElement)) throw new Error(`Checkbox not found: ${label}`);
+    .find((l) => l.textContent?.includes(label))
+    ?.querySelector('[role="checkbox"]');
+  if (!(el instanceof HTMLElement)) throw new Error(`Checkbox not found: ${label}`);
   return el;
 }
 
+const isChecked = (el: HTMLElement) => el.getAttribute("aria-checked") === "true";
+
 function applyButton(): HTMLButtonElement {
-  const el = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes("Apply"));
-  if (!(el instanceof HTMLButtonElement)) throw new Error("Apply not found");
+  const el = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes("Save changes"));
+  if (!(el instanceof HTMLButtonElement)) throw new Error("Save changes not found");
   return el;
 }
 
@@ -55,17 +60,17 @@ describe("AvailableMissionTypes", () => {
   it("checks the types that are visible, i.e. not in the stored deny-list", async () => {
     await render(["create_chat_mock_video"]);
     expect(document.body.textContent).toContain("Available Mission types");
-    expect(checkbox(LYM).checked).toBe(true);
-    expect(checkbox(CHAT_MOCK).checked).toBe(false);
+    expect(isChecked(checkbox(LYM))).toBe(true);
+    expect(isChecked(checkbox(CHAT_MOCK))).toBe(false);
   });
 
   it("checks every type when nothing is hidden", async () => {
     await render(undefined);
-    expect(checkbox(LYM).checked).toBe(true);
-    expect(checkbox(CHAT_MOCK).checked).toBe(true);
+    expect(isChecked(checkbox(LYM))).toBe(true);
+    expect(isChecked(checkbox(CHAT_MOCK))).toBe(true);
   });
 
-  it("keeps Apply disabled until the selection changes", async () => {
+  it("keeps Save changes disabled until the selection changes", async () => {
     await render([]);
     expect(applyButton().disabled).toBe(true);
     await act(async () => checkbox(LYM).click());

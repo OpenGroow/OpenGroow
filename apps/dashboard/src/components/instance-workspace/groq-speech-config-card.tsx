@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic } from "lucide-react";
+import { AudioLines, Save } from "lucide-react";
 import { WorkspaceConfigCard } from "@/src/components/instance-workspace/workspace-config-card";
 import { WorkspaceStatusBadge } from "@/src/components/instance-workspace/workspace-status-badge";
 import type { SpeechToTextConfigState } from "@/src/components/instance-workspace.types";
@@ -41,7 +41,8 @@ export function GroqSpeechConfigCard({
 
   return (
     <WorkspaceConfigCard
-      icon={<Mic className="size-5" />}
+      icon={AudioLines}
+      tone="violet"
       title="Groq Speech-to-Text"
       description="Transcribe incoming voice notes with Groq Whisper and feed the transcript into OpenClaw without echoing it back to the chat."
       badge={badge}
@@ -55,7 +56,7 @@ export function GroqSpeechConfigCard({
             value={apiKey}
             onChange={(event) => onApiKeyChange(event.target.value)}
             placeholder="gsk_..."
-            className="h-12 rounded-xl border-border bg-muted px-4"
+            className="h-11"
           />
           <p className="text-sm leading-6 text-muted-foreground">
             Leave this empty on later saves to keep the current Groq key already
@@ -86,6 +87,7 @@ export function GroqSpeechConfigCard({
             disabled={!canSave}
             onClick={onSave}
           >
+            {config.status === "saving" ? null : <Save />}
             {config.status === "saving"
               ? "Saving…"
               : enabled

@@ -10,12 +10,12 @@ export function WorkspaceMarkdown({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => (
-            <h1 className="m-0 text-2xl tracking-tight text-foreground">
+            <h1 className="m-0 border-b border-border pb-4 text-3xl font-bold tracking-tight text-foreground">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mt-8 text-xl tracking-tight text-foreground">
+            <h2 className="mt-8 border-t border-border pt-6 text-xl font-semibold tracking-tight text-foreground">
               {children}
             </h2>
           ),

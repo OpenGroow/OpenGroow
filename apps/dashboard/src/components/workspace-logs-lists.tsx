@@ -205,7 +205,7 @@ function ParentCard({
     <Card className="py-3">
       <CardContent className="grid grid-cols-[minmax(0,1fr)] gap-2.5 px-4">
         <Button
-          variant="outline"
+          variant="ghost"
           type="button"
           onClick={onToggle}
           className="w-full justify-between"

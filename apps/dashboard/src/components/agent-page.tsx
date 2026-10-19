@@ -1,23 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Loader2, Pencil, RefreshCw } from "lucide-react";
+import { Ellipsis, Pencil, Power, RefreshCw } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
 import { useProjectManifest } from "@/src/hooks/use-project-manifests";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
 import { ActivationDialog } from "@/src/components/activation-dialog";
+import { AgentOverviewMissions } from "@/src/components/agent-overview-missions";
 import { AvailableMissionTypes } from "@/src/components/available-mission-types";
 import { McpUrlOverrides } from "@/src/components/mcp-url-overrides";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AgentAvatar } from "@/components/opengroow/agent-avatar";
 import { AGENT_STATUS } from "@/components/opengroow/agent-presentation";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { TabNav } from "@/components/opengroow/tab-nav";
 
 /** The Agent's merged state for this Project; `undefined` while loading. */
 function useAgentCard(instanceId: string, manifest: AgentManifest) {
@@ -143,52 +150,67 @@ function AgentPageFrame({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { card } = useAgentCard(instanceId, manifest);
+  const { runtimeInstanceId, card } = useAgentCard(instanceId, manifest);
+  const actions = useAgentActions(runtimeInstanceId, manifest.id, `/projects/${encodeURIComponent(instanceId)}/agents`);
   const base = `/projects/${encodeURIComponent(instanceId)}/agents/${encodeURIComponent(manifest.id)}`;
   // Files and Logs read the Agent's workspace, which only an active Agent has.
   const hasWorkspace = card?.status === "active" && card.workspaceKey !== undefined;
   const tabs = [
     { label: "Overview", href: base, enabled: true },
-    { label: "Settings", href: `${base}/settings`, enabled: true },
     { label: "Files", href: `${base}/files`, enabled: hasWorkspace },
     { label: "Logs", href: `${base}/logs`, enabled: hasWorkspace },
+    { label: "Settings", href: `${base}/settings`, enabled: true },
   ];
 
   return (
     <section className="grid gap-6">
-      <header className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
-            {manifest.name}
-          </h1>
-          {card ? <AgentStatusBadge status={card.status} /> : null}
+      <header className="grid gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <AgentAvatar name={manifest.name} category={manifest.category} />
+            <div className="grid min-w-0 gap-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
+                  {manifest.name}
+                </h1>
+                {card ? <AgentStatusBadge status={card.status} /> : null}
+              </div>
+              <p className="m-0 max-w-2xl text-base leading-7 text-muted-foreground">{manifest.description}</p>
+            </div>
+          </div>
+          {card?.status === "active" ? (
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="lg"
+                type="button"
+                loading={actions.busy === "refresh"}
+                onClick={() => void actions.refresh()}
+              >
+                {actions.busy === "refresh" ? null : <RefreshCw />}
+                {actions.busy === "refresh" ? "Refreshing…" : "Refresh"}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="icon-lg" aria-label="More actions" />}
+                >
+                  <Ellipsis />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    disabled={actions.busy === "deactivate"}
+                    onClick={() => void actions.deactivate()}
+                  >
+                    <Power />
+                    {actions.busy === "deactivate" ? "Deactivating…" : "Deactivate"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : null}
         </div>
-        <nav className="flex flex-wrap gap-2" aria-label="Agent sections">
-          {tabs.map((tab) =>
-            tab.enabled ? (
-              <Link
-                key={tab.label}
-                href={tab.href}
-                aria-current={pathname === tab.href ? "page" : undefined}
-                className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
-                  pathname === tab.href
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-accent"
-                }`}
-              >
-                {tab.label}
-              </Link>
-            ) : (
-              <span
-                key={tab.label}
-                aria-disabled="true"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-muted-foreground opacity-40"
-              >
-                {tab.label}
-              </span>
-            ),
-          )}
-        </nav>
+        {actions.error ? <ErrorMessage message={actions.error} /> : null}
+        <TabNav items={tabs} current={pathname} label="Agent sections" />
       </header>
       {children}
     </section>
@@ -211,15 +233,6 @@ function ErrorMessage({ message, link }: { message: string; link?: string }) {
   );
 }
 
-function Spinner({ label }: { label: string }) {
-  return (
-    <span className="flex items-center gap-2">
-      <Loader2 className="size-4 animate-spin" />
-      {label}
-    </span>
-  );
-}
-
 export function AgentOverview({ instanceId, templateId }: { instanceId: string; templateId: string }) {
   return (
     <WithAgentManifest instanceId={instanceId} templateId={templateId}>
@@ -230,47 +243,15 @@ export function AgentOverview({ instanceId, templateId }: { instanceId: string; 
 
 function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; manifest: AgentManifest }) {
   const { runtimeInstanceId, card } = useAgentCard(instanceId, manifest);
-  const actions = useAgentActions(runtimeInstanceId, manifest.id, `/projects/${encodeURIComponent(instanceId)}/agents`);
   if (!card) return null;
 
-  const persistedError = card.status === "error" ? card.errorMessage : undefined;
-  const message = actions.error ?? persistedError;
+  // Refresh and Deactivate live in the page header, which shows their errors.
   // The MCP's dashboardUrl only goes with the persisted error (issue #320).
-  const link = !actions.error && card.status === "error" ? card.errorLink : undefined;
-
+  const persistedError = card.status === "error" ? card.errorMessage : undefined;
   return (
-    <div className="grid gap-5">
-      <p className="m-0 max-w-3xl text-sm leading-7 text-muted-foreground">
-        {manifest.description}
-      </p>
-      {manifest.mcpServers.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {manifest.mcpServers.map((server) => (
-            <Badge
-              key={server.name}>
-              {server.name}
-            </Badge>
-          ))}
-        </div>
-      )}
-      {message ? <ErrorMessage message={message} link={link} /> : null}
-      {card.status === "active" ? (
-        <div className="flex flex-wrap gap-3">
-          <Button variant="outline" type="button" disabled={actions.busy === "refresh"} onClick={() => void actions.refresh()}>
-            {actions.busy === "refresh" ? (
-              <Spinner label="Refreshing…" />
-            ) : (
-              <span className="flex items-center gap-2">
-                <RefreshCw className="size-4" />
-                Refresh
-              </span>
-            )}
-          </Button>
-          <Button variant="outline" type="button" disabled={actions.busy === "deactivate"} onClick={() => void actions.deactivate()}>
-            {actions.busy === "deactivate" ? <Spinner label="Deactivating…" /> : "Deactivate"}
-          </Button>
-        </div>
-      ) : null}
+    <div className="grid gap-6">
+      {persistedError ? <ErrorMessage message={persistedError} link={card.errorLink} /> : null}
+      <AgentOverviewMissions runtimeInstanceId={runtimeInstanceId} projectId={instanceId} manifest={manifest} />
     </div>
   );
 }
@@ -327,11 +308,9 @@ function AgentSettingsContent({
       ) : null}
       {editable ? (
         <div>
-          <Button variant="outline" type="button" onClick={() => setEditing(true)}>
-            <span className="flex items-center gap-2">
-              <Pencil className="size-4" />
-              Edit config
-            </span>
+          <Button variant="outline" size="lg" type="button" onClick={() => setEditing(true)}>
+            <Pencil />
+            Edit config
           </Button>
         </div>
       ) : null}
