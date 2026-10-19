@@ -3,7 +3,7 @@ import { Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-type FilterOption = { id: string; label: string }
+type FilterOption = { id: string; label: string; count?: number }
 
 /** Single-choice filter chips; the pressed chip carries the blue selection. */
 function FilterChips({
@@ -29,6 +29,11 @@ function FilterChips({
           onClick={() => onChange(option.id)}
         >
           {option.label}
+          {option.count !== undefined ? (
+            <span className="rounded-md bg-muted px-1.5 text-sm text-muted-foreground tabular-nums">
+              {option.count}
+            </span>
+          ) : null}
         </Button>
       ))}
     </div>
