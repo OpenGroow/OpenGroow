@@ -299,10 +299,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 type="button"
                 aria-expanded={payloadOpen}
                 onClick={() => setPayloadOpen(!payloadOpen)}
-                className="w-fit"
+                className="-ml-3 w-fit"
               >
                 <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
-                Payload
+                Payload (optional)
               </Button>
               {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
               <div hidden={!payloadOpen}>

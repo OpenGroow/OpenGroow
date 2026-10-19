@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
+import { StatTile } from "@/components/opengroow/stat-tile";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { Card } from "@/components/ui/card";
 import {
@@ -25,6 +26,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
   CalendarDays,
+  CircleCheck,
+  CircleX,
+  Layers,
+  LoaderCircle,
   ChartColumn,
   Clock,
   Download,
@@ -133,6 +138,30 @@ export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
           No jobs yet. Jobs appear here when an Agent with scheduled capabilities is activated.
         </p>
       ) : (
+        <>
+        <section aria-label="Job counts" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatTile icon={Layers} label="Total jobs" value={jobs.length} tone="visual" />
+          <StatTile
+            icon={CircleCheck}
+            label="Active"
+            value={jobs.filter((job) => statusOf(job) === "active").length}
+            tone="engagement"
+          />
+          <StatTile
+            icon={LoaderCircle}
+            label="Running"
+            value={jobs.filter((job) => statusOf(job) === "running").length}
+            tone="research"
+          />
+          <StatTile icon={Pause} label="Paused" value={jobs.filter((job) => statusOf(job) === "paused").length} />
+          <StatTile
+            icon={CircleX}
+            label="Failed"
+            value={jobs.filter((job) => statusOf(job) === "failed").length}
+            tone="error"
+          />
+        </section>
+
         <section className="grid gap-5">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
             <FilterChips options={chips} value={filter} onChange={setFilter} label="Filter by status" />
@@ -162,6 +191,7 @@ export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
             </ul>
           )}
         </section>
+        </>
       )}
     </div>
   );

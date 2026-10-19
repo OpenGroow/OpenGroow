@@ -43,19 +43,17 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
 
   return (
     <div className="grid gap-2">
-      <label className="grid gap-1.5">
-        <span className="text-sm font-semibold text-muted-foreground">Payload (JSON, optional)</span>
-        <Textarea
-          value={payloadText}
-          onChange={(e) => onChange(e.target.value)}
-          rows={3}
-          placeholder='{"url": "https://example.com"}'
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          className="font-mono"
-        />
-      </label>
+      <Textarea
+        aria-label="Payload (JSON)"
+        value={payloadText}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        placeholder='{"url": "https://example.com"}'
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        className="font-mono"
+      />
       {hasFields ? (
         <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(false)} >
           Back to form
