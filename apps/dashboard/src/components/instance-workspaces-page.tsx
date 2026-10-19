@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import * as React from "react";
 import { use } from "react";
 import { useAction, useQuery } from "convex/react";
@@ -130,81 +131,53 @@ export function InstanceWorkspacesPage({ params }: InstanceWorkspacesPageProps) 
       ) : null}
 
       {workspaces.length > 0 ? (
-        <div className="grid gap-5 xl:grid-cols-2">
-          {workspaces.map((workspace) => {
-            const agent = agentOf(workspace);
-            return (
-            <Card
-              key={workspace.workspaceKey}
-              className="py-4"
-            >
-              <CardHeader className="grid gap-3 px-6 pb-0">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Badge>
-                    {workspace.kind}
-                  </Badge>
-                  {workspace.isActive && workspace.kind !== "default" ? (
-                    <Badge variant="default">
-                      Active
-                    </Badge>
-                  ) : null}
-                </div>
-                <CardTitle className="text-lg tracking-tight text-foreground">
-                  {agent?.name ?? workspace.label}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-5 px-6 pt-5">
-                <div className="grid gap-2 text-sm leading-6 text-muted-foreground">
-                  <p className="m-0">
-                    <span className="font-semibold text-foreground">Path:</span>{" "}
-                    <code>{workspace.absolutePath}</code>
-                  </p>
-                  <p className="m-0">
-                    <span className="font-semibold text-foreground">Files:</span>{" "}
-                    {workspace.availableFiles.length}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {workspace.availableFiles.slice(0, 4).map((file) => (
-                    <Badge
-                      key={file.filePath}>
-                      {file.filePath}
-                    </Badge>
-                  ))}
-                  {workspace.availableFiles.length > 4 ? (
-                    <Badge>
-                      +{workspace.availableFiles.length - 4} more
-                    </Badge>
-                  ) : null}
-                </div>
-
-                {workspace.kind === "managed" && agents === undefined ? (
-                  // The owning Agent is not known yet: linking now would send a
-                  // managed workspace to the generic detail page, not Agent Files.
-                  <span
-                    aria-disabled="true"
-                    className="inline-flex min-h-11 w-fit items-center justify-center rounded-xl border border-border bg-primary/15 px-5 font-semibold text-primary transition hover:-translate-y-0.5 hover:border-input hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 pointer-events-none opacity-50"
-                  >
-                    Open Files
+        <Card className="w-full max-w-3xl overflow-hidden py-0">
+          <ul className="m-0 grid list-none p-0">
+            {workspaces.map((workspace) => {
+              const agent = agentOf(workspace);
+              // The owning Agent is not known yet while its Agents load: linking now
+              // would send a managed workspace to the generic detail page.
+              const pending = workspace.kind === "managed" && agents === undefined;
+              const href = agent
+                ? `/projects/${encodeURIComponent(decodedInstanceId)}/agents/${encodeURIComponent(agent.templateId)}/files`
+                : `/projects/${encodeURIComponent(decodedInstanceId)}/settings/workspaces/${encodeURIComponent(workspace.workspaceKey)}`;
+              const title = agent?.name ?? workspace.label;
+              const count = workspace.availableFiles.length;
+              const row = (
+                <>
+                  <span className="flex min-w-0 items-center gap-3 font-medium text-foreground">
+                    <span className="truncate">{title}</span>
+                    {workspace.isActive && workspace.kind !== "default" ? (
+                      <Badge variant="default">Active</Badge>
+                    ) : null}
                   </span>
-                ) : (
-                  <Link
-                    href={
-                      agent
-                        ? `/projects/${encodeURIComponent(decodedInstanceId)}/agents/${encodeURIComponent(agent.templateId)}/files`
-                        : `/projects/${encodeURIComponent(decodedInstanceId)}/settings/workspaces/${encodeURIComponent(workspace.workspaceKey)}`
-                    }
-                    className="inline-flex min-h-11 w-fit items-center justify-center rounded-xl border border-border bg-primary/15 px-5 font-semibold text-primary transition hover:-translate-y-0.5 hover:border-input hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
-                  >
-                    {agent ? "Open Files" : "Open workspace"}
-                  </Link>
-                )}
-              </CardContent>
-            </Card>
-            );
-          })}
-        </div>
+                  <span className="flex shrink-0 items-center gap-3 text-sm text-muted-foreground">
+                    {count} {count === 1 ? "file" : "files"}
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </span>
+                </>
+              );
+              const rowClass =
+                "flex items-center justify-between gap-4 px-6 py-6";
+              return (
+                <li key={workspace.workspaceKey} className="border-b border-foreground/15 last:border-b-0">
+                  {pending ? (
+                    <span aria-disabled="true" className={`${rowClass} opacity-50`}>
+                      {row}
+                    </span>
+                  ) : (
+                    <Link
+                      href={href}
+                      className={`${rowClass} transition hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50`}
+                    >
+                      {row}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       ) : null}
     </section>
   );
