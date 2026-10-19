@@ -162,8 +162,8 @@ A restrained operational overview, not another Missions page.
 ### Brand
 
 - Brand context is currently **text-only**.
-- Structured textareas: business/product summary, target audience, voice/tone, positioning, editorial guidance, exclusions/constraints.
-- Save/reset states and unsaved-change feedback.
+- `PageHeader` then a 2-column grid of one `Card` per rubric (icon on a tone, title, pencil, and the text clamped to 3 lines; a click anywhere on the card (the pencil is the keyboard target) swaps it for a `Textarea` with an `n/2,000` counter, one card edited at a time).
+- A sticky `Save changes` button at the bottom right (disabled until something changed).
 - Do not invent a visual brand kit, logo manager, or asset uploader unless the product genuinely supports those features.
 
 ## 8. Interaction and motion
