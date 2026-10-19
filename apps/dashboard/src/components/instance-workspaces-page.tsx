@@ -20,7 +20,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PageHeader } from "@/components/opengroow/page-header";
 
 type InstanceWorkspacesPageProps = {
   params: Promise<{ instanceId: string }>;
@@ -131,7 +130,7 @@ export function InstanceWorkspacesPage({ params }: InstanceWorkspacesPageProps) 
       ) : null}
 
       {workspaces.length > 0 ? (
-        <Card className="w-full max-w-3xl overflow-hidden py-0">
+        <Card className="w-full overflow-hidden py-0">
           <ul className="m-0 grid list-none p-0">
             {workspaces.map((workspace) => {
               const agent = agentOf(workspace);
@@ -184,9 +183,7 @@ export function InstanceWorkspacesPage({ params }: InstanceWorkspacesPageProps) 
 }
 
 function WorkspaceHeader({ action }: { action?: React.ReactNode }) {
-  return (
-    <PageHeader title="Workspaces" description="Browse the OpenClaw workspaces mounted in this Project." action={action} />
-  );
+  return action ? <div className="flex justify-end">{action}</div> : null;
 }
 
 function EmptyPanel({

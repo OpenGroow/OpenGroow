@@ -82,7 +82,7 @@ export function WizardStep({
           ) : null}
         </div>
       </div>
-      {children}
+      <div className="pl-11">{children}</div>
     </div>
   );
 }

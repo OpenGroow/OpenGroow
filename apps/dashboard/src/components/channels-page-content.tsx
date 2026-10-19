@@ -517,7 +517,7 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
   }
 
   return (
-    <section className="grid max-w-4xl gap-5">
+    <section className="grid gap-5">
       {whatsAppAvailable ? (
         <WorkspaceConfigCard
           icon={MessageCircle}

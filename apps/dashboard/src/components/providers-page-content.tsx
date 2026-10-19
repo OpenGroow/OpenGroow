@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { CheckCircle2, Cpu, CreditCard, KeyRound, LoaderCircle, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, Cpu, CreditCard, KeyRound, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -21,9 +21,13 @@ import {
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useOptionalPlugin } from "@/src/components/optional-plugins-provider";
 import { useProviderAuth } from "@/src/hooks/use-provider-auth";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -31,6 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const ROW_GRID = "grid grid-cols-[1.4fr_1.2fr_9rem_8rem_6rem] gap-4";
 
 type Props = { resolvedInstanceId: string };
 
@@ -310,109 +316,104 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
 
   return (
     <section className="grid gap-6">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">Provider Management</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage your subscriptions and API keys.
-          </p>
-        </div>
+      <div className="flex items-center justify-end gap-4">
         <Button
+          variant="glow"
+          size="lg"
           type="button"
           onClick={() => {
-            if (showAddPanel) { closePanel(); }
-            else { setShowAddPanel(true); setAiConfig({}); }
+            setShowAddPanel(true);
+            setAiConfig({});
           }}
-          className="h-10 shrink-0 rounded-xl bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
         >
-          + Add provider
+          <Plus />
+          Add provider
         </Button>
       </div>
 
-      {activateError ? <p className="text-sm text-destructive">{activateError}</p> : null}
+      {activateError ? <p className="m-0 text-sm text-destructive">{activateError}</p> : null}
 
-      {/* Providers table */}
-      <div className="overflow-hidden rounded-xl border border-border">
-        {/* Table header */}
-        <div className="grid grid-cols-[1.3fr_1fr_150px_130px_96px] border-b border-border bg-muted/50 px-5 py-2.5">
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground">Provider</span>
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground">Model</span>
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground">Type</span>
-          <span className="text-xs font-semibold tracking-wide text-muted-foreground">Status</span>
-          <span className="text-right text-xs font-semibold tracking-wide text-muted-foreground">Actions</span>
+      <Card className="gap-0 py-0">
+        <div className={`${ROW_GRID} border-b border-border px-6 py-4`}>
+          {["Provider", "Model", "Type", "Status", "Actions"].map((label, index) => (
+            <span
+              key={label}
+              className={`text-xs font-semibold tracking-wide text-muted-foreground uppercase ${index === 4 ? "text-right" : ""}`}
+            >
+              {label}
+            </span>
+          ))}
         </div>
 
-        {providers.map((entry, idx) => {
+        {providers.map((entry) => {
           const key = providerKey(entry);
           const isSubscription = entry.kind === "subscription";
           const isSwitchingAuth = !entry.inUse && isSwitchingSameProviderAuth(entry);
+          const name = isSubscription
+            ? `${entry.provider === DEFAULT_SUBSCRIPTION_PROVIDER ? "OpenAI" : entry.provider} Subscription`
+            : labelForProvider(entry.provider);
+          const activating = activatingKey === key;
           return (
             <div
               key={key}
-              className={`grid grid-cols-[1.3fr_1fr_150px_130px_96px] items-center px-5 py-4 ${idx < providers.length - 1 ? "border-b border-border" : ""}`}
+              className={`${ROW_GRID} items-center border-b border-border px-6 py-4 last:border-b-0`}
             >
-              <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
                   {isSubscription ? (
-                    <CreditCard className="size-4 text-primary" />
+                    <CreditCard className="size-5 text-primary" />
                   ) : (
-                    <Cpu className="size-4 text-primary" />
+                    <Cpu className="size-5 text-primary" />
                   )}
                 </div>
-                <div className="text-sm font-medium text-foreground">
-                  {isSubscription
-                    ? `${entry.provider === DEFAULT_SUBSCRIPTION_PROVIDER ? "OpenAI" : entry.provider} Subscription`
-                    : labelForProvider(entry.provider)}
-                </div>
+                <span className="truncate text-base font-medium text-foreground">{name}</span>
+              </div>
+              <div className="min-w-0">
+                <Badge variant="tag" className="max-w-full font-mono text-xs">
+                  <span className="truncate">{entry.model}</span>
+                </Badge>
               </div>
               <div>
-                <code className="inline-block rounded-md border border-input bg-secondary px-2 py-1 font-mono text-xs text-foreground">
-                  {entry.model}
-                </code>
-              </div>
-              <div>
-                <span className="inline-flex items-center rounded-md border border-border bg-card px-2.5 py-0.5 text-xs font-semibold tracking-wide text-muted-foreground">
+                <Badge variant="tag">
                   {isSubscription ? "Subscription" : "Direct API key"}
-                </span>
+                </Badge>
               </div>
-              <div className="flex items-center">
+              <div>
                 <label
                   title={
-                    !entry.inUse && isSwitchingAuth
+                    isSwitchingAuth
                       ? "Switches to this provider's other configured auth method (API key vs. subscription)."
                       : undefined
                   }
-                  className={`inline-flex items-center gap-2 text-xs font-semibold tracking-wide ${
-                    entry.inUse ? "text-primary" : "text-muted-foreground"
-                  } ${activatingKey === key ? "cursor-wait" : "cursor-pointer"}`}
+                  className={`inline-flex items-center gap-2 ${activating ? "cursor-wait" : "cursor-pointer"}`}
                 >
                   <input
                     type="radio"
                     name={`active-provider-${instance?._id ?? "unknown"}`}
                     checked={entry.inUse}
-                    disabled={activatingKey === key}
+                    disabled={activating}
                     onChange={() => {
                       if (!entry.inUse) void handleActivateProvider(entry);
                     }}
                     aria-label={`Activate ${labelForProvider(entry.provider)}`}
-                    className="size-4 accent-primary disabled:cursor-wait"
+                    className="sr-only"
                   />
-                  {activatingKey === key ? (
-                    <>
-                      <LoaderCircle className="size-3 animate-spin" />
+                  {activating ? (
+                    <Badge variant="outline" size="xs" className="text-foreground">
+                      <LoaderCircle className="animate-spin" />
                       Activating…
-                    </>
-                  ) : entry.inUse ? (
-                    "Active"
+                    </Badge>
                   ) : (
-                    "Inactive"
+                    <StatusBadge
+                      tone={entry.inUse ? "active" : "neutral"}
+                      label={entry.inUse ? "Active" : "Inactive"}
+                    />
                   )}
                 </label>
               </div>
-              <div className="flex items-center justify-end gap-1">
+              <div className="flex items-center justify-end gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon-sm"
                   type="button"
                   aria-label={isSubscription ? `Edit ${labelForProvider(entry.provider)} model` : `Edit ${labelForProvider(entry.provider)}`}
@@ -430,10 +431,10 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                     }
                   }}
                 >
-                  <Pencil className="size-4" />
+                  <Pencil />
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="icon-sm"
                   type="button"
                   aria-label={`Remove ${labelForProvider(entry.provider)}`}
@@ -441,24 +442,28 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                   disabled={entry.inUse}
                   onClick={() => void handleRemoveProvider(entry)}
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 />
                 </Button>
               </div>
             </div>
           );
         })}
 
-        {/* Empty state */}
         {providers.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
             No providers configured. Click &ldquo;Add provider&rdquo; to get started.
           </div>
         ) : null}
-      </div>
+      </Card>
 
-      {/* Add / edit panel */}
-      {showAddPanel ? (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
+      {/* Add / edit modal */}
+      <Dialog
+        open={showAddPanel}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) closePanel();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-0">
           {/* Type selector */}
           {!addType ? (
             <div className="p-6">
@@ -467,6 +472,7 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                 <Button
                   variant="outline"
                   type="button"
+                  className="h-auto flex-col items-start gap-2 p-4 text-left whitespace-normal"
                   onClick={() => setAddType("subscription")}
                   disabled={!codexAvailable}
                 >
@@ -481,6 +487,7 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                 <Button
                   variant="outline"
                   type="button"
+                  className="h-auto flex-col items-start gap-2 p-4 text-left whitespace-normal"
                   onClick={() => setAddType("apikey")}
                 >
                   <KeyRound className="size-5 text-primary" />
@@ -743,8 +750,8 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

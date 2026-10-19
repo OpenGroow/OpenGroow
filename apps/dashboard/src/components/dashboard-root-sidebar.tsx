@@ -13,7 +13,6 @@ type RootNavItem = {
 
 const ROOT_NAV_ITEMS: RootNavItem[] = [
   { href: "/", label: "Projects", icon: AppGridIcon },
-  { href: "/admin", label: "Admin", icon: AdminPanelIcon },
 ];
 
 export function DashboardRootSidebar({
@@ -108,21 +107,6 @@ function AppGridIcon() {
       <rect x="13" y="5" width="7" height="6" rx="1.5" fill="currentColor" opacity="0.7" />
       <rect x="4" y="13" width="7" height="6" rx="1.5" fill="currentColor" opacity="0.75" />
       <rect x="13" y="13" width="7" height="6" rx="1.5" fill="currentColor" opacity="0.45" />
-    </svg>
-  );
-}
-
-function AdminPanelIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M12 3.75 19 7.5v9L12 20.25 5 16.5v-9l7-3.75Zm0 4.25a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="1.8" fill="currentColor" />
     </svg>
   );
 }
