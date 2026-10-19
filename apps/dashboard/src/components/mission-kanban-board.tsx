@@ -1,6 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ListChecks,
+  Loader2,
+  Upload,
+  type LucideIcon,
+} from "lucide-react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
@@ -8,6 +18,8 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { blockedExternalResult } from "@/src/lib/mission-result";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
 // Drift-prone fields (the status union, the run-result shape, names, etc.) are
@@ -39,20 +51,75 @@ type Props = {
   doneMissions?: Mission[];
   doneStatus?: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
   onLoadMoreDone?: () => void;
+  // Lower-cased text typed in the search field; matches the type, name and
+  // summary of a Mission. Empty shows everything.
+  query?: string;
+  sort?: "newest" | "oldest";
 };
 
-const COLUMNS = [
-  { id: "todo", label: "To do" },
-  { id: "doing", label: "In progress" },
-  { id: "blocked", label: "Blocked" },
-  { id: "to_validate", label: "To validate" },
-  { id: "approved", label: "To publish" },
-  { id: "done", label: "Done" },
-] as const;
+// `dot` is the column's colour marker (a label always sits next to it); the
+// empty state tells the user what the column is for.
+export const COLUMNS = [
+  {
+    id: "todo",
+    label: "To do",
+    dot: "bg-tone-slate",
+    icon: ListChecks,
+    emptyTitle: "No missions yet",
+    emptyText: "Create a new mission to get started.",
+  },
+  {
+    id: "doing",
+    label: "In progress",
+    dot: "bg-tone-cyan",
+    icon: Loader2,
+    emptyTitle: "Nothing in progress",
+    emptyText: "Missions in progress will appear here.",
+  },
+  {
+    id: "blocked",
+    label: "Blocked",
+    dot: "bg-status-warning",
+    icon: AlertTriangle,
+    emptyTitle: "No blocked missions",
+    emptyText: "Missions that need attention will appear here.",
+  },
+  {
+    id: "to_validate",
+    label: "To validate",
+    dot: "bg-tone-violet",
+    icon: CheckCircle2,
+    emptyTitle: "Nothing to validate",
+    emptyText: "Missions ready for review will appear here.",
+  },
+  {
+    id: "approved",
+    label: "To publish",
+    dot: "bg-tone-green",
+    icon: Upload,
+    emptyTitle: "Nothing to publish",
+    emptyText: "Approved missions will appear here before publishing.",
+  },
+  {
+    id: "done",
+    label: "Done",
+    dot: "bg-tone-slate",
+    icon: CheckCircle2,
+    emptyTitle: "Nothing done yet",
+    emptyText: "Completed missions will appear here.",
+  },
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  dot: string;
+  icon: LucideIcon;
+  emptyTitle: string;
+  emptyText: string;
+}[];
 
 type ColumnId = (typeof COLUMNS)[number]["id"];
 
-function columnForMission(status: Mission["status"]): ColumnId {
+export function columnForMission(status: Mission["status"]): ColumnId {
   // `cancelled` (issue #482, an operator-initiated Stop) has no dedicated
   // column, same as `failed` — both render in "In progress" so the board's
   // status coverage stays exhaustive.
@@ -90,13 +157,20 @@ function hasReviewableArtifact(mission: Mission): boolean {
   return typeof artifact.external?.id === "string";
 }
 
+// Active columns reveal their Missions by batches of this size; Done pages on
+// the server instead (see `onLoadMoreDone`).
+const COLUMN_PAGE_SIZE = 5;
+
 export function MissionKanbanBoard({
   missions,
   projectId,
   doneMissions,
   doneStatus,
   onLoadMoreDone,
+  query = "",
+  sort = "newest",
 }: Props) {
+  const [visibleCount, setVisibleCount] = useState<Partial<Record<ColumnId, number>>>({});
   const byColumn: Record<ColumnId, Mission[]> = {
     todo: [],
     doing: [],
@@ -106,15 +180,20 @@ export function MissionKanbanBoard({
     done: [],
   };
 
+  const needle = query.trim().toLowerCase();
+  const matches = (m: Mission): boolean =>
+    !needle ||
+    [m.type, titleCase(m.type), m.name, m.summary].some((text) => text?.toLowerCase().includes(needle));
+
   for (const m of missions) {
-    byColumn[columnForMission(m.status)].push(m);
+    if (matches(m)) byColumn[columnForMission(m.status)].push(m);
   }
   if (doneMissions) {
-    byColumn.done.push(...doneMissions);
+    byColumn.done.push(...doneMissions.filter(matches));
   }
 
   for (const col of COLUMNS) {
-    byColumn[col.id].sort((a, b) => b.updatedAt - a.updatedAt);
+    byColumn[col.id].sort((a, b) => (sort === "newest" ? b.updatedAt - a.updatedAt : a.updatedAt - b.updatedAt));
   }
 
   const canLoadMoreDone = onLoadMoreDone && (doneStatus === "CanLoadMore" || doneStatus === "LoadingMore");
@@ -122,36 +201,70 @@ export function MissionKanbanBoard({
   return (
     <div className="flex gap-4 overflow-x-auto pb-2">
       {COLUMNS.map((col) => (
-        <div
+        <section
           key={col.id}
           data-column={col.id}
-          className="flex min-w-[220px] flex-1 flex-col gap-3 rounded-xl border border-border bg-background p-4"
+          aria-label={col.label}
+          className="flex min-w-60 flex-1 flex-col rounded-2xl border border-border bg-card/50"
         >
-          <h3 className="m-0 text-xs font-semibold text-muted-foreground">
-            {col.label}
-          </h3>
+          <header className="flex items-center gap-2.5 border-b border-border px-4 py-3.5">
+            <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", col.dot)} />
+            <h3 className="m-0 min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+              {col.label}
+            </h3>
+            <Badge variant="outline" size="xs" className="tabular-nums">
+              {byColumn[col.id].length}
+            </Badge>
+          </header>
 
-          {byColumn[col.id].length === 0 ? (
-            <p className="text-sm text-muted-foreground">—</p>
-          ) : (
-            byColumn[col.id].map((mission) => (
-              <MissionCard key={mission._id} mission={mission} projectId={projectId} />
-            ))
-          )}
+          <div className="flex flex-1 flex-col gap-3 p-3">
+            {byColumn[col.id].length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-10 text-center">
+                <col.icon aria-hidden="true" className="mb-1 size-8 text-muted-foreground" />
+                <p className="m-0 text-sm font-semibold text-foreground">{col.emptyTitle}</p>
+                <p className="m-0 text-sm text-muted-foreground">{col.emptyText}</p>
+              </div>
+            ) : (
+              (col.id === "done"
+                ? byColumn.done
+                : byColumn[col.id].slice(0, visibleCount[col.id] ?? COLUMN_PAGE_SIZE)
+              ).map((mission) => (
+                <MissionCard key={mission._id} mission={mission} projectId={projectId} />
+              ))
+            )}
 
-          {col.id === "done" && canLoadMoreDone && (
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              disabled={doneStatus === "LoadingMore"}
-              onClick={() => onLoadMoreDone?.()}
-              className="mt-1"
-            >
-              {doneStatus === "LoadingMore" ? "Loading…" : "Load more"}
-            </Button>
-          )}
-        </div>
+            {col.id !== "done" &&
+              byColumn[col.id].length > (visibleCount[col.id] ?? COLUMN_PAGE_SIZE) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() =>
+                    setVisibleCount((prev) => ({
+                      ...prev,
+                      [col.id]: (prev[col.id] ?? COLUMN_PAGE_SIZE) + COLUMN_PAGE_SIZE,
+                    }))
+                  }
+                >
+                  <ChevronDown />
+                  Load more
+                </Button>
+              )}
+
+            {col.id === "done" && canLoadMoreDone && (
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                disabled={doneStatus === "LoadingMore"}
+                onClick={() => onLoadMoreDone?.()}
+              >
+                <ChevronDown />
+                {doneStatus === "LoadingMore" ? "Loading…" : "Load more"}
+              </Button>
+            )}
+          </div>
+        </section>
       ))}
     </div>
   );
@@ -184,16 +297,20 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
   }
 
   return (
-    <div
+    <Card
       data-mission={mission._id}
-      className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3"
+      size="sm"
+      className="glow-hover gap-2 px-3 py-3"
     >
       <Link
         href={detailHref}
         className="flex flex-col gap-2 no-underline"
       >
         <div className="flex flex-col gap-1.5">
-          <span className="break-words text-sm font-semibold text-foreground">
+          <span className="flex items-start gap-2 break-words text-sm font-semibold text-foreground">
+            {mission.status === "done" && (
+              <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-tone-green" />
+            )}
             {titleCase(mission.type)}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -252,12 +369,18 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
 
       <div className="flex items-center gap-2">
         {showAction && (
-          <Link
-            href={`/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}/review`}
-            className="inline-flex min-h-8 flex-1 items-center justify-center rounded-xl border border-border bg-primary/15 px-3 py-1 text-xs font-semibold text-primary transition hover:border-input"
+          <Button
+            variant="accent"
+            size="sm"
+            nativeButton={false}
+            render={
+              <Link
+                href={`/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}/review`}
+              />
+            }
           >
             {mission.status === "approved" ? "Publish" : "Review"}
-          </Link>
+          </Button>
         )}
         {showDelete && (
           <Button
@@ -273,6 +396,6 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
           </Button>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -48,7 +48,7 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
         <Textarea
           value={payloadText}
           onChange={(e) => onChange(e.target.value)}
-          rows={5}
+          rows={3}
           placeholder='{"url": "https://example.com"}'
           autoCorrect="off"
           autoCapitalize="off"

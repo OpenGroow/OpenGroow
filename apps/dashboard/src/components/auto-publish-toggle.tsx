@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+import { Switch } from "@/components/ui/switch";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { templateSupportsAutoPublish } from "@convex/template_manifest_contract";
 
@@ -40,21 +42,24 @@ export function AutoPublishToggle({
   hint?: string;
   onChange: (next: boolean) => void;
 }) {
+  const id = useId();
+  const labelId = `${id}-label`;
+  const hintId = `${id}-hint`;
   return (
-    <label className="flex items-start gap-2.5">
-      <input
-        type="checkbox"
+    <div className="flex items-center gap-3">
+      <Switch
         checked={checked}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 rounded border-border text-primary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+        onCheckedChange={(next) => onChange(next === true)}
+        aria-labelledby={labelId}
+        aria-describedby={hintId}
       />
       <span className="grid gap-0.5">
-        <span className="text-sm font-semibold text-muted-foreground">
+        <span id={labelId} className="text-sm font-semibold text-muted-foreground">
           Auto-publish
         </span>
-        <span className="text-xs text-muted-foreground">{hint}</span>
+        <span id={hintId} className="text-xs text-muted-foreground">{hint}</span>
       </span>
-    </label>
+    </div>
   );
 }
