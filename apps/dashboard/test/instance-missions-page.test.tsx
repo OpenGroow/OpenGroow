@@ -107,7 +107,7 @@ describe("InstanceMissionsContent — mission list", () => {
     };
   }
 
-  it("shows 'Project' section label (not 'Instance') in page header", async () => {
+  it("titles the page Missions and never says 'Instance'", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.listActiveByInstance") return [];
       if (key === "project_agents.listByInstance") return [];
@@ -116,7 +116,7 @@ describe("InstanceMissionsContent — mission list", () => {
 
     await render();
 
-    expect(document.body.textContent).toContain("Project");
+    expect(document.querySelector("h1")?.textContent).toBe("Missions");
     expect(document.body.textContent).not.toContain("Instance");
   });
 

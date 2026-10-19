@@ -6,6 +6,9 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { signIn, signUp } from "@/src/lib/auth-client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -50,11 +53,11 @@ export function SignInForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-[var(--dashboard-radius-panel)] bg-[var(--dashboard-surface-container-lowest)] p-8 shadow-[var(--dashboard-shadow)]">
-      <h1 className="text-xl font-semibold text-[var(--dashboard-ink)]">
+    <Card className="w-full max-w-sm p-8">
+      <h1 className="text-xl font-semibold text-foreground">
         {mode === "sign-up" ? "Create your account" : "Sign in"}
       </h1>
-      <p className="mt-1 text-sm text-[var(--dashboard-ink-muted)]">
+      <p className="mt-1 text-sm text-muted-foreground">
         {mode === "sign-up"
           ? "Create the admin account for this self-hosted OpenGroow."
           : "Sign in to OpenGroow."}
@@ -62,50 +65,47 @@ export function SignInForm({ mode }: { mode: Mode }) {
 
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
         {mode === "sign-up" && (
-          <input
+          <Input
             type="text"
             required
             placeholder="Name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            className="rounded-[var(--dashboard-radius-control)] border border-[var(--dashboard-outline-strong)] px-3 py-2 text-sm"
           />
         )}
-        <input
+        <Input
           type="email"
           required
           placeholder="Email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="rounded-[var(--dashboard-radius-control)] border border-[var(--dashboard-outline-strong)] px-3 py-2 text-sm"
         />
-        <input
+        <Input
           type="password"
           required
           minLength={8}
           placeholder="Password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="rounded-[var(--dashboard-radius-control)] border border-[var(--dashboard-outline-strong)] px-3 py-2 text-sm"
         />
 
-        {error && <p className="text-sm text-[var(--dashboard-tertiary)]">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <button
+        <Button
           type="submit"
           disabled={submitting}
-          className="mt-2 rounded-[var(--dashboard-radius-control)] bg-[var(--dashboard-primary)] px-4 py-2 text-sm font-semibold text-[var(--dashboard-on-primary)] disabled:opacity-60"
+          className="mt-2"
         >
           {mode === "sign-up" ? "Create account" : "Sign in"}
-        </button>
+        </Button>
       </form>
 
       <Link
         href={mode === "sign-up" ? "/sign-in" : "/sign-up"}
-        className="mt-4 block text-sm text-[var(--dashboard-ink-muted)] underline"
+        className="mt-4 block text-sm text-muted-foreground underline"
       >
         {mode === "sign-up" ? "Already have an account? Sign in" : "First time here? Create an account"}
       </Link>
-    </div>
+    </Card>
   );
 }

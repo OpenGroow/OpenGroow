@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { MissionPayloadField } from "@convex/template_manifest_contract";
 import { MissionPayloadFields } from "../src/components/mission-payload-fields";
+import { Input } from "@/components/ui/input";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -156,7 +157,7 @@ describe("MissionPayloadFields", () => {
   });
 
   // Number fields (e.g. create_chat_mock_video's turnCount, issue #336) render
-  // as a bounded <input type="number"> and must round-trip as a JSON number,
+  // as a bounded <Input type="number"> and must round-trip as a JSON number,
   // not a string — downstream contracts (see manifest-mission-types.test.ts)
   // rely on `typeof payload.turnCount === "number"`.
   const turnCountFields: MissionPayloadField[] = [

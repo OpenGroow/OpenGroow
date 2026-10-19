@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestFixture } from "./fixtures/manifests";
 import { AddAgentDialog } from "../src/components/add-agent-dialog";
+import { Input } from "@/components/ui/input";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,7 +42,7 @@ vi.mock("@convex/_generated/api", () => ({
 const manifest = { ...manifestFixture("seo"), id: "@acme/seo", name: "Acme SEO" };
 const PLAN = { mcpHosts: ["seo.acme.dev"], secrets: [], skills: [], prerequisites: [] };
 
-/** A file as `<input webkitdirectory>` reports it. */
+/** A file as `<Input webkitdirectory>` reports it. */
 function pickedFile(path: string, content: string | Uint8Array) {
   const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
   return { webkitRelativePath: path, size: bytes.byteLength, arrayBuffer: async () => bytes.slice().buffer as ArrayBuffer };

@@ -24,16 +24,17 @@ import type { InstanceRecord, InstanceView } from "@/src/components/instance-wor
 import { getWorkspaceStatusLabel } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { HOSTED_ONLY_VIEWS } from "@/src/lib/self-host";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { WaitingLogsPanel } from "./waiting-logs-panel";
 
 const NAV_LINK_BASE_CLASSES =
-  "flex min-h-14 items-center gap-3.5 rounded-2xl px-4 py-3 text-left transition-[background-color,color,transform] duration-150 hover:-translate-y-px hover:text-[var(--dashboard-primary)] [&_svg]:size-[1.1rem] [&_svg]:shrink-0";
+  "relative flex h-10 items-center gap-3 rounded-lg px-3 text-left text-base font-medium transition-colors [&_svg]:size-5 [&_svg]:shrink-0";
 
 function navLinkActiveClasses(isActive: boolean) {
   return isActive
-    ? "bg-[linear-gradient(135deg,rgba(188,237,215,0.92),rgba(214,236,226,0.88))] text-[var(--dashboard-primary)] shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)]"
-    : "text-[var(--dashboard-ink-muted)] hover:bg-[rgba(220,230,224,0.65)]";
+    ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-sidebar-primary"
+    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground";
 }
 
 type ProjectView = {
@@ -135,9 +136,9 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
   if (!instances) {
     return (
-      <main className="min-h-screen bg-white">
+      <main className="min-h-screen bg-background">
         <section className="grid min-h-screen place-items-center px-6">
-          <div className="w-full max-w-[720px] px-8 py-16 text-center text-[var(--dashboard-ink-muted)]">
+          <div className="w-full max-w-[720px] px-8 py-16 text-center text-muted-foreground">
             Loading project workspace…
           </div>
         </section>
@@ -147,22 +148,21 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
   if (instances && !instance) {
     return (
-      <main className="min-h-screen bg-white">
+      <main className="min-h-screen bg-background">
         <section className="grid min-h-screen place-items-center px-6">
           <div className="w-full max-w-[720px] px-8 py-16 text-center">
-            <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
+            <span className="text-xs font-medium text-muted-foreground">
               Project
             </span>
-            <h1 className="m-0 text-[clamp(2rem,4vw,3.5rem)] leading-[0.98] tracking-[-0.05em] text-[var(--dashboard-ink)]">
+            <h1 className="m-0 text-3xl font-semibold tracking-tight text-foreground">
               Not Found
             </h1>
-            <p className="m-0 text-[0.9375rem] leading-[1.7] text-[var(--dashboard-ink-muted)]">
+            <p className="m-0 mt-2 text-sm leading-6 text-muted-foreground">
               No project matched <code>{decodedId}</code>.
             </p>
             <Link
               href="/"
-              className="mx-auto mt-6 inline-flex min-h-[3.375rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:text-white hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] [&_span]:text-white"
-              style={{ color: "#f6fffa" }}
+              className={cn(buttonVariants({ size: "lg" }), "mt-6")}
             >
               <span>Back to Dashboard</span>
             </Link>
@@ -174,27 +174,26 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
   if (instance && !instanceAccessible) {
     return (
-      <main className="min-h-screen bg-white">
+      <main className="min-h-screen bg-background">
         <section className="grid min-h-screen place-items-center px-6">
           <div className="w-full max-w-[960px] px-8 py-16 text-center">
-            <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
+            <span className="text-xs font-medium text-muted-foreground">
               Project
             </span>
-            <h1 className="m-0 text-[clamp(2rem,4vw,3.5rem)] leading-[0.98] tracking-[-0.05em] text-[var(--dashboard-ink)]">
+            <h1 className="m-0 text-3xl font-semibold tracking-tight text-foreground">
               Still Starting
             </h1>
-            <p className="m-0 text-[0.9375rem] leading-[1.7] text-[var(--dashboard-ink-muted)]">
+            <p className="m-0 mt-2 text-sm leading-6 text-muted-foreground">
               This project is not ready yet. Access to the workspace stays locked until provisioning finishes.
             </p>
-            <div className="mx-auto mt-6 inline-flex items-center gap-3 rounded-full border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-4 py-2.5 text-[0.95rem] font-bold text-[var(--dashboard-ink)]">
-              <span className="inline-block size-4 animate-spin rounded-full border-2 border-[rgba(0,38,27,0.16)] border-t-[var(--dashboard-primary)]" />
+            <div className="mx-auto mt-6 inline-flex items-center gap-3 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground">
+              <span className="inline-block size-4 animate-spin rounded-full border-2 border-border border-t-primary" />
               <span>{statusLabel}</span>
             </div>
             <WaitingLogsPanel instance={instance} />
             <Link
               href="/"
-              className="mx-auto mt-6 inline-flex min-h-[3.375rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:text-white hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] [&_span]:text-white"
-              style={{ color: "#f6fffa" }}
+              className={cn(buttonVariants({ size: "lg" }), "mt-6")}
             >
               <span>Back to Dashboard</span>
             </Link>
@@ -205,12 +204,12 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
   }
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-background">
       <section className="flex min-h-screen flex-col">
-        <section className="flex flex-1 flex-col items-start gap-6 xl:flex-row xl:gap-10">
+        <section className="flex flex-1 flex-col items-start gap-6 xl:flex-row xl:gap-8">
           <aside
-            className={`flex w-full flex-col gap-6 bg-[#f8f9f7] px-5 py-8 shadow-[inset_0_-1px_0_rgba(0,38,27,0.08)] xl:min-h-screen xl:flex-none xl:py-8 xl:shadow-[inset_-1px_0_0_rgba(0,38,27,0.08)] xl:transition-[width,padding] xl:duration-150 ${
-              isSidebarCollapsed ? "xl:w-[84px] xl:px-3" : "xl:w-[300px] xl:px-7"
+            className={`flex w-full flex-col gap-6 border-b border-sidebar-border bg-sidebar px-5 py-6 text-sidebar-foreground xl:min-h-screen xl:flex-none xl:border-r xl:border-b-0 xl:py-6 xl:transition-[width,padding] xl:duration-150 ${
+              isSidebarCollapsed ? "xl:w-16 xl:px-3" : "xl:w-72 xl:px-4"
             }`}
           >
             <div
@@ -219,7 +218,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
               }`}
             >
               {!isSidebarCollapsed ? (
-                <h2 className="m-0 text-[1.2rem] font-extrabold leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+                <h2 className="m-0 truncate text-lg font-semibold tracking-tight text-sidebar-foreground">
                   {projectTitle}
                 </h2>
               ) : null}
@@ -228,10 +227,12 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
                   isSidebarCollapsed ? "ml-auto xl:ml-0" : "ml-auto"
                 }`}
               >
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  className="hidden shrink-0 rounded-full p-1.5 text-[var(--dashboard-ink-muted)] transition hover:bg-[rgba(0,38,27,0.08)] hover:text-[var(--dashboard-ink)] xl:flex"
+                  className="hidden xl:inline-flex"
                   onClick={() => setIsSidebarCollapsed((current) => !current)}
                 >
                   {isSidebarCollapsed ? (
@@ -239,24 +240,26 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
                   ) : (
                     <PanelLeftClose className="size-4" />
                   )}
-                </button>
+                </Button>
                 {/* Below `xl` the sidebar isn't collapsible (the toggle above is
                     `xl:flex` only), so a full vertical stack of ~14 rows would push
                     the page content off-screen. Hide it behind a burger menu instead. */}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon-sm"
                   aria-label={isMobileNavOpen ? "Close menu" : "Open menu"}
                   aria-expanded={isMobileNavOpen}
-                  className="flex shrink-0 items-center justify-center rounded-full p-1.5 text-[var(--dashboard-ink-muted)] transition hover:bg-[rgba(0,38,27,0.08)] hover:text-[var(--dashboard-ink)] xl:hidden"
+                  className="xl:hidden"
                   onClick={() => setIsMobileNavOpen((current) => !current)}
                 >
-                  {isMobileNavOpen ? <X className="size-5" /> : <Menu className="size-5" />}
-                </button>
+                  {isMobileNavOpen ? <X /> : <Menu />}
+                </Button>
               </div>
             </div>
 
             {isMobileNavOpen ? (
-              <nav className="grid gap-1.5 xl:hidden" aria-label="Project sections">
+              <nav className="grid gap-1 xl:hidden" aria-label="Project sections">
                 <ProjectNavLinks
                   views={visibleViews}
                   projectPath={`/projects/${encodeURIComponent(decodedId)}`}
@@ -277,7 +280,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
             {/* Desktop: the original full-height vertical nav, collapsible via the
                 toggle above (which only renders at `xl`). */}
-            <nav className="hidden xl:grid xl:gap-1.5" aria-label="Project sections">
+            <nav className="hidden xl:grid xl:gap-1" aria-label="Project sections">
               <ProjectNavLinks
                 views={visibleViews}
                 projectPath={`/projects/${encodeURIComponent(decodedId)}`}
@@ -292,7 +295,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
                 title={isSidebarCollapsed ? "Projects" : undefined}
                 className={cn(
                   NAV_LINK_BASE_CLASSES,
-                  "text-[var(--dashboard-ink-muted)] hover:bg-[rgba(220,230,224,0.65)]",
+                  "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                   isSidebarCollapsed && "xl:justify-center xl:px-0",
                 )}
               >
@@ -302,7 +305,13 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
             </div>
           </aside>
 
-          <section className="grid w-full min-w-0 flex-1 content-start gap-8 px-5 pb-12 pt-8 sm:px-8 xl:px-0 xl:py-12 xl:pr-8">
+          <section className="relative isolate grid w-full min-w-0 flex-1 content-start gap-8 px-5 pb-12 pt-8 sm:px-8 xl:px-0 xl:py-10 xl:pr-8">
+            {/* Spotlight behind the page header (DESIGN.md: glow-hero), faint and
+                fading downwards; the pages themselves draw no background. */}
+            <div
+              aria-hidden="true"
+              className="glow-hero pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 [mask-image:linear-gradient(to_bottom,black_30%,transparent)]"
+            />
             {children}
           </section>
         </section>

@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { DecisionBadge, ScoreBadge } from "./report-badges";
 import type { AnchorRepair, ReportPost } from "./report-schema";
+import { Button } from "@/components/ui/button";
 
 /** The resource-id without its package prefix: "com.x:id/g6s" -> "g6s". */
 function shortId(resourceId: string | null | undefined): string {
@@ -49,13 +50,13 @@ export function PostRow({ post }: PostRowProps) {
   const commentAction = post.agentEvaluation?.commentAction;
 
   return (
-    <div className="rounded-[1.35rem] border border-[rgba(0,38,27,0.08)] bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex gap-3">
         {/* Content */}
         <div className="min-w-0 flex-1 grid gap-1.5">
           {/* Top row: username + decision */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-[0.92rem] text-[var(--dashboard-ink)]">
+            <span className="font-semibold text-sm text-foreground">
               @{accountHandle ?? "—"}
             </span>
             <DecisionBadge decision={decision} />
@@ -65,7 +66,7 @@ export function PostRow({ post }: PostRowProps) {
           {/* Caption (truncated unless expanded) */}
           {caption && (
             <p
-              className={`text-[0.85rem] leading-5 text-[var(--dashboard-ink-soft)] ${expanded ? "" : "line-clamp-2"}`}
+              className={`text-sm leading-5 text-muted-foreground ${expanded ? "" : "line-clamp-2"}`}
             >
               {caption}
             </p>
@@ -74,7 +75,7 @@ export function PostRow({ post }: PostRowProps) {
           {/* jev's answer for this post: the two probabilities, or why there
               are none. Absent for reports written before jev was recorded. */}
           {classifier && (
-            <p className="text-[0.78rem] font-medium text-[var(--dashboard-ink-muted)]">
+            <p className="text-xs font-medium text-muted-foreground">
               {classifier.status === "available" &&
               classifier.shouldLikeScore !== undefined &&
               classifier.shouldCommentScore !== undefined
@@ -85,7 +86,7 @@ export function PostRow({ post }: PostRowProps) {
 
           {/* Drifted app anchors re-resolved (or not) while handling this post. */}
           {post.anchorRepairs?.map((repair, i) => (
-            <p key={i} className="text-[0.78rem] font-medium text-[var(--dashboard-ink-muted)]">
+            <p key={i} className="text-xs font-medium text-muted-foreground">
               {describeRepair(repair)}
             </p>
           ))}
@@ -94,17 +95,17 @@ export function PostRow({ post }: PostRowProps) {
               or why it produced nothing (Ollama down, no crop area...). Absent
               entirely when the run never asked for one. */}
           {(visualDescription || visualDescriptionStatus?.ok === false) && (
-            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2">
-              <p className="text-[0.82rem] text-[var(--dashboard-ink-soft)]">
+            <div className="rounded-xl border border-border bg-background px-3 py-2">
+              <p className="text-sm text-muted-foreground">
                 <span className="font-semibold">Visual description: </span>
                 {visualDescription ? (
                   <span
-                    className={`whitespace-pre-line text-[var(--dashboard-ink)] ${expanded ? "" : "line-clamp-3"}`}
+                    className={`whitespace-pre-line text-foreground ${expanded ? "" : "line-clamp-3"}`}
                   >
                     {visualDescription}
                   </span>
                 ) : (
-                  <span className="italic text-[var(--dashboard-ink-muted)]">
+                  <span className="italic text-muted-foreground">
                     unavailable{visualDescriptionStatus?.reason ? ` (${visualDescriptionStatus.reason})` : ""}
                   </span>
                 )}
@@ -114,7 +115,7 @@ export function PostRow({ post }: PostRowProps) {
 
           {/* Relevance reason */}
           {relevanceReason && (
-            <p className="text-[0.82rem] italic text-[var(--dashboard-ink-soft)]">
+            <p className="text-sm italic text-muted-foreground">
               {relevanceReason}
             </p>
           )}
@@ -123,21 +124,21 @@ export function PostRow({ post }: PostRowProps) {
               only commentPostReason is set: a comment flow that was entered but
               posted nothing still needs to show *why* it didn't. */}
           {commentAction && (commentAction.commentsLiked?.length || commentAction.commentPosted || commentAction.commentPostReason) && (
-            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2 grid gap-1.5">
+            <div className="rounded-xl border border-border bg-background px-3 py-2 grid gap-1.5">
               {commentAction.commentsLiked && commentAction.commentsLiked.length > 0 && (
-                <p className="text-[0.82rem] text-[var(--dashboard-ink-soft)]">
+                <p className="text-sm text-muted-foreground">
                   <span className="font-semibold">Liked comments: </span>
                   {commentAction.commentsLiked.map((i) => `#${i + 1}`).join(", ")}
                 </p>
               )}
               {commentAction.commentPosted && (
-                <p className="text-[0.82rem] text-[var(--dashboard-ink)]">
-                  <span className="font-semibold text-[var(--dashboard-ink-soft)]">Comment posted: </span>
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold text-muted-foreground">Comment posted: </span>
                   {commentAction.commentPosted}
                 </p>
               )}
               {commentAction.commentPostReason && (
-                <p className="text-[0.82rem] italic text-[var(--dashboard-ink-muted)]">
+                <p className="text-sm italic text-muted-foreground">
                   {commentAction.commentPostReason}
                 </p>
               )}
@@ -146,9 +147,9 @@ export function PostRow({ post }: PostRowProps) {
 
           {/* Legacy comment posted (pre-commentAction schema) */}
           {!commentAction && legacyCommentAction?.commentPosted && (
-            <div className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-3 py-2">
-              <p className="text-[0.82rem] text-[var(--dashboard-ink)]">
-                <span className="font-semibold text-[var(--dashboard-ink-soft)]">Comment: </span>
+            <div className="rounded-xl border border-border bg-background px-3 py-2">
+              <p className="text-sm text-foreground">
+                <span className="font-semibold text-muted-foreground">Comment: </span>
                 {legacyCommentAction.commentPosted}
               </p>
             </div>
@@ -156,13 +157,15 @@ export function PostRow({ post }: PostRowProps) {
 
           {/* Expand / collapse */}
           {((caption && caption.length > 80) || (visualDescription && visualDescription.length > 160)) && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               onClick={() => { setExpanded((v) => !v); }}
-              className="self-start text-[0.78rem] font-semibold text-[var(--dashboard-primary)] hover:underline"
+              className="self-start"
             >
               {expanded ? "Show less" : "Show more"}
-            </button>
+            </Button>
           )}
         </div>
       </div>

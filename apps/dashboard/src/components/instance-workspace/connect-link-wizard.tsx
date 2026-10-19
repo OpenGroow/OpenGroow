@@ -44,10 +44,10 @@ export function ConnectLinkWizard({
   });
   const phaseTone =
     wizardPhase === "failed" || wizardPhase === "expired"
-      ? "text-[#8f3030]"
+      ? "text-destructive"
       : wizardPhase === "connected"
-        ? "text-[#236949]"
-        : "text-[var(--dashboard-ink-muted)]";
+        ? "text-status-success"
+        : "text-muted-foreground";
 
   const stepOneComplete = connectTicket.ticket !== undefined;
   const stepTwoComplete =
@@ -70,12 +70,12 @@ export function ConnectLinkWizard({
   }, [wizardPhase, deviceSaveStatus, onConnected]);
 
   return (
-    <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
+    <Card className="gap-5 py-6">
       <CardHeader className="grid gap-2 px-6 pb-0">
-        <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+        <CardTitle className="text-lg tracking-tight text-foreground">
           Connect Link
         </CardTitle>
-        <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
+        <CardDescription className="max-w-2xl text-base leading-7 text-muted-foreground">
           Generate a public link and guide the remote helper through connection,
           approval, and reconnect confirmation.
         </CardDescription>
@@ -88,21 +88,20 @@ export function ConnectLinkWizard({
           title="Generate the connect link"
         >
           <div className="flex flex-wrap gap-3">
-            <Button
+            <Button size="lg"
               type="button"
-              className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
               onClick={() => void handleCreateConnectTicket()}
             >
               {connectTicket.ticket ? "Generate new connect link" : "Create connect link"}
             </Button>
           </div>
           {connectTicket.status === "creating" ? (
-            <p className="text-sm text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm text-muted-foreground">
               Creating public connect ticket…
             </p>
           ) : null}
           {connectTicket.ticket ? (
-            <p className="text-sm text-[#236949]">
+            <p className="text-sm text-status-success">
               Connect ticket ready until{" "}
               {new Date(connectTicket.ticket.expiresAt).toLocaleString()}.
             </p>
@@ -117,18 +116,17 @@ export function ConnectLinkWizard({
           description="Run the helper command on the remote machine, then wait for its first connection attempt."
         >
           {!connectTicket.ticket ? (
-            <p className="text-sm text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm text-muted-foreground">
               Create the connect link in step 1 to unlock the helper command.
             </p>
           ) : (
             <div className="grid gap-3">
-              <code className="block w-full rounded-xl border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.95)] px-4 py-3 text-sm text-[var(--dashboard-ink)] [overflow-wrap:anywhere]">
+              <code className="block w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm text-foreground [overflow-wrap:anywhere]">
                 {connectTicket.ticket.nodeRunCommand}
               </code>
               <div className="flex flex-wrap gap-3">
-                <Button
+                <Button variant="secondary" size="lg"
                   type="button"
-                  className="h-11 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
                   onClick={() =>
                     void navigator.clipboard.writeText(
                       connectTicket.ticket?.nodeRunCommand ?? "",
@@ -157,10 +155,9 @@ export function ConnectLinkWizard({
         >
           {wizardPhase === "approval_required" && pendingNodeRequestId ? (
             <div className="flex flex-wrap gap-3">
-              <Button
+              <Button size="lg"
                 type="button"
                 disabled={approvingDevice}
-                className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
                 onClick={() => void handleApproveDevice()}
               >
                 {approvingDevice ? (
@@ -174,17 +171,17 @@ export function ConnectLinkWizard({
               </Button>
             </div>
           ) : wizardPhase === "reconnecting" ? (
-            <div className="flex items-center gap-2 text-sm text-[var(--dashboard-ink-muted)]">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="size-4 animate-spin" />
               Reconnecting remote helper…
             </div>
           ) : wizardPhase === "connected" ? (
-            <div className="flex items-center gap-2 text-sm text-[#236949]">
+            <div className="flex items-center gap-2 text-sm text-status-success">
               <Loader2 className="size-4 animate-spin" />
               Connected. Redirecting to devices…
             </div>
           ) : (
-            <p className="text-sm text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm text-muted-foreground">
               {stepThreeComplete
                 ? "The device request has been approved."
                 : wizardPhase === "approval_required"
@@ -195,7 +192,7 @@ export function ConnectLinkWizard({
         </WizardStep>
 
         {wizardError ? (
-          <p className="text-sm text-[#8f3030]">{wizardError}</p>
+          <p className="text-sm text-destructive">{wizardError}</p>
         ) : null}
       </CardContent>
     </Card>

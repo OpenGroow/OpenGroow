@@ -29,10 +29,10 @@ export function SettingsTabs({ projectId }: { projectId: string }) {
             href={href}
             aria-current={current ? "page" : undefined}
             className={cn(
-              "rounded-full px-4 py-1.5 text-[0.9rem] font-semibold",
+              "rounded-full px-4 py-1.5 text-sm font-semibold",
               current
-                ? "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]"
-                : "text-[var(--dashboard-ink-muted)] hover:bg-[rgba(220,230,224,0.5)]",
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-accent",
             )}
           >
             {label}

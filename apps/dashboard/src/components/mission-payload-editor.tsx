@@ -2,6 +2,8 @@
 
 import type { MissionPayloadField } from "@convex/template_manifest_contract";
 import { MissionPayloadFields } from "./mission-payload-fields";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 type Props = {
   /** The selected Mission type's declared field schema, if any. */
@@ -18,9 +20,6 @@ type Props = {
   onRawModeChange: (rawMode: boolean) => void;
 };
 
-const TOGGLE_CLASS =
-  "justify-self-start text-[0.78rem] font-semibold text-[var(--dashboard-primary)] underline underline-offset-2";
-
 /**
  * Chooses how a Mission payload is edited: a generic per-field form when the
  * Mission type declares `fields` (issue #300), otherwise the raw JSON textarea.
@@ -35,9 +34,9 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
     return (
       <div className="grid gap-2">
         <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} />
-        <button type="button" onClick={() => onRawModeChange(true)} className={TOGGLE_CLASS}>
+        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(true)} >
           Edit as raw JSON
-        </button>
+        </Button>
       </div>
     );
   }
@@ -45,8 +44,8 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
   return (
     <div className="grid gap-2">
       <label className="grid gap-1.5">
-        <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">Payload (JSON, optional)</span>
-        <textarea
+        <span className="text-sm font-semibold text-muted-foreground">Payload (JSON, optional)</span>
+        <Textarea
           value={payloadText}
           onChange={(e) => onChange(e.target.value)}
           rows={5}
@@ -54,13 +53,13 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 font-mono text-[0.88rem] text-[var(--dashboard-ink)] placeholder:font-sans placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+          className="font-mono"
         />
       </label>
       {hasFields ? (
-        <button type="button" onClick={() => onRawModeChange(false)} className={TOGGLE_CLASS}>
+        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(false)} >
           Back to form
-        </button>
+        </Button>
       ) : null}
     </div>
   );

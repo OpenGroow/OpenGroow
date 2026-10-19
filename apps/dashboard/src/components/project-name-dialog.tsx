@@ -90,7 +90,7 @@ export function ProjectNameDialog({
             />
           </div>
 
-          {error ? <p className="text-sm text-[#7e3d35]">{error}</p> : null}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
           <DialogFooter>
             <Button

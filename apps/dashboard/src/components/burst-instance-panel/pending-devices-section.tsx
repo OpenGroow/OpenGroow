@@ -1,6 +1,8 @@
 "use client";
 
-import { buttonChipClass, inputChipClass, preClass } from "./styles";
+import { preClass } from "./styles";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function PendingDevicesSection({
   pendingDeviceRequests,
@@ -22,37 +24,38 @@ export function PendingDevicesSection({
   return (
     <div style={{ marginTop: 8 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button className={buttonChipClass} type="button" onClick={onListPendingNodes}>
+        <Button variant="outline" size="sm"  type="button" onClick={onListPendingNodes}>
           List pending devices
-        </button>
-        <input
-          className={inputChipClass}
+        </Button>
+        <Input
+          className="w-auto"
           style={{ minWidth: 260 }}
           placeholder="Pending device request id"
           value={nodeRequestId}
           onChange={(event) => onNodeRequestIdChange(event.target.value)}
         />
-        <button className={buttonChipClass} type="button" onClick={() => onApproveNode()}>
+        <Button variant="outline" size="sm"  type="button" onClick={() => onApproveNode()}>
           Approve
-        </button>
+        </Button>
       </div>
       {pendingDeviceRequests.length ? (
         <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
           {pendingDeviceRequests.map((requestId) => (
             <div key={requestId} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <code style={{ fontSize: 12 }}>{requestId}</code>
-              <button
-                className={buttonChipClass}
+              <Button
+                variant="outline"
+                size="sm"
                 type="button"
                 onClick={() => onApproveNode(requestId)}
               >
                 Approve
-              </button>
+              </Button>
             </div>
           ))}
         </div>
       ) : null}
-      {nodeError ? <div style={{ color: "#9d1f2f", marginTop: 6, fontSize: 12 }}>{nodeError}</div> : null}
+      {nodeError ? <div style={{ color: "var(--status-error)", marginTop: 6, fontSize: 12 }}>{nodeError}</div> : null}
       {nodeOutput ? <pre className={preClass}>{nodeOutput}</pre> : null}
     </div>
   );

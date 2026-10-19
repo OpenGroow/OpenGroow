@@ -13,6 +13,11 @@ import {
   validateMissionPayloadUnlessRaw,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/opengroow/page-header";
+import { Card } from "@/components/ui/card";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -146,24 +151,17 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
 
   return (
     <div className="grid gap-8">
-      <header className="grid gap-1">
-        <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
-          Project
-        </span>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-          Missions
-        </h1>
-      </header>
+      <PageHeader title="Missions" description="Goals, outcomes, review and progress." />
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+      <Card className="grid gap-5 p-6">
+        <h2 className="m-0 text-lg font-semibold text-foreground">
           Create Mission
         </h2>
 
         {agents === undefined || manifestsLoading ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading agents…</p>
+          <p className="text-sm text-muted-foreground">Loading agents…</p>
         ) : activeAgents.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm text-muted-foreground">
             {runningAgents.length === 0
               ? "No active agents. Activate an agent first."
               : "No active agent supports Missions: the active agents only run Jobs."}
@@ -171,46 +169,44 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
         ) : (
           <form onSubmit={(e) => { void handleSubmit(e); }} className="grid gap-4">
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Agent
               </span>
-              <select
+              <NativeSelect
                 value={effectiveTemplateId}
                 onChange={(e) => setTemplateId(e.target.value)}
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
               >
                 {activeAgents.map((a) => (
                   <option key={a.templateId} value={a.templateId}>
                     {manifests.find((m) => m.id === a.templateId)?.name ?? a.templateId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Name
               </span>
-              <input
+              <Input
                 type="text"
                 name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Article about running shoes (auto-derived if left blank)"
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
               />
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Type
               </span>
               {allTypesHidden ? (
-                <p className="m-0 text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+                <p className="m-0 text-sm text-muted-foreground">
                   Every Mission type of this agent is hidden. Unhide one in the agent&apos;s settings.
                 </p>
               ) : missionTypes.length > 0 ? (
-                <select
+                <NativeSelect
                   value={type}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -220,22 +216,20 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                     const option = missionTypes.find((t) => t.type === next);
                     if (option) setPayloadText(option.payload);
                   }}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   {missionTypes.map((t) => (
                     <option key={t.type} value={t.type}>
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
-                <input
+                <Input
                   type="text"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
                   placeholder="e.g. seo.audit"
                   required
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 />
               )}
             </label>
@@ -253,40 +247,40 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
             />
 
             {error ? (
-              <p className="rounded-xl border border-[rgba(200,0,0,0.15)] bg-[rgba(255,240,240,0.8)] px-4 py-3 text-[0.88rem] text-red-700">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
               </p>
             ) : null}
 
             {result ? (
-              <div className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-4 py-3 text-[0.88rem] text-[var(--dashboard-ink)]">
-                <p className="m-0 font-semibold text-[var(--dashboard-primary)]">Mission created</p>
-                <p className="m-0 mt-1 font-mono text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+              <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground">
+                <p className="m-0 font-semibold text-primary">Mission created</p>
+                <p className="m-0 mt-1 font-mono text-sm text-muted-foreground">
                   missionId: {result.missionId}
                 </p>
-                <p className="m-0 font-mono text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+                <p className="m-0 font-mono text-sm text-muted-foreground">
                   runId: {result.runId}
                 </p>
               </div>
             ) : null}
 
-            <button
+            <Button
+              size="lg"
               type="submit"
               disabled={submitting || allTypesHidden}
-              className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] disabled:opacity-50 disabled:pointer-events-none"
             >
               {submitting ? "Creating…" : "Create Mission"}
-            </button>
+            </Button>
           </form>
         )}
-      </section>
+      </Card>
 
       <section className="grid gap-5">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+        <h2 className="m-0 text-lg font-semibold text-foreground">
           Missions
         </h2>
         {missions === undefined ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <MissionKanbanBoard
             missions={missions}

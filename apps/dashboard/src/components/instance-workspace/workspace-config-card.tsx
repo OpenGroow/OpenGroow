@@ -25,20 +25,20 @@ export function WorkspaceConfigCard({
 }) {
   return (
     <Card
-      className={`${stretch ? "flex h-full flex-col" : ""} gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]`}
+      className={`${stretch ? "flex h-full flex-col" : ""} gap-5 rounded-xl border-0 bg-card py-6  ring-1 ring-border`}
     >
       <CardHeader className="gap-4 px-6 pb-0">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]">
+          <div className="flex size-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
             {icon}
           </div>
           {badge ?? null}
         </div>
         <div className="space-y-2">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+          <CardTitle className="text-lg tracking-tight text-foreground">
             {title}
           </CardTitle>
-          <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
+          <CardDescription className="max-w-2xl text-base leading-7 text-muted-foreground">
             {description}
           </CardDescription>
         </div>

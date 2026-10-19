@@ -12,7 +12,7 @@ export type MachinePrerequisiteItem = InstallationPlan["prerequisites"][number];
  */
 export function MachinePrerequisiteList({ prerequisites }: { prerequisites: MachinePrerequisiteItem[] }) {
   return (
-    <ul className="m-0 grid list-none gap-3 p-0 text-[0.9rem] text-[var(--dashboard-ink)]">
+    <ul className="m-0 grid list-none gap-3 p-0 text-sm text-foreground">
       {prerequisites.map((prerequisite) => (
         <li key={prerequisite.name} className="grid gap-1.5">
           <span>
@@ -25,7 +25,7 @@ export function MachinePrerequisiteList({ prerequisites }: { prerequisites: Mach
           </span>
           {prerequisite.installCommand ? (
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-[rgba(0,38,27,0.06)] px-3 py-1.5 text-[0.85rem]">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-muted px-3 py-1.5 text-sm">
                 {prerequisite.installCommand}
               </code>
               <Button
@@ -40,7 +40,7 @@ export function MachinePrerequisiteList({ prerequisites }: { prerequisites: Mach
             </div>
           ) : null}
           {prerequisite.externalPrerequisites?.length ? (
-            <ul className="m-0 grid list-none gap-0.5 p-0 pl-3 text-[var(--dashboard-ink-muted)]">
+            <ul className="m-0 grid list-none gap-0.5 p-0 pl-3 text-muted-foreground">
               {prerequisite.externalPrerequisites.map((external) => (
                 <li key={external.name}>
                   Also needs {external.name}

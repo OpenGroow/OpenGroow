@@ -11,6 +11,8 @@ import { DashboardRootSidebar } from "@/src/components/dashboard-root-sidebar";
 import { ProjectNameDialog } from "@/src/components/project-name-dialog";
 import { getInstancePathId } from "@/src/lib/instance-path";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/opengroow/page-header";
 
 type DashboardHomeProps = {
   focusInstanceId?: string;
@@ -243,33 +245,23 @@ export function DashboardHome({
   }
 
   return (
-    <main className="min-h-screen w-full bg-white xl:grid xl:grid-cols-[320px_minmax(0,1fr)]">
+    <main className="min-h-screen w-full bg-card xl:grid xl:grid-cols-[320px_minmax(0,1fr)]">
       <DashboardRootSidebar
         activeHref="/"
         workspaceTitle={workspaceTitle}
         workspaceSubtitle={workspaceSubtitle}
       />
 
-      <section className="grid min-w-0 content-start gap-0 px-5 pb-14 pt-8 sm:px-8 xl:px-11 xl:pb-14 xl:pt-[var(--dashboard-home-top-offset)]">
-        <header className="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
-          <div className="grid gap-1.5">
-            <h1 className="m-0 text-[clamp(2.4rem,5vw,4rem)] leading-[0.98] tracking-[-0.06em] text-[var(--dashboard-primary)]">
-              Projects
-            </h1>
-            <p className="m-0 text-[1.125rem] text-[var(--dashboard-ink-muted)]">
-              Manage your OpenClaw compute environments.
-            </p>
-          </div>
-
-        </header>
+      <section className="grid min-w-0 content-start gap-0 px-5 pb-14 pt-8 sm:px-8 xl:px-11 xl:pb-14 xl:pt-13">
+        <PageHeader title="Projects" description="Manage your OpenClaw compute environments." />
 
         {createPhase !== "idle" ? (
           <div
             className={cn(
-              "mt-5 inline-flex min-h-11 flex-wrap items-center gap-3 rounded-2xl px-4 py-3 shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)]",
+              "mt-5 inline-flex min-h-11 flex-wrap items-center gap-3 rounded-xl px-4 py-3 ring-1 ring-inset ring-border",
               createPhase === "error"
-                ? "bg-[rgba(84,41,37,0.08)] text-[var(--dashboard-tertiary)]"
-                : "bg-[rgba(188,237,215,0.35)] text-[var(--dashboard-primary)]",
+                ? "bg-destructive/10 text-destructive"
+                : "bg-primary/10 text-primary",
             )}
           >
             <span>{CREATE_PHASE_LABELS[createPhase]}</span>
@@ -278,7 +270,7 @@ export function DashboardHome({
         ) : null}
 
         {deleteError ? (
-          <div className="mt-4 inline-flex min-h-11 items-center rounded-2xl bg-[rgba(84,41,37,0.08)] px-4 py-3 text-[var(--dashboard-tertiary)] shadow-[inset_0_0_0_1px_rgba(84,41,37,0.08)]">
+          <div className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-destructive/10 px-4 py-3 text-destructive ring-1 ring-inset ring-border">
             {deleteError}
           </div>
         ) : null}
@@ -306,9 +298,9 @@ export function DashboardHome({
               <article
                 key={instance._id}
                 className={cn(
-                  "relative flex min-h-[23rem] flex-col gap-7 overflow-hidden rounded-[1.9rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,246,245,0.86))] p-7 shadow-[var(--dashboard-shadow)] transition-[transform,box-shadow,background-color] duration-180 hover:-translate-y-0.5 hover:shadow-[0_22px_44px_rgba(25,28,28,0.08)]",
+                  "relative flex min-h-[23rem] flex-col gap-7 overflow-hidden rounded-xl bg-card p-7  transition-[transform,box-shadow,background-color] duration-180 hover:-translate-y-0.5 ",
                   isFocused
-                    ? "shadow-[0_22px_44px_rgba(25,28,28,0.08),inset_0_0_0_1px_rgba(0,38,27,0.18)]"
+                    ? ""
                     : "",
                 )}
               >
@@ -316,7 +308,7 @@ export function DashboardHome({
                   {visual ? (
                     <span
                       className={cn(
-                        "inline-flex min-h-8 items-center justify-center rounded-full px-3.5 py-1 text-[0.8125rem] font-bold uppercase tracking-[0.12em]",
+                        "inline-flex min-h-8 items-center justify-center rounded-full px-3.5 py-1 text-sm font-semibold",
                         getStatusBadgeClass(visual.tone),
                       )}
                     >
@@ -327,45 +319,47 @@ export function DashboardHome({
 
                 <div className="grid min-h-[6.5rem] gap-3.5">
                   <div className="flex items-start justify-between gap-3">
-                    <h2 className="m-0 font-[var(--font-dashboard-display)] text-[clamp(1.55rem,2vw,2rem)] leading-[1.08] tracking-[-0.05em] text-[var(--dashboard-ink)] break-words">
+                    <h2 className="m-0 text-xl font-semibold break-words text-foreground">
                       {instance.displayName?.trim() || "Untitled Project"}
                     </h2>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       type="button"
                       aria-label="Rename project"
-                      className="shrink-0 rounded-full p-2 text-[var(--dashboard-ink-muted)] transition hover:bg-[rgba(0,38,27,0.06)] hover:text-[var(--dashboard-ink)]"
+                      className="shrink-0"
                       onClick={() => setRenameTarget(instance)}
                     >
                       <PencilIcon />
-                    </button>
+                    </Button>
                   </div>
-                  <p className="m-0 text-[0.95rem] leading-7 text-[var(--dashboard-ink-muted)]">
+                  <p className="m-0 text-sm leading-7 text-muted-foreground">
                     {formatInstanceMeta(instance)}
                   </p>
                 </div>
 
-                <div className="mt-auto flex items-center justify-between gap-4 pt-5 shadow-[inset_0_1px_0_rgba(192,200,195,0.24)]">
-                  <span className="m-0 text-[0.95rem] leading-7 text-[var(--dashboard-ink-muted)]">
+                <div className="mt-auto flex items-center justify-between gap-4 pt-5 border-t">
+                  <span className="m-0 text-sm leading-7 text-muted-foreground">
                     {formatRelativeUpdate(instance.updatedAt)}
                   </span>
                   <div className="flex flex-wrap items-center justify-end gap-3">
                     {canDeleteFromCard ? (
-                      <button
+                      <Button
+                        variant="destructive"
                         type="button"
-                        className="inline-flex min-h-9 items-center rounded-full bg-[rgba(126,61,53,0.08)] px-3.5 text-[0.8125rem] font-bold uppercase tracking-[0.11em] text-[#7e3d35] transition hover:bg-[rgba(126,61,53,0.14)] disabled:cursor-wait disabled:opacity-60"
                         onClick={() => void handleDeleteInstance(instance)}
                         disabled={isDeleting}
                       >
                         {isDeleting ? "Deleting…" : "Delete"}
-                      </button>
+                      </Button>
                     ) : null}
                     <Link
                       href={`/projects/${encodeURIComponent(getInstancePathId(instance))}`}
                       className={cn(
-                        "inline-flex items-center gap-2 font-bold [&_svg]:size-5",
+                        "inline-flex items-center gap-2 font-semibold [&_svg]:size-5",
                         isNavigable
-                          ? "text-[var(--dashboard-primary)]"
-                          : "text-[var(--dashboard-primary)]",
+                          ? "text-primary"
+                          : "text-primary",
                       )}
                     >
                       {isNavigable ? (
@@ -384,29 +378,30 @@ export function DashboardHome({
             );
           })}
 
-          <button
+          <Button
             type="button"
+            variant="outline"
             className={cn(
-              "flex w-full flex-col items-center justify-center rounded-[1.9rem] border-2 border-dashed border-[rgba(0,38,27,0.18)] bg-white/80 p-7 text-center appearance-none transition disabled:cursor-wait disabled:opacity-80",
+              "h-auto w-full flex-col whitespace-normal border-2 border-dashed p-7 text-center disabled:cursor-wait",
               hasInstances ? "min-h-[23rem]" : "min-h-[24rem]",
             )}
             onClick={() => setIsCreateDialogOpen(true)}
             disabled={isCreating}
           >
             <div className="grid max-w-56 place-items-center gap-4">
-              <div className="flex size-[4.875rem] items-center justify-center rounded-full bg-[rgba(25,28,28,0.08)] text-[var(--dashboard-ink)] [&_svg]:size-5">
+              <div className="flex size-[4.875rem] items-center justify-center rounded-full bg-muted text-foreground [&_svg]:size-5">
                 <PlusIcon />
               </div>
-              <div className="font-[var(--font-dashboard-display)] text-[1.55rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+              <div className="text-xl tracking-tight text-foreground">
                 {isCreating ? "Creating Project" : "Create New Project"}
               </div>
-              <div className="m-0 text-[0.95rem] leading-7 text-[var(--dashboard-ink-muted)]">
+              <div className="m-0 text-sm leading-7 text-muted-foreground">
                 {isCreating
                   ? CREATE_PHASE_LABELS[createPhase]
                   : "Provision a new project environment."}
               </div>
             </div>
-          </button>
+          </Button>
         </section>
 
         <ProjectNameDialog
@@ -430,54 +425,54 @@ export function DashboardHome({
         />
 
         {hasInstances ? (
-          <footer className="mt-24 grid items-end gap-6 border-t border-[rgba(192,200,195,0.24)] pt-8 pb-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.6fr)_repeat(4,minmax(110px,1fr))]">
+          <footer className="mt-24 grid items-end gap-6 border-t border-border pt-8 pb-4 md:grid-cols-2 xl:grid-cols-[minmax(220px,1.6fr)_repeat(4,minmax(110px,1fr))]">
             <div>
-              <div className="font-[var(--font-dashboard-display)] text-[1.75rem] leading-[1.05] tracking-[-0.05em] text-[var(--dashboard-ink)]">
+              <div className="text-xl tracking-tight text-foreground">
                 OpenClaw Runtime
               </div>
-              <div className="mt-1.5 text-[var(--dashboard-ink-soft)] italic">
+              <div className="mt-1.5 text-muted-foreground italic">
                 Architectural integrity by design.
               </div>
             </div>
 
             <div className="grid gap-2.5">
-              <div className="text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+              <div className="text-xs font-semibold text-muted-foreground">
                 Total Projects
               </div>
-              <div className="font-[var(--font-dashboard-display)] text-[1.85rem] leading-none tracking-[-0.05em] text-[var(--dashboard-ink)]">
+              <div className="text-xl leading-none tracking-tight text-foreground">
                 {displayedInstances.length}
               </div>
             </div>
 
             <div className="grid gap-2.5">
-              <div className="text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+              <div className="text-xs font-semibold text-muted-foreground">
                 Active Nodes
               </div>
-              <div className="font-[var(--font-dashboard-display)] text-[1.85rem] leading-none tracking-[-0.05em] text-[var(--dashboard-ink)]">
+              <div className="text-xl leading-none tracking-tight text-foreground">
                 {activeCount}
               </div>
             </div>
 
             <div className="grid gap-2.5">
-              <div className="text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+              <div className="text-xs font-semibold text-muted-foreground">
                 Reachable IPs
               </div>
-              <div className="font-[var(--font-dashboard-display)] text-[1.85rem] leading-none tracking-[-0.05em] text-[var(--dashboard-ink)]">
+              <div className="text-xl leading-none tracking-tight text-foreground">
                 {onlineCount}
               </div>
             </div>
 
             <div className="grid gap-2.5">
-              <div className="text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+              <div className="text-xs font-semibold text-muted-foreground">
                 System Status
               </div>
-              <div className="flex items-center gap-3 font-[var(--font-dashboard-display)] text-[1.85rem] leading-none tracking-[-0.05em] text-[var(--dashboard-ink)]">
+              <div className="flex items-center gap-3 text-xl leading-none tracking-tight text-foreground">
                 <span
                   className={cn(
                     "size-[0.7rem] rounded-full",
                     systemStatus === "Optimal"
-                      ? "bg-[#2d7a57]"
-                      : "bg-[var(--dashboard-tertiary)]",
+                      ? "bg-status-success"
+                      : "bg-destructive",
                   )}
                 />
                 <span>{systemStatus}</span>
@@ -581,22 +576,22 @@ function formatRelativeUpdate(value?: string): string {
 
 function getInstanceTileClass(tone: StatusTone): string {
   if (tone === "active") {
-    return "bg-[linear-gradient(135deg,var(--dashboard-primary),var(--dashboard-primary-container))] text-[var(--dashboard-on-primary-container)]";
+    return "bg-primary text-primary-foreground/70";
   }
   if (tone === "error") {
-    return "bg-[rgba(84,41,37,0.16)] text-[var(--dashboard-tertiary)]";
+    return "bg-destructive/10 text-destructive";
   }
-  return "bg-[rgba(214,219,223,0.75)] text-[rgba(25,28,28,0.7)]";
+  return "bg-muted text-primary";
 }
 
 function getStatusBadgeClass(tone: StatusTone): string {
   if (tone === "active") {
-    return "bg-[rgba(188,237,215,0.9)] text-[var(--dashboard-primary)]";
+    return "bg-primary/15 text-primary";
   }
   if (tone === "error") {
-    return "bg-[rgba(84,41,37,0.12)] text-[var(--dashboard-tertiary)]";
+    return "bg-destructive/10 text-destructive";
   }
-  return "bg-[rgba(227,230,231,0.95)] text-[var(--dashboard-ink-muted)]";
+  return "bg-muted text-muted-foreground";
 }
 
 function SpinnerIcon() {

@@ -6,10 +6,14 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import { StatusPill } from "@/components/ui/status-pill";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/opengroow/page-header";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { Card } from "@/components/ui/card";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -40,28 +44,18 @@ function formatDateTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(timestamp);
 }
 
-const FIELD_CLASS =
-  "rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2 text-[0.88rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]";
-
 export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
   const jobs = useQuery(api.jobs.listByInstance, { instanceId }) as JobRow[] | undefined;
 
   return (
     <div className="grid gap-8">
-      <header className="grid gap-1">
-        <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
-          Project
-        </span>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-          Jobs
-        </h1>
-      </header>
+      <PageHeader title="Jobs" description="Executions, their logs and retries." />
 
       <section className="grid gap-5">
         {jobs === undefined ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : jobs.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm text-muted-foreground">
             No jobs yet. Jobs appear here when an Agent with scheduled capabilities is activated.
           </p>
         ) : (
@@ -78,23 +72,23 @@ export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
 
 function StatePill({ job }: { job: JobRow }) {
   if (job.state === "paused") {
-    return <StatusPill label="Paused" className="bg-[rgba(0,38,27,0.06)] text-[var(--dashboard-ink-muted)]" />;
+    return <StatusBadge tone="neutral" label="Paused" />;
   }
   return job.running ? (
-    <StatusPill label="Running" className="bg-[rgba(220,230,224,0.7)] text-[var(--dashboard-ink-soft)]" />
+    <StatusBadge tone="progress" label="Running" />
   ) : (
-    <StatusPill label="Active" className="bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" />
+    <StatusBadge tone="active" label="Active" />
   );
 }
 
 // `skipped` is not an error: the previous execution was still running.
 function Outcome({ job }: { job: JobRow }) {
   if (job.lastOutcome === undefined) {
-    return <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">Last outcome: none yet</p>;
+    return <p className="m-0 text-sm text-muted-foreground">Last outcome: none yet</p>;
   }
   if (job.lastOutcome === "skipped") {
     return (
-      <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 text-sm text-muted-foreground">
         Last outcome: Skipped — the previous execution was still running.
       </p>
     );
@@ -102,9 +96,9 @@ function Outcome({ job }: { job: JobRow }) {
   if (job.lastOutcome === "failed") {
     return (
       <div className="grid gap-1">
-        <p className="m-0 text-[0.82rem] font-semibold text-[var(--dashboard-tertiary)]">Last outcome: Failed</p>
+        <p className="m-0 text-sm font-semibold text-destructive">Last outcome: Failed</p>
         {job.lastError ? (
-          <p role="alert" className="m-0 break-words text-[0.82rem] text-[var(--dashboard-tertiary)]">
+          <p role="alert" className="m-0 break-words text-sm text-destructive">
             {job.lastError}
           </p>
         ) : null}
@@ -113,8 +107,8 @@ function Outcome({ job }: { job: JobRow }) {
   }
   return (
     <div className="grid gap-1">
-      <p className="m-0 text-[0.82rem] text-[var(--dashboard-primary)]">Last outcome: Succeeded</p>
-      {job.lastSummary ? <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">{job.lastSummary}</p> : null}
+      <p className="m-0 text-sm text-primary">Last outcome: Succeeded</p>
+      {job.lastSummary ? <p className="m-0 text-sm text-muted-foreground">{job.lastSummary}</p> : null}
     </div>
   );
 }
@@ -148,10 +142,11 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   }
 
   return (
-    <li className="grid gap-2 rounded-2xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-4">
+    <li>
+      <Card className="gap-2 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="m-0 text-[1rem] font-bold text-[var(--dashboard-ink)]">{job.agentName}</h2>
+          <h2 className="m-0 text-lg font-semibold text-foreground">{job.agentName}</h2>
           <StatePill job={job} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -166,7 +161,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
           </Button>
         </div>
       </div>
-      <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 text-sm text-muted-foreground">
         {formatCadence(job)} ({job.timezone}) ·{" "}
         {job.state === "paused" ? "Paused" : `Next run ${formatDateTime(job.nextRunAt)}`}
         {job.lastRunAt !== undefined ? ` · Last run ${formatDateTime(job.lastRunAt)}` : ""}
@@ -175,12 +170,13 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
       {job.workspaceKey !== undefined && job.latestRunId !== undefined ? (
         <Link
           href={runLogsHref(instanceId, job.templateId, job.latestRunId)}
-          className="w-fit text-[0.82rem] font-semibold text-[var(--dashboard-primary)] underline underline-offset-2 hover:no-underline"
+          className="w-fit text-sm font-semibold text-primary underline underline-offset-2 hover:no-underline"
         >
           View logs
         </Link>
       ) : null}
       {editing ? <RecurrenceForm job={job} onDone={() => setEditing(false)} /> : null}
+    </Card>
     </li>
   );
 }
@@ -212,76 +208,75 @@ function RecurrenceForm({ job, onDone }: { job: JobRow; onDone: () => void }) {
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-[rgba(0,38,27,0.10)] bg-white p-3">
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-3">
       <div className="flex flex-wrap items-end gap-3">
-        <label className="grid gap-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
           Repeat
-          <select name="unit" value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className={FIELD_CLASS}>
+          <NativeSelect name="unit" value={unit} onChange={(e) => setUnit(e.target.value as Unit)}>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
-          </select>
+          </NativeSelect>
         </label>
         {unit === "weekly" ? (
-          <label className="grid gap-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+          <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
             Day of week
-            <select
+            <NativeSelect
               name="dayOfWeek"
               value={dayOfWeek}
               onChange={(e) => setDayOfWeek(Number(e.target.value))}
-              className={FIELD_CLASS}
             >
               {WEEKDAYS.map((name, idx) => (
                 <option key={name} value={idx}>
                   {name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
         ) : null}
         {unit === "monthly" ? (
-          <label className="grid gap-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+          <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
             Day of month
-            <input
+            <Input
               name="dayOfMonth"
               type="number"
               min={1}
               max={31}
               value={dayOfMonth}
               onChange={(e) => setDayOfMonth(Math.max(1, Math.min(31, Number(e.target.value))))}
-              className={`${FIELD_CLASS} w-24`}
+              className="w-24"
             />
           </label>
         ) : null}
-        <label className="grid gap-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
           Hour
-          <input
+          <Input
             name="hour"
             type="number"
             min={0}
             max={23}
             value={hour}
             onChange={(e) => setHour(Math.max(0, Math.min(23, Number(e.target.value))))}
-            className={`${FIELD_CLASS} w-20`}
+            className="w-20"
           />
         </label>
-        <label className="grid gap-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
           Minute
-          <input
+          <Input
             name="minute"
             type="number"
             min={0}
             max={59}
             value={minute}
             onChange={(e) => setMinute(Math.max(0, Math.min(59, Number(e.target.value))))}
-            className={`${FIELD_CLASS} w-20`}
+            className="w-20"
           />
         </label>
         <Button type="button" onClick={() => void save()}>
           Save
         </Button>
       </div>
-      {error ? <p className="m-0 text-[0.82rem] text-red-700">{error}</p> : null}
+      {error ? <p className="m-0 text-sm text-destructive">{error}</p> : null}
     </div>
   );
 }

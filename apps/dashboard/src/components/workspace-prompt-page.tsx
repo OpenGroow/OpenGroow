@@ -102,7 +102,7 @@ export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
     return null;
   }
   if (run === null) {
-    return <p className="text-[0.88rem] text-[var(--dashboard-ink-muted)]">Run not found.</p>;
+    return <p className="text-sm text-muted-foreground">Run not found.</p>;
   }
 
   // The transcript records an MCP tool_call's name prefixed by its server
@@ -122,11 +122,11 @@ export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
 
   return (
     <section className="grid gap-8">
-      <h1 className="m-0 text-[1.4rem] font-semibold">Prompt</h1>
+      <h1 className="m-0 text-lg font-semibold">Prompt</h1>
 
       <div className="grid gap-3">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em]">Instructions</h2>
-        <p className="m-0 max-w-2xl text-[0.9rem] leading-6 text-[var(--dashboard-ink-muted)]">
+        <h2 className="m-0 text-lg font-semibold text-foreground">Instructions</h2>
+        <p className="m-0 max-w-2xl text-sm leading-6 text-muted-foreground">
           This is what OpenGroow&apos;s own agent received when this Run started: the Template&apos;s rules for this
           Mission type, plus the Brand Core and Mission context. The agent reads this and decides what to write —
           it is not the final content itself.
@@ -137,23 +137,23 @@ export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
 
       {generativeToolName && (
         <div className="grid gap-3">
-          <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em]">Génération</h2>
-          <p className="m-0 max-w-2xl text-[0.9rem] leading-6 text-[var(--dashboard-ink-muted)]">
+          <h2 className="m-0 text-lg font-semibold text-foreground">Génération</h2>
+          <p className="m-0 max-w-2xl text-sm leading-6 text-muted-foreground">
             This is what actually reached <code className="text-[0.88em]">{generativeToolName}</code>, the MCP tool
             that produced this Mission&apos;s deliverable — written by the agent based on the Instructions above. To
             change this output, edit the Brand Core or the Template&apos;s instructions; this panel is read-only.
           </p>
           {transcript.status === "loading" && (
-            <p className="m-0 text-[0.85rem] text-[var(--dashboard-ink-muted)]">Loading the session transcript…</p>
+            <p className="m-0 text-sm text-muted-foreground">Loading the session transcript…</p>
           )}
           {transcript.status === "error" && (
-            <p className="m-0 text-[0.85rem] text-red-700">{transcript.error}</p>
+            <p className="m-0 text-sm text-destructive">{transcript.error}</p>
           )}
           {transcript.status === "data" && generationCall && (
             <WorkspaceMarkdown content={"```json\n" + JSON.stringify(generationCall.arguments, null, 2) + "\n```"} />
           )}
           {transcript.status === "data" && !generationCall && (
-            <p className="m-0 text-[0.85rem] text-[var(--dashboard-ink-muted)]">
+            <p className="m-0 text-sm text-muted-foreground">
               No <code className="text-[0.88em]">{generativeToolName}</code> call found in this Run&apos;s session
               transcript.
             </p>

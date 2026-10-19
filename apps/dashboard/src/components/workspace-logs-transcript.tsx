@@ -49,22 +49,22 @@ function TranscriptTurnCard({ turn }: { turn: SessionTranscriptTurn }) {
   return (
     <Card
       className={cn(
-        "rounded-[1.4rem] border-0 py-4 shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)]",
-        turn.role === "assistant" ? "bg-[#fbfcfa]" : "bg-[rgba(220,230,224,0.35)]",
+        "rounded-xl border-0 py-4 ring-1 ring-inset ring-border",
+        turn.role === "assistant" ? "bg-background" : "bg-muted",
       )}
     >
       <CardContent className="grid gap-1.5 px-5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+          <span className="text-xs font-semibold text-muted-foreground">
             {turn.role === "assistant" ? "Agent" : "Instruction"}
           </span>
           {turn.timestamp ? (
-            <span className="text-[0.78rem] text-[var(--dashboard-ink-muted)]">
+            <span className="text-xs text-muted-foreground">
               {new Date(turn.timestamp).toLocaleString()}
             </span>
           ) : null}
         </div>
-        <p className="m-0 whitespace-pre-wrap text-[0.96rem] leading-7 text-[var(--dashboard-ink)]">
+        <p className="m-0 whitespace-pre-wrap text-base leading-7 text-foreground">
           {turn.text}
         </p>
       </CardContent>
@@ -97,24 +97,24 @@ function ToolEventCard({
   const isResult = turn.kind === "tool_result";
   const payload = isResult ? turn.result : turn.arguments;
   return (
-    <Card className="rounded-[1.4rem] border-0 bg-[#fbf9f2] py-4 shadow-[inset_0_0_0_1px_rgba(180,140,40,0.18)]">
+    <Card className="bg-status-warning/10 py-4">
       <CardContent className="grid gap-1.5 px-5">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[#8a6a1a]">
+          <span className="text-xs font-semibold text-status-warning">
             {isResult ? "Tool result" : "Tool call"} · {turn.toolName}
             {isResult && !turn.success ? " · error" : ""}
           </span>
           {turn.timestamp ? (
-            <span className="text-[0.78rem] text-[var(--dashboard-ink-muted)]">
+            <span className="text-xs text-muted-foreground">
               {new Date(turn.timestamp).toLocaleString()}
             </span>
           ) : null}
         </div>
         <details>
-          <summary className="cursor-pointer text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
             {isResult ? "View response" : "View arguments"}
           </summary>
-          <pre className="m-0 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words text-[0.78rem] leading-relaxed text-[var(--dashboard-ink)]">
+          <pre className="m-0 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
             {formatPayloadForDisplay(payload)}
           </pre>
         </details>

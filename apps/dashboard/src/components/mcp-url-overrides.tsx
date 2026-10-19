@@ -27,8 +27,8 @@ export function McpUrlOverrides({ instanceId, manifest }: Props) {
   if (overrides === undefined) return null;
   return (
     <section className="grid max-w-3xl gap-3">
-      <h2 className="m-0 text-base font-semibold text-[var(--dashboard-ink)]">MCP server URLs</h2>
-      <p className="m-0 text-[0.875rem] text-[var(--dashboard-ink-muted)]">
+      <h2 className="m-0 text-lg font-semibold text-foreground">MCP server URLs</h2>
+      <p className="m-0 text-sm text-muted-foreground">
         Override the URL a server of this Template is reached at. Leave it empty to use the URL the Template declares.
         A localhost URL is reachable from the OpenClaw container.
       </p>
@@ -85,7 +85,7 @@ function McpUrlRow({
   const inputId = `mcp-url-${serverName}`;
   return (
     <div className="grid gap-1.5">
-      <label htmlFor={inputId} className="text-[0.8rem] font-medium text-[var(--dashboard-ink-muted)]">
+      <label htmlFor={inputId} className="text-xs font-medium text-muted-foreground">
         {serverName}
       </label>
       <div className="flex gap-2">
@@ -100,7 +100,7 @@ function McpUrlRow({
           Save
         </Button>
       </div>
-      {error ? <p className="m-0 text-[0.8rem] text-[var(--dashboard-tertiary)]">{error}</p> : null}
+      {error ? <p className="m-0 text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

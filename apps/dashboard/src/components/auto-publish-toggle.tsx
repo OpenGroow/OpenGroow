@@ -47,13 +47,13 @@ export function AutoPublishToggle({
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 rounded border-[rgba(0,38,27,0.24)] text-[var(--dashboard-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)] disabled:opacity-50"
+        className="mt-1 h-4 w-4 rounded border-border text-primary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
       />
       <span className="grid gap-0.5">
-        <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+        <span className="text-sm font-semibold text-muted-foreground">
           Auto-publish
         </span>
-        <span className="text-[0.78rem] text-[var(--dashboard-ink-muted)]">{hint}</span>
+        <span className="text-xs text-muted-foreground">{hint}</span>
       </span>
     </label>
   );

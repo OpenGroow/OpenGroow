@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 export function WaitingLogsPanel({ instance }: { instance: InstanceRecord }) {
   const getOpenClawStatus = useAction(api.instances_node.getOpenClawStatus);
@@ -76,31 +78,31 @@ export function WaitingLogsPanel({ instance }: { instance: InstanceRecord }) {
 
   return (
     <div className="mx-auto mt-10 grid w-full max-w-[960px] gap-5 text-left">
-      <div className="grid gap-3 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-5 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
+      <Card className="grid gap-3 p-5">
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="inline-flex rounded-full bg-white px-3 py-1 text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+          <Badge variant="outline">
             {instance.runtimeStatus ?? instance.status}
-          </span>
+          </Badge>
           {instance.ipv4 ? (
-            <span className="inline-flex rounded-full bg-white px-3 py-1 text-[0.78rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+            <Badge variant="outline">
               {instance.ipv4}
-            </span>
+            </Badge>
           ) : null}
           {lastUpdatedAt ? (
-            <span className="text-[0.82rem] text-[var(--dashboard-ink-soft)]">
+            <span className="text-sm text-muted-foreground">
               Logs refreshed {formatRelativeTime(lastUpdatedAt)}
             </span>
           ) : null}
         </div>
         {logsError ? (
-          <p className="m-0 text-[0.92rem] leading-7 text-[var(--dashboard-tertiary)]">
+          <p className="m-0 text-sm leading-7 text-destructive">
             {logsError}
           </p>
         ) : null}
-        <pre className="m-0 max-h-48 overflow-auto rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white p-4 text-xs leading-6 text-[var(--dashboard-ink-muted)]">
+        <pre className="m-0 max-h-48 overflow-auto rounded-xl border border-border bg-card p-4 text-xs leading-6 text-muted-foreground">
           {statusOutput}
         </pre>
-      </div>
+      </Card>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <LogCard title="Gateway Logs" output={gatewayLogs} />
@@ -112,14 +114,14 @@ export function WaitingLogsPanel({ instance }: { instance: InstanceRecord }) {
 
 function LogCard({ title, output }: { title: string; output: string }) {
   return (
-    <article className="grid gap-3 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-5 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-      <h2 className="m-0 text-[0.95rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+    <Card className="grid gap-3 p-5">
+      <h2 className="m-0 text-lg font-semibold text-foreground">
         {title}
       </h2>
-      <pre className="m-0 max-h-[22rem] overflow-auto rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white p-4 text-xs leading-6 text-[var(--dashboard-ink-muted)]">
+      <pre className="m-0 max-h-[22rem] overflow-auto rounded-xl border border-border bg-card p-4 text-xs leading-6 text-muted-foreground">
         {output}
       </pre>
-    </article>
+    </Card>
   );
 }
 

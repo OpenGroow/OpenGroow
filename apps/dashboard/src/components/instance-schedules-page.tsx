@@ -16,6 +16,12 @@ import {
   validateMissionPayloadUnlessRaw,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/opengroow/page-header";
+import { Card } from "@/components/ui/card";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -208,55 +214,47 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
   return (
     <div className="grid gap-8">
-      <header className="grid gap-1">
-        <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
-          Project
-        </span>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-          Scheduler
-        </h1>
-      </header>
+      <PageHeader title="Scheduler" description="Recurring jobs and their execution rules." />
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+      <Card className="grid gap-5 p-6">
+        <h2 className="m-0 text-lg font-semibold text-foreground">
           Create Schedule
         </h2>
 
         {agents === undefined || manifestsLoading ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading agents…</p>
+          <p className="text-sm text-muted-foreground">Loading agents…</p>
         ) : activeAgents.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm text-muted-foreground">
             No active agents. Activate an agent first.
           </p>
         ) : (
           <form onSubmit={(e) => { void handleSubmit(e); }} className="grid gap-4">
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Agent
               </span>
-              <select
+              <NativeSelect
                 value={effectiveTemplateId}
                 onChange={(e) => setTemplateId(e.target.value)}
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
               >
                 {activeAgents.map((a) => (
                   <option key={a.templateId} value={a.templateId}>
                     {manifests.find((m) => m.id === a.templateId)?.name ?? a.templateId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Type
               </span>
               {allTypesHidden ? (
-                <p className="m-0 text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+                <p className="m-0 text-sm text-muted-foreground">
                   Every Mission type of this agent is hidden. Unhide one in the agent&apos;s settings.
                 </p>
               ) : missionTypes.length > 0 ? (
-                <select
+                <NativeSelect
                   value={type}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -265,22 +263,20 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     const option = missionTypes.find((t) => t.type === next);
                     if (option) setPayloadText(option.payload);
                   }}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   {missionTypes.map((t) => (
                     <option key={t.type} value={t.type}>
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
-                <input
+                <Input
                   type="text"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
                   placeholder="e.g. seo.audit"
                   required
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 />
               )}
             </label>
@@ -301,53 +297,51 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               onRawModeChange={setRawPayloadMode}
             />
 
-            <fieldset className="grid gap-3 rounded-2xl border border-[rgba(0,38,27,0.10)] bg-white p-4">
-              <legend className="px-1 text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+            <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
+              <legend className="px-1 text-sm font-semibold text-muted-foreground">
                 Frequency
               </legend>
 
               <label className="grid gap-1.5">
-                <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                <span className="text-xs font-semibold text-muted-foreground">
                   Repeat
                 </span>
-                <select
+                <NativeSelect
                   name="unit"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value as "daily" | "weekly" | "monthly")}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
-                </select>
+                </NativeSelect>
               </label>
 
               {unit === "weekly" ? (
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Day of week
                   </span>
-                  <select
+                  <NativeSelect
                     name="dayOfWeek"
                     value={dayOfWeek}
                     onChange={(e) => setDayOfWeek(Number(e.target.value))}
-                    className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                   >
                     {WEEKDAYS.map((name, idx) => (
                       <option key={idx} value={idx}>
                         {name}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
               ) : null}
 
               {unit === "monthly" ? (
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Day of month
                   </span>
-                  <input
+                  <Input
                     name="dayOfMonth"
                     type="number"
                     min={1}
@@ -356,9 +350,9 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     onChange={(e) =>
                       setDayOfMonth(Math.max(1, Math.min(31, Number(e.target.value))))
                     }
-                    className="w-24 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-24"
                   />
-                  <span className="text-[0.72rem] text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs text-muted-foreground">
                     Months without this day fire on their last day.
                   </span>
                 </label>
@@ -366,71 +360,71 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
               <div className="flex items-end gap-3">
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Hour
                   </span>
-                  <input
+                  <Input
                     name="hour"
                     type="number"
                     min={0}
                     max={23}
                     value={hour}
                     onChange={(e) => setHour(Math.max(0, Math.min(23, Number(e.target.value))))}
-                    className="w-20 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-20"
                   />
                 </label>
-                <span className="pb-3 text-[1.1rem] font-bold text-[var(--dashboard-ink-soft)]">:</span>
+                <span className="pb-3 text-base font-semibold text-muted-foreground">:</span>
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Minute
                   </span>
-                  <input
+                  <Input
                     name="minute"
                     type="number"
                     min={0}
                     max={59}
                     value={minute}
                     onChange={(e) => setMinute(Math.max(0, Math.min(59, Number(e.target.value))))}
-                    className="w-20 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-20"
                   />
                 </label>
               </div>
             </fieldset>
 
             {error ? (
-              <p className="rounded-xl border border-[rgba(200,0,0,0.15)] bg-[rgba(255,240,240,0.8)] px-4 py-3 text-[0.88rem] text-red-700">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
               </p>
             ) : null}
 
             {result ? (
-              <div className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-4 py-3 text-[0.88rem] text-[var(--dashboard-ink)]">
-                <p className="m-0 font-semibold text-[var(--dashboard-primary)]">Schedule created</p>
-                <p className="m-0 mt-1 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+              <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-foreground">
+                <p className="m-0 font-semibold text-primary">Schedule created</p>
+                <p className="m-0 mt-1 text-sm text-muted-foreground">
                   Next run {new Date(result.nextRunAt).toLocaleString()}
                 </p>
               </div>
             ) : null}
 
-            <button
+            <Button
+              size="lg"
               type="submit"
               disabled={submitting || allTypesHidden}
-              className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] disabled:opacity-50 disabled:pointer-events-none"
             >
               {submitting ? "Creating…" : "Create Schedule"}
-            </button>
+            </Button>
           </form>
         )}
-      </section>
+      </Card>
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+      <Card className="grid gap-5 p-6">
+        <h2 className="m-0 text-lg font-semibold text-foreground">
           Schedules
         </h2>
         {schedules === undefined ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : schedules.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">No schedules yet.</p>
+          <p className="text-sm text-muted-foreground">No schedules yet.</p>
         ) : (
           <ul className="grid gap-3">
             {schedules.map((schedule) => {
@@ -438,7 +432,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               return (
                 <li
                   key={schedule._id}
-                  className="rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white px-4 py-3"
+                  className="rounded-xl border border-border bg-card px-4 py-3"
                 >
                   <div
                     role="button"
@@ -473,14 +467,14 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     className="flex w-full cursor-pointer items-center justify-between gap-4 text-left"
                   >
                     <div className="grid gap-0.5">
-                      <span className="text-[0.92rem] font-semibold text-[var(--dashboard-ink)]">
+                      <span className="text-sm font-semibold text-foreground">
                         {schedule.type}
                       </span>
-                      <span className="text-[0.78rem] text-[var(--dashboard-ink-muted)]">
+                      <span className="text-xs text-muted-foreground">
                         {formatCadence(schedule)}
                       </span>
                       {schedule.lastRunAt !== undefined ? (
-                        <span className="text-[0.75rem] text-[var(--dashboard-ink-muted)]">
+                        <span className="text-xs text-muted-foreground">
                           Last run {new Date(schedule.lastRunAt).toLocaleString()}
                         </span>
                       ) : null}
@@ -489,27 +483,27 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                           data-testid="last-mission-link"
                           href={`/projects/${encodeURIComponent(instanceId)}/missions/${schedule.lastMissionId}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="text-[0.75rem] text-[var(--dashboard-ink-muted)] hover:underline"
+                          className="text-xs text-muted-foreground hover:underline"
                         >
                           Last mission
                         </a>
                       ) : null}
                       {schedule.lastError ? (
-                        <span className="text-[0.75rem] text-red-600">
+                        <span className="text-xs text-destructive">
                           {schedule.lastError}
                         </span>
                       ) : null}
                     </div>
                     <div className="grid justify-items-end gap-0.5 text-right">
-                      <span className="text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[var(--dashboard-ink-soft)]">
+                      <span className="text-xs font-semibold text-muted-foreground">
                         Next run
                       </span>
-                      <span className="text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+                      <span className="text-sm text-muted-foreground">
                         {schedule.status === "paused" ? "Paused" : new Date(schedule.nextRunAt).toLocaleString()}
                       </span>
                       <span
                         aria-hidden="true"
-                        className={`mt-1 text-[0.7rem] text-[var(--dashboard-ink-soft)] transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        className={`mt-1 text-xs text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
                       >
                         ▾
                       </span>
@@ -517,18 +511,18 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                   </div>
 
                   {isExpanded ? (
-                    <div className="mt-3 grid gap-2 rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-3 text-[0.8rem] text-[var(--dashboard-ink)]">
+                    <div className="mt-3 grid gap-2 rounded-xl border border-border bg-background p-3 text-xs text-foreground">
                       <div className="grid grid-cols-[6rem_1fr] gap-1">
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Agent</span>
+                        <span className="font-semibold text-muted-foreground">Agent</span>
                         <span className="break-all">{schedule.templateId}</span>
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Type</span>
+                        <span className="font-semibold text-muted-foreground">Type</span>
                         <span className="break-all">{schedule.type}</span>
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Timezone</span>
+                        <span className="font-semibold text-muted-foreground">Timezone</span>
                         <span>{schedule.timezone}</span>
                       </div>
                       <div className="grid gap-1">
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Payload</span>
-                        <textarea
+                        <span className="font-semibold text-muted-foreground">Payload</span>
+                        <Textarea
                           data-testid="schedule-payload-editor"
                           value={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
                           onChange={(e) =>
@@ -540,10 +534,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                           autoCorrect="off"
                           autoCapitalize="off"
                           spellCheck={false}
-                          className="overflow-x-auto rounded-lg border border-[rgba(0,38,27,0.08)] bg-white p-2 font-mono text-[0.75rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                          className="font-mono"
                         />
                         {payloadErrors[schedule._id] ? (
-                          <span className="text-[0.72rem] text-red-600">{payloadErrors[schedule._id]}</span>
+                          <span className="text-xs text-destructive">{payloadErrors[schedule._id]}</span>
                         ) : null}
                       </div>
                     </div>
@@ -551,36 +545,39 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
                   <div className="mt-2 flex justify-end gap-2">
                     {schedule.status === "active" ? (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="sm"
                         data-action="pause"
                         onClick={() => { void pauseSchedule({ scheduleId: schedule._id }); }}
-                        className="rounded-lg border border-[rgba(0,38,27,0.12)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(0,38,27,0.04)]"
                       >
                         Pause
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="sm"
                         data-action="resume"
                         onClick={() => { void resumeSchedule({ scheduleId: schedule._id }); }}
-                        className="rounded-lg border border-[rgba(0,38,27,0.12)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(0,38,27,0.04)]"
                       >
                         Resume
-                      </button>
+                      </Button>
                     )}
-                    <button
+                    <Button
+                      variant="destructive"
+                      size="sm"
                       data-action="delete"
                       onClick={() => { void removeSchedule({ scheduleId: schedule._id }); }}
-                      className="rounded-lg border border-[rgba(200,0,0,0.18)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-red-600 hover:bg-[rgba(255,240,240,0.8)]"
                     >
                       Delete
-                    </button>
+                    </Button>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </section>
+      </Card>
     </div>
   );
 }

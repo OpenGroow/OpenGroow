@@ -72,21 +72,21 @@ export function OverviewPageContent({ resolvedInstanceId }: Props) {
     <section className="grid gap-8">
       <ProjectNameCard jobId={instance.jobId} displayName={instance.displayName} />
 
-      <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
+      <Card className="gap-5 py-6">
         <CardHeader className="grid gap-2 px-6 pb-0">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+          <CardTitle className="text-lg tracking-tight text-foreground">
             OpenClaw Version
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 px-6">
           <div className="grid gap-1">
-            <p className="text-sm uppercase tracking-[0.12em] text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm text-muted-foreground">
               Current version
             </p>
-            <p className="text-[1.2rem] leading-7 text-[var(--dashboard-ink)]">
+            <p className="text-lg leading-7 text-foreground">
               {formatOpenClawVersion(instance.openclawVersion)}
             </p>
-            <p className="text-sm text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm text-muted-foreground">
               {instance.openclawVersionUpdatedAt
                 ? `Last refresh ${formatOverviewTimestamp(instance.openclawVersionUpdatedAt)}`
                 : "No runtime version has been recorded yet."}
@@ -94,18 +94,17 @@ export function OverviewPageContent({ resolvedInstanceId }: Props) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button
+            <Button variant="secondary" size="lg"
               type="button"
               disabled={!openclawId || versionStatus === "refreshing"}
               onClick={() => void handleRefreshVersion()}
-              className="h-11 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
             >
               {versionStatus === "refreshing" ? "Refreshing version…" : "Refresh version"}
             </Button>
           </div>
 
           {versionError ? (
-            <p className="text-sm text-[var(--dashboard-tertiary)]">{versionError}</p>
+            <p className="text-sm text-destructive">{versionError}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -164,12 +163,12 @@ function ProjectNameCard({ jobId, displayName }: { jobId: string; displayName?: 
   }
 
   return (
-    <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
+    <Card className="gap-5 py-6">
       <CardHeader className="grid gap-2 px-6 pb-0">
-        <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+        <CardTitle className="text-lg tracking-tight text-foreground">
           Project name
         </CardTitle>
-        <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
+        <CardDescription className="max-w-2xl text-base leading-7 text-muted-foreground">
           The name shown for this project.
         </CardDescription>
       </CardHeader>
@@ -184,17 +183,16 @@ function ProjectNameCard({ jobId, displayName }: { jobId: string; displayName?: 
             placeholder="e.g. Marketing Ops"
             maxLength={PROJECT_NAME_MAX_LENGTH}
             onChange={(event) => setName(event.target.value)}
-            className="h-12 max-w-xl rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4"
+            className="h-12 max-w-xl rounded-xl border-border bg-card px-4"
           />
           <div className="flex flex-wrap items-center gap-3">
-            <Button
+            <Button size="lg"
               type="submit"
               disabled={!canSave}
-              className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
             >
               {status === "saving" ? "Saving…" : "Save name"}
             </Button>
-            {error ? <span className="text-sm text-[var(--dashboard-tertiary)]">{error}</span> : null}
+            {error ? <span className="text-sm text-destructive">{error}</span> : null}
           </div>
         </form>
       </CardContent>

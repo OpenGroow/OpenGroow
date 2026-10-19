@@ -32,6 +32,8 @@ import { mergeTemplatesWithAgents } from "@/src/utils/merge-agent-states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/opengroow/page-header";
 
 type InstanceWorkspaceDetailPageProps = {
   params: Promise<{ instanceId: string; workspaceKey: string }>;
@@ -291,21 +293,19 @@ export function InstanceWorkspaceDetailPage({
       <DetailHeader
         action={
           <div className="flex flex-wrap gap-3">
-            <Button
+            <Button variant="secondary" size="lg"
               type="button"
               onClick={() => {
                 setResetKey((k) => k + 1);
               }}
               disabled={userRefreshing}
-              className="h-11 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
             >
               {userRefreshing ? "Refreshing…" : "Refresh"}
             </Button>
             {agentCard?.status === "active" ? (
-              <Button
+              <Button size="lg"
                 type="button"
                 variant="outline"
-                className="h-11 rounded-xl"
                 onClick={() => {
                   setSkillMessage(null);
                   setAddSkillOpen(true);
@@ -334,30 +334,30 @@ export function InstanceWorkspaceDetailPage({
       />
 
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="rounded-[1.7rem] border-0 bg-[#fbfcfa] py-4 shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)]">
+        <Card className="py-4">
           <CardContent className="grid gap-6 overflow-x-auto overflow-y-hidden px-5">
             <div className="grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[rgba(220,230,224,0.5)] px-3 py-1 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+                <Badge>
                   {workspace.kind}
-                </span>
+                </Badge>
                 {workspace.isActive ? (
-                  <span className="rounded-full bg-[rgba(188,237,215,0.7)] px-3 py-1 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-primary)]">
+                  <Badge variant="default">
                     Active
-                  </span>
+                  </Badge>
                 ) : null}
               </div>
-              <h2 className="m-0 text-[1.3rem] leading-[1.08] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+              <h2 className="m-0 text-lg font-semibold text-foreground">
                 {workspace.label}
               </h2>
-              <p className="m-0 text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+              <p className="m-0 text-sm leading-6 text-muted-foreground">
                 <code>{workspace.absolutePath}</code>
               </p>
             </div>
 
             {agentCard?.skills && agentCard.skills.length > 0 ? (
               <div className="grid gap-2">
-                <h3 className="m-0 text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+                <h3 className="m-0 text-xs font-semibold text-muted-foreground">
                   Agent Skills
                 </h3>
                 <AgentSkillsList
@@ -366,12 +366,12 @@ export function InstanceWorkspaceDetailPage({
                   onSelectSkill={handleSelectSkill}
                 />
                 {selectedSkillSpec && skillFilesError ? (
-                  <p className="m-0 text-sm text-[var(--dashboard-tertiary)]">
+                  <p className="m-0 text-sm text-destructive">
                     {skillFilesError}
                   </p>
                 ) : null}
                 {selectedSkillSpec && !skillFilesError && loadingSkillFiles ? (
-                  <p className="m-0 text-sm text-[var(--dashboard-ink-muted)]">
+                  <p className="m-0 text-sm text-muted-foreground">
                     Loading files…
                   </p>
                 ) : null}
@@ -387,7 +387,7 @@ export function InstanceWorkspaceDetailPage({
             ) : null}
 
             {skillMessage ? (
-              <p className="m-0 rounded-xl bg-[rgba(0,38,27,0.05)] px-4 py-3 text-[0.9rem] leading-6 text-[var(--dashboard-ink-muted)]">
+              <p className="m-0 rounded-xl bg-muted px-4 py-3 text-sm leading-6 text-muted-foreground">
                 {skillMessage}
               </p>
             ) : null}
@@ -408,13 +408,13 @@ export function InstanceWorkspaceDetailPage({
           </CardContent>
         </Card>
 
-        <Card className="rounded-[1.8rem] border-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(246,247,246,0.92))] py-4 shadow-[var(--dashboard-shadow)]">
+        <Card className="py-4">
           <CardHeader className="grid gap-2 px-6 pb-0">
-            <CardTitle className="text-[1.45rem] leading-[1.08] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+            <CardTitle className="text-lg tracking-tight text-foreground">
               {fileData?.title || selectedFilePath || "Workspace file"}
             </CardTitle>
             {selectedFilePath ? (
-              <p className="m-0 text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+              <p className="m-0 text-sm leading-6 text-muted-foreground">
                 <code>{selectedFilePath}</code>
                 {fileData?.lastModifiedAt
                   ? ` · Updated ${new Date(fileData.lastModifiedAt).toLocaleString()}`
@@ -494,20 +494,7 @@ function resolveSelectedFilePath(
 
 function DetailHeader({ action }: { action?: React.ReactNode }) {
   return (
-    <header className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-center">
-      <div className="grid gap-2">
-        <span className="text-[0.78rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
-          Runtime Workspace
-        </span>
-        <h1 className="m-0 text-[clamp(2.2rem,4vw,3.6rem)] leading-[0.98] tracking-[-0.06em] text-[var(--dashboard-primary)]">
-          Workspace Files
-        </h1>
-        <p className="m-0 max-w-3xl text-[1rem] leading-7 text-[var(--dashboard-ink-muted)]">
-          Inspect the standard Markdown files exposed by the selected OpenClaw workspace.
-        </p>
-      </div>
-      {action}
-    </header>
+    <PageHeader title="Workspace Files" description="Inspect the Markdown files of this workspace." action={action} />
   );
 }
 
@@ -524,12 +511,12 @@ function WorkspaceFileSection({
 }) {
   return (
     <section className="grid gap-2">
-      <h3 className="m-0 text-[0.8rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+      <h3 className="m-0 text-xs font-semibold text-muted-foreground">
         {title}
       </h3>
       <div className="grid gap-1.5">
         {files.length === 0 ? (
-          <p className="m-0 text-sm text-[var(--dashboard-ink-muted)]">None</p>
+          <p className="m-0 text-sm text-muted-foreground">None</p>
         ) : (
           files.map((file) => (
             <Link
@@ -538,8 +525,8 @@ function WorkspaceFileSection({
               className={cn(
                 "flex min-h-11 items-center rounded-xl px-3 py-2 text-sm transition-[background-color,color] duration-150",
                 activeFilePath === file.filePath
-                  ? "bg-[linear-gradient(135deg,rgba(188,237,215,0.92),rgba(214,236,226,0.88))] text-[var(--dashboard-primary)]"
-                  : "text-[var(--dashboard-ink-muted)] hover:bg-[rgba(220,230,224,0.62)] hover:text-[var(--dashboard-ink)]",
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
               )}
             >
               {file.filePath}
@@ -563,15 +550,15 @@ function WorkspaceStatePanel({
   return (
     <Card
       className={cn(
-        "rounded-[1.5rem] border-0 py-4 shadow-none",
-        tone === "error" ? "bg-[rgba(84,41,37,0.06)]" : "bg-[rgba(220,230,224,0.22)]",
+        "rounded-xl border-0 py-4 shadow-none",
+        tone === "error" ? "bg-destructive/10" : "bg-muted",
       )}
     >
       <CardContent className="grid gap-2 px-5">
-        <h3 className="m-0 text-[1.05rem] leading-[1.08] tracking-[-0.03em] text-[var(--dashboard-ink)]">
+        <h3 className="m-0 text-base tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="m-0 text-[0.96rem] leading-7 text-[var(--dashboard-ink-muted)]">
+        <p className="m-0 text-base leading-7 text-muted-foreground">
           {description}
         </p>
       </CardContent>

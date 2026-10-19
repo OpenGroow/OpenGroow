@@ -182,12 +182,12 @@ export default function BrandPage({ params }: BrandPageProps) {
 
   return (
     <section className="grid gap-8">
-      <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
+      <Card className="gap-5 py-6">
         <CardHeader className="grid gap-2 px-6 pb-0">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+          <CardTitle className="text-lg tracking-tight text-foreground">
             Brand Core
           </CardTitle>
-          <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
+          <CardDescription className="max-w-2xl text-base leading-7 text-muted-foreground">
             Shared brand context for agents working in this project.
           </CardDescription>
         </CardHeader>
@@ -217,7 +217,7 @@ export default function BrandPage({ params }: BrandPageProps) {
                         event.currentTarget.form?.requestSubmit();
                       }
                     }}
-                    className="min-h-28 resize-y rounded-xl bg-white text-base leading-7 md:text-base"
+                    className="min-h-28 resize-y rounded-xl bg-card text-base leading-7 md:text-base"
                     disabled={brandCore === undefined || brandCoreStatus === "saving"}
                   />
                 </div>
@@ -225,10 +225,9 @@ export default function BrandPage({ params }: BrandPageProps) {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <Button
+              <Button variant="secondary" size="lg"
                 type="submit"
                 disabled={!openclawId || brandCore === undefined || brandCoreStatus === "saving"}
-                className="h-11 gap-2 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
               >
                 {brandCoreStatus === "saving" ? (
                   <Loader2 className="animate-spin" aria-hidden="true" />
@@ -238,7 +237,7 @@ export default function BrandPage({ params }: BrandPageProps) {
                 <span>Save</span>
               </Button>
               <span
-                className="text-sm text-[var(--dashboard-ink-muted)]"
+                className="text-sm text-muted-foreground"
                 aria-live="polite"
               >
                 {brandCore === undefined
@@ -250,7 +249,7 @@ export default function BrandPage({ params }: BrandPageProps) {
             </div>
 
             {brandCoreError ? (
-              <p className="text-sm text-[var(--dashboard-tertiary)]" aria-live="polite">
+              <p className="text-sm text-destructive" aria-live="polite">
                 {brandCoreError}
               </p>
             ) : null}

@@ -36,10 +36,9 @@ export default function InstanceDevicesPage({ params }: DevicesPageProps) {
     return (
       <section className="grid gap-5">
         <div>
-          <Button
+          <Button size="lg"
             type="button"
             variant="ghost"
-            className="h-9 rounded-xl px-3 text-sm text-[var(--dashboard-ink-muted)] hover:text-[var(--dashboard-ink)]"
             onClick={() => setShowWizard(false)}
           >
             <ArrowLeft className="mr-1.5 size-4" />

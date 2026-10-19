@@ -39,19 +39,19 @@ export function AvailableMissionTypes({
   }
 
   return (
-    <fieldset className="m-0 grid gap-3 rounded-xl border border-[rgba(0,38,27,0.12)] px-4 py-3">
-      <legend className="px-1 text-[0.8rem] font-semibold text-[var(--dashboard-ink-soft)]">
+    <fieldset className="m-0 grid gap-3 rounded-xl border border-border px-4 py-3">
+      <legend className="px-1 text-xs font-semibold text-muted-foreground">
         Available Mission types
       </legend>
-      <p className="m-0 text-[0.85rem] text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 text-sm text-muted-foreground">
         Unchecked types are not offered in Create Mission and Create Schedule, and their instructions are removed from
         the workspace.
       </p>
       {missionTypes.map((missionType) => (
-        <label key={missionType.type} className="flex items-start gap-2.5 text-[0.9rem] text-[var(--dashboard-ink)]">
+        <label key={missionType.type} className="flex items-start gap-2.5 text-sm text-foreground">
           <input
             type="checkbox"
-            className="mt-1 h-4 w-4 rounded border-[rgba(0,38,27,0.24)] focus:ring-2 focus:ring-[var(--dashboard-primary)] disabled:opacity-50"
+            className="mt-1 h-4 w-4 rounded border-border focus:ring-2 focus:ring-ring disabled:opacity-50"
             checked={draft.includes(missionType.type)}
             disabled={saving}
             onChange={(event) => toggle(missionType.type, event.target.checked)}
@@ -60,11 +60,10 @@ export function AvailableMissionTypes({
         </label>
       ))}
       <div>
-        <Button
+        <Button variant="outline" size="lg"
           type="button"
           disabled={saving || !changed}
           onClick={() => onApply(nextHidden)}
-          className="h-10 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-4 font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(220,230,224,0.5)]"
         >
           {saving ? (
             <span className="flex items-center gap-2">

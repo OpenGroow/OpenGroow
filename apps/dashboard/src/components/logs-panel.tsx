@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api.js";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type InstanceRow = {
   _id: string;
@@ -27,17 +29,11 @@ type LogsPanelProps = {
 };
 
 const sectionClass = "mt-4 grid gap-3";
-const panelClass = "rounded-2xl border border-stone-200 bg-white/80 p-4 shadow-sm";
+const panelClass = "rounded-xl border border-border bg-card p-4 shadow-sm";
 const chipClass =
-  "inline-flex items-center rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm text-stone-700 shadow-sm";
-const inputClass =
-  "rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-200";
-const primaryButtonClass =
-  "rounded-xl bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-xl bg-teal-800 px-3 py-2 text-sm font-semibold text-white transition hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center rounded-full border border-border bg-muted px-3 py-1.5 text-sm text-foreground shadow-sm";
 const preClass =
-  "overflow-x-auto whitespace-pre-wrap rounded-2xl border border-stone-200 bg-stone-50 p-4 text-xs leading-6 text-stone-700";
+  "overflow-x-auto whitespace-pre-wrap rounded-xl border border-border bg-muted p-4 text-xs leading-6 text-foreground";
 
 export function LogsPanel({ instanceId }: LogsPanelProps) {
   const instances = useAuthenticatedInstances<InstanceRow>();
@@ -173,31 +169,31 @@ export function LogsPanel({ instanceId }: LogsPanelProps) {
   return (
     <section className={sectionClass}>
       <article className={panelClass}>
-        <h3 className="mb-3 text-base font-semibold text-stone-900">Logs Controls</h3>
+        <h3 className="mb-3 text-base font-semibold text-foreground">Logs Controls</h3>
         <div className="flex flex-wrap items-center gap-2.5">
-          <label className="text-sm text-stone-500" htmlFor="tail-input">
+          <label className="text-sm text-muted-foreground" htmlFor="tail-input">
             Tail lines
           </label>
-          <input
+          <Input
             id="tail-input"
             value={tail}
             onChange={(event) => setTail(event.target.value)}
-            className={`${inputClass} w-24`}
+            className="w-24"
           />
         </div>
       </article>
 
       {!instances?.length ? (
         <article className={panelClass}>
-          <h3 className="mb-2 text-base font-semibold text-stone-900">No Projects</h3>
-          <p className="text-sm text-stone-500">Create a Project first in the main dashboard page.</p>
+          <h3 className="mb-2 text-base font-semibold text-foreground">No Projects</h3>
+          <p className="text-sm text-muted-foreground">Create a Project first in the main dashboard page.</p>
         </article>
       ) : null}
 
       {instances?.length && instanceId && !visibleInstances?.length ? (
         <article className={panelClass}>
-          <h3 className="mb-2 text-base font-semibold text-stone-900">Project Not Found</h3>
-          <p className="text-sm text-stone-500">
+          <h3 className="mb-2 text-base font-semibold text-foreground">Project Not Found</h3>
+          <p className="text-sm text-muted-foreground">
             No project matched <code>{instanceId}</code>.
           </p>
         </article>
@@ -210,7 +206,7 @@ export function LogsPanel({ instanceId }: LogsPanelProps) {
         const hasBrokerServer = typeof instance.brokerServerId === "number";
         return (
           <article className={panelClass} key={key}>
-            <h3 className="text-base font-semibold text-stone-900">
+            <h3 className="text-base font-semibold text-foreground">
               {instance.displayName?.trim() || "Untitled Project"}
             </h3>
             <div className="mt-3 flex flex-wrap gap-2.5">
@@ -221,30 +217,30 @@ export function LogsPanel({ instanceId }: LogsPanelProps) {
               <span className={chipClass}>ipv4: {instance.ipv4 ?? "n/a"}</span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button onClick={() => runForInstance(instance, "openclaw-status")} className={primaryButtonClass}>
+              <Button size="sm" onClick={() => runForInstance(instance, "openclaw-status")} >
                 OpenClaw Status
-              </button>
-              <button onClick={() => runForInstance(instance, "openclaw-gateway-logs")} className={primaryButtonClass}>
+              </Button>
+              <Button size="sm" onClick={() => runForInstance(instance, "openclaw-gateway-logs")} >
                 Gateway Logs
-              </button>
-              <button onClick={() => runForInstance(instance, "openclaw-worker-logs")} className={primaryButtonClass}>
+              </Button>
+              <Button size="sm" onClick={() => runForInstance(instance, "openclaw-worker-logs")} >
                 Worker Logs
-              </button>
+              </Button>
               {hasBrokerServer ? (
-                <button onClick={() => runForInstance(instance, "broker-status")} className={secondaryButtonClass}>
+                <Button variant="secondary" size="sm" onClick={() => runForInstance(instance, "broker-status")} >
                   Broker Status
-                </button>
+                </Button>
               ) : null}
               {hasBrokerServer ? (
-                <button onClick={() => runForInstance(instance, "broker-logs")} className={secondaryButtonClass}>
+                <Button variant="secondary" size="sm" onClick={() => runForInstance(instance, "broker-logs")} >
                   Broker Logs
-                </button>
+                </Button>
               ) : null}
             </div>
-            {pending ? <p className="mt-3 text-sm text-stone-500">Running: {pending}</p> : null}
+            {pending ? <p className="mt-3 text-sm text-muted-foreground">Running: {pending}</p> : null}
             {current ? (
               <>
-                <p className="mb-1.5 mt-3 text-sm text-stone-500">
+                <p className="mb-1.5 mt-3 text-sm text-muted-foreground">
                   {current.title}
                 </p>
                 <pre className={`${preClass} max-h-[420px] overflow-auto`}>

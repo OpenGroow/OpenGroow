@@ -15,24 +15,9 @@ import { ActivationDialog } from "@/src/components/activation-dialog";
 import { AvailableMissionTypes } from "@/src/components/available-mission-types";
 import { McpUrlOverrides } from "@/src/components/mcp-url-overrides";
 import { Button } from "@/components/ui/button";
-import { StatusPill } from "@/components/ui/status-pill";
-
-const STATUS_LABELS: Record<AgentCardState["status"], string> = {
-  inactive: "Inactive",
-  activating: "Activating",
-  active: "Active",
-  error: "Error",
-};
-
-const STATUS_STYLES: Record<AgentCardState["status"], string> = {
-  inactive: "bg-[rgba(220,230,224,0.5)] text-[var(--dashboard-ink-soft)]",
-  active: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]",
-  activating: "bg-[rgba(220,230,224,0.7)] text-[var(--dashboard-ink-soft)]",
-  error: "bg-[rgba(84,41,37,0.08)] text-[var(--dashboard-tertiary)]",
-};
-
-const SECONDARY_BUTTON =
-  "h-11 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-5 font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(220,230,224,0.5)]";
+import { Badge } from "@/components/ui/badge";
+import { AGENT_STATUS } from "@/components/opengroow/agent-presentation";
+import { StatusBadge } from "@/components/opengroow/status-badge";
 
 /** The Agent's merged state for this Project; `undefined` while loading. */
 function useAgentCard(instanceId: string, manifest: AgentManifest) {
@@ -106,7 +91,7 @@ function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHr
 }
 
 export function AgentStatusBadge({ status }: { status: AgentCardState["status"] }) {
-  return <StatusPill label={STATUS_LABELS[status]} className={STATUS_STYLES[status]} />;
+  return <StatusBadge tone={AGENT_STATUS[status].tone} label={AGENT_STATUS[status].label} />;
 }
 
 /**
@@ -173,7 +158,7 @@ function AgentPageFrame({
     <section className="grid gap-6">
       <header className="grid gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="m-0 text-[clamp(1.8rem,3vw,2.6rem)] leading-[1.02] tracking-[-0.05em] text-[var(--dashboard-primary)]">
+          <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
             {manifest.name}
           </h1>
           {card ? <AgentStatusBadge status={card.status} /> : null}
@@ -185,10 +170,10 @@ function AgentPageFrame({
                 key={tab.label}
                 href={tab.href}
                 aria-current={pathname === tab.href ? "page" : undefined}
-                className={`rounded-full px-4 py-1.5 text-[0.9rem] font-semibold ${
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold ${
                   pathname === tab.href
-                    ? "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]"
-                    : "text-[var(--dashboard-ink-muted)] hover:bg-[rgba(220,230,224,0.5)]"
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:bg-accent"
                 }`}
               >
                 {tab.label}
@@ -197,7 +182,7 @@ function AgentPageFrame({
               <span
                 key={tab.label}
                 aria-disabled="true"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-[0.9rem] font-semibold text-[var(--dashboard-ink-muted)] opacity-40"
+                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-muted-foreground opacity-40"
               >
                 {tab.label}
               </span>
@@ -212,7 +197,7 @@ function AgentPageFrame({
 
 function ErrorMessage({ message, link }: { message: string; link?: string }) {
   return (
-    <p className="m-0 rounded-xl bg-[rgba(84,41,37,0.06)] px-4 py-3 text-[0.9rem] leading-6 text-[var(--dashboard-tertiary)]">
+    <p className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
       {message}
       {link ? (
         <>
@@ -255,25 +240,23 @@ function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; ma
 
   return (
     <div className="grid gap-5">
-      <p className="m-0 max-w-3xl text-[0.9375rem] leading-7 text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 max-w-3xl text-sm leading-7 text-muted-foreground">
         {manifest.description}
       </p>
       {manifest.mcpServers.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {manifest.mcpServers.map((server) => (
-            <span
-              key={server.name}
-              className="rounded-full bg-[rgba(0,38,27,0.05)] px-3 py-1 text-[0.8rem] text-[var(--dashboard-ink-muted)]"
-            >
+            <Badge
+              key={server.name}>
               {server.name}
-            </span>
+            </Badge>
           ))}
         </div>
       )}
       {message ? <ErrorMessage message={message} link={link} /> : null}
       {card.status === "active" ? (
         <div className="flex flex-wrap gap-3">
-          <Button type="button" disabled={actions.busy === "refresh"} onClick={() => void actions.refresh()} className={SECONDARY_BUTTON}>
+          <Button variant="outline" type="button" disabled={actions.busy === "refresh"} onClick={() => void actions.refresh()}>
             {actions.busy === "refresh" ? (
               <Spinner label="Refreshing…" />
             ) : (
@@ -283,7 +266,7 @@ function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; ma
               </span>
             )}
           </Button>
-          <Button type="button" disabled={actions.busy === "deactivate"} onClick={() => void actions.deactivate()} className={SECONDARY_BUTTON}>
+          <Button variant="outline" type="button" disabled={actions.busy === "deactivate"} onClick={() => void actions.deactivate()}>
             {actions.busy === "deactivate" ? <Spinner label="Deactivating…" /> : "Deactivate"}
           </Button>
         </div>
@@ -333,18 +316,18 @@ function AgentSettingsContent({
     <div className="grid gap-5">
       {actions.error ? <ErrorMessage message={actions.error} /> : null}
       {!active ? (
-        <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+        <p className="m-0 text-sm text-muted-foreground">
           Activate this Agent from the Agents list to configure it.
         </p>
       ) : null}
       {active && !editable && !configurableMissionTypes && !overridableMcpUrls ? (
-        <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+        <p className="m-0 text-sm text-muted-foreground">
           Nothing to configure for this Agent: its configuration is fixed at activation and it offers at most one Mission type.
         </p>
       ) : null}
       {editable ? (
         <div>
-          <Button type="button" onClick={() => setEditing(true)} className={SECONDARY_BUTTON}>
+          <Button variant="outline" type="button" onClick={() => setEditing(true)}>
             <span className="flex items-center gap-2">
               <Pencil className="size-4" />
               Edit config

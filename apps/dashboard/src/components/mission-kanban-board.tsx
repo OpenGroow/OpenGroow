@@ -6,6 +6,9 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { blockedExternalResult } from "@/src/lib/mission-result";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/opengroow/status-badge";
 
 // Drift-prone fields (the status union, the run-result shape, names, etc.) are
 // derived from the schema so they stay in sync and callers can pass query
@@ -122,14 +125,14 @@ export function MissionKanbanBoard({
         <div
           key={col.id}
           data-column={col.id}
-          className="flex min-w-[220px] flex-1 flex-col gap-3 rounded-[1.5rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-4"
+          className="flex min-w-[220px] flex-1 flex-col gap-3 rounded-xl border border-border bg-background p-4"
         >
-          <h3 className="m-0 text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+          <h3 className="m-0 text-xs font-semibold text-muted-foreground">
             {col.label}
           </h3>
 
           {byColumn[col.id].length === 0 ? (
-            <p className="text-[0.82rem] text-[var(--dashboard-ink-muted)]">—</p>
+            <p className="text-sm text-muted-foreground">—</p>
           ) : (
             byColumn[col.id].map((mission) => (
               <MissionCard key={mission._id} mission={mission} projectId={projectId} />
@@ -137,14 +140,16 @@ export function MissionKanbanBoard({
           )}
 
           {col.id === "done" && canLoadMoreDone && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               type="button"
               disabled={doneStatus === "LoadingMore"}
               onClick={() => onLoadMoreDone?.()}
-              className="mt-1 inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)] transition hover:border-[rgba(0,38,27,0.2)] disabled:opacity-50"
+              className="mt-1"
             >
               {doneStatus === "LoadingMore" ? "Loading…" : "Load more"}
-            </button>
+            </Button>
           )}
         </div>
       ))}
@@ -181,49 +186,41 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
   return (
     <div
       data-mission={mission._id}
-      className="flex flex-col gap-2 rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white p-3 shadow-[0_2px_8px_rgba(25,28,28,0.04)]"
+      className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3"
     >
       <Link
         href={detailHref}
         className="flex flex-col gap-2 no-underline"
       >
         <div className="flex flex-col gap-1.5">
-          <span className="break-words text-[0.88rem] font-semibold text-[var(--dashboard-ink)]">
+          <span className="break-words text-sm font-semibold text-foreground">
             {titleCase(mission.type)}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
             {mission.status === "failed" && (
-              <span className="shrink-0 rounded-full bg-red-100 px-2.5 py-0.5 text-[0.72rem] font-bold text-red-700">
-                Failed
-              </span>
+              <StatusBadge tone="error" label="Failed" className="shrink-0" />
             )}
             {mission.status === "blocked" && (
-              <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-[0.72rem] font-bold text-amber-800">
-                Blocked
-              </span>
+              <StatusBadge tone="warning" label="Blocked" className="shrink-0" />
             )}
             {/* `cancelled` shares the "In progress" column with live Missions,
                 so without a badge an operator-stopped Mission would be
                 indistinguishable from a running one. "Stopped" is its canonical
                 UI term (GLOSSARY.md, Mission statuses). */}
             {mission.status === "cancelled" && (
-              <span className="shrink-0 rounded-full bg-[rgba(0,38,27,0.07)] px-2.5 py-0.5 text-[0.72rem] font-bold text-[var(--dashboard-ink-soft)]">
-                Stopped
-              </span>
+              <StatusBadge tone="neutral" label="Stopped" className="shrink-0" />
             )}
             {mission.sourceObservationId !== undefined && (
-              <span
-                data-testid="from-observation-badge"
-                className="shrink-0 rounded-full bg-[rgba(188,237,215,0.7)] px-2.5 py-0.5 text-[0.72rem] font-bold text-[var(--dashboard-primary)]"
-              >
+              <Badge variant="default" className="shrink-0"
+                data-testid="from-observation-badge">
                 From Source
-              </span>
+              </Badge>
             )}
           </div>
         </div>
 
         {summaryLine(mission) ? (
-          <p className="m-0 break-words text-[0.82rem] text-[var(--dashboard-ink-soft)] line-clamp-2">
+          <p className="m-0 break-words text-sm text-muted-foreground line-clamp-2">
             {summaryLine(mission)}
           </p>
         ) : null}
@@ -231,7 +228,7 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
         {mission.number !== undefined ? (
           <span
             data-mission-number
-            className="text-[0.72rem] text-[var(--dashboard-ink-muted)]"
+            className="text-xs text-muted-foreground"
           >
             #{mission.number}
           </span>
@@ -240,7 +237,7 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
 
       {/* Rendered outside the detail-page <Link> — an <a> cannot nest inside another <a>. */}
       {blocked && (
-        <p className="m-0 rounded-lg bg-amber-50 px-2.5 py-2 text-[0.78rem] leading-5 text-amber-900">
+        <p className="m-0 rounded-lg bg-status-warning/10 px-2.5 py-2 text-xs leading-5 text-status-warning">
           {blocked.message}{" "}
           {blocked.resolution?.kind === "link" && (
             <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
@@ -257,21 +254,23 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
         {showAction && (
           <Link
             href={`/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}/review`}
-            className="inline-flex min-h-8 flex-1 items-center justify-center rounded-xl border border-[rgba(0,38,27,0.12)] bg-[linear-gradient(135deg,rgba(188,237,215,0.96),rgba(227,242,234,0.98))] px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-primary)] transition hover:border-[rgba(0,38,27,0.18)]"
+            className="inline-flex min-h-8 flex-1 items-center justify-center rounded-xl border border-border bg-primary/15 px-3 py-1 text-xs font-semibold text-primary transition hover:border-input"
           >
             {mission.status === "approved" ? "Publish" : "Review"}
           </Link>
         )}
         {showDelete && (
-          <button
+          <Button
+            variant="destructive"
+            size="sm"
             type="button"
             aria-label="Delete mission"
             data-delete-mission={mission._id}
             onClick={(e) => void handleDelete(e)}
-            className="ml-auto inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(126,61,53,0.18)] bg-transparent px-2.5 py-1 text-[0.72rem] font-semibold text-[#7e3d35] transition hover:bg-[rgba(126,61,53,0.06)]"
+            className="ml-auto"
           >
             Delete
-          </button>
+          </Button>
         )}
       </div>
     </div>
