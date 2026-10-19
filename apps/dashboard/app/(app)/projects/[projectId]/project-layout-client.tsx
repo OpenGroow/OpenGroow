@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { use, useMemo, useState } from "react";
@@ -218,9 +219,12 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
               }`}
             >
               {!isSidebarCollapsed ? (
-                <h2 className="m-0 truncate text-lg font-semibold tracking-tight text-sidebar-foreground">
-                  {projectTitle}
-                </h2>
+                <div className="flex min-w-0 items-center gap-3">
+                  <Image src="/opengroow-logo.png" alt="OpenGroow" width={32} height={32} className="size-8 shrink-0" />
+                  <h2 className="m-0 truncate text-lg font-semibold tracking-tight text-sidebar-foreground">
+                    {projectTitle}
+                  </h2>
+                </div>
               ) : null}
               <div
                 className={`flex shrink-0 items-center gap-1 ${

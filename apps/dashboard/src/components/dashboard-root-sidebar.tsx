@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "@/src/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,7 @@ export function DashboardRootSidebar({
     <aside className="flex flex-col gap-5 border-b border-sidebar-border bg-sidebar px-4 pb-4 pt-8 text-sidebar-foreground xl:min-h-screen xl:border-b-0 xl:border-r xl:px-5 xl:pb-6 xl:pt-13">
       <div className="flex flex-1 flex-col gap-6 pt-4">
         <div className="flex items-center gap-4">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground [&_svg]:size-5">
-            <WorkspaceMark />
-          </div>
+          <Image src="/opengroow-logo.png" alt="OpenGroow" width={40} height={40} className="size-10 shrink-0" priority />
           <div>
             <div className="text-base font-semibold leading-tight tracking-tight text-sidebar-foreground">
               {workspaceTitle}
@@ -82,21 +81,6 @@ export function DashboardRootSidebar({
         <span>Sign Out</span>
       </Button>
     </aside>
-  );
-}
-
-function WorkspaceMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="4.5" y="5.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M8 9.5h8M8 13h5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }
 
