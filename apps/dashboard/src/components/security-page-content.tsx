@@ -26,21 +26,21 @@ export function SecurityPageContent({ resolvedInstanceId }: Props) {
 
   return (
     <section className="grid gap-5">
-      <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
+      <Card className="gap-5 py-6">
         <CardHeader className="grid gap-2 px-6 pb-0">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+          <CardTitle className="text-lg tracking-tight text-foreground">
             Gateway Token
           </CardTitle>
-          <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
+          <CardDescription className="max-w-2xl text-base leading-7 text-muted-foreground">
             Use this token for external integrations and connect tickets.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 px-6">
-          <code className="block w-full rounded-xl border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.95)] px-4 py-3 text-sm text-[var(--dashboard-ink)] [filter:blur(6px)] transition duration-150 hover:[filter:blur(0)] focus-visible:[filter:blur(0)] [overflow-wrap:anywhere]">
+          <code className="block w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm text-foreground [filter:blur(6px)] transition duration-150 hover:[filter:blur(0)] focus-visible:[filter:blur(0)] [overflow-wrap:anywhere]">
             {instance.openclawGatewayToken ?? "The gateway token is not available yet."}
           </code>
           <div className="flex flex-wrap gap-3">
-            <Button
+            <Button variant="secondary" size="lg"
               type="button"
               disabled={!instance.openclawGatewayToken}
               onClick={() =>
@@ -48,7 +48,6 @@ export function SecurityPageContent({ resolvedInstanceId }: Props) {
                   ? void navigator.clipboard.writeText(instance.openclawGatewayToken)
                   : undefined
               }
-              className="h-11 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
             >
               Copy token
             </Button>

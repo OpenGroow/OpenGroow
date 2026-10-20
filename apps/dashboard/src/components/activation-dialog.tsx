@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { NativeSelect } from "@/components/ui/native-select";
 
 type ActivationDialogProps = {
   manifest: AgentManifest;
@@ -113,8 +114,8 @@ export function ActivationDialog({
         <form className="grid gap-4" onSubmit={handleSubmit}>
           {requirements.map((field) =>
             field.type === "group" ? (
-              <fieldset key={field.label} className="grid gap-3 rounded-xl border border-[rgba(0,38,27,0.10)] p-4">
-                <legend className="px-1 text-[0.75rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+              <fieldset key={field.label} className="grid gap-3 rounded-xl border border-border p-4">
+                <legend className="px-1 text-xs font-semibold text-muted-foreground">
                   {field.label}
                 </legend>
                 {field.fields.map((leaf) => (
@@ -141,7 +142,7 @@ export function ActivationDialog({
           )}
 
           {submitError ? (
-            <p role="alert" className="m-0 text-[0.85rem] font-medium text-[var(--dashboard-tertiary)]">
+            <p role="alert" className="m-0 text-sm font-medium text-destructive">
               {submitError}
             </p>
           ) : null}
@@ -189,21 +190,21 @@ function LeafFieldControl({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : field.type === "select" ? (
-        <select
+        <NativeSelect
           id={inputId}
           value={value}
           required={field.required && !readOnly}
           aria-required={(field.required && !readOnly) || undefined}
           disabled={readOnly}
           onChange={(event) => onChange(event.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full"
         >
           {field.options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       ) : (
         <Input
           id={inputId}

@@ -488,7 +488,7 @@ describe("InstanceAgentsContent", () => {
     });
   });
 
-  it("shows only Open on an active Agent's card, linking to its page", async () => {
+  it("makes an active Agent's whole card a link to its page, with no Open button", async () => {
     const helloManifest = manifestFixture("hello");
     if (!helloManifest) throw new Error("Hello template not found");
     useQueryMock.mockReturnValue([
@@ -497,10 +497,19 @@ describe("InstanceAgentsContent", () => {
 
     await renderPage([helloManifest]);
 
-    const open = Array.from(document.querySelectorAll("a")).find((a) => a.textContent?.includes("Open"));
-    expect(open?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fhello");
-    // The card itself carries no button; the only one is the page-level Add Agent.
-    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["Add Agent"]);
+    const card = document.querySelector('[data-slot="agent-card"]');
+    const link = card?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fhello");
+    // The link is the agent's name, stretched over the card.
+    expect(link?.textContent).toBe(helloManifest.name);
+    expect(card?.textContent).not.toContain("Open");
+    // The card itself carries no button: the buttons are page-level.
+    expect(document.querySelectorAll('[data-slot="agent-card"] button')).toHaveLength(0);
+    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim()).slice(0, 3)).toEqual([
+      "Add Agent",
+      "All",
+      "Active",
+    ]);
     for (const label of ["Refresh", "Deactivate", "Edit config", "Open workspace"]) {
       expect(document.body.textContent).not.toContain(label);
     }
@@ -521,7 +530,7 @@ describe("InstanceAgentsContent", () => {
     }
   });
 
-  it("shows neither the category nor a status badge on the card", async () => {
+  it("shows a status badge and no category tag on the card", async () => {
     const helloManifest = manifestFixture("hello");
     if (!helloManifest) throw new Error("Hello template not found");
     useQueryMock.mockReturnValue([
@@ -530,8 +539,26 @@ describe("InstanceAgentsContent", () => {
 
     await renderPage([{ ...helloManifest, category: "zzz-category" } as AgentManifest]);
 
-    expect(document.body.textContent).not.toContain("zzz-category");
-    expect(document.body.textContent).not.toMatch(/\bActive\b/);
+    const card = document.querySelector('[data-slot="agent-card"]');
+    expect(card?.textContent).not.toContain("Zzz-category");
+    expect(card?.querySelector('[data-slot="status-badge"]')?.textContent).toContain("Active");
+  });
+
+  it("filters the cards by status", async () => {
+    const helloManifest = manifestFixture("hello");
+    const seoManifest = manifestFixture("seo");
+    if (!helloManifest || !seoManifest) throw new Error("Templates not found");
+    useQueryMock.mockReturnValue([
+      { templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello", mcpServerKeys: [] },
+      { templateId: "@opengroow/seo", status: "inactive", mcpServerKeys: [] },
+    ]);
+
+    await renderPage([helloManifest, seoManifest]);
+    const cardCount = () => document.querySelectorAll('[data-slot="agent-card"]').length;
+    expect(cardCount()).toBe(2);
+
+    await click(getRequiredButtonWithin(document.querySelector('[role="group"]') as HTMLElement, "Active"));
+    expect(cardCount()).toBe(1);
   });
 
   it("prefills the Activate dialog with the Agent's stored config when reactivating", async () => {

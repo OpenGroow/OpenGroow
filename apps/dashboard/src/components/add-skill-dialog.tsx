@@ -84,8 +84,8 @@ export function AddSkillDialog({ agentName, open, onOpenChange, onSubmit }: AddS
         </DialogHeader>
 
         <form className="grid gap-4" onSubmit={handleSubmit}>
-          <p className="m-0 flex items-start gap-2 rounded-xl bg-[rgba(148,108,0,0.08)] px-4 py-3 text-[0.9rem] leading-6 text-[var(--dashboard-ink)]">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[rgba(148,108,0,0.9)]" />
+          <p className="m-0 flex items-start gap-2 rounded-xl bg-status-warning/10 px-4 py-3 text-sm leading-6 text-foreground">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-status-warning" />
             Installing a skill can change this Agent&apos;s behavior.
           </p>
 
@@ -104,7 +104,7 @@ export function AddSkillDialog({ agentName, open, onOpenChange, onSubmit }: AddS
           {error && (
             <p
               role="alert"
-              className="m-0 rounded-xl bg-[rgba(84,41,37,0.06)] px-4 py-3 text-[0.9rem] leading-6 text-[var(--dashboard-tertiary)]"
+              className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive"
             >
               {error}
             </p>

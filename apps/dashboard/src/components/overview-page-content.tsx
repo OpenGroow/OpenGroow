@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useAction, useMutation } from "convex/react";
+import { Box, Pencil, RefreshCw, Save } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -11,13 +12,7 @@ import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instanc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { SettingsCard } from "@/components/opengroow/settings-panel";
 
 type Props = { resolvedInstanceId: string };
 
@@ -69,46 +64,50 @@ export function OverviewPageContent({ resolvedInstanceId }: Props) {
   }
 
   return (
-    <section className="grid gap-8">
+    <section className="grid gap-6">
       <ProjectNameCard jobId={instance.jobId} displayName={instance.displayName} />
 
-      <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
-        <CardHeader className="grid gap-2 px-6 pb-0">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-            OpenClaw Version
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 px-6">
-          <div className="grid gap-1">
-            <p className="text-sm uppercase tracking-[0.12em] text-[var(--dashboard-ink-muted)]">
-              Current version
-            </p>
-            <p className="text-[1.2rem] leading-7 text-[var(--dashboard-ink)]">
-              {formatOpenClawVersion(instance.openclawVersion)}
-            </p>
-            <p className="text-sm text-[var(--dashboard-ink-muted)]">
-              {instance.openclawVersionUpdatedAt
-                ? `Last refresh ${formatOverviewTimestamp(instance.openclawVersionUpdatedAt)}`
-                : "No runtime version has been recorded yet."}
-            </p>
+      <SettingsCard
+        icon={Box}
+        tone="blue"
+        title="OpenClaw Version"
+        description="Current version and system information."
+      >
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="flex items-center gap-8">
+            <div className="grid gap-1">
+              <p className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Current version
+              </p>
+              <p className="m-0 text-2xl font-semibold text-foreground tabular-nums">
+                {formatOpenClawVersion(instance.openclawVersion)}
+              </p>
+            </div>
+            <div className="grid gap-1 border-l border-border pl-8">
+              <p className="m-0 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Last refresh
+              </p>
+              <p className="m-0 text-base text-muted-foreground tabular-nums">
+                {instance.openclawVersionUpdatedAt
+                  ? formatOverviewTimestamp(instance.openclawVersionUpdatedAt)
+                  : "No runtime version has been recorded yet."}
+              </p>
+            </div>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              disabled={!openclawId || versionStatus === "refreshing"}
-              onClick={() => void handleRefreshVersion()}
-              className="h-11 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
-            >
-              {versionStatus === "refreshing" ? "Refreshing version…" : "Refresh version"}
-            </Button>
-          </div>
-
-          {versionError ? (
-            <p className="text-sm text-[var(--dashboard-tertiary)]">{versionError}</p>
-          ) : null}
-        </CardContent>
-      </Card>
+          <Button
+            variant="accent"
+            size="lg"
+            type="button"
+            loading={versionStatus === "refreshing"}
+            disabled={!openclawId}
+            onClick={() => void handleRefreshVersion()}
+          >
+            {versionStatus === "refreshing" ? null : <RefreshCw />}
+            {versionStatus === "refreshing" ? "Refreshing version…" : "Refresh version"}
+          </Button>
+        </div>
+        {versionError ? <p className="m-0 text-sm text-destructive">{versionError}</p> : null}
+      </SettingsCard>
     </section>
   );
 }
@@ -164,40 +163,25 @@ function ProjectNameCard({ jobId, displayName }: { jobId: string; displayName?: 
   }
 
   return (
-    <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
-      <CardHeader className="grid gap-2 px-6 pb-0">
-        <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+    <SettingsCard icon={Pencil} tone="blue" title="Project name" description="The name shown for this project.">
+      <form className="flex flex-wrap gap-3" onSubmit={(event) => void handleSubmit(event)}>
+        <Label htmlFor="project-name" className="sr-only">
           Project name
-        </CardTitle>
-        <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
-          The name shown for this project.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-6">
-        <form className="grid gap-3" onSubmit={(event) => void handleSubmit(event)}>
-          <Label htmlFor="project-name" className="sr-only">
-            Project name
-          </Label>
-          <Input
-            id="project-name"
-            value={name}
-            placeholder="e.g. Marketing Ops"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            onChange={(event) => setName(event.target.value)}
-            className="h-12 max-w-xl rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4"
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="submit"
-              disabled={!canSave}
-              className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
-            >
-              {status === "saving" ? "Saving…" : "Save name"}
-            </Button>
-            {error ? <span className="text-sm text-[var(--dashboard-tertiary)]">{error}</span> : null}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+        </Label>
+        <Input
+          id="project-name"
+          value={name}
+          placeholder="e.g. Marketing Ops"
+          maxLength={PROJECT_NAME_MAX_LENGTH}
+          onChange={(event) => setName(event.target.value)}
+          className="h-11 w-full max-w-md"
+        />
+        <Button size="lg" type="submit" disabled={!canSave}>
+          {status === "saving" ? null : <Save />}
+          {status === "saving" ? "Saving…" : "Save"}
+        </Button>
+        {error ? <span className="w-full text-sm text-destructive">{error}</span> : null}
+      </form>
+    </SettingsCard>
   );
 }

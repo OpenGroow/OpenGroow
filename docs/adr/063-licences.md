@@ -1,6 +1,6 @@
 # ADR-063: Product under AGPL-3.0-only, hubs under MIT, contributions by DCO
 
-**Status:** Accepted (#722, #721). DCO confirmed by the maintainer on 2026-10-11 (sole contributor at the time). Details, dependency audit and open items: `docs/LICENSING.md`. This is an engineering audit, not legal advice.
+**Status:** Accepted (#722, #721). DCO confirmed by the maintainer on 2026-10-11 (sole contributor at the time). This is not legal advice.
 
 ## Context
 
@@ -18,7 +18,3 @@ The repository is about to become public. The licence must be chosen before anyt
 - **BSL/FSL (source-available)**: the only way to forbid competing hosting, but not open source.
 - **Apache-2.0 hubs**: adds an explicit patent grant; MIT is kept unless that matters.
 - **CLA**: keeps relicensing power at the cost of a bot and contributor friction.
-
-## Consequences
-
-- Open items before publication are the checklist at the end of `docs/LICENSING.md` (lawyer review, including the Convex FSL point, Linux image scan).

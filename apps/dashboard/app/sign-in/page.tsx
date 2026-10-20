@@ -2,7 +2,7 @@ import { SignInForm } from "@/src/components/sign-in-form";
 
 export default function SignInPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--dashboard-surface)] p-6">
+    <main className="flex min-h-screen items-center justify-center bg-background p-6">
       <SignInForm mode="sign-in" />
     </main>
   );

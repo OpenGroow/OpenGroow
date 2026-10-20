@@ -1,6 +1,8 @@
 import { CircleAlert } from "lucide-react";
 import type { ProjectAgentSkill } from "@convex/template_manifest_contract";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type AgentSkillsListProps = {
   skills: ProjectAgentSkill[];
@@ -8,7 +10,7 @@ type AgentSkillsListProps = {
   onSelectSkill?: (spec: string) => void;
 };
 
-const SPEC_LABEL_CLASS = "font-medium text-[var(--dashboard-ink)]";
+const SPEC_LABEL_CLASS = "font-medium text-foreground";
 
 /**
  * Compact list of persisted Agent Skills (`projectAgents.skills[]`), showing
@@ -29,28 +31,29 @@ export function AgentSkillsList({ skills, selectedSpec, onSelectSkill }: AgentSk
         <li
           key={`${skill.source}:${skill.spec}:${skill.origin}`}
           className={cn(
-            "flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-[0.85rem] text-[var(--dashboard-ink-muted)] transition-colors duration-150",
+            "flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors duration-150",
             selectedSpec === skill.spec
-              ? "bg-[linear-gradient(135deg,rgba(188,237,215,0.92),rgba(214,236,226,0.88))]"
-              : "bg-[rgba(0,38,27,0.04)]",
+              ? "bg-primary/15"
+              : "bg-muted",
           )}
         >
           {onSelectSkill ? (
-            <button
+            <Button
               type="button"
+              variant="link"
               onClick={() => onSelectSkill(skill.spec)}
-              className={cn(SPEC_LABEL_CLASS, "hover:underline")}
+              className={cn(SPEC_LABEL_CLASS, "h-auto p-0")}
             >
               {skill.spec}
-            </button>
+            </Button>
           ) : (
             <span className={SPEC_LABEL_CLASS}>{skill.spec}</span>
           )}
-          <span className="rounded-full bg-[rgba(220,230,224,0.6)] px-2 py-0.5 text-[0.68rem] font-bold uppercase tracking-[0.1em] text-[var(--dashboard-ink-soft)]">
+          <Badge>
             {skill.origin === "template" ? "Required" : "Added by you"}
-          </span>
+          </Badge>
           {skill.status === "error" ? (
-            <span className="flex items-center gap-1 text-[0.8rem] text-[var(--dashboard-tertiary)]">
+            <span className="flex items-center gap-1 text-xs text-destructive">
               <CircleAlert className="size-3.5" />
               {skill.errorMessage ?? "Install failed"}
             </span>

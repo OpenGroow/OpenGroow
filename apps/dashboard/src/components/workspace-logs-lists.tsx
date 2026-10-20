@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import type { JobSummary } from "@/src/components/workspace-logs.types";
+import { Button } from "@/components/ui/button";
 
 // The two Run parents a founder browses on the Agent Logs page: the Agent's
 // Missions, and its generic or legacy Job. Both expand into their Runs;
@@ -15,7 +16,7 @@ import type { JobSummary } from "@/src/components/workspace-logs.types";
 
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
-    <h2 className="m-0 text-[0.78rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
+    <h2 className="m-0 text-lg font-semibold text-foreground">
       {children}
     </h2>
   );
@@ -94,7 +95,7 @@ function MissionRow({
               onClick={() => onSelectRun(run._id)}
             >
               <span>{new Date(run.createdAt).toLocaleString()}</span>
-              <span className="uppercase tracking-[0.08em]">{run.status}</span>
+              <span className="">{run.status}</span>
             </RunButton>
           )}
         </RunList>
@@ -156,12 +157,12 @@ function JobRow({
     <ParentCard title={`${job.agentName} job`} expanded={expanded} onToggle={onToggle}>
       {/* The job's last outcome stays readable while the card is collapsed —
           it is the first thing a founder debugging a job looks for. */}
-      <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 text-sm text-muted-foreground">
         Last outcome: {job.lastOutcome ?? "none yet"}
         {job.lastRunAt !== undefined ? ` · ${new Date(job.lastRunAt).toLocaleString()}` : ""}
       </p>
       {job.lastError ? (
-        <p role="alert" className="m-0 break-words text-[0.82rem] text-[var(--dashboard-tertiary)]">
+        <p role="alert" className="m-0 break-words text-sm text-destructive">
           {job.lastError}
         </p>
       ) : null}
@@ -176,7 +177,7 @@ function JobRow({
             >
               <span className="flex items-center justify-between gap-3">
                 <span>{new Date(run.createdAt).toLocaleString()}</span>
-                <span className="uppercase tracking-[0.08em]">{run.status}</span>
+                <span className="">{run.status}</span>
               </span>
               {run.errorMessage ? <span className="break-words">{run.errorMessage}</span> : null}
             </RunButton>
@@ -201,18 +202,19 @@ function ParentCard({
   children: ReactNode;
 }) {
   return (
-    <Card className="rounded-[1.4rem] border-0 py-3 shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)]">
+    <Card className="py-3">
       <CardContent className="grid grid-cols-[minmax(0,1fr)] gap-2.5 px-4">
-        <button
+        <Button
+          variant="ghost"
           type="button"
           onClick={onToggle}
-          className="flex w-full items-center justify-between gap-3 text-left"
+          className="w-full justify-between"
         >
-          <span className="text-[0.94rem] font-semibold text-[var(--dashboard-ink)]">{title}</span>
-          <span className="text-[0.78rem] uppercase tracking-[0.1em] text-[var(--dashboard-ink-soft)]">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <span className="text-xs text-muted-foreground">
             {expanded ? "Hide runs" : "Show runs"}
           </span>
-        </button>
+        </Button>
         {children}
       </CardContent>
     </Card>
@@ -230,10 +232,10 @@ function RunList<Run>({
   children: (run: Run) => ReactNode;
 }) {
   if (runs === undefined) {
-    return <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">Loading runs…</p>;
+    return <p className="m-0 text-sm text-muted-foreground">Loading runs…</p>;
   }
   if (runs.length === 0) {
-    return <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">No Runs yet.</p>;
+    return <p className="m-0 text-sm text-muted-foreground">No Runs yet.</p>;
   }
   return <div className="grid gap-2">{runs.map((run) => children(run))}</div>;
 }
@@ -250,18 +252,13 @@ function RunButton({
   children: ReactNode;
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant={selected ? "default" : "secondary"}
       onClick={onClick}
-      className={cn(
-        layout,
-        "rounded-xl px-3 py-2 text-left text-[0.84rem]",
-        selected
-          ? "bg-[var(--dashboard-primary)] text-white"
-          : "bg-[rgba(220,230,224,0.35)] text-[var(--dashboard-ink)]",
-      )}
+      className={cn(layout, "h-auto justify-start whitespace-normal py-2 text-left")}
     >
       {children}
-    </button>
+    </Button>
   );
 }

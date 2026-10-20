@@ -27,11 +27,11 @@ export type SocialEngagementReportProps = {
 function SchemaDeviationsWarning({ deviations }: { deviations: string[] }) {
   if (deviations.length === 0) return null;
   return (
-    <details className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
-      <summary className="cursor-pointer text-[0.8rem] font-bold uppercase tracking-[0.14em] text-amber-800">
+    <details className="rounded-xl border border-status-warning/30 bg-status-warning/10 px-4 py-3">
+      <summary className="cursor-pointer text-xs font-semibold text-status-warning">
         This report doesn&apos;t match the documented schema ({deviations.length})
       </summary>
-      <ul className="m-0 mt-3 grid gap-1 pl-4 text-[0.8rem] text-amber-900">
+      <ul className="m-0 mt-3 grid gap-1 pl-4 text-xs text-status-warning">
         {deviations.map((d, i) => (
           <li key={i} className="list-disc">{d}</li>
         ))}
@@ -44,11 +44,11 @@ function AdditionalDetails({ details }: { details: Record<string, unknown> | und
   if (details === undefined || Object.keys(details).length === 0) return null;
 
   return (
-    <details className="rounded-2xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] px-4 py-3">
-      <summary className="cursor-pointer text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+    <details className="rounded-xl border border-border bg-background px-4 py-3">
+      <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
         Additional details
       </summary>
-      <pre className="m-0 mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white p-3 text-[0.78rem] leading-relaxed text-[var(--dashboard-ink-muted)]">
+      <pre className="m-0 mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-card p-3 text-xs leading-relaxed text-muted-foreground">
         {JSON.stringify(details, null, 2)}
       </pre>
     </details>
@@ -69,7 +69,7 @@ export function SocialEngagementReport({
 
   if (!report) {
     return (
-      <p className="text-[0.88rem] text-red-700">
+      <p className="text-sm text-destructive">
         Failed to parse social-engagement report.
       </p>
     );
@@ -105,7 +105,7 @@ export function SocialEngagementReport({
 
       {/* Run metadata */}
       {(report.startedAt || report.completedAt) && (
-        <div className="flex flex-wrap gap-4 text-[0.8rem] text-[var(--dashboard-ink-muted)]">
+        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
           {report.startedAt && (
             <span>Started: {new Date(report.startedAt).toLocaleString()}</span>
           )}
@@ -120,7 +120,7 @@ export function SocialEngagementReport({
       {/* Posts */}
       {posts.length > 0 && (
         <div className="grid gap-3">
-          <h3 className="text-[0.8rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+          <h3 className="text-xs font-semibold text-muted-foreground">
             Posts ({posts.length})
           </h3>
           {posts.map((post, idx) => (

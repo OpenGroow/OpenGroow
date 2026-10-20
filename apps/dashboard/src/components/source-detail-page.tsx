@@ -11,6 +11,7 @@ import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
 import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
+import { Card } from "@/components/ui/card";
 
 export { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
 
@@ -71,16 +72,16 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
       <header className="grid gap-3">
         <Link
           href={`/projects/${encodeURIComponent(instanceId)}/sources`}
-          className="w-fit text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)] hover:text-[var(--dashboard-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2"
+          className="w-fit text-xs font-semibold text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           ← Sources
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="grid gap-1">
-            <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
+            <span className="text-xs font-semibold text-muted-foreground">
               {source.label} · {source.family}
             </span>
-            <h1 className="m-0 break-words text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+            <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}
             </h1>
           </div>
@@ -99,21 +100,21 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           </div>
         </div>
         {source.status === "processing" && source.retryRequested ? (
-          <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+          <p className="m-0 text-sm text-muted-foreground">
             Retry requested. It is picked up at the next run of the Agent&apos;s job.
           </p>
         ) : null}
-        <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+        <p className="m-0 text-sm text-muted-foreground">
           Observed {formatSourceDate(source.capturedAt)} ·{" "}
           <SchemaValue value={source.origin} />
         </p>
         {source.runId || source.sourceJobId ? (
-          <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+          <p className="m-0 text-sm text-muted-foreground">
             {source.runId && workspaceKey ? (
               <Link
                 data-testid="source-run-link"
                 href={runLogsHref(instanceId, source.templateId, source.runId)}
-                className="font-bold text-[var(--dashboard-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2"
+                className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 View Run
               </Link>
@@ -126,7 +127,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <Link
             data-testid="source-production-mission-link"
             href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(source.productionMissionId)}`}
-            className="w-fit font-bold text-[var(--dashboard-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2"
+            className="w-fit font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             View production Mission
           </Link>
@@ -142,9 +143,9 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
       {Object.keys(scoring).length > 0 ? (
         <details
           data-testid="scoring-details"
-          className="rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]"
+          className="rounded-xl border border-border bg-background p-6"
         >
-          <summary className="cursor-pointer text-[1.1rem] font-bold tracking-[-0.02em] text-[var(--dashboard-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2">
+          <summary className="cursor-pointer text-base font-semibold tracking-tight text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             Scoring details
           </summary>
           <div className="mt-4">
@@ -158,11 +159,11 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
       </Section>
 
       {source.raw ? (
-        <details className="rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-          <summary className="cursor-pointer text-[1.1rem] font-bold tracking-[-0.02em] text-[var(--dashboard-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2">
+        <details className="rounded-xl border border-border bg-background p-6">
+          <summary className="cursor-pointer text-base font-semibold tracking-tight text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             Raw
           </summary>
-          <pre className="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap break-all text-[0.8rem] text-[var(--dashboard-ink)]">
+          <pre className="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap break-all text-xs text-foreground">
             {source.raw}
           </pre>
         </details>
@@ -173,17 +174,17 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
 
 function SourcePipelineStepper({ state }: { state: SourcePipelineState }) {
   return (
-    <section
+    <Card
       aria-labelledby="source-pipeline"
-      className="grid gap-4 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]"
+      className="grid gap-4 p-6"
     >
-      <h2 id="source-pipeline" className="m-0 text-[1.1rem] font-bold tracking-[-0.02em] text-[var(--dashboard-ink)]">
+      <h2 id="source-pipeline" className="m-0 text-base font-semibold tracking-tight text-foreground">
         Pipeline
       </h2>
       {state.kind === "terminal" ? (
         <p
           data-testid="source-pipeline-terminal"
-          className="m-0 rounded-xl border border-[rgba(84,41,37,0.16)] bg-[rgba(84,41,37,0.06)] px-4 py-3 font-semibold text-[var(--dashboard-tertiary)]"
+          className="m-0 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 font-semibold text-destructive"
           role="status"
         >
           Terminal state: {state.label}
@@ -198,43 +199,43 @@ function SourcePipelineStepper({ state }: { state: SourcePipelineState }) {
                 key={stage}
                 data-stage={stage}
                 aria-current={status === "Current" ? "step" : undefined}
-                className={`grid min-h-16 gap-1 rounded-xl border px-3 py-2 text-[0.82rem] ${
+                className={`grid min-h-16 gap-1 rounded-xl border px-3 py-2 text-sm ${
                   status === "Current"
-                    ? "border-[var(--dashboard-primary)] bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]"
+                    ? "border-primary bg-primary/15 text-primary"
                     : status === "Complete"
-                      ? "border-[rgba(0,38,27,0.12)] bg-white text-[var(--dashboard-ink)]"
-                      : "border-[rgba(0,38,27,0.08)] text-[var(--dashboard-ink-muted)]"
+                      ? "border-border bg-card text-foreground"
+                      : "border-border text-muted-foreground"
                 }`}
               >
                 <span className="font-semibold">{stage}</span>
-                <span className="text-[0.72rem] uppercase tracking-[0.08em]">{status}</span>
+                <span className="text-xs">{status}</span>
               </li>
             );
           })}
         </ol>
       )}
-    </section>
+    </Card>
   );
 }
 
 function Message({ children }: { children: string }) {
   return (
     <div className="grid gap-8">
-      <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">{children}</p>
+      <p className="text-sm text-muted-foreground">{children}</p>
     </div>
   );
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
-    <section
+    <Card
       aria-labelledby={id}
-      className="grid gap-4 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]"
+      className="grid gap-4 p-6"
     >
-      <h2 id={id} className="m-0 text-[1.1rem] font-bold tracking-[-0.02em] text-[var(--dashboard-ink)]">
+      <h2 id={id} className="m-0 text-base font-semibold tracking-tight text-foreground">
         {title}
       </h2>
       {children}
-    </section>
+    </Card>
   );
 }

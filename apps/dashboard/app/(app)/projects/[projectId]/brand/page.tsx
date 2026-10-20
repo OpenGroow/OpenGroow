@@ -3,67 +3,102 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { Loader2, Save } from "lucide-react";
+import {
+  Ban,
+  FileText,
+  Gift,
+  Info,
+  Loader2,
+  MessageCircle,
+  Pencil,
+  Save,
+  StickyNote,
+  Target,
+  Users,
+} from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AGENT_TONE_CLASSES } from "@/components/opengroow/agent-presentation";
+import { PageHeader } from "@/components/opengroow/page-header";
+import { cn } from "@/lib/utils";
 
 type BrandPageProps = {
   params: Promise<{ projectId: string }>;
 };
 
+const BRAND_CORE_MAX_LENGTH = 2000;
+
 const BRAND_CORE_FIELDS = [
   {
     key: "audience",
     label: "Audience",
+    hint: "Who are you creating this for? Be as specific as possible.",
     placeholder: "Independent shop owners, founders, marketing teams…",
+    icon: Users,
+    tone: "visual",
   },
   {
     key: "tone",
     label: "Tone of voice",
+    hint: "How should the brand sound? What's the style and personality?",
     placeholder: "Warm, direct, expert, playful…",
+    icon: MessageCircle,
+    tone: "creative",
   },
   {
     key: "offer",
     label: "Offer",
+    hint: "What do you offer? Describe your product or service.",
     placeholder: "Products, services, pricing model, guarantees…",
+    icon: Gift,
+    tone: "creative",
   },
   {
     key: "positioning",
     label: "Positioning",
+    hint: "How do you position the brand? What makes it different?",
     placeholder: "How this brand should be understood in the market…",
+    icon: Target,
+    tone: "research",
   },
   {
     key: "editorialRules",
     label: "Editorial rules",
+    hint: "Guidelines for the type of content and messaging.",
     placeholder: "Style rules, formatting preferences, claims policy…",
+    icon: FileText,
+    tone: "visual",
   },
   {
     key: "constraints",
     label: "Constraints",
+    hint: "Important limitations or things to keep in mind.",
     placeholder: "Legal, operational, budget, or channel constraints…",
+    icon: Info,
+    tone: "neutral",
   },
   {
     key: "avoid",
     label: "Things to avoid",
+    hint: "What should agents avoid doing or saying?",
     placeholder: "Forbidden topics, terms, claims, or competitor mentions…",
+    icon: Ban,
+    tone: "neutral",
   },
   {
     key: "notes",
     label: "Additional notes",
+    hint: "Anything else agents should know?",
     placeholder: "Anything else agents should know…",
+    icon: StickyNote,
+    tone: "creative",
   },
 ] as const;
 
@@ -113,11 +148,32 @@ function sameBrandCoreFormState(a: BrandCoreFormState, b: BrandCoreFormState): b
   return BRAND_CORE_FIELDS.every((field) => a[field.key] === b[field.key]);
 }
 
+function BrandFieldIcon({
+  icon: Icon,
+  tone,
+}: {
+  icon: (typeof BRAND_CORE_FIELDS)[number]["icon"];
+  tone: (typeof BRAND_CORE_FIELDS)[number]["tone"];
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-12 shrink-0 items-center justify-center rounded-xl",
+        AGENT_TONE_CLASSES[tone],
+      )}
+    >
+      <Icon className="size-6" />
+    </span>
+  );
+}
+
 export default function BrandPage({ params }: BrandPageProps) {
   const resolvedInstanceId = useResolvedProjectId(params);
   const [brandCoreValues, setBrandCoreValues] =
     useState<BrandCoreFormState>(EMPTY_BRAND_CORE);
   const [brandCoreDirty, setBrandCoreDirty] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [brandCoreStatus, setBrandCoreStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
@@ -172,6 +228,7 @@ export default function BrandPage({ params }: BrandPageProps) {
       setBrandCoreValues(trimmedValues);
       setBrandCoreDirty(false);
       setBrandCoreStatus("saved");
+      setEditing(false);
     } catch (error: unknown) {
       setBrandCoreStatus("error");
       setBrandCoreError(
@@ -180,29 +237,75 @@ export default function BrandPage({ params }: BrandPageProps) {
     }
   }
 
+  const savedValues = brandCoreFormState(brandCore ?? null);
+  const hasChanges = !sameBrandCoreFormState(
+    trimBrandCoreFormState(brandCoreValues),
+    trimBrandCoreFormState(savedValues),
+  );
+  const isSaving = brandCoreStatus === "saving";
+
+  // Leaves edit mode and drops whatever was typed since the last save.
+  function handleCancelEdit() {
+    setBrandCoreValues(savedValues);
+    setBrandCoreDirty(false);
+    setBrandCoreStatus("idle");
+    setBrandCoreError("");
+    setEditing(false);
+  }
+
   return (
-    <section className="grid gap-8">
-      <Card className="gap-5 rounded-[1.5rem] border-0 bg-white/92 py-6 shadow-[0_18px_48px_rgba(25,28,28,0.08)] ring-1 ring-[rgba(0,38,27,0.08)]">
-        <CardHeader className="grid gap-2 px-6 pb-0">
-          <CardTitle className="text-[1.35rem] leading-[1.1] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-            Brand Core
-          </CardTitle>
-          <CardDescription className="max-w-2xl text-base leading-7 text-[var(--dashboard-ink-muted)]">
-            Shared brand context for agents working in this project.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-6">
-          <form className="grid gap-4" onSubmit={(event) => void handleSaveBrandCore(event)}>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {BRAND_CORE_FIELDS.map((field) => (
-                <div className="grid gap-2" key={field.key}>
-                  <Label htmlFor={`brand-core-${field.key}`}>{field.label}</Label>
+    <form
+      className="grid gap-8"
+      onSubmit={(event) => void handleSaveBrandCore(event)}
+    >
+      <PageHeader
+        title="Brand"
+        description="Shared brand context for the agents working in this project, so every output stays on brand."
+        action={
+          editing ? (
+            <Button type="button" variant="outline" size="lg" disabled={isSaving} onClick={handleCancelEdit}>
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={brandCore === undefined}
+              onClick={() => setEditing(true)}
+            >
+              <Pencil aria-hidden="true" />
+              Edit
+            </Button>
+          )
+        }
+      />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {BRAND_CORE_FIELDS.map((field) => {
+          const value = brandCoreValues[field.key];
+          return (
+            <Card className="gap-4 p-5" key={field.key}>
+              <div className="flex items-center gap-4">
+                <BrandFieldIcon icon={field.icon} tone={field.tone} />
+                <div className="grid min-w-0 gap-0.5">
+                  <Label htmlFor={`brand-core-${field.key}`} className="text-base font-semibold">
+                    {field.label}
+                  </Label>
+                  {editing ? (
+                    <p className="m-0 text-sm text-muted-foreground">{field.hint}</p>
+                  ) : null}
+                </div>
+              </div>
+              {editing ? (
+                <>
                   <Textarea
                     id={`brand-core-${field.key}`}
                     name={field.key}
                     autoComplete="off"
                     placeholder={field.placeholder}
-                    value={brandCoreValues[field.key]}
+                    value={value}
+                    maxLength={BRAND_CORE_MAX_LENGTH}
                     onChange={(event) => {
                       setBrandCoreValues((current) => ({
                         ...current,
@@ -217,46 +320,51 @@ export default function BrandPage({ params }: BrandPageProps) {
                         event.currentTarget.form?.requestSubmit();
                       }
                     }}
-                    className="min-h-28 resize-y rounded-xl bg-white text-base leading-7 md:text-base"
-                    disabled={brandCore === undefined || brandCoreStatus === "saving"}
+                    className="min-h-36 resize-y rounded-xl bg-card leading-7"
+                    disabled={isSaving}
                   />
-                </div>
-              ))}
-            </div>
+                  <span className="text-right text-sm text-muted-foreground tabular-nums">
+                    {value.length}/{BRAND_CORE_MAX_LENGTH.toLocaleString("en-US")}
+                  </span>
+                </>
+              ) : (
+                <p
+                  className={cn(
+                    "m-0 line-clamp-3 text-base whitespace-pre-line",
+                    value.trim() ? "text-muted-foreground" : "text-muted-foreground/60",
+                  )}
+                >
+                  {value.trim() || "Not defined yet"}
+                </p>
+              )}
+            </Card>
+          );
+        })}
+      </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                type="submit"
-                disabled={!openclawId || brandCore === undefined || brandCoreStatus === "saving"}
-                className="h-11 gap-2 rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
-              >
-                {brandCoreStatus === "saving" ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Save aria-hidden="true" />
-                )}
-                <span>Save</span>
-              </Button>
-              <span
-                className="text-sm text-[var(--dashboard-ink-muted)]"
-                aria-live="polite"
-              >
-                {brandCore === undefined
-                  ? "Loading Brand Core…"
-                  : brandCoreStatus === "saved"
-                    ? "Saved"
-                    : "Optional. Leave empty if this is not defined yet."}
-              </span>
-            </div>
+      {editing ? (
+      <div className="sticky bottom-4 z-10 flex justify-end">
+        <Button
+          type="submit"
+          variant="default"
+          size="lg"
+          disabled={!openclawId || brandCore === undefined || !hasChanges || isSaving}
+        >
+          {isSaving ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <Save aria-hidden="true" />
+          )}
+          <span>Save changes</span>
+        </Button>
+      </div>
+      ) : null}
 
-            {brandCoreError ? (
-              <p className="text-sm text-[var(--dashboard-tertiary)]" aria-live="polite">
-                {brandCoreError}
-              </p>
-            ) : null}
-          </form>
-        </CardContent>
-      </Card>
-    </section>
+      {brandCoreError ? (
+        <p className="text-sm text-destructive" aria-live="polite">
+          {brandCoreError}
+        </p>
+      ) : null}
+    </form>
   );
 }

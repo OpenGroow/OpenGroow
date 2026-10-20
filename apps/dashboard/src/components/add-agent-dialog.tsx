@@ -159,24 +159,24 @@ export function AddAgentDialog({ projectId, instanceId, selfHost = false, open, 
           />
         ) : null}
         {hub?.error ? (
-          <p role="alert" className="m-0 text-[0.85rem] text-[var(--dashboard-ink-muted)]">
+          <p role="alert" className="m-0 text-sm text-muted-foreground">
             The hub catalogue could not be read: {hub.error}
           </p>
         ) : null}
         {previewError ? (
-          <p role="alert" className="m-0 text-[0.85rem] text-red-700">
+          <p role="alert" className="m-0 text-sm text-destructive">
             {previewError}
           </p>
         ) : null}
         {catalogue === undefined ? (
-          <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">Loading catalogue…</p>
+          <p className="m-0 text-sm text-muted-foreground">Loading catalogue…</p>
         ) : nothingToAdd && hub?.error ? (
-          <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+          <p className="m-0 text-sm text-muted-foreground">
             No agent template is available while the hub cannot be reached. Retry later, or add one from a local folder
             with <code>pnpm template:add &lt;folder&gt; --project {instanceId ?? "&lt;projectId&gt;"}</code>.
           </p>
         ) : nothingToAdd ? (
-          <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+          <p className="m-0 text-sm text-muted-foreground">
             Every available agent template is already in this Project.
           </p>
         ) : (

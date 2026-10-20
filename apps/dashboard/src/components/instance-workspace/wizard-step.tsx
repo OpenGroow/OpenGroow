@@ -59,30 +59,30 @@ export function WizardStep({
 }) {
   return (
     <div
-      className={`grid gap-3 rounded-[1.25rem] border p-5 ${
+      className={`grid gap-3 rounded-xl border p-5 ${
         active
-          ? "border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)]"
+          ? "border-border bg-muted"
           : complete
-            ? "border-[rgba(0,38,27,0.06)] bg-[rgba(243,244,244,0.45)] opacity-70"
-            : "border-[rgba(0,38,27,0.06)] bg-[rgba(243,244,244,0.45)] opacity-60"
+            ? "border-border bg-muted/50 opacity-70"
+            : "border-border bg-muted/50 opacity-60"
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--dashboard-primary)] text-sm font-semibold text-[var(--dashboard-on-primary)]">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
           {index}
         </div>
         <div className="grid gap-2">
-          <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">
+          <h4 className="text-base font-semibold text-foreground">
             {title}
           </h4>
           {description ? (
-            <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm leading-6 text-muted-foreground">
               {description}
             </p>
           ) : null}
         </div>
       </div>
-      {children}
+      <div className="pl-11">{children}</div>
     </div>
   );
 }

@@ -85,9 +85,9 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
         {offers.map((offer) => (
           <li
             key={offer.templateId}
-            className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(0,38,27,0.10)] bg-[rgba(0,38,27,0.04)] p-4"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted p-4"
           >
-            <span className="text-[0.95rem] text-[var(--dashboard-ink)]">
+            <span className="text-sm text-foreground">
               Version {offer.availableVersion} of {offer.templateId} is available (installed: {offer.currentVersion}).
             </span>
             <Button type="button" variant="outline" onClick={() => setReviewing(offer)}>
@@ -108,22 +108,22 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
               {reviewing?.currentVersion}.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3 rounded-xl bg-[rgba(0,38,27,0.04)] p-4">
+          <div className="grid gap-3 rounded-xl bg-muted p-4">
             {sections.length === 0 ? (
-              <span className="text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+              <span className="text-sm text-muted-foreground">
                 No change to hosts, secrets, plugins, required configuration or Mission types.
               </span>
             ) : (
               sections.map(({ title, items, warning }) => (
                 <div key={title} className="grid gap-1">
                   <span
-                    className={`text-[0.75rem] font-bold uppercase tracking-[0.14em] ${
-                      warning ? "text-[var(--dashboard-danger,#b42318)]" : "text-[var(--dashboard-ink-soft)]"
+                    className={`text-xs font-semibold ${
+                      warning ? "text-destructive" : "text-muted-foreground"
                     }`}
                   >
                     {title}
                   </span>
-                  <ul className="m-0 grid list-none gap-0.5 p-0 text-[0.9rem] text-[var(--dashboard-ink)]">
+                  <ul className="m-0 grid list-none gap-0.5 p-0 text-sm text-foreground">
                     {items.map((item) => (
                       <li key={item}>{item}</li>
                     ))}
@@ -133,7 +133,7 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
             )}
           </div>
           {error ? (
-            <p role="alert" className="m-0 text-[0.9rem] text-[var(--dashboard-danger,#b42318)]">
+            <p role="alert" className="m-0 text-sm text-destructive">
               {error}
             </p>
           ) : null}

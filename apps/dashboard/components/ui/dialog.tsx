@@ -17,7 +17,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-[rgba(8,15,11,0.52)] backdrop-blur-[2px]",
+        "fixed inset-0 z-50 bg-background/70 backdrop-blur-[2px]",
         className
       )}
       {...props}
@@ -36,7 +36,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-[min(92vw,40rem)] max-w-full -translate-x-1/2 -translate-y-1/2 gap-5 rounded-[1.6rem] border border-[rgba(0,38,27,0.08)] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,246,245,0.96))] p-6 shadow-[0_32px_90px_rgba(0,38,27,0.2)] outline-none duration-150 data-[closed]:opacity-0 data-[closed]:scale-[0.98] data-[open]:opacity-100 data-[open]:scale-100",
+          "fixed top-1/2 left-1/2 z-50 grid w-[min(92vw,40rem)] max-w-full -translate-x-1/2 -translate-y-1/2 gap-5 rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-lg outline-none duration-150 data-[closed]:opacity-0 data-[closed]:scale-[0.98] data-[open]:opacity-100 data-[open]:scale-100",
           className
         )}
         {...props}
@@ -63,7 +63,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "text-[1.35rem] leading-[1.08] tracking-[-0.04em] text-[var(--dashboard-ink)]",
+        "font-heading text-xl leading-tight font-semibold text-foreground",
         className
       )}
       {...props}
@@ -78,7 +78,7 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-[0.96rem] leading-7 text-[var(--dashboard-ink-muted)]", className)}
+      className={cn("text-base leading-6 text-muted-foreground", className)}
       {...props}
     />
   )
