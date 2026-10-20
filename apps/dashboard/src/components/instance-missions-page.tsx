@@ -168,7 +168,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     <div className="grid gap-8">
       <PageHeader
         title="Missions"
-        description="Goals, outcomes, review and progress."
+        description="Tasks you give your agents, from request to review and publication."
         action={
           <Button variant="glow" size="lg" type="button" onClick={() => setCreateOpen(true)}>
             <Plus />

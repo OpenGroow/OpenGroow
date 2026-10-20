@@ -178,7 +178,7 @@ function ProjectNameCard({ jobId, displayName }: { jobId: string; displayName?: 
         />
         <Button size="lg" type="submit" disabled={!canSave}>
           {status === "saving" ? null : <Save />}
-          {status === "saving" ? "Saving…" : "Save name"}
+          {status === "saving" ? "Saving…" : "Save"}
         </Button>
         {error ? <span className="w-full text-sm text-destructive">{error}</span> : null}
       </form>

@@ -54,8 +54,8 @@ vi.mock("@/src/hooks/use-authenticated-instances", () => ({
 }));
 
 function getRequiredTextarea(labelText: string): HTMLTextAreaElement {
-  const editButton = document.querySelector(`button[aria-label="Edit ${labelText}"]`);
-  if (editButton instanceof HTMLButtonElement) {
+  const editButton = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Edit");
+  if (editButton) {
     act(() => {
       editButton.click();
     });

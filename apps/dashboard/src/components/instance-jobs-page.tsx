@@ -129,7 +129,7 @@ export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="grid gap-8">
-      <PageHeader title="Jobs" description="Executions, schedules, logs and retries." />
+      <PageHeader title="Jobs" description="Background work your agents run on a recurrence: ingestion, scoring and ranking. Track, pause or run now." />
 
       {jobs === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

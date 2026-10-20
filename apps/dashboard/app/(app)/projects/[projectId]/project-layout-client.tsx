@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import {
   Bot,
   CalendarClock,
+  LayoutDashboard,
   LayoutGrid,
   Library,
   ListChecks,
@@ -45,6 +46,7 @@ type ProjectView = {
 };
 
 const PROJECT_VIEWS: ProjectView[] = [
+  { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "missions", label: "Missions", icon: Rocket },
   { id: "agents", label: "Agents", icon: Bot },
   { id: "sources", label: "Sources", icon: Library },

@@ -112,6 +112,7 @@ describe("Project layout navigation", () => {
     const nav = container.querySelector('nav[aria-label="Project sections"]') as HTMLElement;
     const links = Array.from(nav.querySelectorAll("a"));
     expect(links.map((a) => a.textContent?.trim())).toEqual([
+      "Overview",
       "Missions",
       "Agents",
       "Sources",

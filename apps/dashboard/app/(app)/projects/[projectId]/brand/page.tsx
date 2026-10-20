@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Ban,
-  Check,
   FileText,
   Gift,
   Info,
@@ -174,7 +173,7 @@ export default function BrandPage({ params }: BrandPageProps) {
   const [brandCoreValues, setBrandCoreValues] =
     useState<BrandCoreFormState>(EMPTY_BRAND_CORE);
   const [brandCoreDirty, setBrandCoreDirty] = useState(false);
-  const [editingKey, setEditingKey] = useState<BrandCoreFieldKey | null>(null);
+  const [editing, setEditing] = useState(false);
   const [brandCoreStatus, setBrandCoreStatus] = useState<"idle" | "saving" | "saved" | "error">(
     "idle",
   );
@@ -229,6 +228,7 @@ export default function BrandPage({ params }: BrandPageProps) {
       setBrandCoreValues(trimmedValues);
       setBrandCoreDirty(false);
       setBrandCoreStatus("saved");
+      setEditing(false);
     } catch (error: unknown) {
       setBrandCoreStatus("error");
       setBrandCoreError(
@@ -244,6 +244,15 @@ export default function BrandPage({ params }: BrandPageProps) {
   );
   const isSaving = brandCoreStatus === "saving";
 
+  // Leaves edit mode and drops whatever was typed since the last save.
+  function handleCancelEdit() {
+    setBrandCoreValues(savedValues);
+    setBrandCoreDirty(false);
+    setBrandCoreStatus("idle");
+    setBrandCoreError("");
+    setEditing(false);
+  }
+
   return (
     <form
       className="grid gap-8"
@@ -251,55 +260,49 @@ export default function BrandPage({ params }: BrandPageProps) {
     >
       <PageHeader
         title="Brand"
-        description="Shared brand context for agents working in this project. This helps every agent create consistent, on-brand content."
+        description="Shared brand context for the agents working in this project, so every output stays on brand."
+        action={
+          editing ? (
+            <Button type="button" variant="outline" size="lg" disabled={isSaving} onClick={handleCancelEdit}>
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={brandCore === undefined}
+              onClick={() => setEditing(true)}
+            >
+              <Pencil aria-hidden="true" />
+              Edit
+            </Button>
+          )
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {BRAND_CORE_FIELDS.map((field) => {
           const value = brandCoreValues[field.key];
-          const isEditing = editingKey === field.key;
           return (
-            <Card
-              className={cn(
-                "gap-4 p-5 transition-colors",
-                !isEditing && "cursor-pointer hover:bg-muted/40",
-              )}
-              key={field.key}
-              onClick={
-                isEditing || brandCore === undefined || isSaving
-                  ? undefined
-                  : () => setEditingKey(field.key)
-              }
-            >
+            <Card className="gap-4 p-5" key={field.key}>
               <div className="flex items-center gap-4">
                 <BrandFieldIcon icon={field.icon} tone={field.tone} />
                 <div className="grid min-w-0 gap-0.5">
                   <Label htmlFor={`brand-core-${field.key}`} className="text-base font-semibold">
                     {field.label}
                   </Label>
-                  {isEditing ? (
+                  {editing ? (
                     <p className="m-0 text-sm text-muted-foreground">{field.hint}</p>
                   ) : null}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="ml-auto"
-                  aria-label={`${isEditing ? "Done editing" : "Edit"} ${field.label}`}
-                  disabled={brandCore === undefined || isSaving}
-                  onClick={() => setEditingKey(isEditing ? null : field.key)}
-                >
-                  {isEditing ? <Check aria-hidden="true" /> : <Pencil aria-hidden="true" />}
-                </Button>
               </div>
-              {isEditing ? (
+              {editing ? (
                 <>
                   <Textarea
                     id={`brand-core-${field.key}`}
                     name={field.key}
                     autoComplete="off"
-                    autoFocus
                     placeholder={field.placeholder}
                     value={value}
                     maxLength={BRAND_CORE_MAX_LENGTH}
@@ -339,6 +342,7 @@ export default function BrandPage({ params }: BrandPageProps) {
         })}
       </div>
 
+      {editing ? (
       <div className="sticky bottom-4 z-10 flex justify-end">
         <Button
           type="submit"
@@ -354,6 +358,7 @@ export default function BrandPage({ params }: BrandPageProps) {
           <span>Save changes</span>
         </Button>
       </div>
+      ) : null}
 
       {brandCoreError ? (
         <p className="text-sm text-destructive" aria-live="polite">

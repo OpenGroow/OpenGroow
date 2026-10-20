@@ -302,7 +302,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
     <div className="grid gap-8">
       <PageHeader
         title="Scheduler"
-        description="Recurring jobs and their execution rules."
+        description="Missions created automatically at the cadence you set."
         action={
           <Button variant="glow" size="lg" type="button" onClick={() => setCreateOpen(true)}>
             <Plus />

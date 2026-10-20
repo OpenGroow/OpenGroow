@@ -12,7 +12,7 @@ import { getPublicUrls } from "@/src/lib/public-urls";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "OpenClaw Dashboard",
+  title: "OpenGroow",
   description: "Manage your OpenGroow Projects and their agents",
 };
 

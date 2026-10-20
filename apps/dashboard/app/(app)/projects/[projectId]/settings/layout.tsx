@@ -12,7 +12,7 @@ export default async function Layout({
   const { projectId } = await params;
   return (
     <section className="grid max-w-4xl gap-6">
-      <PageHeader title="Settings" description="Configuration, integrations and account." />
+      <PageHeader title="Settings" description="Project configuration: providers, channels, workspaces and security." />
       <SettingsTabs projectId={decodeURIComponent(projectId)} />
       {children}
     </section>
