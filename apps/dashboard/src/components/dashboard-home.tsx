@@ -107,9 +107,6 @@ export function DashboardHome({
     );
   });
 
-  const workspaceTitle = session?.user?.name?.trim() || "OpenClaw Control";
-  const workspaceSubtitle =
-    session?.user?.email?.trim() || "Managed operator runtime";
   const isCreating =
     createPhase !== "idle" && createPhase !== "done" && createPhase !== "error";
 
@@ -256,8 +253,6 @@ export function DashboardHome({
     <main className="min-h-screen w-full bg-card xl:grid xl:grid-cols-[320px_minmax(0,1fr)]">
       <DashboardRootSidebar
         activeHref="/"
-        workspaceTitle={workspaceTitle}
-        workspaceSubtitle={workspaceSubtitle}
       />
 
       <section className="grid min-w-0 content-start gap-8 px-5 pb-14 pt-8 sm:px-8 xl:px-11 xl:pb-14 xl:pt-13">

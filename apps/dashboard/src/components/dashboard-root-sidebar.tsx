@@ -18,25 +18,16 @@ const ROOT_NAV_ITEMS: RootNavItem[] = [
 
 export function DashboardRootSidebar({
   activeHref,
-  workspaceSubtitle,
-  workspaceTitle,
 }: {
   activeHref: string;
-  workspaceSubtitle: string;
-  workspaceTitle: string;
 }) {
   return (
     <aside className="flex flex-col gap-5 border-b border-sidebar-border bg-sidebar px-4 pb-4 pt-8 text-sidebar-foreground xl:min-h-screen xl:border-b-0 xl:border-r xl:px-5 xl:pb-6 xl:pt-13">
       <div className="flex flex-1 flex-col gap-6 pt-4">
         <div className="flex items-center gap-4">
           <Image src="/opengroow-logo.png" alt="OpenGroow" width={40} height={40} className="size-10 shrink-0" priority />
-          <div>
-            <div className="text-base font-semibold leading-tight tracking-tight text-sidebar-foreground">
-              {workspaceTitle}
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {workspaceSubtitle}
-            </div>
+          <div className="text-base font-semibold leading-tight tracking-tight text-sidebar-foreground">
+            OpenGroow
           </div>
         </div>
 
