@@ -1,7 +1,8 @@
 "use client";
 
-import { buttonChipClass, inputChipClass } from "./styles";
 import type { TelegramConfigState } from "./types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function TelegramSection({
   botToken,
@@ -17,31 +18,32 @@ export function TelegramSection({
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input
+        <Input
           value={botToken}
           onChange={(event) => onBotTokenChange(event.target.value)}
-          className={inputChipClass}
+          className="w-auto"
           aria-label="telegram bot token"
           placeholder="Telegram bot token (from @BotFather)"
           style={{ minWidth: 280 }}
           type="password"
         />
-        <button
-          className={buttonChipClass}
+        <Button
+          variant="outline"
+          size="sm"
           type="button"
           disabled={configState?.status === "saving"}
           onClick={() => onSave()}
         >
           {configState?.status === "saving" ? "Saving…" : "Save Telegram token"}
-        </button>
+        </Button>
       </div>
       {configState?.status === "saved" ? (
-        <div style={{ marginTop: 6, fontSize: 12, color: "#1e7f5c" }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-success)" }}>
           {configState.output ?? "Telegram bot configured."}
         </div>
       ) : null}
       {configState?.error ? (
-        <div style={{ color: "#9d1f2f", marginTop: 6, fontSize: 12 }}>{configState.error}</div>
+        <div style={{ color: "var(--status-error)", marginTop: 6, fontSize: 12 }}>{configState.error}</div>
       ) : null}
     </div>
   );

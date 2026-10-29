@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { CheckCircle2, Cpu, CreditCard, KeyRound, LoaderCircle, Pencil, Trash2 } from "lucide-react";
+import { CheckCircle2, Cpu, CreditCard, KeyRound, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 
@@ -21,9 +21,13 @@ import {
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useOptionalPlugin } from "@/src/components/optional-plugins-provider";
 import { useProviderAuth } from "@/src/hooks/use-provider-auth";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -31,6 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const ROW_GRID = "grid grid-cols-[1.4fr_1.2fr_9rem_8rem_6rem] gap-4";
 
 type Props = { resolvedInstanceId: string };
 
@@ -310,108 +316,105 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
 
   return (
     <section className="grid gap-6">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-[var(--dashboard-ink)]">Provider Management</h2>
-          <p className="mt-1 text-sm text-[var(--dashboard-ink-muted)]">
-            Manage your subscriptions and API keys.
-          </p>
-        </div>
+      <div className="flex items-center justify-end gap-4">
         <Button
+          variant="glow"
+          size="lg"
           type="button"
           onClick={() => {
-            if (showAddPanel) { closePanel(); }
-            else { setShowAddPanel(true); setAiConfig({}); }
+            setShowAddPanel(true);
+            setAiConfig({});
           }}
-          className="h-10 shrink-0 rounded-xl bg-[var(--dashboard-primary)] px-4 text-sm text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
         >
-          + Add provider
+          <Plus />
+          Add provider
         </Button>
       </div>
 
-      {activateError ? <p className="text-sm text-[#8f3030]">{activateError}</p> : null}
+      {activateError ? <p className="m-0 text-sm text-destructive">{activateError}</p> : null}
 
-      {/* Providers table */}
-      <div className="overflow-hidden rounded-xl border border-[rgba(0,38,27,0.1)]">
-        {/* Table header */}
-        <div className="grid grid-cols-[1.3fr_1fr_150px_130px_96px] border-b border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.6)] px-5 py-2.5">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">Provider</span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">Model</span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">Type</span>
-          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">Status</span>
-          <span className="text-right text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">Actions</span>
+      <Card className="gap-0 py-0">
+        <div className={`${ROW_GRID} border-b border-border px-6 py-4`}>
+          {["Provider", "Model", "Type", "Status", "Actions"].map((label, index) => (
+            <span
+              key={label}
+              className={`text-xs font-semibold tracking-wide text-muted-foreground uppercase ${index === 4 ? "text-right" : ""}`}
+            >
+              {label}
+            </span>
+          ))}
         </div>
 
-        {providers.map((entry, idx) => {
+        {providers.map((entry) => {
           const key = providerKey(entry);
           const isSubscription = entry.kind === "subscription";
           const isSwitchingAuth = !entry.inUse && isSwitchingSameProviderAuth(entry);
+          const name = isSubscription
+            ? `${entry.provider === DEFAULT_SUBSCRIPTION_PROVIDER ? "OpenAI" : entry.provider} Subscription`
+            : labelForProvider(entry.provider);
+          const activating = activatingKey === key;
           return (
             <div
               key={key}
-              className={`grid grid-cols-[1.3fr_1fr_150px_130px_96px] items-center px-5 py-4 ${idx < providers.length - 1 ? "border-b border-[rgba(0,38,27,0.06)]" : ""}`}
+              className={`${ROW_GRID} items-center border-b border-border px-6 py-4 last:border-b-0`}
             >
-              <div className="flex items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(220,230,224,0.5)]">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
                   {isSubscription ? (
-                    <CreditCard className="size-4 text-[var(--dashboard-primary)]" />
+                    <CreditCard className="size-5 text-primary" />
                   ) : (
-                    <Cpu className="size-4 text-[var(--dashboard-primary)]" />
+                    <Cpu className="size-5 text-primary" />
                   )}
                 </div>
-                <div className="text-sm font-medium text-[var(--dashboard-ink)]">
-                  {isSubscription
-                    ? `${entry.provider === DEFAULT_SUBSCRIPTION_PROVIDER ? "OpenAI" : entry.provider} Subscription`
-                    : labelForProvider(entry.provider)}
-                </div>
+                <span className="truncate text-base font-medium text-foreground">{name}</span>
+              </div>
+              <div className="min-w-0">
+                <Badge variant="tag" className="max-w-full font-mono text-xs">
+                  <span className="truncate">{entry.model}</span>
+                </Badge>
               </div>
               <div>
-                <code className="inline-block rounded-md border border-[var(--dashboard-outline-strong)] bg-[var(--dashboard-surface-container)] px-2 py-1 font-mono text-xs text-[var(--dashboard-ink)]">
-                  {entry.model}
-                </code>
-              </div>
-              <div>
-                <span className="inline-flex items-center rounded-md border border-[rgba(0,38,27,0.12)] bg-white px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-[var(--dashboard-ink-muted)]">
+                <Badge variant="tag">
                   {isSubscription ? "Subscription" : "Direct API key"}
-                </span>
+                </Badge>
               </div>
-              <div className="flex items-center">
+              <div>
                 <label
                   title={
-                    !entry.inUse && isSwitchingAuth
+                    isSwitchingAuth
                       ? "Switches to this provider's other configured auth method (API key vs. subscription)."
                       : undefined
                   }
-                  className={`inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${
-                    entry.inUse ? "text-[var(--dashboard-primary)]" : "text-[var(--dashboard-ink-muted)]"
-                  } ${activatingKey === key ? "cursor-wait" : "cursor-pointer"}`}
+                  className={`inline-flex items-center gap-2 ${activating ? "cursor-wait" : "cursor-pointer"}`}
                 >
                   <input
                     type="radio"
                     name={`active-provider-${instance?._id ?? "unknown"}`}
                     checked={entry.inUse}
-                    disabled={activatingKey === key}
+                    disabled={activating}
                     onChange={() => {
                       if (!entry.inUse) void handleActivateProvider(entry);
                     }}
                     aria-label={`Activate ${labelForProvider(entry.provider)}`}
-                    className="size-4 accent-[var(--dashboard-primary)] disabled:cursor-wait"
+                    className="sr-only"
                   />
-                  {activatingKey === key ? (
-                    <>
-                      <LoaderCircle className="size-3 animate-spin" />
+                  {activating ? (
+                    <Badge variant="outline" size="xs" className="text-foreground">
+                      <LoaderCircle className="animate-spin" />
                       Activating…
-                    </>
-                  ) : entry.inUse ? (
-                    "Active"
+                    </Badge>
                   ) : (
-                    "Inactive"
+                    <StatusBadge
+                      tone={entry.inUse ? "active" : "neutral"}
+                      label={entry.inUse ? "Active" : "Inactive"}
+                    />
                   )}
                 </label>
               </div>
-              <div className="flex items-center justify-end gap-1">
-                <button
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
                   type="button"
                   aria-label={isSubscription ? `Edit ${labelForProvider(entry.provider)} model` : `Edit ${labelForProvider(entry.provider)}`}
                   onClick={() => {
@@ -427,71 +430,76 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                       setAddType("apikey");
                     }
                   }}
-                  className="flex size-8 items-center justify-center rounded-lg text-[var(--dashboard-ink-muted)] hover:bg-[rgba(0,38,27,0.06)] hover:text-[var(--dashboard-primary)]"
                 >
-                  <Pencil className="size-4" />
-                </button>
-                <button
+                  <Pencil />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
                   type="button"
                   aria-label={`Remove ${labelForProvider(entry.provider)}`}
                   title={entry.inUse ? "Activate another provider before removing this one." : undefined}
                   disabled={entry.inUse}
                   onClick={() => void handleRemoveProvider(entry)}
-                  className="flex size-8 items-center justify-center rounded-lg text-[var(--dashboard-ink-muted)] hover:bg-[rgba(0,38,27,0.06)] hover:text-[#8f3030] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--dashboard-ink-muted)]"
                 >
-                  <Trash2 className="size-4" />
-                </button>
+                  <Trash2 />
+                </Button>
               </div>
             </div>
           );
         })}
 
-        {/* Empty state */}
         {providers.length === 0 ? (
-          <div className="py-16 text-center text-sm text-[var(--dashboard-ink-muted)]">
+          <div className="py-16 text-center text-sm text-muted-foreground">
             No providers configured. Click &ldquo;Add provider&rdquo; to get started.
           </div>
         ) : null}
-      </div>
+      </Card>
 
-      {/* Add / edit panel */}
-      {showAddPanel ? (
-        <div className="overflow-hidden rounded-xl border border-[rgba(0,38,27,0.1)] bg-white">
+      {/* Add / edit modal */}
+      <Dialog
+        open={showAddPanel}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) closePanel();
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-0">
           {/* Type selector */}
           {!addType ? (
             <div className="p-6">
-              <h3 className="mb-4 text-base font-semibold text-[var(--dashboard-ink)]">Choose provider type</h3>
+              <h3 className="mb-4 text-base font-semibold text-foreground">Choose provider type</h3>
               <div className="grid grid-cols-2 gap-3">
-                <button
+                <Button
+                  variant="outline"
                   type="button"
+                  className="h-auto flex-col items-start gap-2 p-4 text-left whitespace-normal"
                   onClick={() => setAddType("subscription")}
                   disabled={!codexAvailable}
-                  className="flex flex-col items-start gap-2 rounded-xl border border-[rgba(0,38,27,0.1)] bg-[rgba(243,244,244,0.5)] p-4 text-left hover:border-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.3)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[rgba(0,38,27,0.1)] disabled:hover:bg-[rgba(243,244,244,0.5)]"
                 >
-                  <CreditCard className="size-5 text-[var(--dashboard-primary)]" />
-                  <span className="text-sm font-medium text-[var(--dashboard-ink)]">Subscription</span>
-                  <span className="text-xs text-[var(--dashboard-ink-muted)]">
+                  <CreditCard className="size-5 text-primary" />
+                  <span className="text-sm font-medium text-foreground">Subscription</span>
+                  <span className="text-xs text-muted-foreground">
                     {codexAvailable
                       ? "Delegate billing and access via OpenAI"
                       : 'Not available on this Instance (add "codex" to OPENCLAW_OPTIONAL_PLUGINS)'}
                   </span>
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="outline"
                   type="button"
+                  className="h-auto flex-col items-start gap-2 p-4 text-left whitespace-normal"
                   onClick={() => setAddType("apikey")}
-                  className="flex flex-col items-start gap-2 rounded-xl border border-[rgba(0,38,27,0.1)] bg-[rgba(243,244,244,0.5)] p-4 text-left hover:border-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.3)]"
                 >
-                  <KeyRound className="size-5 text-[var(--dashboard-primary)]" />
-                  <span className="text-sm font-medium text-[var(--dashboard-ink)]">Direct API key</span>
-                  <span className="text-xs text-[var(--dashboard-ink-muted)]">Use your own API key (BYOK)</span>
-                </button>
+                  <KeyRound className="size-5 text-primary" />
+                  <span className="text-sm font-medium text-foreground">Direct API key</span>
+                  <span className="text-xs text-muted-foreground">Use your own API key (BYOK)</span>
+                </Button>
               </div>
               <div className="mt-4 flex justify-end">
-                <Button
+                <Button size="lg"
                   type="button"
                   variant="outline"
                   onClick={closePanel}
-                  className="h-9 rounded-xl border-[rgba(0,38,27,0.12)] px-4 text-sm"
                 >
                   Cancel
                 </Button>
@@ -506,16 +514,17 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
           {addType === "subscription-edit" ? (
             <div className="p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-base font-semibold text-[var(--dashboard-ink)]">
+                <h3 className="text-base font-semibold text-foreground">
                   Edit — {editingSubscriptionProvider === DEFAULT_SUBSCRIPTION_PROVIDER ? "OpenAI" : editingSubscriptionProvider} Subscription
                 </h3>
-                <button
+                <Button
+                  variant="link"
                   type="button"
                   onClick={closePanel}
-                  className="text-xs text-[var(--dashboard-ink-muted)] underline"
+                  className="h-auto p-0"
                 >
                   ← Back
-                </button>
+                </Button>
               </div>
               <div className="grid gap-5">
                 <div className="grid gap-2">
@@ -525,24 +534,23 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                     value={subscriptionModelInput}
                     onChange={(e) => setSubscriptionModelInput(e.target.value)}
                     placeholder="openai/gpt-5.5"
-                    className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4"
+                    className="h-12 rounded-xl border-border bg-card px-4"
                   />
                 </div>
                 <div className="flex gap-3">
-                  <Button
+                  <Button size="lg"
                     type="button"
                     disabled={
                       !subscriptionModelInput.trim() ||
                       activatingKey === providerKey({ provider: editingSubscriptionProvider ?? "", kind: "subscription" })
                     }
                     onClick={() => void handleUpdateSubscriptionModel()}
-                    className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
                   >
                     {activatingKey === providerKey({ provider: editingSubscriptionProvider ?? "", kind: "subscription" })
                       ? "Saving…"
                       : "Update"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={closePanel} className="h-11 rounded-xl border-[rgba(0,38,27,0.12)] px-5">
+                  <Button size="lg" type="button" variant="outline" onClick={closePanel}>
                     Cancel
                   </Button>
                 </div>
@@ -554,55 +562,56 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
           {addType === "subscription" && codexAvailable ? (
             <div className="p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-base font-semibold text-[var(--dashboard-ink)]">Link OpenAI Subscription</h3>
-                <button
+                <h3 className="text-base font-semibold text-foreground">Link OpenAI Subscription</h3>
+                <Button
+                  variant="link"
                   type="button"
                   onClick={() => setAddType(null)}
-                  className="text-xs text-[var(--dashboard-ink-muted)] underline"
+                  className="h-auto p-0"
                 >
                   ← Back
-                </button>
+                </Button>
               </div>
               <div className="grid gap-5">
                 {!authHasStarted ? (
-                  <Button
+                  <Button size="lg"
                     type="button"
                     disabled={authIsStarting}
                     onClick={() => void startAuth(DEFAULT_SUBSCRIPTION_PROVIDER)}
-                    className="h-11 w-fit rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
+                    className="w-fit"
                   >
                     {managedAuthLinked ? "Relink OpenAI Subscription" : "Link OpenAI Subscription"}
                   </Button>
                 ) : null}
-                {authJob.error ? <p className="text-sm text-[#8f3030]">{authJob.error}</p> : null}
+                {authJob.error ? <p className="text-sm text-destructive">{authJob.error}</p> : null}
                 {authSucceeded ? (
                   <div className="grid gap-4">
-                    <div className="rounded-[1.25rem] border border-[rgba(35,105,73,0.18)] bg-[rgba(235,246,240,0.95)] p-5">
+                    <div className="rounded-xl border border-border bg-muted p-5">
                       <div className="flex items-start gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#236949] text-white">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-status-success text-primary-foreground">
                           <CheckCircle2 className="size-5" />
                         </div>
                         <div className="grid gap-2">
-                          <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">Subscription linked successfully</h4>
-                          <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+                          <h4 className="text-base font-semibold text-foreground">Subscription linked successfully</h4>
+                          <p className="text-sm leading-6 text-muted-foreground">
                             {managedAuthProviderLabel ?? "OpenAI"} is now linked to this Project.
                           </p>
                         </div>
                       </div>
                     </div>
-                    <Button type="button" variant="outline" className="h-11 w-fit rounded-xl border-[rgba(0,38,27,0.12)] bg-white px-5 text-[var(--dashboard-primary)]" onClick={() => { resetAuthFlow(); closePanel(); }}>
+                    <Button size="lg" type="button" variant="outline" className="w-fit" onClick={() => { resetAuthFlow(); closePanel(); }}>
                       Close
                     </Button>
                   </div>
                 ) : null}
                 {authHasStarted && !authSucceeded ? (
                   <div className="grid gap-4">
-                    <div className="grid gap-3 rounded-[1.25rem] border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)] p-5">
+                    <div className="grid gap-3 rounded-xl border border-border bg-muted p-5">
                       <div className="flex items-start gap-3">
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--dashboard-primary)] text-sm font-semibold text-[var(--dashboard-on-primary)]">1</div>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">1</div>
                         <div className="grid gap-2">
-                          <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">Get authorization URL</h4>
-                          <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+                          <h4 className="text-base font-semibold text-foreground">Get authorization URL</h4>
+                          <p className="text-sm leading-6 text-muted-foreground">
                             {authRestartRecovered
                               ? "The gateway restarted before the flow completed. Restart from this page."
                               : "Log in with your OpenAI account, then keep this page open."}
@@ -610,53 +619,53 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                         </div>
                       </div>
                       {authRestartRecovered ? (
-                        <Button type="button" className="h-11 w-fit rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)]" onClick={() => void startAuth(DEFAULT_SUBSCRIPTION_PROVIDER)}>
+                        <Button size="lg" type="button" className="w-fit" onClick={() => void startAuth(DEFAULT_SUBSCRIPTION_PROVIDER)}>
                           Restart flow
                         </Button>
                       ) : null}
                       {authIsStarting && !authBrowserUrl ? (
-                        <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-4 text-sm text-[var(--dashboard-ink-muted)] shadow-[inset_0_0_0_1px_rgba(0,38,27,0.06)]">
-                          <LoaderCircle className="size-5 animate-spin text-[var(--dashboard-primary)]" />
+                        <div className="flex items-center gap-3 rounded-xl bg-card px-4 py-4 text-sm text-muted-foreground ring-1 ring-inset ring-border">
+                          <LoaderCircle className="size-5 animate-spin text-primary" />
                           <span>Getting your authorization URL…</span>
                         </div>
                       ) : null}
                       {authBrowserUrl ? (
                         <div className="grid gap-3">
-                          <a href={authBrowserUrl} target="_blank" rel="noreferrer" className="block w-full rounded-xl border border-[rgba(0,38,27,0.08)] bg-white px-4 py-3 text-sm text-[var(--dashboard-primary)] underline underline-offset-4 [overflow-wrap:anywhere]">{authBrowserUrl}</a>
-                          <Button type="button" className="h-11 w-fit rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)]" onClick={() => window.open(authBrowserUrl, "_blank", "noopener,noreferrer")}>Open URL</Button>
+                          <a href={authBrowserUrl} target="_blank" rel="noreferrer" className="block w-full rounded-xl border border-border bg-card px-4 py-3 text-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere]">{authBrowserUrl}</a>
+                          <Button variant="secondary" size="lg" type="button" className="w-fit" onClick={() => window.open(authBrowserUrl, "_blank", "noopener,noreferrer")}>Open URL</Button>
                         </div>
                       ) : null}
                     </div>
-                    <div className="grid gap-3 rounded-[1.25rem] border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)] p-5">
+                    <div className="grid gap-3 rounded-xl border border-border bg-muted p-5">
                       <div className="flex items-start gap-3">
-                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--dashboard-primary)] text-sm font-semibold text-[var(--dashboard-on-primary)]">2</div>
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">2</div>
                         <div className="grid gap-2">
-                          <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">Copy redirect URL</h4>
-                          <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">Once OpenAI finishes, copy the final redirect URL from your browser and paste it here.</p>
+                          <h4 className="text-base font-semibold text-foreground">Copy redirect URL</h4>
+                          <p className="text-sm leading-6 text-muted-foreground">Once OpenAI finishes, copy the final redirect URL from your browser and paste it here.</p>
                         </div>
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="subscription-auth-input">Redirect URL</Label>
-                        <Input id="subscription-auth-input" value={authInput} onChange={(e) => setAuthInput(e.target.value)} placeholder="Paste the final redirect URL" disabled={!authCanAcceptRedirectInput || authRestartRecovered || authSubmittingRedirect} className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4" />
-                        {authInputValidationError ? <p className="text-sm text-[#8f3030]">{authInputValidationError}</p> : null}
+                        <Input id="subscription-auth-input" value={authInput} onChange={(e) => setAuthInput(e.target.value)} placeholder="Paste the final redirect URL" disabled={!authCanAcceptRedirectInput || authRestartRecovered || authSubmittingRedirect} className="h-12 rounded-xl border-border bg-card px-4" />
+                        {authInputValidationError ? <p className="text-sm text-destructive">{authInputValidationError}</p> : null}
                       </div>
                       {authIsVerifyingRedirect ? (
-                        <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-4 text-sm text-[var(--dashboard-ink-muted)] shadow-[inset_0_0_0_1px_rgba(0,38,27,0.06)]">
-                          <LoaderCircle className="size-5 animate-spin text-[var(--dashboard-primary)]" />
+                        <div className="flex items-center gap-3 rounded-xl bg-card px-4 py-4 text-sm text-muted-foreground ring-1 ring-inset ring-border">
+                          <LoaderCircle className="size-5 animate-spin text-primary" />
                           <span>Verifying your authorization…</span>
                         </div>
                       ) : null}
-                      <Button type="button" disabled={!authCanSubmit} className="h-11 w-fit rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] disabled:opacity-50" onClick={() => void sendAuthInput(false)}>
+                      <Button variant="secondary" size="lg" type="button" disabled={!authCanSubmit} className="w-fit" onClick={() => void sendAuthInput(false)}>
                         {authSubmittingRedirect ? "Verifying…" : "Submit URL"}
                       </Button>
                     </div>
-                    <Button type="button" variant="outline" className="h-11 w-fit rounded-xl border-[rgba(0,38,27,0.12)] bg-white px-5 text-[var(--dashboard-primary)]" disabled={authCancelling} onClick={() => void cancelAuth()}>
+                    <Button size="lg" type="button" variant="outline" className="w-fit" disabled={authCancelling} onClick={() => void cancelAuth()}>
                       {authCancelling ? "Cancelling…" : "Cancel"}
                     </Button>
                     {authJob.logs && authJob.logs.length > 0 ? (
-                      <div className="grid gap-2 rounded-[1.25rem] border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)] p-5">
-                        <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">Authorization logs</h4>
-                        <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap rounded-[1rem] bg-white p-4 text-sm leading-6 text-[var(--dashboard-ink-muted)] shadow-[inset_0_0_0_1px_rgba(0,38,27,0.06)]">{authJob.logs.join("\n")}</pre>
+                      <div className="grid gap-2 rounded-xl border border-border bg-muted p-5">
+                        <h4 className="text-base font-semibold text-foreground">Authorization logs</h4>
+                        <pre className="m-0 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-card p-4 text-sm leading-6 text-muted-foreground ring-1 ring-inset ring-border">{authJob.logs.join("\n")}</pre>
                       </div>
                     ) : null}
                   </div>
@@ -669,10 +678,11 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
           {addType === "apikey" ? (
             <div className="p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-base font-semibold text-[var(--dashboard-ink)]">
+                <h3 className="text-base font-semibold text-foreground">
                   {isEditMode ? `Edit — ${labelForProvider(aiProvider)}` : "Add API key"}
                 </h3>
-                <button
+                <Button
+                  variant="link"
                   type="button"
                   onClick={() => {
                     if (editingProvider !== null) {
@@ -686,10 +696,10 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                       setAiConfig({});
                     }
                   }}
-                  className="text-xs text-[var(--dashboard-ink-muted)] underline"
+                  className="h-auto p-0"
                 >
                   ← Back
-                </button>
+                </Button>
               </div>
               <div className="grid gap-5">
                 <div className="grid gap-2">
@@ -699,7 +709,7 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                     onValueChange={(raw) => { const v = raw ?? ""; setAiProvider(v); setAiModel(""); setAiBaseUrl(defaultBaseUrlForProvider(v)); setAiApiKey(defaultApiKeyForProvider(v)); setEditingProvider(null); }}
                     disabled={isEditMode}
                   >
-                    <SelectTrigger id="ai-provider" className="h-12 w-full rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+                    <SelectTrigger id="ai-provider" className="h-12 w-full rounded-xl border-border bg-card px-4 text-sm disabled:cursor-not-allowed disabled:opacity-60">
                       <SelectValue placeholder="Select provider…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -717,31 +727,31 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                     API Key
                     {isEditMode && <span className="ml-2 text-xs text-muted-foreground">(kept — not editable in edit mode)</span>}
                   </Label>
-                  <Input id="ai-api-key" type="password" value={isEditMode ? "" : aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} placeholder={isEditMode ? "••••••••" : "sk-..."} disabled={isEditMode} className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4 disabled:cursor-not-allowed disabled:opacity-60" />
+                  <Input id="ai-api-key" type="password" value={isEditMode ? "" : aiApiKey} onChange={(e) => setAiApiKey(e.target.value)} placeholder={isEditMode ? "••••••••" : "sk-..."} disabled={isEditMode} className="h-12 rounded-xl border-border bg-card px-4 disabled:cursor-not-allowed disabled:opacity-60" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ai-model">Model</Label>
-                  <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="gpt-4o, mimo-v2.5… (provider prefix added automatically)" className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4" />
+                  <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="gpt-4o, mimo-v2.5… (provider prefix added automatically)" className="h-12 rounded-xl border-border bg-card px-4" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ai-base-url">Base URL <span className="text-xs text-muted-foreground">(optional)</span></Label>
-                  <Input id="ai-base-url" value={aiBaseUrl} onChange={(e) => setAiBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4" />
+                  <Input id="ai-base-url" value={aiBaseUrl} onChange={(e) => setAiBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" className="h-12 rounded-xl border-border bg-card px-4" />
                 </div>
-                {aiConfig.output ? <p className="text-sm text-[#236949]">{aiConfig.output}</p> : null}
-                {aiConfig.error ? <p className="text-sm text-[#8f3030]">{aiConfig.error}</p> : null}
+                {aiConfig.output ? <p className="text-sm text-status-success">{aiConfig.output}</p> : null}
+                {aiConfig.error ? <p className="text-sm text-destructive">{aiConfig.error}</p> : null}
                 <div className="flex gap-3">
-                  <Button type="button" disabled={!canSaveAiConfig} onClick={() => void handleSaveAiConfig()} className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]">
+                  <Button size="lg" type="button" disabled={!canSaveAiConfig} onClick={() => void handleSaveAiConfig()}>
                     {aiConfig.status === "saving" ? "Saving…" : isEditMode ? "Update" : "Save"}
                   </Button>
-                  <Button type="button" variant="outline" onClick={closePanel} className="h-11 rounded-xl border-[rgba(0,38,27,0.12)] px-5">
+                  <Button size="lg" type="button" variant="outline" onClick={closePanel}>
                     Cancel
                   </Button>
                 </div>
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

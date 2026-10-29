@@ -11,6 +11,11 @@ import {
   SocialEngagementReport,
   isSocialEngagementReport,
 } from "@/src/components/social-engagement-report/social-engagement-report";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { Card } from "@/components/ui/card";
 
 type Props = {
   params: Promise<{ instanceId: string; missionId: string }>;
@@ -98,32 +103,32 @@ function parseCarouselReviewPayload(content: string): CarouselReviewPayload | nu
 function CarouselReviewContent({ content }: { content: string }) {
   const carousel = parseCarouselReviewPayload(content);
   if (!carousel) {
-    return <p className="text-[0.88rem] text-red-700">Carousel review content is invalid.</p>;
+    return <p className="text-sm text-destructive">Carousel review content is invalid.</p>;
   }
 
   return (
     <div className="grid gap-6" data-testid="carousel-review-content">
       {(carousel.brief || carousel.status) && (
-        <div className="grid gap-1 text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+        <div className="grid gap-1 text-sm text-muted-foreground">
           {carousel.brief && <p className="m-0">{carousel.brief}</p>}
-          {carousel.status && <p className="m-0 text-xs uppercase tracking-[0.14em]">Status: {carousel.status}</p>}
+          {carousel.status && <p className="m-0 text-xs">Status: {carousel.status}</p>}
         </div>
       )}
       {carousel.missingImages.length > 0 && (
         <p
           role="alert"
           data-testid="carousel-missing-images"
-          className="m-0 rounded-xl border border-red-700/30 bg-red-50 px-4 py-3 text-[0.88rem] text-red-800"
+          className="m-0 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
           Missing rendered variants: {carousel.missingImages.join(", ")}. Approval is disabled until every requested platform is rendered.
         </p>
       )}
       {carousel.slides.map((slide, index) => (
         <article key={`slide-${index + 1}`} className="grid gap-3">
-          <h3 className="m-0 text-sm font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+          <h3 className="m-0 text-sm font-semibold text-muted-foreground">
             Slide {index + 1}
           </h3>
-          {slide.text && <p className="m-0 text-[0.95rem] text-[var(--dashboard-ink)]">{slide.text}</p>}
+          {slide.text && <p className="m-0 text-sm text-foreground">{slide.text}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             {Object.entries(slide.imageUrls).map(([platform, url]) => (
               <figure key={`${index}-${platform}`} className="m-0 grid gap-2">
@@ -131,10 +136,10 @@ function CarouselReviewContent({ content }: { content: string }) {
                 <img
                   src={url}
                   alt={`${platform} variant for slide ${index + 1}`}
-                  className="w-full rounded-xl border border-[rgba(0,38,27,0.08)] object-contain shadow-sm"
+                  className="w-full rounded-xl border border-border object-contain shadow-sm"
                   data-testid={`carousel-image-${index + 1}-${platform}`}
                 />
-                <figcaption className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dashboard-ink-soft)]">
+                <figcaption className="text-xs font-semibold text-muted-foreground">
                   {platform}
                 </figcaption>
               </figure>
@@ -168,7 +173,7 @@ function ReviewCover({ src }: { src: string }) {
     : `${src}${src.includes("?") ? "&" : "?"}retry=${retryCount}`;
 
   return (
-    <section className="overflow-hidden rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
+    <section className="overflow-hidden rounded-xl border border-border">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={retryCount}
@@ -220,16 +225,12 @@ function IndexingBadge({ indexing }: { indexing: Doc<"missions">["indexing"] }) 
 
   if (indexing.status === "submitted") {
     return (
-      <p className="inline-flex w-fit items-center gap-2 rounded-full border border-green-700/30 bg-green-50 px-3 py-1 text-[0.82rem] font-semibold text-green-800">
-        Indexing submitted
-      </p>
+      <StatusBadge tone="active" label="Indexing submitted" />
     );
   }
 
   return (
-    <p className="inline-flex w-fit items-center gap-2 rounded-full border border-red-700/30 bg-red-50 px-3 py-1 text-[0.82rem] font-semibold text-red-800">
-      Indexing failed: {indexing.error}
-    </p>
+    <StatusBadge tone="error" label={`Indexing failed: ${indexing.error}`} />
   );
 }
 
@@ -289,7 +290,7 @@ function ReviewActionsSection({
   return (
     <section className="grid gap-3">
       {actionError && (
-        <p className="text-[0.88rem] text-red-700">{actionError}</p>
+        <p className="text-sm text-destructive">{actionError}</p>
       )}
 
       {/* Render declared input fields */}
@@ -297,16 +298,16 @@ function ReviewActionsSection({
         <div key={inputDef.key} className="grid gap-2">
           <label
             htmlFor={`action-input-${inputDef.key}`}
-            className="text-[0.8rem] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]"
+            className="text-xs font-semibold text-muted-foreground"
           >
             {inputDef.label}
             {!inputDef.required && (
-              <span className="ml-1 normal-case font-normal text-[var(--dashboard-ink-muted)]">
+              <span className="ml-1 normal-case font-normal text-muted-foreground">
                 (optional)
               </span>
             )}
           </label>
-          <input
+          <Input
             id={`action-input-${inputDef.key}`}
             type={inputDef.type}
             value={inputValues[inputDef.key] ?? ""}
@@ -315,24 +316,24 @@ function ReviewActionsSection({
             }
             disabled={isLoading}
             data-testid={`action-input-${inputDef.key}`}
-            className="w-full max-w-xs rounded-2xl border border-[rgba(0,38,27,0.12)] bg-white px-4 py-2 text-[0.92rem] text-[var(--dashboard-ink)] disabled:opacity-40"
+            className="w-full max-w-xs"
           />
         </div>
       ))}
 
       <div className="flex gap-4">
-        <button
+        <Button
+          size="lg"
           type="button"
           onClick={() => { void handleAction(eligibleAction); }}
           disabled={isLoading || disabled}
           data-testid={`review-action-${eligibleAction.key}`}
-          className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[var(--dashboard-primary)] bg-[var(--dashboard-primary)] px-5 font-semibold text-[var(--dashboard-on-primary)] shadow-[0_14px_26px_rgba(0,38,27,0.24)] transition hover:bg-[var(--dashboard-primary-container)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isLoading ? `${eligibleAction.label}…` : eligibleAction.label}
-        </button>
+        </Button>
       </div>
       {disabled && (
-        <p data-testid="review-action-blocked" className="m-0 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
+        <p data-testid="review-action-blocked" className="m-0 text-sm text-muted-foreground">
           This action is unavailable until the review content is complete.
         </p>
       )}
@@ -396,29 +397,30 @@ function RejectSection({
 
   if (!rejecting) {
     return (
-      <button
+      <Button
+        variant="destructive"
+        size="lg"
         type="button"
         onClick={() => { setRejecting(true); }}
         data-testid="reject-button"
-        className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-red-700 bg-white px-5 font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {rejectCapability.label}
-      </button>
+      </Button>
     );
   }
 
   return (
     <div className="grid gap-3">
       {rejectError && (
-        <p className="text-[0.88rem] text-red-700">{rejectError}</p>
+        <p className="text-sm text-destructive">{rejectError}</p>
       )}
       <label
         htmlFor="reject-feedback"
-        className="text-[0.8rem] font-semibold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]"
+        className="text-xs font-semibold text-muted-foreground"
       >
         {feedbackLabel}
       </label>
-      <textarea
+      <Textarea
         id="reject-feedback"
         value={feedback}
         onChange={(e) => setFeedback(e.target.value)}
@@ -426,27 +428,29 @@ function RejectSection({
         placeholder="Explain what needs to be corrected…"
         disabled={submitting}
         data-testid="reject-feedback"
-        className="w-full rounded-2xl border border-[rgba(0,38,27,0.12)] bg-white p-4 text-[0.92rem] text-[var(--dashboard-ink)] disabled:opacity-40"
+        className="w-full"
       />
       <div className="flex gap-4">
-        <button
+        <Button
+          variant="destructive"
+          size="lg"
           type="button"
           onClick={() => { void handleReject(); }}
           disabled={submitting || feedback.trim() === ""}
           data-testid="reject-confirm"
-          className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-red-700 bg-red-700 px-5 font-semibold text-white shadow-[0_14px_26px_rgba(185,28,28,0.20)] transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? "Submitting…" : "Confirm rejection"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="outline"
+          size="lg"
           type="button"
           onClick={() => { setRejecting(false); setRejectError(null); }}
           disabled={submitting}
           data-testid="reject-cancel"
-          className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-white px-5 font-semibold text-[var(--dashboard-ink)] disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -555,7 +559,7 @@ export function MissionReviewContent({
   if (mission === undefined) {
     return (
       <div className="grid gap-8">
-        <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -563,7 +567,7 @@ export function MissionReviewContent({
   if (mission === null) {
     return (
       <div className="grid gap-8">
-        <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Mission not found.</p>
+        <p className="text-sm text-muted-foreground">Mission not found.</p>
       </div>
     );
   }
@@ -571,7 +575,7 @@ export function MissionReviewContent({
   if (reviewProjection === null) {
     return (
       <div className="grid gap-8">
-        <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+        <p className="text-sm text-muted-foreground">
           {fetchError ?? "Loading review…"}
         </p>
       </div>
@@ -607,11 +611,11 @@ export function MissionReviewContent({
       <header className="grid gap-1">
         <Link
           href={`/projects/${encodeURIComponent(instanceId)}/missions`}
-          className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)] hover:text-[var(--dashboard-primary)]"
+          className="text-xs font-semibold text-muted-foreground hover:text-primary"
         >
           ← Missions
         </Link>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+        <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
           {isSocialEngagement
             ? "Engagement Report"
             : readOnly
@@ -621,39 +625,39 @@ export function MissionReviewContent({
       </header>
 
       {!reviewArtifact?.available ? (
-        <section className="rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6">
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">No artifact available for this mission.</p>
-        </section>
+        <Card className="p-6">
+          <p className="text-sm text-muted-foreground">No artifact available for this mission.</p>
+        </Card>
       ) : (
         <>
           {!isVideoMission && !isCarouselMission && !isWorkspaceArtifact && <IndexingBadge indexing={mission.indexing} />}
 
           {!isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
-            <section className="grid gap-4 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-              <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+            <Card className="grid gap-4 p-6">
+              <h2 className="m-0 text-lg font-semibold text-foreground">
                 SEO Metadata
               </h2>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[0.92rem]">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
                 {metadata?.["keyword"] !== undefined && (
                   <>
-                    <dt className="font-semibold text-[var(--dashboard-ink-soft)]">Keyword</dt>
-                    <dd className="text-[var(--dashboard-ink)]">{String(metadata["keyword"])}</dd>
+                    <dt className="font-semibold text-muted-foreground">Keyword</dt>
+                    <dd className="text-foreground">{String(metadata["keyword"])}</dd>
                   </>
                 )}
                 {reviewArtifact?.externalId !== undefined && (
                   <>
-                    <dt className="font-semibold text-[var(--dashboard-ink-soft)]">Article ID</dt>
-                    <dd className="font-mono text-[var(--dashboard-ink)]">{String(reviewArtifact.externalId)}</dd>
+                    <dt className="font-semibold text-muted-foreground">Article ID</dt>
+                    <dd className="font-mono text-foreground">{String(reviewArtifact.externalId)}</dd>
                   </>
                 )}
                 {metadata?.["score"] !== undefined && (
                   <>
-                    <dt className="font-semibold text-[var(--dashboard-ink-soft)]">Score</dt>
-                    <dd className="text-[var(--dashboard-ink)]">{String(metadata["score"])}</dd>
+                    <dt className="font-semibold text-muted-foreground">Score</dt>
+                    <dd className="text-foreground">{String(metadata["score"])}</dd>
                   </>
                 )}
               </dl>
-            </section>
+            </Card>
           )}
 
           {reviewCoverUrl && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
@@ -661,14 +665,14 @@ export function MissionReviewContent({
           )}
 
           {/* Generic content renderer — switches on kind returned by loadReviewContent */}
-          <section className="grid gap-4 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
+          <Card className="grid gap-4 p-6">
             {!isSocialEngagement && (
-              <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+              <h2 className="m-0 text-lg font-semibold text-foreground">
                 {isVideoMission ? "Final Video" : isCarouselMission ? "Carousel images" : "Article"}
               </h2>
             )}
             {fetchError ? (
-              <p className="text-[0.88rem] text-red-700">{fetchError}</p>
+              <p className="text-sm text-destructive">{fetchError}</p>
             ) : reviewContent ? (
               reviewKind === "video" ? (
                 <video
@@ -687,16 +691,16 @@ export function MissionReviewContent({
               ) : reviewKind === "markdown" || reviewKind === null ? (
                 <WorkspaceMarkdown content={reviewContent} />
               ) : (
-                <p className="text-[0.88rem] text-[var(--dashboard-ink-muted)]">
+                <p className="text-sm text-muted-foreground">
                   Unsupported content type: {reviewKind}
                 </p>
               )
             ) : (
-              <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+              <p className="text-sm text-muted-foreground">
                 {isVideoMission ? "Loading video…" : isCarouselMission ? "Loading carousel images…" : isSocialEngagement ? "Loading engagement report…" : "Loading article…"}
               </p>
             )}
-          </section>
+          </Card>
 
           {/* Generic review action panel + generic reject affordance (ADR-020) */}
           {!readOnly && isReviewable && (

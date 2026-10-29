@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic } from "lucide-react";
+import { AudioLines, Save } from "lucide-react";
 import { WorkspaceConfigCard } from "@/src/components/instance-workspace/workspace-config-card";
 import { WorkspaceStatusBadge } from "@/src/components/instance-workspace/workspace-status-badge";
 import type { SpeechToTextConfigState } from "@/src/components/instance-workspace.types";
@@ -41,7 +41,8 @@ export function GroqSpeechConfigCard({
 
   return (
     <WorkspaceConfigCard
-      icon={<Mic className="size-5" />}
+      icon={AudioLines}
+      tone="violet"
       title="Groq Speech-to-Text"
       description="Transcribe incoming voice notes with Groq Whisper and feed the transcript into OpenClaw without echoing it back to the chat."
       badge={badge}
@@ -55,20 +56,20 @@ export function GroqSpeechConfigCard({
             value={apiKey}
             onChange={(event) => onApiKeyChange(event.target.value)}
             placeholder="gsk_..."
-            className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-[rgba(243,244,244,0.95)] px-4"
+            className="h-11"
           />
-          <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm leading-6 text-muted-foreground">
             Leave this empty on later saves to keep the current Groq key already
             stored on the Project.
           </p>
         </div>
 
-        <div className="flex flex-col gap-4 rounded-[1.25rem] border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)] p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="grid gap-1">
-            <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">
+            <h4 className="text-base font-semibold text-foreground">
               Enable speech-to-text
             </h4>
-            <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+            <p className="text-sm leading-6 text-muted-foreground">
               When enabled, OpenClaw routes incoming audio transcription through
               Groq only.
             </p>
@@ -81,12 +82,12 @@ export function GroqSpeechConfigCard({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button
+          <Button size="lg"
             type="button"
             disabled={!canSave}
             onClick={onSave}
-            className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
           >
+            {config.status === "saving" ? null : <Save />}
             {config.status === "saving"
               ? "Saving…"
               : enabled
@@ -96,10 +97,10 @@ export function GroqSpeechConfigCard({
         </div>
 
         {config.output ? (
-          <p className="text-sm text-[#236949]">{config.output}</p>
+          <p className="text-sm text-status-success">{config.output}</p>
         ) : null}
         {config.error ? (
-          <p className="text-sm text-[#8f3030]">{config.error}</p>
+          <p className="text-sm text-destructive">{config.error}</p>
         ) : null}
       </CardContent>
     </WorkspaceConfigCard>

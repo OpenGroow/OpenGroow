@@ -10,17 +10,11 @@ import { CreateInstanceControls } from "./burst-instance-panel/create-instance-c
 import { InstanceAuthSection } from "./burst-instance-panel/instance-auth-section";
 import { OpenClawExecSection } from "./burst-instance-panel/openclaw-exec-section";
 import { PendingDevicesSection } from "./burst-instance-panel/pending-devices-section";
-import {
-  buttonChipClass,
-  inputChipClass,
-  mutedClass,
-  panelClass,
-  preClass,
-  sectionClass,
-} from "./burst-instance-panel/styles";
+import { mutedClass, panelClass, preClass, sectionClass } from "./burst-instance-panel/styles";
 import { TelegramSection } from "./burst-instance-panel/telegram-section";
 import type { ApiResponse, ConnectTicketState } from "./burst-instance-panel/types";
 import { WhatsAppSection } from "./burst-instance-panel/whatsapp-section";
+import { Button } from "@/components/ui/button";
 
 const WHATSAPP_PAIR_START_TIMEOUT_MS = 30_000;
 const WHATSAPP_PAIR_WAIT_TIMEOUT_MS = 15_000;
@@ -768,7 +762,7 @@ export function BurstInstancePanel({ instanceId }: BurstInstancePanelProps) {
 
   return (
     <section className={sectionClass}>
-      <h2 className="mt-0 text-xl font-semibold text-stone-900">
+      <h2 className="mt-0 text-xl font-semibold text-foreground">
         {isScopedToInstance ? "Project Controls" : "Burst Projects"}
       </h2>
       <p className={mutedClass}>
@@ -792,19 +786,20 @@ export function BurstInstancePanel({ instanceId }: BurstInstancePanelProps) {
         />
       ) : null}
 
-      {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       {!isScopedToInstance && gatewayToken ? (
         <div className={panelClass}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <strong>Gateway Token</strong>
             <code style={{ fontSize: 12 }}>{gatewayToken}</code>
-            <button
-              className={buttonChipClass}
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => void navigator.clipboard.writeText(gatewayToken)}
               type="button"
             >
               Copy
-            </button>
+            </Button>
           </div>
           <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
             {openclawName ? <span>Project: {openclawName} </span> : null}
@@ -830,60 +825,66 @@ export function BurstInstancePanel({ instanceId }: BurstInstancePanelProps) {
                   {instance.ipv4 ? <span>IPv4: {instance.ipv4}</span> : null}
                   <span>Job: {instance.jobId.slice(0, 8)}</span>
                   {jobId.trim() && instance.jobId === jobId.trim() ? (
-                    <span style={{ color: "#1e7f5c" }}>(current)</span>
+                    <span style={{ color: "var(--status-success)" }}>(current)</span>
                   ) : null}
                 </div>
                 {instance.openclawGatewayToken ? (
                   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <code style={{ fontSize: 12 }}>{instance.openclawGatewayToken}</code>
-                    <button
-                      className={buttonChipClass}
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => void navigator.clipboard.writeText(instance.openclawGatewayToken ?? "")}
                       type="button"
                     >
                       Copy token
-                    </button>
-                    <button
-                      className={buttonChipClass}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => void runCreateConnectTicket(instance)}
                     >
                       Create connect link
-                    </button>
-                    <button
-                      className={buttonChipClass}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => void refreshInstance(instance.jobId)}
                       disabled={loading}
                     >
                       Refresh
-                    </button>
-                    <button
-                      className={buttonChipClass}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => void removeInstance(instance.jobId)}
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, opacity: 0.6, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span>Gateway token not available yet.</span>
-                    <button
-                      className={buttonChipClass}
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => void refreshInstance(instance.jobId)}
                       disabled={loading}
                     >
                       Refresh
-                    </button>
-                    <button
-                      className={buttonChipClass}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       type="button"
                       onClick={() => void removeInstance(instance.jobId)}
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
                 )}
                 <ConnectTicketSection connectState={connectTickets[instanceKey]} />

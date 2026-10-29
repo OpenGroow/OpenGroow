@@ -6,6 +6,7 @@ import { Gauge } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
+import { Card } from "@/components/ui/card";
 
 type UsageWindow = {
   label: string;
@@ -114,41 +115,41 @@ export function UsagePanel({ instanceId }: UsagePanelProps) {
 
   if (!instances) {
     return (
-      <section className="mt-3 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-white/90 p-5 shadow-[0_18px_36px_rgba(24,32,28,0.08)]">
-        <p className="m-0 text-sm text-[var(--dashboard-ink-muted)]">Loading usage…</p>
-      </section>
+      <Card className="mt-3 p-5">
+        <p className="m-0 text-sm text-muted-foreground">Loading usage…</p>
+      </Card>
     );
   }
 
   if (!instance) {
     return (
-      <section className="mt-3 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-white/90 p-5 shadow-[0_18px_36px_rgba(24,32,28,0.08)]">
-        <h2 className="m-0 text-xl font-semibold text-[var(--dashboard-ink)]">Usage & Quotas</h2>
-        <p className="mt-2 text-sm text-[var(--dashboard-ink-muted)]">
+      <Card className="mt-3 p-5">
+        <h2 className="m-0 text-xl font-semibold text-foreground">Usage & Quotas</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
           This project is not linked to a running deployment yet, so usage isn't available.
         </p>
-      </section>
+      </Card>
     );
   }
 
   return (
-    <section className="mt-3 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-white/90 p-5 shadow-[0_18px_36px_rgba(24,32,28,0.08)]">
+    <Card className="mt-3 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="m-0 text-xl font-semibold text-[var(--dashboard-ink)]">Usage & Quotas</h2>
-          <p className="mt-1 text-sm text-[var(--dashboard-ink-muted)]">
+          <h2 className="m-0 text-xl font-semibold text-foreground">Usage & Quotas</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
             How much of each model provider's usage window this project's Agents have consumed. This
             covers the whole project — a breakdown per Agent isn't available yet.
           </p>
         </div>
-        <Gauge className="size-6 shrink-0 text-[var(--dashboard-primary)]" />
+        <Gauge className="size-6 shrink-0 text-primary" />
       </div>
 
       {state.kind === "loading" ? (
-        <p className="mt-4 text-sm text-[var(--dashboard-ink-muted)]">Loading usage…</p>
+        <p className="mt-4 text-sm text-muted-foreground">Loading usage…</p>
       ) : null}
 
-      {state.kind === "error" ? <p className="mt-4 text-sm text-[#8f3030]">{state.message}</p> : null}
+      {state.kind === "error" ? <p className="mt-4 text-sm text-destructive">{state.message}</p> : null}
 
       {state.kind === "data" ? (
         state.providers.length > 0 ? (
@@ -156,26 +157,26 @@ export function UsagePanel({ instanceId }: UsagePanelProps) {
             {state.providers.map((provider, index) => (
               <li
                 key={`${index}-${provider.provider}`}
-                className="rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white/60 p-4"
+                className="rounded-xl border border-border bg-card/60 p-4"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-[var(--dashboard-ink)]">{provider.displayName}</span>
+                  <span className="font-medium text-foreground">{provider.displayName}</span>
                   {provider.plan ? (
-                    <span className="text-xs text-[var(--dashboard-ink-muted)]">{provider.plan}</span>
+                    <span className="text-xs text-muted-foreground">{provider.plan}</span>
                   ) : null}
                 </div>
 
                 {provider.error ? (
-                  <p className="m-0 mt-2 text-sm text-[#8f3030]">{provider.error}</p>
+                  <p className="m-0 mt-2 text-sm text-destructive">{provider.error}</p>
                 ) : provider.windows.length > 0 ? (
                   <ul className="mt-2 flex flex-col gap-1.5">
                     {provider.windows.map((window, windowIndex) => (
                       <li
                         key={`${windowIndex}-${window.label}`}
-                        className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--dashboard-ink)]"
+                        className="flex flex-wrap items-center justify-between gap-2 text-sm text-foreground"
                       >
                         <span>{window.label}</span>
-                        <span className="text-[var(--dashboard-ink-muted)]">
+                        <span className="text-muted-foreground">
                           {Math.round(window.usedPercent)}% used
                           {window.resetAt
                             ? ` · resets ${resetAtFormatter.format(new Date(window.resetAt))}`
@@ -185,29 +186,29 @@ export function UsagePanel({ instanceId }: UsagePanelProps) {
                     ))}
                   </ul>
                 ) : (
-                  <p className="m-0 mt-2 text-sm text-[var(--dashboard-ink-muted)]">
+                  <p className="m-0 mt-2 text-sm text-muted-foreground">
                     No quota windows reported yet.
                   </p>
                 )}
 
                 {provider.summary ? (
-                  <p className="m-0 mt-2 text-sm text-[var(--dashboard-ink-muted)]">{provider.summary}</p>
+                  <p className="m-0 mt-2 text-sm text-muted-foreground">{provider.summary}</p>
                 ) : null}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-sm text-[var(--dashboard-ink-muted)]">
+          <p className="mt-4 text-sm text-muted-foreground">
             No usage data yet. Usage appears here once this project's Agents start making LLM calls.
           </p>
         )
       ) : null}
 
       {state.kind === "unrecognized" ? (
-        <p className="mt-4 text-sm text-[var(--dashboard-ink-muted)]">
+        <p className="mt-4 text-sm text-muted-foreground">
           Usage data unavailable in an unexpected format.
         </p>
       ) : null}
-    </section>
+    </Card>
   );
 }

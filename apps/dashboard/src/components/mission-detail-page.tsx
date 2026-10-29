@@ -11,6 +11,12 @@ import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref, runPromptHref } from "@/src/lib/instance-path";
 import { blockedExternalResult } from "@/src/lib/mission-result";
+import { Button } from "@/components/ui/button";
+import { Badge, badgeVariants } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { missionStatus, runStatus } from "@/components/opengroow/mission-status";
+import { Card } from "@/components/ui/card";
 
 type Props = {
   params: Promise<{ projectId: string; missionId: string }>;
@@ -55,13 +61,9 @@ function formatLocalTimestamp(ms: number): string {
   });
 }
 
-function StatusBadge({ status, size = "md" }: { status: string; size?: "sm" | "md" }) {
-  const sizing = size === "sm" ? "px-2 text-[0.75rem]" : "px-2.5 text-[0.78rem]";
-  const tone =
-    status === "failed"
-      ? "bg-red-100 font-bold text-red-700"
-      : "bg-[rgba(0,38,27,0.07)] font-semibold text-[var(--dashboard-ink-soft)]";
-  return <span className={`rounded-full py-0.5 ${sizing} ${tone}`}>{status}</span>;
+function MissionStatusBadge({ status }: { status: string }) {
+  const { label, tone } = missionStatus(status);
+  return <StatusBadge tone={tone} label={label} />;
 }
 
 function hasReviewableArtifact(mission: Doc<"missions">): boolean {
@@ -111,19 +113,18 @@ function RunRow({
     run.result && "additionalDetails" in run.result
       ? run.result.additionalDetails
       : undefined;
-  const statusLabel = run.status === "pending" ? "Queued" : run.status;
 
   return (
-    <div className="grid gap-1.5 rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white p-3.5 shadow-[0_2px_8px_rgba(25,28,28,0.04)]">
+    <div className="grid gap-1.5 rounded-xl border border-border bg-card p-3.5">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[0.88rem] font-semibold text-[var(--dashboard-ink)]">
+        <span className="text-sm font-semibold text-foreground">
           {missionLabel}
         </span>
-        <StatusBadge status={statusLabel} size="sm" />
+        <StatusBadge tone={runStatus(run.status).tone} label={runStatus(run.status).label} />
         {hasWorkspace && (
           <Link
             href={runLogsHref(instanceId, templateId, run._id)}
-            className="text-[0.76rem] font-semibold text-[var(--dashboard-primary)] underline underline-offset-2 hover:no-underline"
+            className="text-xs font-semibold text-primary underline underline-offset-2 hover:no-underline"
           >
             View logs
           </Link>
@@ -134,30 +135,30 @@ function RunRow({
         {hasWorkspace && run.missionId != null && (
           <Link
             href={runPromptHref(instanceId, templateId, run._id, run.missionId)}
-            className="text-[0.76rem] font-semibold text-[var(--dashboard-primary)] underline underline-offset-2 hover:no-underline"
+            className="text-xs font-semibold text-primary underline underline-offset-2 hover:no-underline"
           >
             View prompt
           </Link>
         )}
       </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-[0.78rem] text-[var(--dashboard-ink-muted)]">
+      <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-xs text-muted-foreground">
         <span>Started {formatLocalTimestamp(run.createdAt)}</span>
         {run.completedAt !== undefined && (
           <span>Completed {formatLocalTimestamp(run.completedAt)}</span>
         )}
       </div>
       {summary && (
-        <p className="m-0 text-[0.82rem] text-[var(--dashboard-ink-soft)]">{summary}</p>
+        <p className="m-0 text-sm text-muted-foreground">{summary}</p>
       )}
       {run.errorMessage && !summary && (
-        <p className="m-0 text-[0.82rem] text-red-700">{run.errorMessage}</p>
+        <p className="m-0 text-sm text-destructive">{run.errorMessage}</p>
       )}
       {additionalDetails !== undefined && (
-        <details className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-[rgba(0,38,27,0.025)] px-3 py-2">
-          <summary className="cursor-pointer text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+        <details className="rounded-xl border border-border bg-muted px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
             Additional details
           </summary>
-          <pre className="m-0 mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-[0.76rem] leading-relaxed text-[var(--dashboard-ink-muted)]">
+          <pre className="m-0 mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-muted-foreground">
             {JSON.stringify(additionalDetails, null, 2)}
           </pre>
         </details>
@@ -225,7 +226,7 @@ export function MissionDetailContent({
   if (mission === null) {
     return (
       <div className="grid gap-8">
-        <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Mission not found.</p>
+        <p className="text-sm text-muted-foreground">Mission not found.</p>
       </div>
     );
   }
@@ -233,7 +234,7 @@ export function MissionDetailContent({
   if (mission === undefined || runs === undefined) {
     return (
       <div className="grid gap-8">
-        <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -287,7 +288,7 @@ export function MissionDetailContent({
         <div className="flex items-center justify-between gap-4">
           <Link
             href={`/projects/${encodeURIComponent(instanceId)}/missions`}
-            className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)] hover:text-[var(--dashboard-primary)]"
+            className="text-xs font-semibold text-muted-foreground hover:text-primary"
           >
             ← Missions
           </Link>
@@ -295,7 +296,7 @@ export function MissionDetailContent({
             {showReview && (
               <Link
                 href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}/review`}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(0,38,27,0.12)] bg-[linear-gradient(135deg,rgba(188,237,215,0.96),rgba(227,242,234,0.98))] px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-primary)] transition hover:border-[rgba(0,38,27,0.18)]"
+                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-border bg-primary/15 px-3 py-1 text-xs font-semibold text-primary transition hover:border-input"
               >
                 {mission.status === "approved" ? "Publish" : "Review"}
               </Link>
@@ -303,64 +304,67 @@ export function MissionDetailContent({
             {showView && (
               <Link
                 href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}/view`}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink)] transition hover:border-[rgba(0,38,27,0.18)]"
+                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground transition hover:border-input"
               >
                 View
               </Link>
             )}
             {showRetry && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 type="button"
                 aria-label="Retry mission"
                 disabled={isRetrying}
                 onClick={() => void handleRetry()}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(0,38,27,0.12)] bg-[linear-gradient(135deg,rgba(188,237,215,0.96),rgba(227,242,234,0.98))] px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-primary)] transition hover:border-[rgba(0,38,27,0.18)] disabled:opacity-50"
               >
                 {isRetrying ? "Retrying…" : "Retry"}
-              </button>
+              </Button>
             )}
             {showStop && (
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 type="button"
                 aria-label="Stop mission"
                 data-stop-mission={missionId}
                 disabled={isStopping}
                 onClick={() => void handleStop()}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(126,61,53,0.18)] bg-transparent px-2.5 py-1 text-[0.72rem] font-semibold text-[#7e3d35] transition hover:bg-[rgba(126,61,53,0.06)] disabled:opacity-50"
               >
                 {isStopping ? "Stopping…" : "Stop"}
-              </button>
+              </Button>
             )}
             {showDelete && (
-              <button
+              <Button
+                variant="destructive"
+                size="sm"
                 type="button"
                 aria-label="Delete mission"
                 data-delete-mission={missionId}
                 onClick={() => void handleDelete()}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-[rgba(126,61,53,0.18)] bg-transparent px-2.5 py-1 text-[0.72rem] font-semibold text-[#7e3d35] transition hover:bg-[rgba(126,61,53,0.06)]"
               >
                 Delete
-              </button>
+              </Button>
             )}
           </div>
         </div>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
+        <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
           Mission Detail
         </h1>
       </header>
 
       {/* Mission Identity */}
-      <section className="grid gap-4 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
+      <Card className="grid gap-4 p-6">
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[1rem] font-bold text-[var(--dashboard-ink)]">
+          <span className="text-base font-semibold text-foreground">
             {mission.type}
             {mission.number !== undefined ? ` #${mission.number}` : ""}
           </span>
-          <StatusBadge status={mission.status} />
+          <MissionStatusBadge status={mission.status} />
           {mission.sourceObservationId !== undefined && (
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(mission.sourceObservationId)}`}
-              className="rounded-full bg-[rgba(188,237,215,0.7)] px-2.5 py-0.5 text-[0.72rem] font-bold text-[var(--dashboard-primary)] hover:bg-[rgba(188,237,215,0.95)]"
+              className={cn(badgeVariants({ variant: "default" }), "hover:bg-primary/25")}
               data-testid="from-observation-badge"
             >
               From Source
@@ -371,23 +375,23 @@ export function MissionDetailContent({
         {(mission.name ?? mission.summary) ? (
           <div className="grid gap-1">
             {mission.name && (
-              <p className="m-0 text-[0.95rem] font-semibold text-[var(--dashboard-ink)]">
+              <p className="m-0 text-sm font-semibold text-foreground">
                 {mission.name}
               </p>
             )}
             {mission.summary && (
-              <p className="m-0 text-[0.88rem] text-[var(--dashboard-ink-soft)]">
+              <p className="m-0 text-sm text-muted-foreground">
                 {mission.summary}
               </p>
             )}
           </div>
         ) : null}
 
-        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-[0.82rem]">
-          <dt className="font-semibold text-[var(--dashboard-ink-soft)]">Created</dt>
-          <dd className="text-[var(--dashboard-ink)]">{formatLocalTimestamp(mission.createdAt)}</dd>
-          <dt className="font-semibold text-[var(--dashboard-ink-soft)]">Updated</dt>
-          <dd className="text-[var(--dashboard-ink)]">{formatLocalTimestamp(mission.updatedAt)}</dd>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
+          <dt className="font-semibold text-muted-foreground">Created</dt>
+          <dd className="text-foreground">{formatLocalTimestamp(mission.createdAt)}</dd>
+          <dt className="font-semibold text-muted-foreground">Updated</dt>
+          <dd className="text-foreground">{formatLocalTimestamp(mission.updatedAt)}</dd>
         </dl>
 
         {autoPublishAllowed && (
@@ -402,25 +406,25 @@ export function MissionDetailContent({
             onChange={(next) => void handleAutoPublishToggle(next)}
           />
         )}
-      </section>
+      </Card>
 
       {/* What happened — only for failed missions */}
       {failureError !== undefined && (
-        <section className="grid gap-3 rounded-[1.75rem] border border-red-200 bg-red-50 p-6">
-          <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-red-800">
+        <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
+          <h2 className="m-0 text-sm font-semibold text-destructive">
             What happened
           </h2>
-          <p className="m-0 text-[0.92rem] text-red-900">{failureError}</p>
+          <p className="m-0 text-sm text-destructive">{failureError}</p>
         </section>
       )}
 
       {/* Blocked — a Template-declared human-action blocker (issue #323). */}
       {blocked !== undefined && (
-        <section className="grid gap-3 rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6">
-          <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-amber-800">
+        <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
+          <h2 className="m-0 text-sm font-semibold text-status-warning">
             Blocked
           </h2>
-          <p className="m-0 text-[0.92rem] text-amber-900">
+          <p className="m-0 text-sm text-status-warning">
             {blocked.message}{" "}
             {blocked.resolution?.kind === "link" && (
               <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
@@ -436,11 +440,11 @@ export function MissionDetailContent({
 
       {/* Run History */}
       <section className="grid gap-4">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+        <h2 className="m-0 text-lg font-semibold text-foreground">
           Run History
         </h2>
         {sortedRuns.length === 0 ? (
-          <p className="text-[0.88rem] text-[var(--dashboard-ink-muted)]">No runs yet</p>
+          <p className="text-sm text-muted-foreground">No runs yet</p>
         ) : (
           <div className="grid gap-3">
             {sortedRuns.map((run) => (

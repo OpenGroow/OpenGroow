@@ -16,12 +16,45 @@ import {
   validateMissionPayloadUnlessRaw,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/opengroow/page-header";
+import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { StatTile } from "@/components/opengroow/stat-tile";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  CalendarClock,
+  CalendarDays,
+  CircleCheck,
+  ChevronDown,
+  Ellipsis,
+  FileJson,
+  Pause,
+  Play,
+  Plus,
+  Trash2,
+} from "lucide-react";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
 };
-
-type CreateResult = { scheduleId: Id<"schedules">; nextRunAt: number };
 
 export const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -54,6 +87,28 @@ export function formatCadence(schedule: {
   return `Daily at ${at}`;
 }
 
+/** Compact cadence for a row inside a family, e.g. "09:00", "Sunday 13:21". */
+export function formatSlot(schedule: Parameters<typeof formatCadence>[0]): string {
+  const at = `${pad2(schedule.hour)}:${pad2(schedule.minute)}`;
+  if (schedule.unit === "weekly") return `${WEEKDAYS[schedule.dayOfWeek ?? 0]} ${at}`;
+  if (schedule.unit === "monthly") return `Day ${schedule.dayOfMonth ?? 1} ${at}`;
+  return at;
+}
+
+// Family tiles alternate colour only: what a family does is not known in
+// advance, so no glyph. The order follows the list, not the Mission type.
+const FAMILY_TONES = [
+  "bg-tone-green-soft",
+  "bg-tone-violet-soft",
+  "bg-tone-cyan-soft",
+  "bg-tone-blue-soft",
+  "bg-tone-slate-soft",
+];
+
+const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
+
+const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
+
 export function InstanceSchedulesPage({ params }: Props) {
   const { instanceId } = use(params);
   return <InstanceSchedulesContent instanceId={decodeURIComponent(instanceId)} />;
@@ -71,6 +126,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
   const activeAgents = agents?.filter((a) => a.status === "active") ?? [];
 
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("all");
+  const [query, setQuery] = useState("");
+  // Family key -> open/closed; absent = default (only the first family is open).
+  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>({});
   const [expandedScheduleId, setExpandedScheduleId] = useState<Id<"schedules"> | null>(null);
   const [payloadDrafts, setPayloadDrafts] = useState<Record<string, string>>({});
   const [payloadErrors, setPayloadErrors] = useState<Record<string, string>>({});
@@ -79,6 +138,9 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const [type, setType] = useState("");
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
+  // null = follow the default: open when the Mission type declares payload
+  // fields (the form must be visible), collapsed for a plain JSON payload.
+  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
   const [unit, setUnit] = useState<"daily" | "weekly" | "monthly">("daily");
   const [dayOfWeek, setDayOfWeek] = useState(1); // Monday
   const [dayOfMonth, setDayOfMonth] = useState(1);
@@ -99,6 +161,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
+  const payloadOpen =
+    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
 
   useEffect(() => {
@@ -117,13 +181,12 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   }, [effectiveTemplateId, hiddenKey, declaredKey]);
 
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<CreateResult | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setResult(null);
 
     let payload: unknown = {};
     if (payloadText.trim()) {
@@ -166,7 +229,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
     setSubmitting(true);
     try {
-      const res = await createSchedule({
+      await createSchedule({
         instanceId,
         templateId: effectiveTemplateId,
         type: type.trim(),
@@ -175,7 +238,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
         timezone,
         ...(autoPublishAllowed && autoPublish ? { autoPublish: true } : {}),
       });
-      setResult(res as CreateResult);
+      setCreateOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create schedule.");
     } finally {
@@ -206,57 +269,101 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
     }
   }
 
+  const needle = query.trim().toLowerCase();
+  const visibleSchedules = (schedules ?? []).filter((schedule) => {
+    if (statusFilter !== "all" && schedule.status !== statusFilter) return false;
+    if (!needle) return true;
+    const agentName = manifests.find((m) => m.id === schedule.templateId)?.name ?? schedule.templateId;
+    return `${schedule.type} ${agentName}`.toLowerCase().includes(needle);
+  });
+
+  // A family groups the schedules of one Agent running the same Mission type.
+  const families: { key: string; templateId: string; type: string; items: typeof visibleSchedules }[] = [];
+  for (const schedule of visibleSchedules) {
+    const key = `${schedule.templateId}\u0000${schedule.type}`;
+    let family = families.find((f) => f.key === key);
+    if (!family) {
+      family = { key, templateId: schedule.templateId, type: schedule.type, items: [] };
+      families.push(family);
+    }
+    family.items.push(schedule);
+  }
+  for (const family of families) {
+    family.items.sort(
+      (a, b) =>
+        (UNIT_ORDER[a.unit] ?? 0) - (UNIT_ORDER[b.unit] ?? 0) ||
+        (a.dayOfWeek ?? a.dayOfMonth ?? 0) - (b.dayOfWeek ?? b.dayOfMonth ?? 0) ||
+        a.hour - b.hour ||
+        a.minute - b.minute,
+    );
+  }
+
   return (
     <div className="grid gap-8">
-      <header className="grid gap-1">
-        <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
-          Project
-        </span>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-          Scheduler
-        </h1>
-      </header>
+      <PageHeader
+        title="Scheduler"
+        description="Missions created automatically at the cadence you set."
+        action={
+          <Button variant="glow" size="lg" type="button" onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Create Schedule
+          </Button>
+        }
+      />
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
-          Create Schedule
-        </h2>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] w-[min(92vw,48rem)] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary"
+              >
+                <CalendarClock className="size-5" />
+              </span>
+              <div className="grid gap-0.5">
+                <DialogTitle>Create Schedule</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Run a mission automatically on a recurring cadence.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         {agents === undefined || manifestsLoading ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading agents…</p>
+          <p className="text-sm text-muted-foreground">Loading agents…</p>
         ) : activeAgents.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm text-muted-foreground">
             No active agents. Activate an agent first.
           </p>
         ) : (
           <form onSubmit={(e) => { void handleSubmit(e); }} className="grid gap-4">
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Agent
               </span>
-              <select
+              <NativeSelect
                 value={effectiveTemplateId}
                 onChange={(e) => setTemplateId(e.target.value)}
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
               >
                 {activeAgents.map((a) => (
                   <option key={a.templateId} value={a.templateId}>
                     {manifests.find((m) => m.id === a.templateId)?.name ?? a.templateId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Type
               </span>
               {allTypesHidden ? (
-                <p className="m-0 text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+                <p className="m-0 text-sm text-muted-foreground">
                   Every Mission type of this agent is hidden. Unhide one in the agent&apos;s settings.
                 </p>
               ) : missionTypes.length > 0 ? (
-                <select
+                <NativeSelect
                   value={type}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -265,22 +372,20 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     const option = missionTypes.find((t) => t.type === next);
                     if (option) setPayloadText(option.payload);
                   }}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   {missionTypes.map((t) => (
                     <option key={t.type} value={t.type}>
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
-                <input
+                <Input
                   type="text"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
                   placeholder="e.g. seo.audit"
                   required
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 />
               )}
             </label>
@@ -293,61 +398,75 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               />
             )}
 
-            <MissionPayloadEditor
-              fields={missionTypes.find((t) => t.type === type)?.fields}
-              payloadText={payloadText}
-              onChange={setPayloadText}
-              rawMode={rawPayloadMode}
-              onRawModeChange={setRawPayloadMode}
-            />
+            <div className="grid gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                aria-expanded={payloadOpen}
+                onClick={() => setPayloadOpenOverride(!payloadOpen)}
+                className="-ml-3 w-fit"
+              >
+                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
+                Payload (optional)
+              </Button>
+              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
+              <div hidden={!payloadOpen}>
+                <MissionPayloadEditor
+                  fields={missionTypes.find((t) => t.type === type)?.fields}
+                  payloadText={payloadText}
+                  onChange={setPayloadText}
+                  rawMode={rawPayloadMode}
+                  onRawModeChange={setRawPayloadMode}
+                />
+              </div>
+            </div>
 
-            <fieldset className="grid gap-3 rounded-2xl border border-[rgba(0,38,27,0.10)] bg-white p-4">
-              <legend className="px-1 text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+            <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
+              <legend className="px-1 text-sm font-semibold text-muted-foreground">
                 Frequency
               </legend>
 
               <label className="grid gap-1.5">
-                <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                <span className="text-xs font-semibold text-muted-foreground">
                   Repeat
                 </span>
-                <select
+                <NativeSelect
                   name="unit"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value as "daily" | "weekly" | "monthly")}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                   <option value="monthly">Monthly</option>
-                </select>
+                </NativeSelect>
               </label>
 
               {unit === "weekly" ? (
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Day of week
                   </span>
-                  <select
+                  <NativeSelect
                     name="dayOfWeek"
                     value={dayOfWeek}
                     onChange={(e) => setDayOfWeek(Number(e.target.value))}
-                    className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                   >
                     {WEEKDAYS.map((name, idx) => (
                       <option key={idx} value={idx}>
                         {name}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
               ) : null}
 
               {unit === "monthly" ? (
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Day of month
                   </span>
-                  <input
+                  <Input
                     name="dayOfMonth"
                     type="number"
                     min={1}
@@ -356,9 +475,9 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     onChange={(e) =>
                       setDayOfMonth(Math.max(1, Math.min(31, Number(e.target.value))))
                     }
-                    className="w-24 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-24"
                   />
-                  <span className="text-[0.72rem] text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs text-muted-foreground">
                     Months without this day fire on their last day.
                   </span>
                 </label>
@@ -366,221 +485,274 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
               <div className="flex items-end gap-3">
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Hour
                   </span>
-                  <input
+                  <Input
                     name="hour"
                     type="number"
                     min={0}
                     max={23}
                     value={hour}
                     onChange={(e) => setHour(Math.max(0, Math.min(23, Number(e.target.value))))}
-                    className="w-20 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-20"
                   />
                 </label>
-                <span className="pb-3 text-[1.1rem] font-bold text-[var(--dashboard-ink-soft)]">:</span>
+                <span className="pb-3 text-base font-semibold text-muted-foreground">:</span>
                 <label className="grid gap-1.5">
-                  <span className="text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     Minute
                   </span>
-                  <input
+                  <Input
                     name="minute"
                     type="number"
                     min={0}
                     max={59}
                     value={minute}
                     onChange={(e) => setMinute(Math.max(0, Math.min(59, Number(e.target.value))))}
-                    className="w-20 rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
+                    className="w-20"
                   />
                 </label>
               </div>
             </fieldset>
 
             {error ? (
-              <p className="rounded-xl border border-[rgba(200,0,0,0.15)] bg-[rgba(255,240,240,0.8)] px-4 py-3 text-[0.88rem] text-red-700">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
               </p>
             ) : null}
 
-            {result ? (
-              <div className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-4 py-3 text-[0.88rem] text-[var(--dashboard-ink)]">
-                <p className="m-0 font-semibold text-[var(--dashboard-primary)]">Schedule created</p>
-                <p className="m-0 mt-1 text-[0.82rem] text-[var(--dashboard-ink-muted)]">
-                  Next run {new Date(result.nextRunAt).toLocaleString()}
-                </p>
-              </div>
-            ) : null}
-
-            <button
+            <Button
+              size="lg"
               type="submit"
-              disabled={submitting || allTypesHidden}
-              className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] disabled:opacity-50 disabled:pointer-events-none"
+              loading={submitting}
+              disabled={allTypesHidden}
+              className="w-fit justify-self-end"
             >
+              <CalendarClock />
               {submitting ? "Creating…" : "Create Schedule"}
-            </button>
+            </Button>
           </form>
         )}
-      </section>
+        </DialogContent>
+      </Dialog>
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
-          Schedules
-        </h2>
-        {schedules === undefined ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
-        ) : schedules.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">No schedules yet.</p>
-        ) : (
-          <ul className="grid gap-3">
-            {schedules.map((schedule) => {
-              const isExpanded = expandedScheduleId === schedule._id;
+      {schedules === undefined ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : schedules.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No schedules yet.</p>
+      ) : (
+        <>
+          <section aria-label="Schedule counts" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <StatTile icon={CalendarClock} label="Total schedules" value={schedules.length} tone="visual" />
+            <StatTile
+              icon={CircleCheck}
+              label="Active"
+              value={schedules.filter((x) => x.status === "active").length}
+              tone="engagement"
+            />
+            <StatTile
+              icon={Pause}
+              label="Paused"
+              value={schedules.filter((x) => x.status === "paused").length}
+            />
+          </section>
+
+        <section className="grid gap-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <FilterChips
+              label="Filter schedules by status"
+              value={statusFilter}
+              onChange={(id) => setStatusFilter(id as "all" | "active" | "paused")}
+              options={[
+                { id: "all", label: "All", count: schedules.length },
+                { id: "active", label: "Active", count: schedules.filter((x) => x.status === "active").length },
+                { id: "paused", label: "Paused", count: schedules.filter((x) => x.status === "paused").length },
+              ]}
+            />
+            <SearchField
+              value={query}
+              onChange={setQuery}
+              label="Search schedules"
+              placeholder="Search schedules…"
+            />
+          </div>
+
+          {families.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No schedules match.</p>
+          ) : null}
+          <ul className="grid gap-4">
+            {families.map((family, index) => {
+              const open = openFamilies[family.key] ?? index === 0;
+              const familyTone = FAMILY_TONES[index % FAMILY_TONES.length];
+              const manifest = manifests.find((m) => m.id === family.templateId);
+              const agentName = manifest?.name ?? family.templateId;
+              const typeLabel =
+                (manifest
+                  ? missionTypesForManifest(manifest).find((t) => t.type === family.type)?.label
+                  : undefined) ?? family.type;
+              const units = new Set(family.items.map((x) => x.unit));
+              const summary =
+                family.items.length === 1
+                  ? `${UNIT_LABELS[family.items[0].unit] ?? "Daily"} · ${formatSlot(family.items[0])}`
+                  : units.size === 1
+                    ? `${UNIT_LABELS[family.items[0].unit] ?? "Daily"} · ${family.items.length} scheduled runs`
+                    : `${family.items.length} scheduled runs`;
               return (
-                <li
-                  key={schedule._id}
-                  className="rounded-2xl border border-[rgba(0,38,27,0.08)] bg-white px-4 py-3"
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    data-action="toggle-details"
-                    aria-expanded={isExpanded}
-                    onClick={() => {
-                      if (isExpanded) {
-                        setExpandedScheduleId(null);
-                      } else {
-                        setExpandedScheduleId(schedule._id);
-                        setPayloadDrafts((prev) => ({
-                          ...prev,
-                          [schedule._id]: JSON.stringify(schedule.payload, null, 2),
-                        }));
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        if (isExpanded) {
-                          setExpandedScheduleId(null);
-                        } else {
-                          setExpandedScheduleId(schedule._id);
-                          setPayloadDrafts((prev) => ({
-                            ...prev,
-                            [schedule._id]: JSON.stringify(schedule.payload, null, 2),
-                          }));
-                        }
-                      }
-                    }}
-                    className="flex w-full cursor-pointer items-center justify-between gap-4 text-left"
-                  >
-                    <div className="grid gap-0.5">
-                      <span className="text-[0.92rem] font-semibold text-[var(--dashboard-ink)]">
-                        {schedule.type}
-                      </span>
-                      <span className="text-[0.78rem] text-[var(--dashboard-ink-muted)]">
-                        {formatCadence(schedule)}
-                      </span>
-                      {schedule.lastRunAt !== undefined ? (
-                        <span className="text-[0.75rem] text-[var(--dashboard-ink-muted)]">
-                          Last run {new Date(schedule.lastRunAt).toLocaleString()}
-                        </span>
-                      ) : null}
-                      {schedule.lastMissionId ? (
-                        <a
-                          data-testid="last-mission-link"
-                          href={`/projects/${encodeURIComponent(instanceId)}/missions/${schedule.lastMissionId}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[0.75rem] text-[var(--dashboard-ink-muted)] hover:underline"
-                        >
-                          Last mission
-                        </a>
-                      ) : null}
-                      {schedule.lastError ? (
-                        <span className="text-[0.75rem] text-red-600">
-                          {schedule.lastError}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="grid justify-items-end gap-0.5 text-right">
-                      <span className="text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[var(--dashboard-ink-soft)]">
-                        Next run
-                      </span>
-                      <span className="text-[0.82rem] text-[var(--dashboard-ink-muted)]">
-                        {schedule.status === "paused" ? "Paused" : new Date(schedule.nextRunAt).toLocaleString()}
-                      </span>
+                <li key={family.key}>
+                  <Card className="gap-0 p-0" data-family={family.type}>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setOpenFamilies((prev) => ({ ...prev, [family.key]: !open }))}
+                      className="flex w-full items-center gap-4 rounded-xl px-5 py-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
                       <span
                         aria-hidden="true"
-                        className={`mt-1 text-[0.7rem] text-[var(--dashboard-ink-soft)] transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                      >
-                        ▾
+                        className={cn("size-11 shrink-0 rounded-xl", familyTone)}
+                      />
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="flex items-center gap-2.5">
+                          <span className="text-lg font-semibold break-all text-foreground">{typeLabel}</span>
+                          <span className="rounded-md bg-muted px-1.5 text-sm text-muted-foreground tabular-nums">
+                            {family.items.length}
+                          </span>
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {agentName} · {summary}
+                        </span>
                       </span>
-                    </div>
-                  </div>
-
-                  {isExpanded ? (
-                    <div className="mt-3 grid gap-2 rounded-xl border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-3 text-[0.8rem] text-[var(--dashboard-ink)]">
-                      <div className="grid grid-cols-[6rem_1fr] gap-1">
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Agent</span>
-                        <span className="break-all">{schedule.templateId}</span>
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Type</span>
-                        <span className="break-all">{schedule.type}</span>
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Timezone</span>
-                        <span>{schedule.timezone}</span>
-                      </div>
-                      <div className="grid gap-1">
-                        <span className="font-semibold text-[var(--dashboard-ink-soft)]">Payload</span>
-                        <textarea
-                          data-testid="schedule-payload-editor"
-                          value={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
-                          onChange={(e) =>
-                            setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: e.target.value }))
-                          }
-                          onBlur={(e) => { void savePayloadDraft(schedule._id, e.target.value); }}
-                          onClick={(e) => e.stopPropagation()}
-                          rows={6}
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                          className="overflow-x-auto rounded-lg border border-[rgba(0,38,27,0.08)] bg-white p-2 font-mono text-[0.75rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
-                        />
-                        {payloadErrors[schedule._id] ? (
-                          <span className="text-[0.72rem] text-red-600">{payloadErrors[schedule._id]}</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="mt-2 flex justify-end gap-2">
-                    {schedule.status === "active" ? (
-                      <button
-                        data-action="pause"
-                        onClick={() => { void pauseSchedule({ scheduleId: schedule._id }); }}
-                        className="rounded-lg border border-[rgba(0,38,27,0.12)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(0,38,27,0.04)]"
-                      >
-                        Pause
-                      </button>
-                    ) : (
-                      <button
-                        data-action="resume"
-                        onClick={() => { void resumeSchedule({ scheduleId: schedule._id }); }}
-                        className="rounded-lg border border-[rgba(0,38,27,0.12)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-[var(--dashboard-ink)] hover:bg-[rgba(0,38,27,0.04)]"
-                      >
-                        Resume
-                      </button>
-                    )}
-                    <button
-                      data-action="delete"
-                      onClick={() => { void removeSchedule({ scheduleId: schedule._id }); }}
-                      className="rounded-lg border border-[rgba(200,0,0,0.18)] bg-white px-2.5 py-1 text-[0.75rem] font-semibold text-red-600 hover:bg-[rgba(255,240,240,0.8)]"
-                    >
-                      Delete
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={cn("size-5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+                      />
                     </button>
-                  </div>
+
+                    {/* Kept mounted (hidden) so row state survives a collapse. */}
+                    <div hidden={!open} className="border-t border-border">
+                      <ul className="grid">
+                        {family.items.map((schedule) => {
+                          const isExpanded = expandedScheduleId === schedule._id;
+                          const paused = schedule.status === "paused";
+                          return (
+                            <li key={schedule._id} className="border-b border-border/60 last:border-b-0">
+                              <div className="flex items-center gap-6 px-5 py-3">
+                                <span className="inline-flex w-48 items-center gap-3 text-base text-foreground tabular-nums">
+                                  <CalendarClock aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                                  {formatSlot(schedule)}
+                                </span>
+
+                                <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn("size-1.5 rounded-full", paused ? "bg-status-paused" : "bg-tone-green")}
+                                  />
+                                  {paused ? "Paused" : "Active"}
+                                </span>
+
+                                <div className="ml-auto flex items-center gap-2">
+                                  {paused ? (
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full"
+                                      data-action="resume"
+                                      onClick={() => { void resumeSchedule({ scheduleId: schedule._id }); }}
+                                    >
+                                      <Play />
+                                      Resume
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full"
+                                      data-action="pause"
+                                      onClick={() => { void pauseSchedule({ scheduleId: schedule._id }); }}
+                                    >
+                                      <Pause />
+                                      Pause
+                                    </Button>
+                                  )}
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger
+                                      render={<Button variant="outline" size="icon" aria-label="More actions" data-action="more" />}
+                                    >
+                                      <Ellipsis />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          if (isExpanded) {
+                                            setExpandedScheduleId(null);
+                                          } else {
+                                            setExpandedScheduleId(schedule._id);
+                                            setPayloadDrafts((prev) => ({
+                                              ...prev,
+                                              [schedule._id]: JSON.stringify(schedule.payload, null, 2),
+                                            }));
+                                          }
+                                        }}
+                                      >
+                                        <FileJson />
+                                        {isExpanded ? "Hide payload" : "Edit payload"}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-status-error"
+                                        onClick={() => { void removeSchedule({ scheduleId: schedule._id }); }}
+                                      >
+                                        <Trash2 />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </div>
+                              </div>
+
+                              {isExpanded ? (
+                                <div className="px-5 pb-5">
+                                  <div className="grid gap-2 rounded-xl border border-border bg-background p-4 text-xs text-foreground">
+                                    <div className="grid grid-cols-[6rem_1fr] gap-1">
+                                      <span className="font-semibold text-muted-foreground">Agent</span>
+                                      <span className="break-all">{schedule.templateId}</span>
+                                      <span className="font-semibold text-muted-foreground">Type</span>
+                                      <span className="break-all">{schedule.type}</span>
+                                      <span className="font-semibold text-muted-foreground">Timezone</span>
+                                      <span>{schedule.timezone}</span>
+                                    </div>
+                                    <div className="grid gap-1">
+                                      <span className="font-semibold text-muted-foreground">Payload</span>
+                                      <Textarea
+                                        data-testid="schedule-payload-editor"
+                                        value={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
+                                        onChange={(e) =>
+                                          setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: e.target.value }))
+                                        }
+                                        onBlur={(e) => { void savePayloadDraft(schedule._id, e.target.value); }}
+                                        rows={6}
+                                        autoCorrect="off"
+                                        autoCapitalize="off"
+                                        spellCheck={false}
+                                        className="font-mono"
+                                      />
+                                      {payloadErrors[schedule._id] ? (
+                                        <span className="text-xs text-destructive">{payloadErrors[schedule._id]}</span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </Card>
                 </li>
               );
             })}
           </ul>
-        )}
-      </section>
+        </section>
+        </>
+      )}
     </div>
   );
 }

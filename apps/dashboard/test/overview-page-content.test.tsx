@@ -76,7 +76,7 @@ describe("OverviewPageContent", () => {
   });
 
   it("does not save an unchanged name", () => {
-    const save = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Save name");
+    const save = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Save");
     expect(save?.disabled).toBe(true);
   });
 

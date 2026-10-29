@@ -97,23 +97,47 @@ describe("InstanceSourcesContent", () => {
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/sources/src-1");
   });
 
-  it("filters by family through the paginated query, not client-side", async () => {
-    await render([makeSource({ origin: "kw-origin" }), makeSource({ _id: "src-2", family: "social-video" })], {
-      families: ["search", "social-video"],
-    });
-    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({ instanceId: "instance-1" });
-
-    const chip = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "social-video");
+  async function choose(index: number, value: string) {
+    const select = document.querySelectorAll("select")[index]!;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
     await act(async () => {
-      chip!.click();
+      setValue.call(select, value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({ instanceId: "instance-1", family: "social-video" });
+  }
 
-    const all = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "All");
-    await act(async () => {
-      all!.click();
-    });
-    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({ instanceId: "instance-1" });
+  const links = () => Array.from(document.querySelectorAll('a[href^="/projects/"]')).map((a) => a.textContent);
+
+  it("filters by exact status and by agent", async () => {
+    await render([
+      makeSource({ _id: "a", marketing: { summary: "alpha reel" }, templateId: "@opengroow/seo" }),
+      makeSource({ _id: "b", status: "failed", marketing: { summary: "beta reel" }, templateId: "@opengroow/social" }),
+    ]);
+    await choose(1, "Failed");
+    expect(links()).toEqual(["beta reel"]);
+    const chip = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "All")!;
+    await act(async () => chip.click());
+    await choose(0, "@opengroow/seo");
+    expect(links()).toEqual(["alpha reel"]);
+  });
+
+  it("treats the Ready chip as every analysed stage", async () => {
+    await render([
+      makeSource({ _id: "a", marketing: { summary: "alpha reel" }, scoring: { productFit: 1 } }),
+      makeSource({ _id: "b", status: "processing", marketing: { summary: "beta reel" } }),
+    ]);
+    const chip = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Ready")!;
+    await act(async () => chip.click());
+    expect(links()).toEqual(["alpha reel"]);
+  });
+
+  it("counts the loaded sources by status", async () => {
+    await render([makeSource({ _id: "a" }), makeSource({ _id: "b", status: "failed" })]);
+    const tile = (label: string) =>
+      Array.from(document.querySelectorAll("[data-slot=stat-tile]")).find((t) => t.textContent?.includes(label))
+        ?.textContent;
+    expect(tile("Total sources")).toContain("2");
+    expect(tile("Failed")).toContain("1");
   });
 
   it("offers Load more only while another page can be loaded", async () => {

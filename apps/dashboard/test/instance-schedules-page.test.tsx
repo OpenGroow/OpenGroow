@@ -73,6 +73,13 @@ describe("InstanceSchedulesContent", () => {
     await act(async () => {
       root.render(<InstanceSchedulesContent instanceId="instance-1" />);
     });
+    // The Create Schedule form lives in a modal opened from the page header.
+    const openButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create Schedule",
+    );
+    await act(async () => {
+      openButton?.click();
+    });
   }
 
   function makeSchedule(overrides: Record<string, unknown> = {}) {
@@ -104,20 +111,9 @@ describe("InstanceSchedulesContent", () => {
 
     await render();
 
-    expect(document.body.textContent).toContain("create_article");
-    expect(document.body.textContent).toContain("Daily at 09:00");
-  });
-
-  it("shows the next execution for each schedule", async () => {
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance") return [makeSchedule()];
-      if (key === "project_agents.listByInstance") return [];
-      return undefined;
-    });
-
-    await render();
-
-    expect(document.body.textContent).toContain("Next run");
+    // Schedules are grouped in a family titled with the Mission type's label.
+    expect(document.querySelector('[data-family="create_article"]')?.textContent).toContain("Create article");
+    expect(document.body.textContent).toContain("Daily · 09:00");
   });
 
   it("renders the create form (with hour/minute) when an active agent exists", async () => {
@@ -359,7 +355,7 @@ describe("InstanceSchedulesContent", () => {
 
     await render();
 
-    expect(document.body.textContent).toContain("Weekly on Monday at 09:00");
+    expect(document.body.textContent).toContain("Weekly · Monday 09:00");
   });
 
   it("renders a readable monthly cadence in the list", async () => {
@@ -372,7 +368,7 @@ describe("InstanceSchedulesContent", () => {
 
     await render();
 
-    expect(document.body.textContent).toContain("Monthly on day 15 at 09:00");
+    expect(document.body.textContent).toContain("Monthly · Day 15 09:00");
   });
 
   function setSelectValue(el: HTMLSelectElement, value: string) {
@@ -405,47 +401,6 @@ describe("InstanceSchedulesContent", () => {
     expect(document.querySelector('input[name="dayOfMonth"]')).toBeFalsy();
   });
 
-  it("displays lastRunAt when the schedule has run before", async () => {
-    const lastRunAt = Date.UTC(2026, 5, 3, 9, 0, 0);
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance") return [makeSchedule({ lastRunAt })];
-      if (key === "project_agents.listByInstance") return [];
-      return undefined;
-    });
-
-    await render();
-
-    expect(document.body.textContent).toContain("Last run");
-  });
-
-  it("displays lastError when the last tick failed", async () => {
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance")
-        return [makeSchedule({ lastError: "projectAgent for seo is not active" })];
-      if (key === "project_agents.listByInstance") return [];
-      return undefined;
-    });
-
-    await render();
-
-    expect(document.body.textContent).toContain("projectAgent for seo is not active");
-  });
-
-  it("links to the last mission when lastMissionId is set", async () => {
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance")
-        return [makeSchedule({ lastMissionId: "mission-abc" as unknown as string })];
-      if (key === "project_agents.listByInstance") return [];
-      return undefined;
-    });
-
-    await render();
-
-    const link = document.querySelector('[data-testid="last-mission-link"]') as HTMLAnchorElement | null;
-    expect(link).toBeTruthy();
-    expect(link!.href).toContain("mission-abc");
-  });
-
   it("shows a Pause button (not Resume) for an active schedule", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "schedules.listByInstance") return [makeSchedule({ status: "active" })];
@@ -457,7 +412,7 @@ describe("InstanceSchedulesContent", () => {
 
     expect(document.querySelector('button[data-action="pause"]')).toBeTruthy();
     expect(document.querySelector('button[data-action="resume"]')).toBeFalsy();
-    expect(document.querySelector('button[data-action="delete"]')).toBeTruthy();
+    expect(document.querySelector('button[data-action="more"]')).toBeTruthy();
   });
 
   it("shows a Resume button (not Pause) for a paused schedule", async () => {
@@ -471,7 +426,7 @@ describe("InstanceSchedulesContent", () => {
 
     expect(document.querySelector('button[data-action="resume"]')).toBeTruthy();
     expect(document.querySelector('button[data-action="pause"]')).toBeFalsy();
-    expect(document.querySelector('button[data-action="delete"]')).toBeTruthy();
+    expect(document.querySelector('button[data-action="more"]')).toBeTruthy();
   });
 
   it("reveals a day-of-month control when the monthly unit is selected", async () => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAction } from "convex/react";
-import { MessageCircle, Mic, Send } from "lucide-react";
+import { AudioLines, MessageCircle, Save, Send } from "lucide-react";
 import { api } from "@convex/_generated/api";
 
 const WHATSAPP_PAIR_START_TIMEOUT_MS = 30_000;
@@ -520,7 +520,8 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
     <section className="grid gap-5">
       {whatsAppAvailable ? (
         <WorkspaceConfigCard
-          icon={<MessageCircle className="size-5" />}
+          icon={MessageCircle}
+          tone="cyan"
           title="WhatsApp"
           description="Configure the WhatsApp number first, then generate and scan the QR code."
           badge={
@@ -542,19 +543,18 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
           }
         >
           <CardContent className="grid gap-5 px-6">
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.5)] px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/50 px-4 py-3">
               <div className="grid gap-1">
-                <p className="text-sm font-medium text-[var(--dashboard-ink)]">
+                <p className="text-sm font-medium text-foreground">
                   {whatsAppEnabled ? "WhatsApp channel is active" : "WhatsApp channel is disabled"}
                 </p>
-                <p className="text-xs text-[var(--dashboard-ink-muted)]">
+                <p className="text-xs text-muted-foreground">
                   Turn it off if it keeps retrying to connect without linking.
                 </p>
               </div>
-              <Button
+              <Button size="lg"
                 type="button"
                 variant="outline"
-                className="h-9 rounded-lg px-4 text-sm"
                 disabled={whatsAppEnabledStatus === "saving"}
                 onClick={() => void handleToggleWhatsAppEnabled(!whatsAppEnabled)}
               >
@@ -566,44 +566,45 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
               </Button>
             </div>
             {whatsAppEnabledError ? (
-              <p className="text-sm text-[#8f3030]">{whatsAppEnabledError}</p>
+              <p className="text-sm text-destructive">{whatsAppEnabledError}</p>
             ) : null}
             {!whatsAppEnabled && persistedWhatsAppChannel?.autoDisabledReason ? (
-              <p className="text-sm text-[#8f3030]">
+              <p className="text-sm text-destructive">
                 {persistedWhatsAppChannel.autoDisabledReason}
               </p>
             ) : null}
 
             {whatsAppConnectionState === "connected" ? (
-              <Button
+              <Button size="lg"
                 type="button"
-                className="h-11 w-fit rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
+                className="w-fit"
                 onClick={() => void handleStartWhatsApp(true)}
               >
                 Relink WhatsApp
               </Button>
             ) : whatsAppConnectionState === "linked" && !whatsAppPairFlowOpen ? (
               <div className="grid gap-3">
-                <Button
+                <Button size="lg"
                   type="button"
-                  className="h-11 w-fit rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
+                  className="w-fit"
                   onClick={() => void handleReconnectWhatsApp()}
                   disabled={whatsAppPairingPending}
                 >
                   {whatsAppPairingPending ? "Reconnecting…" : "Reconnect WhatsApp"}
                 </Button>
-                <button
+                <Button
+                  variant="link"
                   type="button"
-                  className="w-fit text-xs text-[var(--dashboard-ink-muted)] underline underline-offset-2 hover:text-[var(--dashboard-ink)]"
+                  className="h-auto p-0 w-fit"
                   onClick={() => setWhatsAppPairFlowOpen(true)}
                 >
                   Scan a new QR code instead
-                </button>
+                </Button>
               </div>
             ) : !whatsAppPairFlowOpen ? (
-              <Button
+              <Button size="lg"
                 type="button"
-                className="h-11 w-fit rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
+                className="w-fit"
                 onClick={() => setWhatsAppPairFlowOpen(true)}
               >
                 Pair WhatsApp
@@ -611,21 +612,21 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
             ) : (
               <div className="grid gap-4">
                 <div
-                  className={`grid gap-3 rounded-[1.25rem] border p-5 ${
+                  className={`grid gap-3 rounded-xl border p-5 ${
                     whatsAppStepOneComplete
-                      ? "border-[rgba(0,38,27,0.06)] bg-[rgba(243,244,244,0.45)] opacity-60"
-                      : "border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)]"
+                      ? "border-border bg-muted/50 opacity-60"
+                      : "border-border bg-muted"
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--dashboard-primary)] text-sm font-semibold text-[var(--dashboard-on-primary)]">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                       1
                     </div>
                     <div className="grid gap-2">
-                      <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">
+                      <h4 className="text-base font-semibold text-foreground">
                         Save the WhatsApp number
                       </h4>
-                      <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+                      <p className="text-sm leading-6 text-muted-foreground">
                         Enter the E.164 number that should be allowed for routing
                         before starting the pairing flow.
                       </p>
@@ -640,14 +641,14 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
                         onChange={(event) => setWhatsAppNumber(event.target.value)}
                         disabled={whatsAppStepOneComplete}
                         placeholder="+33612345678"
-                        className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-white px-4 lg:w-[20rem]"
+                        className="h-11 lg:w-[20rem]"
                       />
-                      <Button
+                      <Button variant="secondary" size="lg"
                         type="button"
                         disabled={
                           whatsAppConfig.status === "saving" || whatsAppStepOneComplete
                         }
-                        className="h-11 w-fit rounded-xl bg-[rgba(220,230,224,0.66)] px-5 text-[var(--dashboard-primary)] hover:bg-[rgba(220,230,224,0.82)]"
+                        className="w-fit"
                         onClick={() => void handleSaveWhatsAppNumber()}
                       >
                         {whatsAppConfig.status === "saving"
@@ -657,71 +658,70 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
                     </div>
                   </div>
                   {whatsAppConfig.output ? (
-                    <p className="text-sm text-[#236949]">{whatsAppConfig.output}</p>
+                    <p className="text-sm text-status-success">{whatsAppConfig.output}</p>
                   ) : null}
                   {whatsAppConfig.error ? (
-                    <p className="text-sm text-[#8f3030]">{whatsAppConfig.error}</p>
+                    <p className="text-sm text-destructive">{whatsAppConfig.error}</p>
                   ) : null}
                 </div>
 
                 <div
-                  className={`grid gap-3 rounded-[1.25rem] border p-5 ${
+                  className={`grid gap-3 rounded-xl border p-5 ${
                     whatsAppStepOneComplete
-                      ? "border-[rgba(0,38,27,0.08)] bg-[rgba(243,244,244,0.75)]"
-                      : "border-[rgba(0,38,27,0.06)] bg-[rgba(243,244,244,0.45)] opacity-60"
+                      ? "border-border bg-muted"
+                      : "border-border bg-muted/50 opacity-60"
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--dashboard-primary)] text-sm font-semibold text-[var(--dashboard-on-primary)]">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
                       2
                     </div>
                     <div className="grid gap-2">
-                      <h4 className="text-base font-semibold text-[var(--dashboard-ink)]">
+                      <h4 className="text-base font-semibold text-foreground">
                         Pair the WhatsApp session
                       </h4>
-                      <p className="text-sm leading-6 text-[var(--dashboard-ink-muted)]">
+                      <p className="text-sm leading-6 text-muted-foreground">
                         Once the number is saved, generate a QR code, scan it from
                         WhatsApp Linked Devices, then confirm the session status here.
                       </p>
                     </div>
                   </div>
                   {!whatsAppStepOneComplete ? (
-                    <p className="text-sm text-[var(--dashboard-ink-muted)]">
+                    <p className="text-sm text-muted-foreground">
                       Save the WhatsApp number in step 1 to unlock pairing.
                     </p>
                   ) : null}
                   <div className="flex flex-wrap gap-3">
-                    <Button
+                    <Button size="lg"
                       type="button"
                       disabled={!whatsAppStepOneComplete || whatsAppPairingPending}
-                      className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
                       onClick={() => void handleStartWhatsApp(false)}
                     >
                       {whatsAppPairingPending ? "Waiting…" : "Generate QR Code"}
                     </Button>
                   </div>
                   {whatsAppPairing.status ? (
-                    <p className="text-sm text-[var(--dashboard-ink-muted)]">
+                    <p className="text-sm text-muted-foreground">
                       WhatsApp status: {whatsAppPairing.status}
                     </p>
                   ) : null}
                   {whatsAppConnectionState === "linked" ? (
-                    <p className="text-sm text-[#236949]">
+                    <p className="text-sm text-status-success">
                       WhatsApp is linked, but the session is currently disconnected.
                     </p>
                   ) : null}
                   {whatsAppPairing.error ? (
-                    <p className="text-sm text-[#8f3030]">{whatsAppPairing.error}</p>
+                    <p className="text-sm text-destructive">{whatsAppPairing.error}</p>
                   ) : null}
                   {whatsAppPairing.qrDataUrl ? (
                     <div className="flex flex-col items-start gap-2">
                       <img
                         src={whatsAppPairing.qrDataUrl}
                         alt="WhatsApp QR"
-                        className={`h-[220px] w-[220px] rounded-2xl bg-white p-3 shadow-[inset_0_0_0_1px_rgba(0,38,27,0.08)] ${whatsAppQrStale ? "opacity-30" : ""}`}
+                        className={`h-[220px] w-[220px] rounded-xl bg-card p-3 ring-1 ring-inset ring-border ${whatsAppQrStale ? "opacity-30" : ""}`}
                       />
                       {whatsAppQrStale ? (
-                        <p className="text-sm text-[var(--dashboard-ink-muted)]">Refreshing the QR code…</p>
+                        <p className="text-sm text-muted-foreground">Refreshing the QR code…</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -732,7 +732,8 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
         </WorkspaceConfigCard>
       ) : (
         <PluginUnavailableCard
-          icon={<MessageCircle className="size-5" />}
+          icon={MessageCircle}
+          tone="cyan"
           title="WhatsApp"
           pluginId="whatsapp"
         />
@@ -751,14 +752,16 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
         />
       ) : (
         <PluginUnavailableCard
-          icon={<Mic className="size-5" />}
+          icon={AudioLines}
+          tone="violet"
           title="Groq Speech-to-Text"
           pluginId="groq"
         />
       )}
 
       <WorkspaceConfigCard
-        icon={<Send className="size-5" />}
+        icon={Send}
+        tone="blue"
         title="Telegram"
         description="Save the token generated by @BotFather to enable direct messages on this Project."
         badge={
@@ -766,7 +769,9 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
             <WorkspaceStatusBadge label="Saving" tone="muted" />
           ) : effectiveTelegramConfigured ? (
             <WorkspaceStatusBadge label="Connected" tone="success" />
-          ) : undefined
+          ) : (
+            <WorkspaceStatusBadge label="Not connected" tone="muted" />
+          )
         }
       >
         <CardContent className="grid gap-5 px-6">
@@ -779,25 +784,25 @@ export function ChannelsPageContent({ resolvedInstanceId }: Props) {
                 value={telegramBotToken}
                 onChange={(event) => setTelegramBotToken(event.target.value)}
                 placeholder="1234567890:AAB..."
-                className="h-12 rounded-xl border-[rgba(0,38,27,0.1)] bg-[rgba(243,244,244,0.95)] px-4 lg:flex-1"
+                className="h-11 lg:flex-1"
               />
-              <Button
+              <Button size="lg"
                 type="button"
                 disabled={telegramConfig.status === "saving"}
                 onClick={() => void handleSaveTelegram()}
-                className="h-11 rounded-xl bg-[var(--dashboard-primary)] px-5 text-[var(--dashboard-on-primary)] hover:bg-[var(--dashboard-primary-container)]"
               >
+                {telegramConfig.status === "saving" ? null : <Save />}
                 {telegramConfig.status === "saving"
                   ? "Saving…"
-                  : "Save Telegram token"}
+                  : "Save token"}
               </Button>
             </div>
           </div>
           {telegramConfig.output ? (
-            <p className="text-sm text-[#236949]">{telegramConfig.output}</p>
+            <p className="text-sm text-status-success">{telegramConfig.output}</p>
           ) : null}
           {telegramConfig.error ? (
-            <p className="text-sm text-[#8f3030]">{telegramConfig.error}</p>
+            <p className="text-sm text-destructive">{telegramConfig.error}</p>
           ) : null}
         </CardContent>
       </WorkspaceConfigCard>

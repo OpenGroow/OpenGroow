@@ -1,6 +1,8 @@
 "use client";
 
-import { buttonChipClass, inputChipClass, rowClass } from "./styles";
+import { rowClass } from "./styles";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function CreateInstanceControls({
   nameSuffix,
@@ -30,48 +32,48 @@ export function CreateInstanceControls({
   return (
     <>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
+        <Input
           value={nameSuffix}
           onChange={(event) => onNameSuffixChange(event.target.value)}
-          className={inputChipClass}
+          className="w-auto"
           aria-label="Project name suffix"
           placeholder="name suffix (optional)"
         />
-        <input
+        <Input
           value={openClawImageRef}
           onChange={(event) => onOpenClawImageRefChange(event.target.value)}
-          className={inputChipClass}
+          className="w-auto"
           aria-label="openclaw image ref"
           placeholder="OpenClaw image ref (optional)"
         />
-        <button className={buttonChipClass} onClick={() => onSubmit()} disabled={loading}>
+        <Button variant="outline" size="sm"  onClick={() => onSubmit()} disabled={loading}>
           {loading ? "Creating..." : "Create Project"}
-        </button>
+        </Button>
       </div>
 
       <div className={rowClass}>
-        <input
+        <Input
           value={jobId}
           onChange={(event) => onJobIdChange(event.target.value)}
-          className={inputChipClass}
+          className="w-auto"
           aria-label="job id"
           placeholder="job id"
         />
-        <button className={buttonChipClass} onClick={() => onRefresh()} disabled={loading}>
+        <Button variant="outline" size="sm"  onClick={() => onRefresh()} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh job"}
-        </button>
+        </Button>
       </div>
 
       <div className={rowClass}>
-        <button className={buttonChipClass} onClick={() => onRollout()} disabled={loading}>
+        <Button variant="outline" size="sm"  onClick={() => onRollout()} disabled={loading}>
           {loading ? "Rolling out..." : "Rollout all Projects"}
-        </button>
-        <button className={buttonChipClass} onClick={() => onRollout(true)} disabled={loading}>
+        </Button>
+        <Button variant="outline" size="sm"  onClick={() => onRollout(true)} disabled={loading}>
           {loading ? "Bootstrapping..." : "Rollout + bootstrap"}
-        </button>
-        <button className={buttonChipClass} onClick={() => onDestroyAll()}>
+        </Button>
+        <Button variant="outline" size="sm"  onClick={() => onDestroyAll()}>
           Destroy all Projects
-        </button>
+        </Button>
       </div>
     </>
   );

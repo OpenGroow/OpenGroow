@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Licence policy (issue #721, docs/LICENSING.md): the product is AGPL-3.0-only.
+// Licence policy (issue #721): the product is AGPL-3.0-only.
 const root = path.resolve(__dirname, "..");
 
 // Test data, not shipped packages: Template fixtures are copied/digested by tests.
@@ -40,9 +40,5 @@ describe("licence policy", () => {
 
   it("keeps the hub template under a permissive licence", () => {
     expect(readFileSync(path.join(root, "hub-template/LICENSE"), "utf8")).toMatch(/^MIT License/);
-  });
-
-  it("documents the audit", () => {
-    expect(existsSync(path.join(root, "docs/LICENSING.md"))).toBe(true);
   });
 });

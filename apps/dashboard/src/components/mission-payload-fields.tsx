@@ -2,9 +2,8 @@
 
 import type { MissionPayloadField } from "@convex/template_manifest_contract";
 import { isMissionPayloadFieldEmpty } from "../utils/mission-types";
-
-const INPUT_CLASS =
-  "rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 
 type Props = {
   fields: MissionPayloadField[];
@@ -57,18 +56,17 @@ export function MissionPayloadFields({ fields, payloadText, onChange }: Props) {
         const value = isMissionPayloadFieldEmpty(field, rawValue) ? "" : String(rawValue);
         return (
           <label key={field.key} className="grid gap-1.5">
-            <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+            <span className="text-sm font-semibold text-muted-foreground">
               {field.label}
               {field.required ? " *" : ""}
             </span>
             {field.type === "select" ? (
-              <select
+              <NativeSelect
                 value={value}
                 onChange={(e) => setField(field.key, e.target.value)}
                 required={field.required}
-                className={INPUT_CLASS}
               >
-                {/* Always render an empty option, even when required: a <select>
+                {/* Always render an empty option, even when required: a <NativeSelect>
                     with value="" and no matching <option> silently falls back to
                     displaying the first real option (native browser behavior) —
                     but the underlying value stays "", so it *looks* filled in
@@ -82,24 +80,22 @@ export function MissionPayloadFields({ fields, payloadText, onChange }: Props) {
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             ) : field.type === "number" ? (
-              <input
+              <Input
                 type="number"
                 value={value}
                 min={field.min}
                 max={field.max}
                 onChange={(e) => setNumberField(field.key, e.target.value)}
                 required={field.required}
-                className={INPUT_CLASS}
               />
             ) : (
-              <input
+              <Input
                 type="text"
                 value={value}
                 onChange={(e) => setField(field.key, e.target.value)}
                 required={field.required}
-                className={INPUT_CLASS}
               />
             )}
           </label>

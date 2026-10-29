@@ -56,7 +56,7 @@ export function AgentWorkspaceView({
   if (agents === undefined) return null;
   if (!params) {
     return (
-      <p className="m-0 text-[0.9rem] text-[var(--dashboard-ink-muted)]">
+      <p className="m-0 text-sm text-muted-foreground">
         Activate this Agent from the Agents list to see its workspace.
       </p>
     );

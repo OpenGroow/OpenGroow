@@ -1,4 +1,3 @@
-import { fetchBrokerHealth } from "@/src/lib/health";
 import { DashboardHome } from "@/src/components/dashboard-home";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +14,6 @@ type HomeProps = {
 export default async function Home({ searchParams }: HomeProps) {
   const params = searchParams ? await searchParams : undefined;
   const openClawId = params?.openClawId;
-  const health = await fetchBrokerHealth();
 
-  return <DashboardHome focusInstanceId={openClawId} health={health} />;
+  return <DashboardHome focusInstanceId={openClawId} />;
 }

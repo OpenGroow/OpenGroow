@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { ConnectLinkWizard } from "@/src/components/instance-workspace/connect-link-wizard";
 import { DevicesList } from "@/src/components/instance-workspace/devices-list";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
-import { Button } from "@/components/ui/button";
 
 type DevicesPageProps = {
   params: Promise<{ projectId: string }>;
@@ -35,17 +33,6 @@ export default function InstanceDevicesPage({ params }: DevicesPageProps) {
   if (showWizard) {
     return (
       <section className="grid gap-5">
-        <div>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-9 rounded-xl px-3 text-sm text-[var(--dashboard-ink-muted)] hover:text-[var(--dashboard-ink)]"
-            onClick={() => setShowWizard(false)}
-          >
-            <ArrowLeft className="mr-1.5 size-4" />
-            Back to devices
-          </Button>
-        </div>
         <ConnectLinkWizard
           instance={instance}
           startFresh

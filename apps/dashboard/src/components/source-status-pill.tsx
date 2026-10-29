@@ -1,5 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import { StatusPill } from "@/components/ui/status-pill";
+import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import {
   deriveSourcePipelineState,
   type SourcePipelineSource,
@@ -10,41 +10,43 @@ import {
 // in Convex without this map failing to compile.
 export type SourceStatus = Doc<"sources">["status"];
 
-// Muted grey while in
-// flight, green when ready, brown for a (retryable) failure, and a distinct
-// greyed pill for `unavailable` (structurally unanalyzable, never retryable).
-const SOURCE_STATUS_BADGE: Record<SourceStatus, { label: string; className: string }> = {
-  processing: { label: "Processing", className: "bg-[rgba(220,230,224,0.7)] text-[var(--dashboard-ink-soft)]" },
-  ready: { label: "Ready", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  failed: { label: "Failed", className: "bg-[rgba(84,41,37,0.08)] text-[var(--dashboard-tertiary)]" },
-  unavailable: { label: "Unavailable", className: "bg-[rgba(0,38,27,0.06)] text-[var(--dashboard-ink-muted)]" },
+// In flight is `progress`, ready/produced work is `active`, a (retryable)
+// failure is `error`, and `unavailable` (structurally unanalyzable, never
+// retryable) is `neutral` so it reads as inert rather than as an error.
+type SourceBadge = { label: string; tone: StatusTone };
+
+const SOURCE_STATUS_BADGE: Record<SourceStatus, SourceBadge> = {
+  processing: { label: "Processing", tone: "progress" },
+  ready: { label: "Ready", tone: "active" },
+  failed: { label: "Failed", tone: "error" },
+  unavailable: { label: "Unavailable", tone: "neutral" },
 };
 
 export function SourceStatusPill({ status }: { status: SourceStatus }) {
-  const { label, className } = SOURCE_STATUS_BADGE[status];
-  return <StatusPill label={label} className={className} />;
+  const { label, tone } = SOURCE_STATUS_BADGE[status];
+  return <StatusBadge tone={tone} label={label} />;
 }
 
-const PIPELINE_STAGE_BADGE: Record<SourcePipelineStage, { label: string; className: string }> = {
-  Ingestion: { label: "Ingestion", className: "bg-[rgba(220,230,224,0.7)] text-[var(--dashboard-ink-soft)]" },
-  Ready: { label: "Ready", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  Scored: { label: "Scored", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  Routed: { label: "Routed", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  "In production": { label: "In production", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  Produced: { label: "Produced", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
-  Published: { label: "Published", className: "bg-[rgba(188,237,215,0.7)] text-[var(--dashboard-primary)]" },
+const PIPELINE_STAGE_BADGE: Record<SourcePipelineStage, SourceBadge> = {
+  Ingestion: { label: "Ingestion", tone: "progress" },
+  Ready: { label: "Ready", tone: "info" },
+  Scored: { label: "Scored", tone: "info" },
+  Routed: { label: "Routed", tone: "info" },
+  "In production": { label: "In production", tone: "info" },
+  Produced: { label: "Produced", tone: "active" },
+  Published: { label: "Published", tone: "active" },
 };
 
-const TERMINAL_BADGE: Record<"Failed" | "Unavailable" | "Excluded", { label: string; className: string }> = {
+const TERMINAL_BADGE: Record<"Failed" | "Unavailable" | "Excluded", SourceBadge> = {
   Failed: SOURCE_STATUS_BADGE.failed,
   Unavailable: SOURCE_STATUS_BADGE.unavailable,
-  Excluded: { label: "Excluded", className: "bg-[rgba(0,38,27,0.06)] text-[var(--dashboard-ink-muted)]" },
+  Excluded: { label: "Excluded", tone: "neutral" },
 };
 
 export function SourcePipelinePill({ source }: { source: SourcePipelineSource }) {
   const state = deriveSourcePipelineState(source);
   const badge = state.kind === "stage" ? PIPELINE_STAGE_BADGE[state.current] : TERMINAL_BADGE[state.label];
-  return <StatusPill label={badge.label} className={badge.className} />;
+  return <StatusBadge tone={badge.tone} label={badge.label} />;
 }
 
 export function formatSourceDate(timestamp: number): string {

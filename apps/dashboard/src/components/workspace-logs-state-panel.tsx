@@ -15,15 +15,15 @@ export function LogsStatePanel({
   return (
     <Card
       className={cn(
-        "rounded-[1.5rem] border-0 py-4 shadow-none",
-        tone === "error" ? "bg-[rgba(84,41,37,0.06)]" : "bg-[rgba(220,230,224,0.22)]",
+        "rounded-xl border-0 py-4 shadow-none",
+        tone === "error" ? "bg-destructive/10" : "bg-muted",
       )}
     >
       <CardContent className="grid gap-2 px-5">
-        <h3 className="m-0 text-[1.05rem] leading-[1.08] tracking-[-0.03em] text-[var(--dashboard-ink)]">
+        <h3 className="m-0 text-base tracking-tight text-foreground">
           {title}
         </h3>
-        <p className="m-0 text-[0.96rem] leading-7 text-[var(--dashboard-ink-muted)]">
+        <p className="m-0 text-base leading-7 text-muted-foreground">
           {description}
         </p>
       </CardContent>

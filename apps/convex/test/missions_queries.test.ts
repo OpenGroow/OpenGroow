@@ -178,3 +178,38 @@ describe("runs.listByMission", () => {
     expect(run?.agentsMdSnapshot).toBe("# Agent instructions");
   });
 });
+
+describe("missions.overviewByTemplate", () => {
+  it("returns the recent Missions and the status counts of the Agent for its owner", async () => {
+    const t = convexTest(schema, modules);
+    const { missionId } = await seedAll(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(missionId, { status: "failed" });
+    });
+    const overview = await t
+      .withIdentity(OWNER)
+      .query(api.missions.overviewByTemplate, { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID });
+    expect(overview.recent.map((m) => m._id)).toEqual([missionId]);
+    expect(overview.counts).toEqual({ doing: 0, toValidate: 0, failed: 1 });
+    expect(overview.truncated).toBe(false);
+  });
+
+  it("ignores the Missions of another Agent", async () => {
+    const t = convexTest(schema, modules);
+    await seedAll(t);
+    const overview = await t
+      .withIdentity(OWNER)
+      .query(api.missions.overviewByTemplate, { instanceId: INSTANCE_ID, templateId: "@opengroow/other" });
+    expect(overview.recent).toEqual([]);
+  });
+
+  it("returns nothing for a non-owner", async () => {
+    const t = convexTest(schema, modules);
+    await seedAll(t);
+    const overview = await t
+      .withIdentity(STRANGER)
+      .query(api.missions.overviewByTemplate, { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID });
+    expect(overview.recent).toEqual([]);
+    expect(overview.counts).toEqual({ doing: 0, toValidate: 0, failed: 0 });
+  });
+});

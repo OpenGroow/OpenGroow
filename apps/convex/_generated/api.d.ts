@@ -84,6 +84,7 @@ import type * as project_agents_workspace_provisioning from "../project_agents/w
 import type * as project_agents_node from "../project_agents_node.js";
 import type * as project_channel_operations from "../project_channel_operations.js";
 import type * as project_node_operations from "../project_node_operations.js";
+import type * as project_overview from "../project_overview.js";
 import type * as project_provider_operations from "../project_provider_operations.js";
 import type * as project_templates from "../project_templates.js";
 import type * as project_templates_node from "../project_templates_node.js";
@@ -208,6 +209,7 @@ declare const fullApi: ApiFromModules<{
   project_agents_node: typeof project_agents_node;
   project_channel_operations: typeof project_channel_operations;
   project_node_operations: typeof project_node_operations;
+  project_overview: typeof project_overview;
   project_provider_operations: typeof project_provider_operations;
   project_templates: typeof project_templates;
   project_templates_node: typeof project_templates_node;

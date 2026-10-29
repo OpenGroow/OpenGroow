@@ -86,6 +86,15 @@ async function render(jobs: unknown) {
     });
   }
 
+  async function openMenu() {
+    const trigger = document.querySelector('[aria-label="More actions"]')!;
+    await act(async () => {
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+      }
+    });
+  }
+
   it("shows loading then empty states", async () => {
     await render(undefined);
     expect(document.body.textContent).toContain("Loading");
@@ -99,7 +108,6 @@ async function render(jobs: unknown) {
     ]);
     const text = document.body.textContent ?? "";
     expect(text).toContain("Social engagement");
-    expect(text).toContain("Active");
     expect(text).toContain("Daily at 06:00");
     expect(text).toContain("Next run");
     expect(text).toContain("2026");
@@ -111,7 +119,8 @@ async function render(jobs: unknown) {
     await render([makeJob({ lastOutcome: "skipped" })]);
     const text = document.body.textContent ?? "";
     expect(text).toContain("Skipped");
-    expect(text).not.toContain("Failed");
+    expect(text).not.toContain("Last outcome: Failed");
+    expect(text).toContain("Active");
     expect(document.querySelector('[role="alert"]')).toBeNull();
   });
 
@@ -124,13 +133,35 @@ async function render(jobs: unknown) {
 
   it("links a source job to its latest Run logs", async () => {
     await render([makeJob({ workspaceKey: "ws-social", latestRunId: "run-9" })]);
+    await openMenu();
     const link = Array.from(document.querySelectorAll("a")).find((a) => a.textContent === "View logs");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fengagement/logs?runId=run-9");
   });
 
   it("does not show logs when the job has never run", async () => {
     await render([makeJob({ workspaceKey: "ws-social" })]);
+    await openMenu();
     expect(document.body.textContent).not.toContain("View logs");
+  });
+
+  it("filters by status with counts and searches by name", async () => {
+    await render([
+      makeJob({ running: true }),
+      makeJob({ _id: "job-2", label: "Source scoring", agentName: "Source scoring", state: "paused" }),
+      makeJob({ _id: "job-3", label: "Source routing", agentName: "Source routing", lastOutcome: "failed" }),
+    ]);
+    const chips = Array.from(document.querySelectorAll("[aria-pressed]"));
+    expect(chips.map((c) => c.textContent)).toEqual(["All3", "Running1", "Paused1", "Failed1"]);
+    await click(chips[2]);
+    expect(document.body.textContent).toContain("Source scoring");
+    expect(document.body.textContent).not.toContain("Source routing");
+    await click(chips[0]);
+    const search = document.querySelector('input[type="search"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "zzz");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain("No jobs match");
   });
 
   it("pauses an active job and resumes a paused one", async () => {
@@ -143,14 +174,17 @@ async function render(jobs: unknown) {
 
   it("runs a source job immediately", async () => {
     await render([makeJob()]);
-    expect(document.body.textContent).toContain("Run Now");
-    await click(button("Run Now"));
+    expect(document.body.textContent).toContain("Run now");
+    await click(button("Run now"));
     expect(mutations["jobs.runNow"]).toHaveBeenCalledWith({ jobId: "job-1" });
   });
 
   it("saves a new weekly recurrence with the browser timezone", async () => {
     await render([makeJob()]);
-    await click(button("Edit recurrence"));
+    await openMenu();
+    await click(
+      Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Edit recurrence"),
+    );
 
     const setValue = async (name: string, value: string) => {
       const el = document.querySelector(`[name="${name}"]`) as HTMLSelectElement | HTMLInputElement;
@@ -175,12 +209,14 @@ async function render(jobs: unknown) {
 
   it("links to the job's latest Run in Agent Logs", async () => {
     await render([makeJob({ workspaceKey: "ws-social", latestRunId: "run-9" })]);
+    await openMenu();
     const link = Array.from(document.querySelectorAll("a")).find((a) => a.textContent === "View logs");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fengagement/logs?runId=run-9");
   });
 
   it("shows no logs link for a job that has never run", async () => {
     await render([makeJob({ workspaceKey: "ws-social" })]);
+    await openMenu();
     expect(document.body.textContent).not.toContain("View logs");
   });
 });

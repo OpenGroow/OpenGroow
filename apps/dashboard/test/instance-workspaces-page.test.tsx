@@ -90,16 +90,14 @@ describe("InstanceWorkspacesPage", () => {
   });
 
   function card(title: string): HTMLElement {
-    const heading = Array.from(document.querySelectorAll("h3, [data-slot='card-title']")).find((el) =>
-      el.textContent?.includes(title),
-    );
-    return heading!.closest("[data-slot='card']") as HTMLElement;
+    const row = Array.from(document.querySelectorAll("li")).find((el) => el.textContent?.includes(title));
+    return row as HTMLElement;
   }
 
   it("sends a managed workspace to its Agent's Files, titled with the Agent's name", async () => {
     const managed = card(video.name);
     expect(managed.querySelector("a")?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fvideo-demo/files");
-    expect(managed.querySelector("a")?.textContent).toContain("Open Files");
+    expect(managed.querySelector("a")?.textContent).toContain(video.name);
   });
 
   it("does not link a managed workspace while the Agents are still loading", async () => {
@@ -112,7 +110,7 @@ describe("InstanceWorkspacesPage", () => {
 
     const managed = card("video-workspace");
     expect(managed.querySelector("a")).toBeNull();
-    expect(managed.querySelector("[aria-disabled='true']")?.textContent).toContain("Open Files");
+    expect(managed.querySelector("[aria-disabled='true']")?.textContent).toContain("video-workspace");
     // The other kinds never depend on the Agents.
     expect(card("Profile workspace").querySelector("a")?.getAttribute("href")).toBe(
       "/projects/instance-1/settings/workspaces/ws-profile",

@@ -174,7 +174,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
-    expect(document.body.textContent).toContain("doing");
+    expect(document.body.textContent).toContain("In progress");
   });
 
   it("shows a From Source badge when mission provenance is present", async () => {
@@ -432,7 +432,7 @@ describe("MissionDetailContent", () => {
     const history = document.body.textContent?.split("Run History")[1] ?? "";
     expect(history).toContain(BASE_MISSION.type);
     expect(history).not.toContain("seo-agent-v2");
-    expect(history).toContain("completed");
+    expect(history).toContain("Completed");
   });
 
   it("shows a View prompt link next to View logs when a workspaceKey is resolved", async () => {
@@ -552,7 +552,11 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
-    expect(document.body.textContent).toContain("blocked");
+    const badge = document.querySelector('[data-slot="status-badge"]');
+    expect(badge?.textContent).toBe("Blocked");
+    // Amber (warning), never the red of a failure.
+    expect(badge?.className).toContain("status-warning");
+    expect(badge?.className).not.toContain("status-error");
     expect(document.body.textContent).not.toContain("What happened");
   });
 

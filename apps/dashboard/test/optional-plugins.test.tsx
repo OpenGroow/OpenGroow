@@ -9,6 +9,7 @@ import {
   OptionalPluginsProvider,
   useOptionalPlugin,
 } from "../src/components/optional-plugins-provider";
+import { MessageCircle } from "lucide-react";
 import { PluginUnavailableCard } from "../src/components/plugin-unavailable-card";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -61,7 +62,7 @@ describe("useOptionalPlugin", () => {
 
 describe("PluginUnavailableCard", () => {
   it("names the plugin and the variable to set", () => {
-    const view = render(<PluginUnavailableCard icon={null} title="WhatsApp" pluginId="whatsapp" />);
+    const view = render(<PluginUnavailableCard icon={MessageCircle} tone="cyan" title="WhatsApp" pluginId="whatsapp" />);
     expect(view.textContent).toContain("WhatsApp");
     expect(view.textContent).toContain("OPENCLAW_OPTIONAL_PLUGINS");
     expect(view.textContent).toContain("whatsapp");

@@ -5,7 +5,7 @@ import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
-import { MissionKanbanBoard } from "./mission-kanban-board";
+import { COLUMNS, columnForMission, MissionKanbanBoard } from "./mission-kanban-board";
 import { MissionPayloadEditor } from "./mission-payload-editor";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
@@ -13,12 +13,25 @@ import {
   validateMissionPayloadUnlessRaw,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/opengroow/page-header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { CountTile } from "@/components/opengroow/count-tile";
+import { SearchField } from "@/components/opengroow/filter-bar";
+import { ChevronDown, Plus, Sparkles } from "lucide-react";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
 };
-
-type CreateResult = { missionId: Id<"missions">; runId: Id<"runs"> };
 
 const DONE_PAGE_SIZE = 5;
 
@@ -52,6 +65,12 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
+  // null = follow the default: open when the Mission type declares payload
+  // fields (the form must be visible), collapsed for a plain JSON payload.
+  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"newest" | "oldest">("newest");
 
   const effectiveTemplateId = templateId || activeAgents[0]?.templateId || "";
   const effectiveManifest = manifests.find((m) => m.id === effectiveTemplateId);
@@ -66,6 +85,9 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
+  const payloadOpen =
+    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
+  const setPayloadOpen = setPayloadOpenOverride;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
 
   useEffect(() => {
@@ -81,13 +103,11 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveTemplateId, hiddenKey, declaredKey]);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<CreateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setResult(null);
 
     let payload: unknown = {};
     if (payloadText.trim()) {
@@ -121,7 +141,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
 
     setSubmitting(true);
     try {
-      const res = await createMission({
+      await createMission({
         instanceId,
         templateId: selectedTemplateId,
         type: type.trim(),
@@ -131,7 +151,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
         // rather than persisting an explicit `false`.
         ...(autoPublishAllowed && autoPublish ? { autoPublish: true } : {}),
       });
-      setResult(res as CreateResult);
+      setCreateOpen(false);
       setName("");
       setAutoPublish(false);
       const [firstType] = missionTypes;
@@ -146,71 +166,86 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
 
   return (
     <div className="grid gap-8">
-      <header className="grid gap-1">
-        <span className="text-[0.75rem] font-bold uppercase tracking-[0.18em] text-[var(--dashboard-ink-soft)]">
-          Project
-        </span>
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.5rem)] font-extrabold leading-[0.98] tracking-[-0.04em] text-[var(--dashboard-ink)]">
-          Missions
-        </h1>
-      </header>
+      <PageHeader
+        title="Missions"
+        description="Tasks you give your agents, from request to review and publication."
+        action={
+          <Button variant="glow" size="lg" type="button" onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Create Mission
+          </Button>
+        }
+      />
 
-      <section className="grid gap-5 rounded-[1.75rem] border border-[rgba(0,38,27,0.08)] bg-[#f8f9f7] p-6 shadow-[0_18px_34px_rgba(25,28,28,0.06)]">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
-          Create Mission
-        </h2>
+      {missions !== undefined && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {COLUMNS.filter((col) => col.id !== "blocked" && col.id !== "done").map((col) => (
+            <CountTile
+              key={col.id}
+              label={col.label}
+              dotClassName={col.dot}
+              value={missions.filter((m) => columnForMission(m.status) === col.id).length}
+            />
+          ))}
+        </div>
+      )}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-h-[90vh] w-[min(92vw,48rem)] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden="true"
+                className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary"
+              >
+                <Sparkles className="size-5" />
+              </span>
+              <div className="grid gap-0.5">
+                <DialogTitle>Create Mission</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Turn an idea into an automated content workflow for your agent.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
 
         {agents === undefined || manifestsLoading ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading agents…</p>
+          <p className="text-sm text-muted-foreground">Loading agents…</p>
         ) : activeAgents.length === 0 ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+          <p className="text-sm text-muted-foreground">
             {runningAgents.length === 0
               ? "No active agents. Activate an agent first."
               : "No active agent supports Missions: the active agents only run Jobs."}
           </p>
         ) : (
           <form onSubmit={(e) => { void handleSubmit(e); }} className="grid gap-4">
+            <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Agent
               </span>
-              <select
+              <NativeSelect
                 value={effectiveTemplateId}
                 onChange={(e) => setTemplateId(e.target.value)}
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
               >
                 {activeAgents.map((a) => (
                   <option key={a.templateId} value={a.templateId}>
                     {manifests.find((m) => m.id === a.templateId)?.name ?? a.templateId}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
-                Name
-              </span>
-              <input
-                type="text"
-                name="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Article about running shoes (auto-derived if left blank)"
-                className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
-              />
-            </label>
-
-            <label className="grid gap-1.5">
-              <span className="text-[0.82rem] font-semibold text-[var(--dashboard-ink-soft)]">
+              <span className="text-sm font-semibold text-muted-foreground">
                 Type
               </span>
               {allTypesHidden ? (
-                <p className="m-0 text-[0.92rem] text-[var(--dashboard-ink-muted)]">
+                <p className="m-0 text-sm text-muted-foreground">
                   Every Mission type of this agent is hidden. Unhide one in the agent&apos;s settings.
                 </p>
               ) : missionTypes.length > 0 ? (
-                <select
+                <NativeSelect
                   value={type}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -220,73 +255,105 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                     const option = missionTypes.find((t) => t.type === next);
                     if (option) setPayloadText(option.payload);
                   }}
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 >
                   {missionTypes.map((t) => (
                     <option key={t.type} value={t.type}>
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               ) : (
-                <input
+                <Input
                   type="text"
                   value={type}
                   onChange={(e) => setType(e.target.value)}
                   placeholder="e.g. seo.audit"
                   required
-                  className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-3 py-2.5 text-[0.92rem] text-[var(--dashboard-ink)] placeholder:text-[var(--dashboard-ink-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--dashboard-primary)]"
                 />
               )}
             </label>
+            </div>
 
-            {autoPublishAllowed && (
-              <AutoPublishToggle checked={autoPublish} onChange={setAutoPublish} />
-            )}
+            <div className="grid items-center gap-4 md:grid-cols-2">
+            <label className="grid gap-1.5">
+              <span className="text-sm font-semibold text-muted-foreground">
+                Name{" "}
+                <span className="font-normal">(optional)</span>
+              </span>
+              <Input
+                type="text"
+                name="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </label>
+              {autoPublishAllowed && (
+                <AutoPublishToggle checked={autoPublish} onChange={setAutoPublish} />
+              )}
+            </div>
 
-            <MissionPayloadEditor
-              fields={missionTypes.find((t) => t.type === type)?.fields}
-              payloadText={payloadText}
-              onChange={setPayloadText}
-              rawMode={rawPayloadMode}
-              onRawModeChange={setRawPayloadMode}
-            />
+            <div className="grid gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                aria-expanded={payloadOpen}
+                onClick={() => setPayloadOpen(!payloadOpen)}
+                className="-ml-3 w-fit"
+              >
+                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
+                Payload (optional)
+              </Button>
+              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
+              <div hidden={!payloadOpen}>
+                <MissionPayloadEditor
+                  fields={missionTypes.find((t) => t.type === type)?.fields}
+                  payloadText={payloadText}
+                  onChange={setPayloadText}
+                  rawMode={rawPayloadMode}
+                  onRawModeChange={setRawPayloadMode}
+                />
+              </div>
+            </div>
 
             {error ? (
-              <p className="rounded-xl border border-[rgba(200,0,0,0.15)] bg-[rgba(255,240,240,0.8)] px-4 py-3 text-[0.88rem] text-red-700">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 {error}
               </p>
             ) : null}
 
-            {result ? (
-              <div className="rounded-xl border border-[rgba(0,38,27,0.12)] bg-white px-4 py-3 text-[0.88rem] text-[var(--dashboard-ink)]">
-                <p className="m-0 font-semibold text-[var(--dashboard-primary)]">Mission created</p>
-                <p className="m-0 mt-1 font-mono text-[0.82rem] text-[var(--dashboard-ink-muted)]">
-                  missionId: {result.missionId}
-                </p>
-                <p className="m-0 font-mono text-[0.82rem] text-[var(--dashboard-ink-muted)]">
-                  runId: {result.runId}
-                </p>
-              </div>
-            ) : null}
-
-            <button
+            <Button
+              size="lg"
               type="submit"
-              disabled={submitting || allTypesHidden}
-              className="inline-flex min-h-[3rem] items-center justify-center gap-3 rounded-2xl border border-[rgba(0,38,27,0.12)] bg-[var(--dashboard-primary)] px-5 font-semibold text-white shadow-[0_16px_30px_rgba(0,38,27,0.24)] transition hover:-translate-y-0.5 hover:bg-[var(--dashboard-primary-container)] hover:shadow-[0_20px_34px_rgba(0,38,27,0.28)] disabled:opacity-50 disabled:pointer-events-none"
+              loading={submitting}
+              disabled={allTypesHidden}
+              className="w-fit justify-self-end"
             >
+              <Sparkles />
               {submitting ? "Creating…" : "Create Mission"}
-            </button>
+            </Button>
           </form>
         )}
-      </section>
+        </DialogContent>
+      </Dialog>
 
       <section className="grid gap-5">
-        <h2 className="m-0 text-[0.9rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
-          Missions
-        </h2>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <SearchField value={query} onChange={setQuery} label="Search missions" placeholder="Search missions…" />
+            <NativeSelect
+              aria-label="Sort missions"
+              value={sort}
+              onChange={(e) => setSort(e.target.value === "oldest" ? "oldest" : "newest")}
+              className="h-11 sm:w-44"
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </NativeSelect>
+          </div>
+        </div>
         {missions === undefined ? (
-          <p className="text-[0.92rem] text-[var(--dashboard-ink-muted)]">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <MissionKanbanBoard
             missions={missions}
@@ -294,6 +361,8 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
             doneMissions={doneMissions}
             doneStatus={doneStatus}
             onLoadMoreDone={() => loadMoreDone(DONE_PAGE_SIZE)}
+            query={query}
+            sort={sort}
           />
         )}
       </section>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Badge } from "@/components/ui/badge";
 
 // Generic, schema-driven rendering of any JSON value (ADR-051: no per-origin
 // code). A declared JSON Schema only contributes labels (`title`) and the
@@ -64,7 +65,7 @@ function orderedKeys(objects: ReadonlyArray<Record<string, unknown>>, schema: Js
 }
 
 function Scalar({ value }: { value: string | number | boolean | null }): ReactNode {
-  if (value === null) return <span className="text-[var(--dashboard-ink-muted)]">—</span>;
+  if (value === null) return <span className="text-muted-foreground">—</span>;
   if (typeof value === "boolean") return <>{value ? "Yes" : "No"}</>;
   if (typeof value === "string" && isUrl(value)) {
     return (
@@ -72,7 +73,7 @@ function Scalar({ value }: { value: string | number | boolean | null }): ReactNo
         href={value}
         target="_blank"
         rel="noreferrer noopener"
-        className="break-all font-semibold text-[var(--dashboard-primary)] underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)] focus-visible:ring-offset-2"
+        className="break-all font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {value}
       </a>
@@ -83,12 +84,10 @@ function Scalar({ value }: { value: string | number | boolean | null }): ReactNo
 
 function Chip({ children }: { children: ReactNode }) {
   return (
-    <span
-      data-chip
-      className="rounded-full bg-[rgba(220,230,224,0.7)] px-3 py-1 text-[0.78rem] font-semibold text-[var(--dashboard-ink-soft)]"
-    >
+    <Badge
+      data-chip>
       {children}
-    </span>
+    </Badge>
   );
 }
 
@@ -101,7 +100,7 @@ function ArrayValue({
   schema: JsonSchema | undefined;
   root: JsonSchema | undefined;
 }) {
-  if (items.length === 0) return <span className="text-[var(--dashboard-ink-muted)]">None</span>;
+  if (items.length === 0) return <span className="text-muted-foreground">None</span>;
 
   if (items.every(isScalar)) {
     return (
@@ -119,12 +118,12 @@ function ArrayValue({
   if (items.every(isRecord)) {
     const columns = orderedKeys(items, itemSchema);
     return (
-      <div className="overflow-x-auto rounded-xl border border-[rgba(0,38,27,0.08)]">
-        <table className="w-full border-collapse text-left text-[0.85rem]">
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="bg-[rgba(220,230,224,0.4)]">
+            <tr className="bg-muted">
               {columns.map((column) => (
-                <th key={column} className="px-3 py-2 font-bold text-[var(--dashboard-ink-soft)]">
+                <th key={column} className="px-3 py-2 font-semibold text-muted-foreground">
                   {labelFor(column, resolve(itemSchema?.properties?.[column], root))}
                 </th>
               ))}
@@ -132,7 +131,7 @@ function ArrayValue({
           </thead>
           <tbody>
             {items.map((item, rowIndex) => (
-              <tr key={rowIndex} className="border-t border-[rgba(0,38,27,0.06)] align-top">
+              <tr key={rowIndex} className="border-t border-border align-top">
                 {columns.map((column) => (
                   <td key={column} className="px-3 py-2">
                     {column in item ? (
@@ -162,8 +161,8 @@ function ArrayValue({
 
 function Collapsible({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details className="rounded-xl border border-[rgba(0,38,27,0.08)] bg-white/60 px-3 py-2">
-      <summary className="cursor-pointer text-[0.85rem] font-semibold text-[var(--dashboard-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dashboard-primary)]">
+    <details className="rounded-xl border border-border bg-card/60 px-3 py-2">
+      <summary className="cursor-pointer text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {title}
       </summary>
       <div className="pt-2">{children}</div>
@@ -201,7 +200,7 @@ function ObjectFields({
   nested?: boolean;
 }) {
   const keys = orderedKeys([value], schema);
-  if (keys.length === 0) return <span className="text-[var(--dashboard-ink-muted)]">Empty</span>;
+  if (keys.length === 0) return <span className="text-muted-foreground">Empty</span>;
   return (
     <dl className={nested ? "m-0 grid gap-3" : "m-0 grid gap-4"}>
       {keys.map((key) => {
@@ -216,10 +215,10 @@ function ObjectFields({
               </Collapsible>
             ) : (
               <>
-                <dt className="text-[0.75rem] font-bold uppercase tracking-[0.14em] text-[var(--dashboard-ink-soft)]">
+                <dt className="text-xs font-semibold text-muted-foreground">
                   {label}
                 </dt>
-                <dd className="m-0 text-[0.92rem] leading-relaxed text-[var(--dashboard-ink)]">
+                <dd className="m-0 text-sm leading-relaxed text-foreground">
                   <SchemaValue value={child} schema={childSchema} root={root} />
                 </dd>
               </>

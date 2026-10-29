@@ -77,6 +77,13 @@ describe("InstanceMissionsContent — mission list", () => {
     await act(async () => {
       root.render(<InstanceMissionsContent instanceId="instance-1" />);
     });
+    // The Create Mission form lives in a modal opened from the page header.
+    const openButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create Mission",
+    );
+    await act(async () => {
+      openButton?.click();
+    });
   }
 
   function makeMission(overrides: Partial<{
@@ -107,7 +114,7 @@ describe("InstanceMissionsContent — mission list", () => {
     };
   }
 
-  it("shows 'Project' section label (not 'Instance') in page header", async () => {
+  it("titles the page Missions and never says 'Instance'", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.listActiveByInstance") return [];
       if (key === "project_agents.listByInstance") return [];
@@ -116,7 +123,7 @@ describe("InstanceMissionsContent — mission list", () => {
 
     await render();
 
-    expect(document.body.textContent).toContain("Project");
+    expect(document.querySelector("h1")?.textContent).toBe("Missions");
     expect(document.body.textContent).not.toContain("Instance");
   });
 
@@ -310,6 +317,11 @@ describe("InstanceMissionsContent — mission list", () => {
     serveProjectManifests(undefined);
     await act(async () => {
       root.render(<InstanceMissionsContent instanceId="instance-1" />);
+    });
+    await act(async () => {
+      Array.from(document.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "Create Mission")
+        ?.click();
     });
     expect(engageSelect()).toBeUndefined();
     // No free-text Type input while the manifests load: a submit would skip

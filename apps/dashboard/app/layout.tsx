@@ -1,5 +1,4 @@
 import "./globals.css";
-import "./dashboard-theme.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ConvexClientProvider } from "@/src/components/convex-provider";
@@ -13,7 +12,7 @@ import { getPublicUrls } from "@/src/lib/public-urls";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "OpenClaw Dashboard",
+  title: "OpenGroow",
   description: "Manage your OpenGroow Projects and their agents",
 };
 
@@ -30,10 +29,8 @@ export default async function RootLayout({
   const { convexUrl, appUrl } = getPublicUrls();
 
   return (
-    <html lang="en" className="font-sans">
-      <body
-        className="bg-white text-(--dashboard-ink) [font-family:var(--font-dashboard-sans)]"
-      >
+    <html lang="en" className="dark font-sans">
+      <body>
         <ConvexClientProvider
           initialToken={initialToken}
           convexUrl={convexUrl}

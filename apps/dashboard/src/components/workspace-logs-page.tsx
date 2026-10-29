@@ -13,6 +13,7 @@ import { JobList, MissionList } from "@/src/components/workspace-logs-lists";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { TranscriptPanel } from "@/src/components/workspace-logs-transcript";
 import type { TranscriptState } from "@/src/components/workspace-logs.types";
+import { PageHeader } from "@/components/opengroow/page-header";
 
 type WorkspaceLogsPageProps = {
   params: Promise<{ projectId: string; workspaceKey: string }>;
@@ -109,33 +110,25 @@ export function WorkspaceLogsPage({ params, agentTemplateId }: WorkspaceLogsPage
 
   return (
     <section className="grid gap-8">
-      <header className="flex flex-col items-start justify-between gap-5 lg:flex-row lg:items-center">
-        <div className="grid gap-2">
-          <span className="text-[0.78rem] font-bold uppercase tracking-[0.16em] text-[var(--dashboard-ink-soft)]">
-            Agent Logs
-          </span>
-          <h1 className="m-0 text-[clamp(2.2rem,4vw,3.6rem)] leading-[0.98] tracking-[-0.06em] text-[var(--dashboard-primary)]">
-            Mission, job and Run history
-          </h1>
-          <p className="m-0 max-w-3xl text-[1rem] leading-7 text-[var(--dashboard-ink-muted)]">
-            Browse this Agent&apos;s Missions and jobs, pick a Run, and see what it said and did.
-          </p>
-        </div>
-        {agentTemplateId ? null : (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 rounded-xl"
-            onClick={() => {
-              router.push(
-                `/projects/${encodeURIComponent(decodedProjectId)}/settings/workspaces/${encodeURIComponent(decodedWorkspaceKey)}`,
-              );
-            }}
-          >
-            Back to Workspace
-          </Button>
-        )}
-      </header>
+      <PageHeader
+        title="Run history"
+        description="Missions and jobs of this Agent, and what each Run said and did."
+        action={
+          agentTemplateId ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                router.push(
+                  `/projects/${encodeURIComponent(decodedProjectId)}/settings/workspaces/${encodeURIComponent(decodedWorkspaceKey)}`,
+                );
+              }}
+            >
+              Back to Workspace
+            </Button>
+          )
+        }
+      />
 
       {!runtimeInstanceId ? (
         <LogsStatePanel
