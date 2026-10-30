@@ -82,7 +82,7 @@ export function buildSourceRoutingRunFile(args: { source: Doc<"sources">; candid
     "",
     "Return one exact candidate in additionalDetails.route with its unchanged templateId and missionType and a JSON object payload.",
     "",
-    "For a create_reel target the payload must contain a publish object, e.g. {\"publish\": {\"platforms\": [\"instagram\"], \"title\": \"...\", \"description\": \"...\"}}. Do not set observationId, OpenGroow adds it unless you author a prompt or shots yourself. An empty payload is rejected.",
+    "For a create_reel target the payload must contain a publish object, e.g. {\"publish\": {\"platforms\": [\"instagram\"], \"title\": \"...\", \"description\": \"...\"}}. Do not set observationId, OpenGroow adds it. Do not author a prompt or shots for a Source: the producing Agent reads the Source itself and adapts it to the Instance's own brand, and a prompt or shots you write would replace that and reproduce the Source's own topic. `title` and `description` are the publication text for the Instance's own reel: write them in the Instance's brand voice and never copy the Source's wording, hook, topic-specific objects, colours or hashtags. An empty payload is rejected.",
     "",
     "Never return a target absent from the candidate list and never create a Mission yourself.",
   ];
@@ -182,11 +182,13 @@ function reelPayloadError(missionType: string, payload: Record<string, unknown>)
   return undefined;
 }
 
-// The create_reel contract wants exactly one of observationId/prompt/shots: only
-// fall back to the Source when the router authored no storyboard of its own.
+// A create_reel produced from a Source always carries `{ publish, observationId }`
+// and nothing else (ADR-069). The router's own `prompt`/`shots` (and anything
+// that goes with them) are dropped: the producing Agent reads the Source itself
+// through the `observationId`, and a router-authored brief would replace that
+// with a copy of the Source's own topic.
 function reelPayload(payload: Record<string, unknown>, sourceId: Id<"sources">): Record<string, unknown> {
-  const { observationId: _ignored, ...rest } = payload;
-  return "prompt" in rest || "shots" in rest ? rest : { ...rest, observationId: sourceId };
+  return { publish: payload.publish, observationId: sourceId };
 }
 
 export async function settleRoutingRun(ctx: MutationCtx, run: { _id: Id<"runs">; agentName: string; jobId: Id<"jobs"> }, result: RunResult): Promise<void> {
