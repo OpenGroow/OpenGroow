@@ -6,5 +6,5 @@ type DevicesPageProps = {
 
 export default async function InstanceDevicesPage({ params }: DevicesPageProps) {
   const { projectId } = await params;
-  return <DevicesPageContent resolvedInstanceId={decodeURIComponent(projectId)} />;
+  return <DevicesPageContent key={projectId} resolvedInstanceId={projectId} />;
 }

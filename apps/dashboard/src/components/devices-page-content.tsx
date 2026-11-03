@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { ConnectLinkWizard } from "@/src/components/instance-workspace/connect-link-wizard";
 import { DevicesList } from "@/src/components/instance-workspace/devices-list";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 
+// The parent page passes `key={resolvedInstanceId}` so React remounts this
+// component on project navigation, resetting all local state automatically.
 export function DevicesPageContent({
   resolvedInstanceId,
 }: {
@@ -19,20 +21,15 @@ export function DevicesPageContent({
       entry.openclawId === resolvedInstanceId || entry.jobId === resolvedInstanceId,
   );
 
-  // Keep the last known instance so a momentary Convex disconnect doesn't
-  // unmount the wizard mid-pairing (which would reset it to step 1).
-  // The ref is reset whenever the target project changes so stale instance
-  // data from a previous project never bleeds into the new one.
-  const instanceRef = useRef<InstanceRecord | undefined>(undefined);
-  const prevInstanceIdRef = useRef<string>("");
+  // Keep the last known instance in state so a momentary Convex disconnect
+  // doesn't unmount the wizard mid-pairing (which would reset it to step 1).
+  // The parent's `key` guarantees this cache belongs to the current project.
+  const [cachedInstance, setCachedInstance] = useState<InstanceRecord | undefined>(undefined);
   useEffect(() => {
-    if (prevInstanceIdRef.current !== resolvedInstanceId) {
-      prevInstanceIdRef.current = resolvedInstanceId;
-      instanceRef.current = undefined;
-    }
-  }, [resolvedInstanceId]);
-  if (liveInstance) instanceRef.current = liveInstance;
-  const instance = liveInstance ?? (prevInstanceIdRef.current === resolvedInstanceId ? instanceRef.current : undefined);
+    if (liveInstance) setCachedInstance(liveInstance);
+  }, [liveInstance]);
+
+  const instance = liveInstance ?? cachedInstance;
 
   if (!instance) {
     return null;

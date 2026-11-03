@@ -9,7 +9,7 @@ export default async function ProjectUsagePage({ params }: UsagePageProps) {
 
   return (
     <section className="grid gap-5">
-      <UsagePanel instanceId={decodeURIComponent(projectId)} />
+      <UsagePanel instanceId={projectId} />
     </section>
   );
 }

@@ -21,17 +21,23 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # in Docker Compose v2.24.0 (Docker Desktop 4.27+). Older versions silently
 # merge instead of replacing, which keeps the `convex-bootstrap` dependency on
 # the broker and fails with "no such service: convex-bootstrap".
-_compose_version=$(docker compose version --short 2>/dev/null || true)
-# Strip a leading "v" that some versions of the CLI include (e.g. "v2.29.1").
-_compose_version="${_compose_version#v}"
-if [ -z "$_compose_version" ]; then
+# Strip the leading "v" (e.g. "v2.29.1") and any build suffix (e.g.
+# "2.29.1-desktop.1") so the numeric comparison below always gets clean
+# integers. The major.minor check is enough to enforce the minimum.
+_compose_raw=$(docker compose version --short 2>/dev/null || true)
+_compose_raw="${_compose_raw#v}"
+if [ -z "$_compose_raw" ]; then
   echo "Error: 'docker compose' is not available. Install Docker Desktop 4.27+ and try again." >&2
   exit 1
 fi
-_compose_major=$(printf '%s' "$_compose_version" | cut -d. -f1)
-_compose_minor=$(printf '%s' "$_compose_version" | cut -d. -f2)
+_compose_major=$(printf '%s' "$_compose_raw" | cut -d. -f1 | cut -d- -f1)
+_compose_minor=$(printf '%s' "$_compose_raw" | cut -d. -f2 | cut -d- -f1)
+if ! printf '%s' "$_compose_major$_compose_minor" | grep -qE '^[0-9]+$'; then
+  echo "Error: could not parse Docker Compose version '${_compose_raw}'." >&2
+  exit 1
+fi
 if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 24 ]; }; then
-  echo "Error: Docker Compose ${_compose_version} detected, version 2.24.0 or later is required." >&2
+  echo "Error: Docker Compose ${_compose_raw} detected, version 2.24.0 or later is required." >&2
   echo "Update Docker Desktop at https://docs.docker.com/desktop/release-notes/" >&2
   exit 1
 fi

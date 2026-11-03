@@ -1,6 +1,7 @@
-import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import semver from "semver";
 import { loadOpenClawConnectEnvFile } from "./env.js";
 import {
   type AttemptHandle,
@@ -51,13 +52,10 @@ type ParsedArgs = {
 function checkNodeVersion(): void {
   let required: string | undefined;
   try {
-    const pkgPath = path.resolve(
-      fileURLToPath(import.meta.url),
-      "../../node_modules/openclaw/package.json",
-    );
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as {
-      engines?: { node?: string };
-    };
+    // createRequire resolves through the actual module resolution algorithm,
+    // which handles pnpm hoisting and non-standard layouts correctly.
+    const req = createRequire(import.meta.url);
+    const pkg = req("openclaw/package.json") as { engines?: { node?: string } };
     required = pkg.engines?.node;
   } catch {
     return; // openclaw not installed yet — skip
@@ -65,7 +63,7 @@ function checkNodeVersion(): void {
   if (!required) return;
 
   const current = process.versions.node;
-  if (!nodeSatisfiesRange(current, required)) {
+  if (!semver.satisfies(current, required, { includePrerelease: true })) {
     console.error(
       `[node-run-helper] Warning: Node ${current} does not satisfy the OpenClaw engine requirement (${required}).`,
     );
@@ -73,50 +71,6 @@ function checkNodeVersion(): void {
       `[node-run-helper] If OpenClaw fails to start, upgrade Node (nvm install 22) and re-run pnpm install.`,
     );
   }
-}
-
-// Minimal semver range evaluator for the patterns used in engines.node fields:
-// ">=X.Y.Z", "<X", "^X.Y.Z", "X.Y.Z" and space-separated conjunctions,
-// pipe-separated disjunctions. Pre-release identifiers are stripped before
-// comparison. Unknown operators are treated as "always satisfied" so the check
-// stays advisory (a warning) rather than a false positive block.
-function nodeSatisfiesRange(version: string, range: string): boolean {
-  // Strip pre-release / build metadata from the running version.
-  const clean = version.replace(/-.*$/, "").replace(/\+.*$/, "");
-  const toInt = (s: string) => {
-    const parts = s.split(".").map(Number);
-    return (parts[0] ?? 0) * 1_000_000 + (parts[1] ?? 0) * 1_000 + (parts[2] ?? 0);
-  };
-  const v = toInt(clean);
-
-  return range.split("||").some((clause) => {
-    return clause
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .every((part) => {
-        // ^ caret: >=X.Y.Z <(X+1).0.0
-        const caret = part.match(/^\^(\d+(?:\.\d+(?:\.\d+)?)?)$/);
-        if (caret) {
-          const base = caret[1]!;
-          const lo = toInt(base);
-          const major = Number(base.split(".")[0]);
-          const hi = (major + 1) * 1_000_000;
-          return v >= lo && v < hi;
-        }
-        // Comparative: >=, >, <=, <, = or bare version
-        const m = part.match(/^(>=|>|<=|<|=?)(\d+(?:\.\d+(?:\.\d+)?)?)$/);
-        if (!m) return true; // unknown operator — treat as satisfied
-        const cv = toInt(m[2]!);
-        switch (m[1]) {
-          case ">=": return v >= cv;
-          case ">":  return v > cv;
-          case "<=": return v <= cv;
-          case "<":  return v < cv;
-          default:   return v === cv;
-        }
-      });
-  });
 }
 
 async function main(): Promise<number> {
