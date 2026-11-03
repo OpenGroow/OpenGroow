@@ -1,10 +1,8 @@
-"use client";
-
 import { OverviewPageContent } from "@/src/components/overview-page-content";
-import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 
 type Props = { params: Promise<{ projectId: string }> };
 
-export default function OverviewPage({ params }: Props) {
-  return <OverviewPageContent resolvedInstanceId={useResolvedProjectId(params)} />;
+export default async function OverviewPage({ params }: Props) {
+  const { projectId } = await params;
+  return <OverviewPageContent resolvedInstanceId={decodeURIComponent(projectId)} />;
 }

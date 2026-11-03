@@ -32,10 +32,7 @@ const CONVEX_TOKEN = process.env.CONVEX_TOKEN?.trim() ?? "";
 const CONVEX_SKIP_URL_CHECK = process.env.CONVEX_SKIP_URL_CHECK === "1";
 
 const internal = anyApi;
-// getActiveByTicketId is an internal query, but openclaw-connect is a backend
-// service authenticated with an admin token. At runtime it can call internal
-// functions. This cast is an acknowledged edge case.
-const getTicketQuery = internal.connect_tickets.getActiveByTicketId as FunctionReference<"query">;
+const getTicketQuery = anyApi.connect_tickets.getActiveByTicketId as FunctionReference<"query">;
 
 type ConnectTicketRecord = {
   ticketId: string;
@@ -516,9 +513,21 @@ connectRelayWss.on(
     });
 
     clientWs.on("close", (code: number, reason: Buffer) => {
+      // `clientClosed` is set to true by `closeClient` before the close frame
+      // is sent. If it is still false here, the client initiated the close
+      // (process exit, SIGINT, TCP drop) — not a server-initiated 1008. In
+      // that case reset `approval_required` back to `waiting_for_device` so
+      // the wizard's status poll reflects that no device is actively pending.
+      const wasClientInitiated = !clientClosed;
       clientClosed = true;
       if (lateAuthTimer) { clearTimeout(lateAuthTimer); }
       if (revalidateInterval) { clearInterval(revalidateInterval); revalidateInterval = null; }
+      if (wasClientInitiated && resolvedTicket) {
+        const session = connectSessionStore.get(resolvedTicket);
+        if (session.phase === "approval_required") {
+          connectSessionStore.setPhase(resolvedTicket, "waiting_for_device");
+        }
+      }
       if (brokerWs && brokerWs.readyState === WebSocket.OPEN) {
         brokerWs.send(
           JSON.stringify({

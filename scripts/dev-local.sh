@@ -17,9 +17,33 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# docker-compose.local-convex.yml uses the `!override` merge tag, introduced
+# in Docker Compose v2.24.0 (Docker Desktop 4.27+). Older versions silently
+# merge instead of replacing, which keeps the `convex-bootstrap` dependency on
+# the broker and fails with "no such service: convex-bootstrap".
+_compose_version=$(docker compose version --short 2>/dev/null || echo "0.0.0")
+_compose_major=$(printf '%s' "$_compose_version" | cut -d. -f1)
+_compose_minor=$(printf '%s' "$_compose_version" | cut -d. -f2)
+if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 24 ]; }; then
+  echo "Error: Docker Compose $_compose_version detected, version 2.24.0 or later is required." >&2
+  echo "Update Docker Desktop at https://docs.docker.com/desktop/release-notes/" >&2
+  exit 1
+fi
+
 if [ -f .env ]; then
   # shellcheck disable=SC1091
   set -a && source .env && set +a
+fi
+
+# --- 0. Build OpenClaw images on first run ---
+# Per-project containers (gateway + runtime-worker) reference these local
+# images. Build them once if missing; run `pnpm openclaw:local` to rebuild.
+_gateway_image="${OPENCLAW_LOCAL_GATEWAY_IMAGE_TAG:-opengroow/openclaw-gateway:local}"
+_worker_image="${OPENCLAW_LOCAL_RUNTIME_WORKER_IMAGE_TAG:-opengroow/openclaw-runtime-worker:local}"
+if ! docker image inspect "$_gateway_image" >/dev/null 2>&1 \
+   || ! docker image inspect "$_worker_image" >/dev/null 2>&1; then
+  echo "OpenClaw images not found — building them now (this only happens once)..."
+  bash ./apps/openclaw-docker-config/scripts/local-stack.sh
 fi
 
 COMPOSE=(docker compose --env-file .env

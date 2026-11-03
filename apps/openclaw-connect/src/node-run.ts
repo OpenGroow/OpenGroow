@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadOpenClawConnectEnvFile } from "./env.js";
@@ -44,7 +45,62 @@ type ParsedArgs = {
   forwardedArgs: string[];
 };
 
+// Checks process.versions.node against the engines.node range from openclaw's
+// package.json. Prints a clear error and exits early rather than letting
+// openclaw fail with a cryptic preinstall error after the relay is already
+// connected (which causes an infinite reconnect loop in the dashboard).
+function checkNodeVersion(): void {
+  let required: string | undefined;
+  try {
+    const pkgPath = path.resolve(
+      fileURLToPath(import.meta.url),
+      "../../node_modules/openclaw/package.json",
+    );
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as {
+      engines?: { node?: string };
+    };
+    required = pkg.engines?.node;
+  } catch {
+    return; // openclaw not installed yet — skip
+  }
+  if (!required) return;
+
+  const current = process.versions.node;
+  if (!nodeSatisfiesRange(current, required)) {
+    console.error(
+      `[node-run-helper] Warning: Node ${current} does not satisfy the OpenClaw engine requirement (${required}).`,
+    );
+    console.error(
+      `[node-run-helper] If OpenClaw fails to start, upgrade Node (nvm install 22) and re-run pnpm install.`,
+    );
+  }
+}
+
+// Minimal semver range evaluator covering the ">=X.Y.Z <A || >=B.C.D" pattern
+// used in openclaw's engines.node field. Not a full semver implementation.
+function nodeSatisfiesRange(version: string, range: string): boolean {
+  const [ma, mi, pa] = version.split(".").map(Number);
+  const v = ma * 1_000_000 + mi * 1_000 + pa;
+  return range.split("||").some((clause) => {
+    return clause
+      .trim()
+      .split(/\s+/)
+      .every((part) => {
+        const m = part.match(/^(>=|>|<=|<|=?)(\d+)\.(\d+)\.(\d+)$/);
+        if (!m) return true;
+        const cv =
+          Number(m[2]) * 1_000_000 + Number(m[3]) * 1_000 + Number(m[4]);
+        if (m[1] === ">=" ) return v >= cv;
+        if (m[1] === ">"  ) return v > cv;
+        if (m[1] === "<=" ) return v <= cv;
+        if (m[1] === "<"  ) return v < cv;
+        return v === cv;
+      });
+  });
+}
+
 async function main(): Promise<number> {
+  checkNodeVersion();
   const args = parseArgs(process.argv.slice(2));
   const relayUrl = new URL(args.relayUrl);
   if (!["ws:", "wss:"].includes(relayUrl.protocol)) {
