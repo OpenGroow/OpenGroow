@@ -82,7 +82,7 @@ function createNodeWorkflow({
       output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     } catch (error) {
       const message = toErrorMessage(error);
-      if (!/unknown requestId/i.test(message)) {
+      if (!/unknown.*requestId/i.test(message)) {
         throw error;
       }
       output = JSON.stringify(
@@ -113,7 +113,6 @@ function createNodeWorkflow({
         paired
           .filter(
             (node) =>
-              node.connected === true &&
               node.approvalState === "pending-approval",
           )
           .map(async (node) => {
