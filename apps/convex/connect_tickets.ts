@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, query } from "./_generated/server.js";
+import { internalMutation, internalQuery } from "./_generated/server.js";
 import { isConnectTicketExpired } from "./connect_tickets_utils";
 import { v } from "convex/values";
 
@@ -65,7 +65,7 @@ export const getLatestActiveByInstanceId = internalQuery({
   }
 });
 
-export const getActiveByTicketId = query({
+export const getActiveByTicketId = internalQuery({
   args: { ticketId: v.string() },
   handler: async (ctx, args) => {
     const ticket = await ctx.db

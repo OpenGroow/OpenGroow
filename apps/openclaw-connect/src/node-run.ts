@@ -46,9 +46,8 @@ type ParsedArgs = {
 };
 
 // Checks process.versions.node against the engines.node range from openclaw's
-// package.json. Prints a clear error and exits early rather than letting
-// openclaw fail with a cryptic preinstall error after the relay is already
-// connected (which causes an infinite reconnect loop in the dashboard).
+// package.json. Prints a clear warning so the developer knows to upgrade Node
+// before openclaw fails with a cryptic preinstall error mid-pairing.
 function checkNodeVersion(): void {
   let required: string | undefined;
   try {
@@ -76,25 +75,46 @@ function checkNodeVersion(): void {
   }
 }
 
-// Minimal semver range evaluator covering the ">=X.Y.Z <A || >=B.C.D" pattern
-// used in openclaw's engines.node field. Not a full semver implementation.
+// Minimal semver range evaluator for the patterns used in engines.node fields:
+// ">=X.Y.Z", "<X", "^X.Y.Z", "X.Y.Z" and space-separated conjunctions,
+// pipe-separated disjunctions. Pre-release identifiers are stripped before
+// comparison. Unknown operators are treated as "always satisfied" so the check
+// stays advisory (a warning) rather than a false positive block.
 function nodeSatisfiesRange(version: string, range: string): boolean {
-  const [ma, mi, pa] = version.split(".").map(Number);
-  const v = ma * 1_000_000 + mi * 1_000 + pa;
+  // Strip pre-release / build metadata from the running version.
+  const clean = version.replace(/-.*$/, "").replace(/\+.*$/, "");
+  const toInt = (s: string) => {
+    const parts = s.split(".").map(Number);
+    return (parts[0] ?? 0) * 1_000_000 + (parts[1] ?? 0) * 1_000 + (parts[2] ?? 0);
+  };
+  const v = toInt(clean);
+
   return range.split("||").some((clause) => {
     return clause
       .trim()
       .split(/\s+/)
+      .filter(Boolean)
       .every((part) => {
-        const m = part.match(/^(>=|>|<=|<|=?)(\d+)\.(\d+)\.(\d+)$/);
-        if (!m) return true;
-        const cv =
-          Number(m[2]) * 1_000_000 + Number(m[3]) * 1_000 + Number(m[4]);
-        if (m[1] === ">=" ) return v >= cv;
-        if (m[1] === ">"  ) return v > cv;
-        if (m[1] === "<=" ) return v <= cv;
-        if (m[1] === "<"  ) return v < cv;
-        return v === cv;
+        // ^ caret: >=X.Y.Z <(X+1).0.0
+        const caret = part.match(/^\^(\d+(?:\.\d+(?:\.\d+)?)?)$/);
+        if (caret) {
+          const base = caret[1]!;
+          const lo = toInt(base);
+          const major = Number(base.split(".")[0]);
+          const hi = (major + 1) * 1_000_000;
+          return v >= lo && v < hi;
+        }
+        // Comparative: >=, >, <=, <, = or bare version
+        const m = part.match(/^(>=|>|<=|<|=?)(\d+(?:\.\d+(?:\.\d+)?)?)$/);
+        if (!m) return true; // unknown operator — treat as satisfied
+        const cv = toInt(m[2]!);
+        switch (m[1]) {
+          case ">=": return v >= cv;
+          case ">":  return v > cv;
+          case "<=": return v <= cv;
+          case "<":  return v < cv;
+          default:   return v === cv;
+        }
       });
   });
 }

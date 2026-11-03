@@ -31,7 +31,8 @@ const CONVEX_URL =
 const CONVEX_TOKEN = process.env.CONVEX_TOKEN?.trim() ?? "";
 const CONVEX_SKIP_URL_CHECK = process.env.CONVEX_SKIP_URL_CHECK === "1";
 
-const internal = anyApi;
+// getActiveByTicketId is an internalQuery; openclaw-connect authenticates with
+// an admin token (setAdminAuth) so it can call internal functions at runtime.
 const getTicketQuery = anyApi.connect_tickets.getActiveByTicketId as FunctionReference<"query">;
 
 type ConnectTicketRecord = {
@@ -513,16 +514,17 @@ connectRelayWss.on(
     });
 
     clientWs.on("close", (code: number, reason: Buffer) => {
-      // `clientClosed` is set to true by `closeClient` before the close frame
-      // is sent. If it is still false here, the client initiated the close
-      // (process exit, SIGINT, TCP drop) — not a server-initiated 1008. In
-      // that case reset `approval_required` back to `waiting_for_device` so
-      // the wizard's status poll reflects that no device is actively pending.
-      const wasClientInitiated = !clientClosed;
+      // Reset approval_required → waiting_for_device only when both conditions
+      // hold: (a) the server never sent a 1008 close frame (`clientClosed` is
+      // still false, meaning closeClient() was never called), AND (b) the
+      // session is still in approval_required. This avoids resetting a phase
+      // that was already advanced to `reconnecting` or `connected` by another
+      // path before the close event fires.
+      const shouldResetPhase = !clientClosed;
       clientClosed = true;
       if (lateAuthTimer) { clearTimeout(lateAuthTimer); }
       if (revalidateInterval) { clearInterval(revalidateInterval); revalidateInterval = null; }
-      if (wasClientInitiated && resolvedTicket) {
+      if (shouldResetPhase && resolvedTicket) {
         const session = connectSessionStore.get(resolvedTicket);
         if (session.phase === "approval_required") {
           connectSessionStore.setPhase(resolvedTicket, "waiting_for_device");
