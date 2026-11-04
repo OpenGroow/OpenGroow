@@ -49,7 +49,7 @@ Your agents run on OpenClaw. OpenGroow provides the interface and orchestration 
 git clone https://github.com/OpenGroow/OpenGroow.git
 cd OpenGroow
 pnpm install
-cp .env.example .env
+pnpm run setup   # creates .env from .env.example and generates the local secrets
 ```
 
 Configure the required environment variables in `.env`, then start OpenGroow:
