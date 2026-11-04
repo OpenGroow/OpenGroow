@@ -57,6 +57,8 @@ export type MissionReviewSnapshot = {
  * types that declare `publish`. */
 export type MissionPublishProjection = {
   target: string | null;
+  /** Every target the Mission goes to (one Publication each). */
+  targets?: string[];
   declaredTargets: string[];
   /** The target is mapped to a channel on the Project's Publisher. */
   mapped: boolean;
