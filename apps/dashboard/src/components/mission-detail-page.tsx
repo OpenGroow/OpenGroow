@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { missionStatus, runStatus } from "@/components/opengroow/mission-status";
 import { Card } from "@/components/ui/card";
+import { PublicationList } from "./publication-list";
 
 type Props = {
   params: Promise<{ projectId: string; missionId: string }>;
@@ -352,6 +353,8 @@ export function MissionDetailContent({
           Mission Detail
         </h1>
       </header>
+
+      <PublicationList missionId={missionId} title="Publications" />
 
       {/* Mission Identity */}
       <Card className="grid gap-4 p-6">

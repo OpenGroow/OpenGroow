@@ -47,6 +47,7 @@ vi.mock("@convex/_generated/api", () => ({
       getReview: "missions_node.getReview",
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
+      retryPublication: "missions_node.retryPublication",
     },
     publications: {
       setPublishTarget: "publications.setPublishTarget",
@@ -277,7 +278,13 @@ describe("MissionReviewContent", () => {
           publications: [{ target: "instagram", status: "failed", error: "Postiz responded 500" }],
         },
       }));
-      setupDefaultQuery();
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return MISSION_WITH_ARTIFACT;
+        if (key === "publications.listForMission") {
+          return [{ id: "p1", target: "instagram", status: "failed", error: "Postiz responded 500" }];
+        }
+        return undefined;
+      });
       loadReviewContentMock.mockReturnValue(new Promise(() => {}));
     }
 

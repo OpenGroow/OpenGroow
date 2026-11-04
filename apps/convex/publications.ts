@@ -101,11 +101,16 @@ export const reviewState = internalQuery({
  * needs. Throws when nothing can be published; no Publication is created then.
  */
 export const begin = internalMutation({
-  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
+  args: {
+    missionId: v.id("missions"),
+    declaredTargets: v.array(v.string()),
+    /** Retry of one existing Publication: use its target instead of the Mission's current one. */
+    target: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const target = effectivePublishTarget(mission.payload, args.declaredTargets);
+    const target = args.target ?? effectivePublishTarget(mission.payload, args.declaredTargets);
     if (!target || !args.declaredTargets.includes(target)) {
       throw new Error(`Publish target "${target ?? ""}" is not one this Mission type may use`);
     }
@@ -152,6 +157,11 @@ export const begin = internalMutation({
       publishable: publishable as Record<string, unknown>,
     };
   },
+});
+
+export const getInternal = internalQuery({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, args) => ctx.db.get(args.publicationId),
 });
 
 /** Records the adapter's answer, and completes the Mission once every Publication is published. */

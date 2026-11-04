@@ -47,7 +47,9 @@ vi.mock("@convex/_generated/api", () => ({
     },
     missions_node: {
       cancelMission: "missions_node.cancelMission",
+      retryPublication: "missions_node.retryPublication",
     },
+    publications: { listForMission: "publications.listForMission" },
     runs: { listByMission: "runs.listByMission" },
     project_agents: { get: "project_agents.get" },
   },

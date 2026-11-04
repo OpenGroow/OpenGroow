@@ -418,10 +418,12 @@ async function publishThroughPublisher(
   ctx: ActionCtx,
   mission: Doc<"missions">,
   declaredTargets: string[],
+  target?: string,
 ): Promise<void> {
   const prepared = await ctx.runMutation(internal.publications.begin, {
     missionId: mission._id,
     declaredTargets,
+    ...(target ? { target } : {}),
   });
   const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
     channelId: prepared.channelId,
@@ -732,6 +734,29 @@ export const performReviewAction = action({
       actionKey: args.actionKey,
       input: args.input,
     });
+  },
+});
+
+/**
+ * Retries one `failed` Publication on its own (issue #20): the other
+ * Publications of the Mission are untouched; the Mission becomes `done` once
+ * all of them are `published`.
+ */
+export const retryPublication = action({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, args): Promise<{ ok: true }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+    const publication: Doc<"publications"> | null = await ctx.runQuery(internal.publications.getInternal, {
+      publicationId: args.publicationId,
+    });
+    if (!publication) throw new Error("Publication not found");
+    const { mission, template } = await loadMissionAndTemplate(ctx, publication.missionId);
+    if (mission.ownerId !== (identity.subject ?? identity.tokenIdentifier)) throw new Error("Forbidden");
+    const declaration = template.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+    if (!declaration) throw new Error("This Mission type does not publish");
+    await publishThroughPublisher(ctx, mission, declaration.targets, publication.target);
+    return { ok: true };
   },
 });
 

@@ -259,3 +259,56 @@ describe("review projection", () => {
     expect(review.publish).toBeUndefined();
   });
 });
+
+describe("retrying one failed Publication", () => {
+  async function twoFailed() {
+    const ctx = await seed();
+    const { owner, missionId } = ctx;
+    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
+    await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes", channelId: "ch-1" });
+    stubPostiz(() => json({ message: "boom" }, 500));
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
+    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "pinterest:recipes" });
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
+    const rows = await owner.query(api.publications.listForMission, { missionId });
+    expect(rows.map((r) => r.status)).toEqual(["failed", "failed"]);
+    return { ...ctx, rows };
+  }
+
+  it("retries only that Publication, and completes the Mission once all are published", async () => {
+    const { owner, missionId, rows } = await twoFailed();
+    const instagram = rows.find((r) => r.target === "instagram")!;
+    const pinterest = rows.find((r) => r.target === "pinterest:recipes")!;
+
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.retryPublication, { publicationId: instagram.id });
+    expect(postiz.mock.calls.filter(([u]) => String(u).endsWith("/posts"))).toHaveLength(1);
+
+    const after = await owner.query(api.publications.listForMission, { missionId });
+    expect(after.find((r) => r.target === "instagram")).toMatchObject({ status: "published", externalId: "post-1" });
+    expect(after.find((r) => r.target === "pinterest:recipes")).toMatchObject({ status: "failed", error: pinterest.error });
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+
+    await owner.action(api.missions_node.retryPublication, { publicationId: pinterest.id });
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+  });
+
+  it("keeps a readable error when the retry fails again, and refuses foreign or already published Publications", async () => {
+    const { t, owner, missionId, rows } = await twoFailed();
+    const instagram = rows.find((r) => r.target === "instagram")!;
+    stubPostiz(() => json({ message: "still down" }, 502));
+    await expect(owner.action(api.missions_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/502/);
+    const again = (await owner.query(api.publications.listForMission, { missionId })).find((r) => r.target === "instagram");
+    expect(again).toMatchObject({ status: "failed" });
+    expect(again?.error).toContain("502");
+
+    stubPostiz();
+    await expect(
+      t.withIdentity(OTHER).action(api.missions_node.retryPublication, { publicationId: instagram.id }),
+    ).rejects.toThrow("Forbidden");
+    await owner.action(api.missions_node.retryPublication, { publicationId: instagram.id });
+    await expect(
+      owner.action(api.missions_node.retryPublication, { publicationId: instagram.id }),
+    ).rejects.toThrow(/already published/);
+  });
+});
