@@ -14,11 +14,17 @@ function endpoint(conn: PublisherConnection, path: string): string {
 async function call(
   conn: PublisherConnection,
   path: string,
+  json?: unknown,
 ): Promise<PublisherResult<{ body: unknown }>> {
   let response: Response;
   try {
     response = await fetch(endpoint(conn, path), {
-      headers: { Authorization: conn.apiKey, Accept: "application/json" },
+      ...(json !== undefined ? { method: "POST", body: JSON.stringify(json) } : {}),
+      headers: {
+        Authorization: conn.apiKey,
+        Accept: "application/json",
+        ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
     });
   } catch (error) {
     return { ok: false, error: `Could not reach Postiz: ${error instanceof Error ? error.message : String(error)}` };
@@ -60,9 +66,45 @@ export const postizAdapter: PublisherAdapter = {
     return { ok: true, channels };
   },
 
-  // Publishing and status follow-up land with the Publication slice.
-  async publish() {
-    return NOT_IMPLEMENTED;
+  // V1 publishes `image` Publishables. Media is fetched by Postiz from its
+  // reference (upload-from-url): OpenGroow never stores it (ADR-010).
+  async publish(conn, request) {
+    const publishable = request.publishable as { kind?: string; imageUrl?: string; caption?: string };
+    if (publishable.kind !== "image" || typeof publishable.imageUrl !== "string") {
+      return { ok: false, error: `Publishing a "${String(publishable.kind)}" is not supported yet` };
+    }
+    const channels = await postizAdapter.listChannels(conn);
+    if (!channels.ok) return channels;
+    const channel = channels.channels.find((c) => c.id === request.channelId);
+    if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
+
+    const upload = await call(conn, "upload-from-url", { url: publishable.imageUrl });
+    if (!upload.ok) return upload;
+    const media = upload.body as { id?: unknown; path?: unknown } | null;
+    if (typeof media?.id !== "string" || typeof media.path !== "string") {
+      return { ok: false, error: "Postiz returned an unexpected upload response" };
+    }
+
+    const scheduled = request.publishAt !== undefined;
+    const posted = await call(conn, "posts", {
+      type: scheduled ? "schedule" : "now",
+      date: new Date(request.publishAt ?? Date.now()).toISOString(),
+      shortLink: false,
+      tags: [],
+      posts: [
+        {
+          integration: { id: channel.id },
+          value: [{ content: publishable.caption ?? "", image: [{ id: media.id, path: media.path }] }],
+          settings: { __type: channel.service, ...(request.settings ?? {}) },
+        },
+      ],
+    });
+    if (!posted.ok) return posted;
+    const first = Array.isArray(posted.body) ? (posted.body[0] as { postId?: unknown } | undefined) : undefined;
+    if (typeof first?.postId !== "string") {
+      return { ok: false, error: "Postiz returned an unexpected response when creating the post" };
+    }
+    return { ok: true, outcome: { externalId: first.postId, status: scheduled ? "scheduled" : "published" } };
   },
   async getStatus() {
     return NOT_IMPLEMENTED;

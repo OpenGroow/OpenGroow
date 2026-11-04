@@ -17,6 +17,7 @@ import {
 import { RUNTIME_WORKSPACE_FILE_READ, RUNTIME_WORKSPACE_FILE_READ_RESULT, RUNTIME_OPENCLAW_EXEC_CANCEL } from "@opengroow/protocol";
 import { parseRuntimeOpenClawExecCancelPayload } from "./runtime_commands_node_parsers.js";
 import { resolveMcpActivationUrl } from "./mcp_activation_url.js";
+import { adapterFor } from "./publisher/postiz.js";
 import { errorMessage } from "./mission_dispatcher_node.js";
 import {
   buildMissionReviewProjection,
@@ -42,11 +43,18 @@ export const getReview = action({
     if (mission.ownerId !== ownerId) throw new Error("Forbidden");
 
     const template = await resolveMissionTemplate(getTemplateRegistry(ctx), mission);
-    return buildMissionReviewProjection(template?.manifest, {
-      status: mission.status,
-      missionType: mission.type,
-      lastResult: mission.lastResult,
-    });
+    const declaration = template?.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+    const publish = declaration
+      ? await ctx.runQuery(internal.publications.reviewState, {
+          missionId: args.missionId,
+          declaredTargets: declaration.targets,
+        })
+      : undefined;
+    return buildMissionReviewProjection(
+      template?.manifest,
+      { status: mission.status, missionType: mission.type, lastResult: mission.lastResult },
+      publish,
+    );
   },
 });
 
@@ -401,6 +409,51 @@ async function loadMissionAndTemplate(
 }
 
 /**
+ * Sends the Publishable of a Mission to its Publish target through the
+ * Project's Publisher. The Publication is `pending` first, then `published`
+ * (or `failed`, leaving the Mission `approved`); the Mission becomes `done`
+ * once all its Publications are `published`.
+ */
+async function publishThroughPublisher(
+  ctx: ActionCtx,
+  mission: Doc<"missions">,
+  declaredTargets: string[],
+): Promise<void> {
+  const prepared = await ctx.runMutation(internal.publications.begin, {
+    missionId: mission._id,
+    declaredTargets,
+  });
+  const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
+    channelId: prepared.channelId,
+    settings: prepared.settings,
+    publishable: prepared.publishable,
+  });
+  if (!result.ok) {
+    await ctx.runMutation(internal.publications.finish, {
+      publicationId: prepared.publicationId,
+      status: "failed",
+      error: result.error,
+    });
+    throw new Error(`Publishing failed: ${result.error}`);
+  }
+  await ctx.runMutation(internal.publications.finish, {
+    publicationId: prepared.publicationId,
+    status: result.outcome.status,
+    externalId: result.outcome.externalId,
+    ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
+  });
+  await ctx.runMutation(internal.events.store, {
+    instanceId: mission.instanceId,
+    event: {
+      id: `ReviewPublished:${mission._id}:${prepared.publicationId}`,
+      type: "ReviewPublished",
+      payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
+      ts: Date.now(),
+    },
+  });
+}
+
+/**
  * Resolve a Template-declared review action's contract and execute its bounded
  * HTTP effect (or its `revision_run` effect) for a Mission, then apply the
  * declared Mission status transition.
@@ -483,6 +536,13 @@ async function executeReviewAction(
       eventType,
     });
 
+    return { ok: true };
+  }
+
+  // --- Mission types that declare `publish`: the Publisher is the executor (ADR-069) ---
+  const publishDeclaration = template.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+  if (publishDeclaration && actionDef.key === "publish") {
+    await publishThroughPublisher(ctx, mission, publishDeclaration.targets);
     return { ok: true };
   }
 

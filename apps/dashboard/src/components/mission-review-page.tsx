@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Card } from "@/components/ui/card";
 import { PublishablePreview } from "@/src/components/publishable-preview";
+import { PublishSection, type PublishProjection } from "@/src/components/publish-section";
 
 type Props = {
   params: Promise<{ instanceId: string; missionId: string }>;
@@ -490,6 +491,7 @@ export function MissionReviewContent({
       error?: string;
     } | null;
     actions: ReviewActionDescriptor[];
+    publish?: PublishProjection;
     errors: string[];
   } | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -521,7 +523,7 @@ export function MissionReviewContent({
         }
       });
     return () => { cancelled = true; };
-  }, [getReview, mission?._id, mission?.status, missionId]);
+  }, [getReview, mission?._id, mission?.status, mission?.updatedAt, missionId]);
 
   useEffect(() => {
     if (
@@ -628,6 +630,15 @@ export function MissionReviewContent({
       </header>
 
       <PublishablePreview publishable={publishable} />
+
+      {reviewProjection.publish && (
+        <PublishSection
+          missionId={missionId}
+          instanceId={instanceId}
+          publish={reviewProjection.publish}
+          editable={!readOnly && isReviewable}
+        />
+      )}
 
       {!reviewArtifact?.available ? (
         <Card className="p-6">
