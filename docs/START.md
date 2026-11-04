@@ -75,6 +75,14 @@ read-only at the **same absolute path** inside the container and sets
 `OPENCLAW_LOCAL_CONTROL_DOCKER_DIR` to it. Per-Project data lives in named
 volumes (not bind mounts), so no other host path is involved.
 
+## Smoke test
+
+`pnpm start:smoke` (with the stack running) creates a throwaway Project through
+`openclaw-local-control` inside Docker, waits for its gateway, reads logs and
+status, deletes it and asserts no container or volume is left. It covers what
+`pnpm dev` never exercises (local-control in a container, published images).
+It restarts the broker to sync keys, so run it on a stack you can disturb.
+
 ## Verification status
 
 Verified: compose config resolves with no `build`, the local-control image
