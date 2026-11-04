@@ -64,6 +64,17 @@ export function normalizeTail(tail: number | undefined, fallback = 200): number 
   return Math.min(Math.floor(value), 5000);
 }
 
+// Variables the per-instance compose file requires (`${VAR:?}`): `docker
+// compose` interpolates the whole file before running *any* subcommand, so
+// down/logs/ps fail with "required variable ... is missing" without them,
+// exactly like `up` would.
+export function buildComposeProjectEnv(config: LocalControlConfig): Record<string, string> {
+  return {
+    OPENCLAW_IMAGE_REF: config.gatewayImageRef,
+    OPENCLAW_RUNTIME_WORKER_IMAGE_REF: config.runtimeWorkerImageRef
+  };
+}
+
 export function buildComposeUpEnv(
   config: LocalControlConfig,
   instanceId: string,
@@ -71,8 +82,7 @@ export function buildComposeUpEnv(
   credentials: InstanceCredentials
 ): Record<string, string> {
   return {
-    OPENCLAW_IMAGE_REF: config.gatewayImageRef,
-    OPENCLAW_RUNTIME_WORKER_IMAGE_REF: config.runtimeWorkerImageRef,
+    ...buildComposeProjectEnv(config),
     OPENCLAW_INSTANCE_ID: instanceId,
     OPENCLAW_GATEWAY_PORT: String(port),
     OPENCLAW_KEY_ID: credentials.keyId,

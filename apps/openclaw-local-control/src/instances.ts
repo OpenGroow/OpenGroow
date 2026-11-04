@@ -1,6 +1,6 @@
 import type { ComposeRunner } from "./compose-runner.js";
 import type { LocalControlConfig } from "./config.js";
-import { buildComposeArgs, buildComposeUpEnv } from "./compose.js";
+import { buildComposeArgs, buildComposeProjectEnv, buildComposeUpEnv } from "./compose.js";
 import { generateCredentials, generateInstanceId } from "./ids.js";
 import { allocatePort } from "./port-allocator.js";
 import type { InstanceRegistry } from "./registry.js";
@@ -88,7 +88,7 @@ export async function createInstance(deps: ComposeDeps): Promise<CreatedInstance
 
 async function rollback(deps: ComposeDeps, id: string): Promise<void> {
   const downArgs = buildComposeArgs(deps.config, id, "down");
-  const result = await deps.composeRunner(downArgs, { cwd: deps.config.dockerDir, env: {} });
+  const result = await deps.composeRunner(downArgs, { cwd: deps.config.dockerDir, env: buildComposeProjectEnv(deps.config) });
   if (result.code !== 0) {
     // Best-effort cleanup after an already-failing `up` — surface it loudly
     // instead of swallowing it, since a failed `down -v` here leaves orphaned
@@ -110,7 +110,7 @@ export async function removeInstance(
 ): Promise<RemoveInstanceResult> {
   const { config, registry, composeRunner } = deps;
   const downArgs = buildComposeArgs(config, id, "down");
-  const result = await composeRunner(downArgs, { cwd: config.dockerDir, env: {} });
+  const result = await composeRunner(downArgs, { cwd: config.dockerDir, env: buildComposeProjectEnv(config) });
 
   if (result.code !== 0) {
     throw new ComposeCommandError(
@@ -138,7 +138,7 @@ export async function readInstanceLogs(
   return runOrThrow(
     composeRunner,
     args,
-    { cwd: config.dockerDir, env: {} },
+    { cwd: config.dockerDir, env: buildComposeProjectEnv(config) },
     `docker compose logs failed for instance ${id}`
   );
 }
@@ -152,7 +152,7 @@ export async function readInstanceStatus(deps: ComposeDeps, id: string): Promise
   return runOrThrow(
     composeRunner,
     args,
-    { cwd: config.dockerDir, env: {} },
+    { cwd: config.dockerDir, env: buildComposeProjectEnv(config) },
     `docker compose ps failed for instance ${id}`
   );
 }
