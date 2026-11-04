@@ -10,6 +10,7 @@
     "start": "./scripts/start.sh",
     "start:logs": "./scripts/start.sh logs",
     "start:down": "./scripts/start.sh down",
+    "start:smoke": "node scripts/start-smoke.mjs",
     "typecheck": "turbo run typecheck",
     "template:add": "pnpm --filter @opengroow/agent-templates template:add",
     "template:link": "pnpm --filter @opengroow/agent-templates template:link",
