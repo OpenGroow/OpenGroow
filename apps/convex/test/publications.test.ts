@@ -126,7 +126,9 @@ const postedBody = (fn: ReturnType<typeof stubPostiz>) => {
   return call ? JSON.parse(String((call[1] as RequestInit).body)) : undefined;
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("publish an image Mission through the Publisher", () => {
   it("creates a Publication that ends published, sends the post to the mapped channel and completes the Mission", async () => {

@@ -30,4 +30,6 @@ The deliverable of a Mission expressed in the unified publishing format, of one 
 
 The tracked outcome of sending one Publishable to one Publish target: one Publication per (Mission, Publish target). It has a status (`pending`, `scheduled`, `published`, `failed`), the external URL or id, the scheduled date and the error. A `failed` Publication can be retried on its own. A Mission is `done` when all its Publications are `published`.
 
+- **Target of a Mission**: `payload.publishTarget` (editable in the review, defaults to the first target the Mission type declares). For a Mission type that declares `publish`, the review `publish` action is executed by the Publisher instead of an MCP effect.
+
 - **Do not confuse** with the Mission's `approved` status ("to publish"): `approved` is the human's validation of the deliverable; a Publication is what happens next.

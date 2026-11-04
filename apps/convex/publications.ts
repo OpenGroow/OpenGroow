@@ -109,7 +109,8 @@ export const begin = internalMutation({
     if (!target || !args.declaredTargets.includes(target)) {
       throw new Error(`Publish target "${target ?? ""}" is not one this Mission type may use`);
     }
-    const publishable = (mission.lastResult?.artifact ?? mission.lastArtifact)?.publishable;
+    const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
+    const publishable = (resultArtifact ?? mission.lastArtifact)?.publishable;
     if (!publishable) throw new Error("No Publishable available for this mission");
 
     const publisher = await ctx.db
