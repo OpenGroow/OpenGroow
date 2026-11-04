@@ -6,7 +6,7 @@ Dashboard, broker, `openclaw-connect` and `openclaw-local-control`.
 
 ```bash
 pnpm run setup            # creates .env
-# edit .env: OPENCLAW_IMAGE_REGISTRY=<registry>/<org>   (e.g. ghcr.io/<org>)
+# .env.example defaults OPENCLAW_IMAGE_REGISTRY=ghcr.io/opengroow (change it for a fork)
 pnpm start                # pre-flight check of .env, pull, up -d
 pnpm start:logs
 pnpm start:down
@@ -17,7 +17,7 @@ pnpm start:down
 lowercase, and `OPENCLAW_START_CONTROL_SECRET`). `pnpm run setup` generates that
 secret: it is the HMAC key between Convex and `openclaw-local-control`, which
 mounts the Docker socket, so there is no default and the container refuses the
-built-in one. There is no default registry on purpose: image references are
+built-in one. `.env.example` defaults the registry to `ghcr.io/opengroow`; image references are
 `${OPENCLAW_IMAGE_REGISTRY}/opengroow-<name>:${OPENCLAW_IMAGE_TAG:-latest}`
 (`docker-compose.start.yml`).
 

@@ -6,9 +6,9 @@
 name: opengroow-convex-selfhost
 
 services:
-  # Official self-hosted Convex images: https://github.com/get-convex/convex-backend
+  # Official self-hosted Convex images: https://github.com/convex/convex-backend
   convex-backend:
-    image: ghcr.io/get-convex/convex-backend:latest
+    image: ghcr.io/convex/convex-backend:latest
     restart: unless-stopped
     ports:
       - "${CONVEX_PORT:-3210}:3210"
@@ -43,7 +43,7 @@ services:
 
   # Convex's own admin UI (distinct from the OpenGroow product dashboard).
   convex-dashboard:
-    image: ghcr.io/get-convex/convex-dashboard:latest
+    image: ghcr.io/convex/convex-dashboard:latest
     restart: unless-stopped
     ports:
       - "${CONVEX_DASHBOARD_PORT:-6791}:6791"
@@ -63,7 +63,7 @@ services:
   # than one: this one needs the convex-backend image's own generator
   # binary, the next one needs Node + the OpenGroow Convex app source.
   convex-admin-key:
-    image: ghcr.io/get-convex/convex-backend:latest
+    image: ghcr.io/convex/convex-backend:latest
     restart: "no"
     depends_on:
       convex-backend:

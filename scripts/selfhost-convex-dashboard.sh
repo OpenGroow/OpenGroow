@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Convenience for the self-host Docker stack's Convex dashboard
-# (ghcr.io/get-convex/convex-dashboard, published on :6791 by
+# (ghcr.io/convex/convex-dashboard, published on :6791 by
 # apps/convex/docker/docker-compose.yml). `npx convex dashboard` can't be
 # pointed at it — the CLI explicitly refuses self-hosted deployments — so
 # the only way in is this separate dashboard image, which asks for the
