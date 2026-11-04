@@ -14,7 +14,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
  */
 export function PublicationList({ missionId, title }: { missionId: string; title?: string }) {
   const publications = useQuery(api.publications.listForMission, { missionId: missionId as Id<"missions"> });
-  const retryPublication = useAction(api.missions_node.retryPublication);
+  const retryPublication = useAction(api.publisher_node.retryPublication);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 

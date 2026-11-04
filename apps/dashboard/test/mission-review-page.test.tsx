@@ -47,10 +47,9 @@ vi.mock("@convex/_generated/api", () => ({
       getReview: "missions_node.getReview",
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
-      retryPublication: "missions_node.retryPublication",
     },
+    publisher_node: { setPublishTargets: "publisher_node.setPublishTargets", retryPublication: "publisher_node.retryPublication" },
     publications: {
-      setPublishTarget: "publications.setPublishTarget",
       setPublishAt: "publications.setPublishAt",
       listForMission: "publications.listForMission",
     },
@@ -274,8 +273,11 @@ describe("MissionReviewContent", () => {
         ...(await base()),
         publish: {
           target: "instagram",
+          targets: ["instagram"],
           declaredTargets: ["instagram", "pinterest:recipes"],
           mapped,
+          unmappedTargets: mapped ? [] : ["instagram"],
+          publisherReady: true,
           publications: [{ target: "instagram", status: "failed", error: "Postiz responded 500" }],
         },
       }));
@@ -306,18 +308,33 @@ describe("MissionReviewContent", () => {
       expect(document.querySelector('[data-testid="publish-unmapped"]')).toBeNull();
     });
 
-    it("lets the reviewer change the Publish target", async () => {
+    it("lets the reviewer pick several Publish targets, and refuses to empty the list", async () => {
       withPublish(true);
-      const setTarget = vi.fn().mockResolvedValue(undefined);
-      useMutationMock.mockImplementation(() => setTarget);
+      const setTargets = vi.fn().mockResolvedValue(undefined);
+      const baseAction = useActionMock.getMockImplementation()!;
+      useActionMock.mockImplementation((action: string) =>
+        action === "publisher_node.setPublishTargets" ? setTargets : baseAction(action),
+      );
       await render();
       await act(async () => {});
-      const select = document.querySelector('[data-testid="publish-target"]') as HTMLSelectElement;
-      await act(async () => {
-        select.value = "pinterest:recipes";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      expect(setTarget).toHaveBeenCalledWith({ missionId: "mission-1", target: "pinterest:recipes" });
+      const pinterest = document.querySelector('[data-testid="publish-target-pinterest:recipes"]') as HTMLInputElement;
+      await act(async () => { pinterest.click(); });
+      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram", "pinterest:recipes"] });
+      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram, pinterest:recipes");
+
+      setTargets.mockClear();
+      const instagram = document.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
+      await act(async () => { instagram.click(); });
+      await act(async () => { pinterest.click(); });
+      expect(setTargets).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain("At least one Publish target is required");
+    });
+
+    it("names the unmapped target in the warning", async () => {
+      withPublish(false);
+      await render();
+      await act(async () => {});
+      expect(document.querySelector('[data-testid="publish-unmapped"]')?.textContent).toContain("instagram");
     });
 
     it("lets the reviewer schedule the publication, and clear it to publish immediately", async () => {
@@ -349,6 +366,9 @@ describe("MissionReviewContent", () => {
           target: "instagram",
           declaredTargets: ["instagram"],
           mapped: true,
+          targets: ["instagram"],
+          unmappedTargets: [],
+          publisherReady: true,
           publishAt: new Date("2030-01-02T09:30").getTime(),
           publications: [{ target: "instagram", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }],
         },

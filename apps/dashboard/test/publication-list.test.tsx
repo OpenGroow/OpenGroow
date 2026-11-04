@@ -18,7 +18,7 @@ vi.mock("convex/react", () => ({
 vi.mock("@convex/_generated/api", () => ({
   api: {
     publications: { listForMission: "publications.listForMission" },
-    missions_node: { retryPublication: "missions_node.retryPublication" },
+    publisher_node: { retryPublication: "publisher_node.retryPublication" },
   },
 }));
 

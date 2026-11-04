@@ -13,7 +13,7 @@ A Project-level integration that turns an approved deliverable into a post on an
 
 ### Publish target
 
-A logical, human-readable destination a Publishable can be sent to (for example `instagram`, `pinterest:recipes`). It is the only publishing identifier that appears in a Mission or Schedule payload. The Publisher maps it to a real channel; an unmapped target blocks `publish` (or makes the Publication `failed` under `autoPublish`) until the Publisher is configured. An Agent does not choose the target; the human can change it in the review.
+A logical, human-readable destination a Publishable can be sent to (for example `instagram`, `pinterest:recipes`). It is the only publishing identifier that appears in a Mission or Schedule payload. The Publisher maps it to a real channel; an unmapped target blocks `publish` (or makes the Publication `failed` under `autoPublish`) until the Publisher is configured. An Agent does not choose the target; the human can change it in the review, choosing one or several of the targets the Mission type declares.
 
 - _Avoid_: "channel" (the service's own concept), "board id", "account".
 
@@ -23,7 +23,7 @@ The deliverable of a Mission expressed in the unified publishing format, of one 
 
 - A new kind is added to the closed set by OpenGroow; it is not declared by a Template.
 - **Declaration**: a Mission type declares `"publish": { "kind": "carousel", "targets": ["instagram", "pinterest:recipes"] }` in its manifest entry; `validateManifest` checks the kind and the targets at Activation.
-- **Fields (V1)**: `video` = `videoUrl`, optional `coverUrl` / `title`, `caption`; `image` = `imageUrl`, `caption`; `carousel` = ordered `slideUrls`, `caption`. All accept a free `metadata` object. The Agent returns it as `artifact.publishable`; an invalid or missing one is rejected with per-field errors and the Agent retries.
+- **Fields (V1)**: `video` = `videoUrl`, optional `coverUrl` / `title`, `caption`; `image` = `imageUrl`, `caption`; `carousel` = ordered `slideUrls`, `caption`. All accept a free `metadata` object. The Agent returns it as `artifact.publishable` (required for `success` and `needs_human_review`, since both reach the review that publishes it); an invalid or missing one is rejected with per-field errors and the Agent retries.
 - _Avoid_: "payload", "post".
 
 ### Publication
@@ -33,6 +33,11 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 - **Target of a Mission**: `payload.publishTarget` (editable in the review, defaults to the first target the Mission type declares). For a Mission type that declares `publish`, the review `publish` action is executed by the Publisher instead of an MCP effect.
 
 - **Scheduled publication**: an optional `payload.publishAt` (epoch ms) on a Mission or a Schedule, editable in the review. Without it (or in the past) the post goes out immediately; with it the adapter schedules the post and the Publication is `scheduled` with `scheduledAt`. A cron polls the adapter for scheduled Publications that reached their date (no webhook, like External Job polling) and moves them to `published` (or `failed`).
+
+  - **Caveat, recurring Schedule**: an absolute `publishAt` in a Schedule payload is copied as is to every Mission the Schedule creates. After that date every later Mission publishes immediately (a past date means "now"). It is meant for one-off Schedules; there is no relative date ("tomorrow at 9") in V1.
+  - A Schedule payload's `publishTarget` is not checked when the Schedule is saved (the Template registry is not reachable from a mutation). It is checked against the Mission type's declared targets when the Mission publishes: the human `publish` action is refused, and under `autoPublish` the Mission fails with an explicit error.
+
+- **Readiness**: `publish` is disabled in the review, with the reason and a link to the Publishers page, when the Project has no Publisher, the Publisher has no API key, or a target of the Mission is not mapped (the reason names the unmapped targets). An Agent can be activated without any Publisher: publishing is only checked when publishing.
 
 - **Do not confuse** with the Mission's `approved` status ("to publish"): `approved` is the human's validation of the deliverable; a Publication is what happens next.
 
