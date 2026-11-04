@@ -95,9 +95,15 @@ try {
 }
 `;
 
+// The workspace libs are TypeScript: run through `tsx` (what the image uses for
+// local-control itself) from a temp file next to node_modules, not `node`.
+const REMOTE_FILE = "/app/.start-smoke.mts";
 const result = spawnSync(
   "docker",
-  ["exec", "-i", "-w", "/app", LOCAL_CONTROL, "node", "--input-type=module"],
+  [
+    "exec", "-i", "-w", "/app", LOCAL_CONTROL, "sh", "-c",
+    `cat > ${REMOTE_FILE} && tsx ${REMOTE_FILE}; code=$?; rm -f ${REMOTE_FILE}; exit $code`,
+  ],
   { input: INNER, stdio: ["pipe", "inherit", "inherit"] },
 );
 
