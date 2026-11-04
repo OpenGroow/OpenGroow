@@ -226,6 +226,71 @@ describe("POST /instances", () => {
   });
 });
 
+// Like the real `docker compose`, interpolate the per-instance compose file
+// before doing anything: a required `${VAR:?}` that is missing fails the whole
+// command (exit 1), for `down` as much as for `up`.
+const REQUIRED_COMPOSE_VARS = ["OPENCLAW_IMAGE_REF", "OPENCLAW_RUNTIME_WORKER_IMAGE_REF"];
+const strictComposeRunner = (
+  calls: Array<{ args: string[] }>,
+  options: { failUp?: boolean } = {}
+): ComposeRunner => async (args, runOptions) => {
+  calls.push({ args });
+  const missing = REQUIRED_COMPOSE_VARS.find((name) => !runOptions.env[name]);
+  if (missing) {
+    return {
+      code: 1,
+      stdout: "",
+      stderr: `error while interpolating: required variable ${missing} is missing a value`
+    };
+  }
+  if (options.failUp && args.includes("up")) {
+    return { code: 1, stdout: "", stderr: "image build failed" };
+  }
+  return { code: 0, stdout: "", stderr: "" };
+};
+
+describe("compose environment for non-up commands", () => {
+  it("deletes an instance even though the compose file requires the image refs", async () => {
+    const calls: Array<{ args: string[] }> = [];
+    const server = startServer(strictComposeRunner(calls));
+    const created = await post(server, "/instances");
+    expect(created.status).toBe(201);
+
+    const { status, json } = await del(server, `/instances/${created.json.id}`);
+
+    expect(status).toBe(200);
+    expect(json).toMatchObject({ id: created.json.id, removed: true });
+  });
+
+  it("reads logs and status of an instance even though the compose file requires the image refs", async () => {
+    const calls: Array<{ args: string[] }> = [];
+    const server = startServer(strictComposeRunner(calls));
+    const created = await post(server, "/instances");
+
+    const logs = await post(server, "/instances/logs/openclaw", { port: created.json.port });
+    const statusResult = await post(server, "/instances/status/openclaw", { port: created.json.port });
+
+    expect(logs.status).toBe(200);
+    expect(statusResult.status).toBe(200);
+  });
+
+  it("rolls back a failed create with a down that succeeds", async () => {
+    const calls: Array<{ args: string[] }> = [];
+    const server = startServer(strictComposeRunner(calls, { failUp: true }));
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => errors.push(args.join(" "));
+    try {
+      const { status } = await post(server, "/instances");
+      expect(status).toBe(502);
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(errors.filter((line) => line.includes("rollback failed"))).toEqual([]);
+  });
+});
+
 describe("DELETE /instances/:id", () => {
   it("tears down containers and volumes for that instance only, leaving other instances untouched", async () => {
     const calls: Array<{ args: string[] }> = [];
