@@ -24,6 +24,7 @@ export function ConnectLinkWizard({
   onConnected?: () => void;
 }) {
   const {
+    approvalRound,
     approvalSubmitted,
     approvingDevice,
     connectTicket,
@@ -151,7 +152,7 @@ export function ConnectLinkWizard({
           active={wizardPhase === "approval_required"}
           index={3}
           title="Approve the device"
-          description="Approve the pending device request once the helper appears."
+          description="The gateway asks for two approvals: first the device, then its capabilities. Approve each one when it appears."
         >
           {wizardPhase === "approval_required" && pendingNodeRequestId ? (
             <div className="flex flex-wrap gap-3">
@@ -166,7 +167,9 @@ export function ConnectLinkWizard({
                     Approving…
                   </span>
                 ) : (
-                  "Approve device"
+                  approvalRound === 1
+                    ? "Approve device (1/2)"
+                    : "Approve capabilities (2/2)"
                 )}
               </Button>
             </div>
@@ -185,8 +188,8 @@ export function ConnectLinkWizard({
               {stepThreeComplete
                 ? "The device request has been approved."
                 : wizardPhase === "approval_required"
-                  ? "Waiting for the pending device request id."
-                  : "Waiting for a single pending device request to appear."}
+                  ? "Looking for the approval request. This refreshes on its own, no need to reload."
+                  : "Waiting for the helper to appear. Its approval request will show up here."}
             </p>
           )}
         </WizardStep>

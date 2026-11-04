@@ -185,6 +185,8 @@ describe("useConnectWizard second approval round (scope upgrade)", () => {
     // actual capabilities) — the underlying WS session stays "connected" at
     // the relay throughout, even while this second request is pending.
     listPendingNodesMock
+      // Ticketless resume poll on mount: nothing pending yet.
+      .mockResolvedValueOnce({ ok: true, output: "", requestIds: [] })
       .mockResolvedValueOnce({ ok: true, output: "", requestIds: ["first-id"] })
       .mockResolvedValue({ ok: true, output: "", requestIds: ["second-id"] });
     approvePendingNodeMock.mockResolvedValue({ ok: true, output: "", requestIds: [] });
@@ -231,6 +233,7 @@ describe("useConnectWizard second approval round (scope upgrade)", () => {
     await advance(5_000);
     expect(latestHook.pendingNodeRequestId).toBe("first-id");
     expect(latestHook.wizardPhase).toBe("approval_required");
+    expect(latestHook.approvalRound).toBe(1);
 
     await act(async () => {
       await latestHook.handleApproveDevice();
@@ -246,5 +249,91 @@ describe("useConnectWizard second approval round (scope upgrade)", () => {
     expect(latestHook.wizardPhase).toBe("approval_required");
     expect(latestHook.pendingNodeRequestId).toBe("second-id");
     expect(latestHook.approvalSubmitted).toBe(false);
+    expect(latestHook.approvalRound).toBe(2);
+  });
+});
+
+describe("useConnectWizard without an active ticket", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let latestHook: HookHandle;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    listPendingNodesMock.mockReset();
+    approvePendingNodeMock.mockReset();
+    confirmConnectedDevicesMock.mockReset();
+    createConnectTicketMock.mockReset();
+    getLatestActiveTicketForInstanceMock.mockReset();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function mount() {
+    await act(async () => {
+      root.render(
+        <HookHarness
+          onUpdate={(hook) => {
+            latestHook = hook;
+          }}
+        />,
+      );
+    });
+  }
+
+  it("surfaces a pending approval found on load and waits for a usable device after approving", async () => {
+    listPendingNodesMock
+      .mockResolvedValueOnce({ ok: true, output: "", requestIds: ["pending-id"] })
+      .mockResolvedValue({ ok: true, output: "", requestIds: [] });
+    approvePendingNodeMock.mockResolvedValue({ ok: true, output: "", requestIds: [] });
+    confirmConnectedDevicesMock.mockResolvedValueOnce(false).mockResolvedValue(true);
+
+    await mount();
+    await advance(0);
+    expect(latestHook.wizardPhase).toBe("approval_required");
+    expect(latestHook.pendingNodeRequestId).toBe("pending-id");
+
+    await act(async () => {
+      await latestHook.handleApproveDevice();
+    });
+    expect(latestHook.wizardPhase).toBe("reconnecting");
+
+    // First readiness check (run right after approving) fails because the
+    // capabilities are not published yet: stay in "reconnecting".
+    await advance(0);
+    expect(confirmConnectedDevicesMock).toHaveBeenCalledTimes(1);
+    expect(latestHook.wizardPhase).toBe("reconnecting");
+
+    await advance(3_000);
+    expect(latestHook.wizardPhase).toBe("connected");
+  });
+
+  it("shows the second approval round instead of concluding connected", async () => {
+    listPendingNodesMock
+      .mockResolvedValueOnce({ ok: true, output: "", requestIds: ["device-id"] })
+      .mockResolvedValueOnce({ ok: true, output: "", requestIds: [] })
+      .mockResolvedValue({ ok: true, output: "", requestIds: ["surface-id"] });
+    approvePendingNodeMock.mockResolvedValue({ ok: true, output: "", requestIds: [] });
+    confirmConnectedDevicesMock.mockResolvedValue(false);
+
+    await mount();
+    await advance(0);
+    await act(async () => {
+      await latestHook.handleApproveDevice();
+    });
+
+    await advance(6_000);
+    expect(latestHook.wizardPhase).toBe("approval_required");
+    expect(latestHook.pendingNodeRequestId).toBe("surface-id");
   });
 });

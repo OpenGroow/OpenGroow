@@ -1,5 +1,3 @@
-const { toErrorMessage } = require("./control-socket-errors");
-
 function createNodeWorkflow({
   fs,
   pendingDevicesPath,
@@ -66,6 +64,35 @@ function createNodeWorkflow({
     }
   }
 
+  // One `devices list --json` call exposes both gateway approval stages:
+  //  - `pending[]`: device pairing (first connect of a node host);
+  //  - `paired[].pendingNodeSurface`: capability approval of a paired node.
+  async function listPendingApprovals() {
+    const empty = { devicePairing: [], nodeSurface: [] };
+    try {
+      const result = await runGatewayNodeCommand(
+        ["devices", "list", "--json"],
+        configTimeoutMs,
+      );
+      const data = JSON.parse(result.stdout);
+      const isId = (id) => typeof id === "string" && id.length > 0;
+      const isNode = (entry) =>
+        entry?.role === "node" ||
+        (Array.isArray(entry?.roles) && entry.roles.includes("node"));
+      return {
+        devicePairing: (Array.isArray(data.pending) ? data.pending : [])
+          .filter((entry) => isNode(entry) && isId(entry.requestId))
+          .map((entry) => entry.requestId),
+        nodeSurface: (Array.isArray(data.paired) ? data.paired : [])
+          .map((entry) => entry?.pendingNodeSurface?.requestId)
+          .filter(isId),
+      };
+    } catch {
+      // Best effort: older gateways may not expose `devices list`.
+      return empty;
+    }
+  }
+
   async function approve(body = {}) {
     const requestId =
       typeof body.requestId === "string" ? body.requestId.trim() : "";
@@ -73,23 +100,23 @@ function createNodeWorkflow({
       return invalid("requestId is required", { output: "", requestId: "" });
     }
 
+    // Two distinct gateway stores hold pairing requests: device pairing
+    // (first connect of a node host, `devices list`) and node capability
+    // approval (`nodes approve`). Route by where the id actually lives
+    // instead of reacting to a CLI error message.
     let output;
-    try {
-      const result = await runGatewayNodeCommand(
-        ["nodes", "approve", requestId],
-        configTimeoutMs,
-      );
-      output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-    } catch (error) {
-      const message = toErrorMessage(error);
-      if (!/unknown\s+node\s+pairing\s+requestId/i.test(message)) {
-        throw error;
-      }
+    if ((await listPendingApprovals()).devicePairing.includes(requestId)) {
       output = JSON.stringify(
         await approveGatewayDevicePairing(requestId, {
           timeoutMs: configTimeoutMs,
         }),
       );
+    } else {
+      const result = await runGatewayNodeCommand(
+        ["nodes", "approve", requestId],
+        configTimeoutMs,
+      );
+      output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     }
 
     return {
@@ -134,6 +161,13 @@ function createNodeWorkflow({
       relayRequestIds.push(...describedRequestIds.filter(Boolean));
     } catch {
       // Legacy pending data remains useful when the relay is unavailable.
+    }
+    // A device that has not completed its first connect never shows up in
+    // `nodes list`: the gateway closes it with 1008 "pairing required" and
+    // only records a pending request in the device pairing store.
+    const approvals = await listPendingApprovals();
+    for (const id of [...approvals.devicePairing, ...approvals.nodeSurface]) {
+      if (!relayRequestIds.includes(id)) relayRequestIds.push(id);
     }
     return {
       status: 200,
