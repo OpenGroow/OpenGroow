@@ -27,8 +27,13 @@ registry from the repository variable `IMAGE_REGISTRY`, default
 `opengroow-convex-bootstrap`, `opengroow-openclaw-connect`,
 `opengroow-openclaw-local-control`. The per-Project gateway and runtime-worker
 images are `${OPENCLAW_IMAGE_REGISTRY}/openclaw-gateway` and
-`/openclaw-runtime-worker` (published by the `openclaw:image:*` scripts); they
-are pulled by `docker compose` when a Project is created.
+`/openclaw-runtime-worker` (published by `openclaw-gateway-image.yml` and
+`openclaw-runtime-worker-image.yml`; the `openclaw:image:*` scripts remain for a
+manual push); they are pulled by `docker compose` when a Project is created.
+
+All images are `linux/amd64` only (emulated on Apple Silicon). GHCR packages are
+private by default: set each one to Public (Package settings, Change
+visibility) or run `docker login ghcr.io` on the machine that runs `pnpm start`.
 
 ## Why `openclaw-local-control` gets the Docker socket
 
