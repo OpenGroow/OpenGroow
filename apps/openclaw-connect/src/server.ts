@@ -31,8 +31,6 @@ const CONVEX_URL =
 const CONVEX_TOKEN = process.env.CONVEX_TOKEN?.trim() ?? "";
 const CONVEX_SKIP_URL_CHECK = process.env.CONVEX_SKIP_URL_CHECK === "1";
 
-// getActiveByTicketId is an internalQuery; openclaw-connect authenticates with
-// an admin token (setAdminAuth) so it can call internal functions at runtime.
 const getTicketQuery = anyApi.connect_tickets.getActiveByTicketId as FunctionReference<"query">;
 
 type ConnectTicketRecord = {
