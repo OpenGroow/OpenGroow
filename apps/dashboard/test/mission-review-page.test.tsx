@@ -50,6 +50,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     publications: {
       setPublishTarget: "publications.setPublishTarget",
+      setPublishAt: "publications.setPublishAt",
       listForMission: "publications.listForMission",
     },
     instances: { list: "instances.list" },
@@ -310,6 +311,47 @@ describe("MissionReviewContent", () => {
         select.dispatchEvent(new Event("change", { bubbles: true }));
       });
       expect(setTarget).toHaveBeenCalledWith({ missionId: "mission-1", target: "pinterest:recipes" });
+    });
+
+    it("lets the reviewer schedule the publication, and clear it to publish immediately", async () => {
+      withPublish(true);
+      const setter = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation(() => setter);
+      await render();
+      await act(async () => {});
+      const input = document.querySelector('[data-testid="publish-at"]') as HTMLInputElement;
+      expect(input.value).toBe("");
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(async () => {
+        setValue.call(input, "2030-01-02T09:30");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(setter).toHaveBeenCalledWith({ missionId: "mission-1", publishAt: new Date("2030-01-02T09:30").getTime() });
+      await act(async () => {
+        setValue.call(input, "");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(setter).toHaveBeenLastCalledWith({ missionId: "mission-1", publishAt: null });
+    });
+
+    it("shows the scheduled date of a scheduled Publication", async () => {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        publish: {
+          target: "instagram",
+          declaredTargets: ["instagram"],
+          mapped: true,
+          publishAt: new Date("2030-01-02T09:30").getTime(),
+          publications: [{ target: "instagram", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }],
+        },
+      }));
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect((document.querySelector('[data-testid="publish-at"]') as HTMLInputElement).value).toBe("2030-01-02T09:30");
+      expect(document.querySelector('[data-testid="publication-instagram"]')?.textContent).toContain("scheduled");
     });
 
     it("has no publish section for a Mission type without publish", async () => {

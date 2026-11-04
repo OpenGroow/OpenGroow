@@ -17,6 +17,8 @@ export type PublishProjection = {
   target: string | null;
   declaredTargets: string[];
   mapped: boolean;
+  /** The date the reviewer chose (epoch ms); absent = publish immediately. */
+  publishAt?: number;
   publications: Array<{
     target: string;
     status: "pending" | "scheduled" | "published" | "failed";
@@ -26,6 +28,14 @@ export type PublishProjection = {
     error?: string;
   }>;
 };
+
+/** Epoch ms to the `YYYY-MM-DDTHH:mm` local time a datetime-local input expects. */
+function toLocalInput(ms: number | undefined): string {
+  if (ms === undefined) return "";
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export function PublishSection({
   missionId,
@@ -39,9 +49,25 @@ export function PublishSection({
   editable: boolean;
 }) {
   const setPublishTarget = useMutation(api.publications.setPublishTarget);
+  const setPublishAt = useMutation(api.publications.setPublishAt);
   const live = useQuery(api.publications.listForMission, { missionId: missionId as Id<"missions"> });
   const publications = live ?? publish.publications;
   const [error, setError] = useState<string | null>(null);
+
+  // The projection is fetched once, so the date is held locally after the first edit.
+  const [publishAtInput, setPublishAtInput] = useState(() => toLocalInput(publish.publishAt));
+
+  async function changePublishAt(value: string) {
+    setError(null);
+    setPublishAtInput(value);
+    const at = value === "" ? null : new Date(value).getTime();
+    if (at !== null && !Number.isFinite(at)) return;
+    try {
+      await setPublishAt({ missionId: missionId as Id<"missions">, publishAt: at });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change the publication date");
+    }
+  }
 
   async function changeTarget(target: string) {
     setError(null);
@@ -72,6 +98,18 @@ export function PublishSection({
             <option key={target} value={target}>{target}</option>
           ))}
         </select>
+        <label htmlFor="publish-at" className="mt-2 text-xs font-semibold text-muted-foreground">
+          Publish at (leave empty to publish immediately)
+        </label>
+        <input
+          id="publish-at"
+          data-testid="publish-at"
+          type="datetime-local"
+          className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm"
+          value={publishAtInput}
+          disabled={!editable}
+          onChange={(e) => { void changePublishAt(e.target.value); }}
+        />
         {error && <p className="m-0 text-sm text-destructive">{error}</p>}
         {!publish.mapped && (
           <p data-testid="publish-unmapped" className="m-0 text-sm text-destructive">
@@ -90,6 +128,9 @@ export function PublishSection({
           {publications.map((publication) => (
             <li key={publication.target} data-testid={`publication-${publication.target}`}>
               <span className="font-semibold">{publication.target}</span>: {publication.status}
+              {publication.status === "scheduled" && publication.scheduledAt !== undefined && (
+                <> for {new Date(publication.scheduledAt).toLocaleString()}</>
+              )}
               {publication.externalUrl && (
                 <>
                   {" "}

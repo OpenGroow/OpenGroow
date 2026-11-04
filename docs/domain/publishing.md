@@ -32,4 +32,6 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 
 - **Target of a Mission**: `payload.publishTarget` (editable in the review, defaults to the first target the Mission type declares). For a Mission type that declares `publish`, the review `publish` action is executed by the Publisher instead of an MCP effect.
 
+- **Scheduled publication**: an optional `payload.publishAt` (epoch ms) on a Mission or a Schedule, editable in the review. Without it (or in the past) the post goes out immediately; with it the adapter schedules the post and the Publication is `scheduled` with `scheduledAt`. A cron polls the adapter for scheduled Publications that reached their date (no webhook, like External Job polling) and moves them to `published` (or `failed`).
+
 - **Do not confuse** with the Mission's `approved` status ("to publish"): `approved` is the human's validation of the deliverable; a Publication is what happens next.
