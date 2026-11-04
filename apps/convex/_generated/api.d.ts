@@ -89,6 +89,10 @@ import type * as project_provider_operations from "../project_provider_operation
 import type * as project_templates from "../project_templates.js";
 import type * as project_templates_node from "../project_templates_node.js";
 import type * as projects from "../projects.js";
+import type * as publisher_adapter from "../publisher/adapter.js";
+import type * as publisher_postiz from "../publisher/postiz.js";
+import type * as publisher_schema from "../publisher_schema.js";
+import type * as publishers from "../publishers.js";
 import type * as run_parent from "../run_parent.js";
 import type * as run_result from "../run_result.js";
 import type * as runs from "../runs.js";
@@ -214,6 +218,10 @@ declare const fullApi: ApiFromModules<{
   project_templates: typeof project_templates;
   project_templates_node: typeof project_templates_node;
   projects: typeof projects;
+  "publisher/adapter": typeof publisher_adapter;
+  "publisher/postiz": typeof publisher_postiz;
+  publisher_schema: typeof publisher_schema;
+  publishers: typeof publishers;
   run_parent: typeof run_parent;
   run_result: typeof run_result;
   runs: typeof runs;
