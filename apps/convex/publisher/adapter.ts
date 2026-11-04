@@ -46,5 +46,14 @@ export interface PublisherAdapter {
   testConnection(conn: PublisherConnection): Promise<PublisherResult>;
   listChannels(conn: PublisherConnection): Promise<PublisherResult<{ channels: PublisherChannel[] }>>;
   publish(conn: PublisherConnection, request: PublishRequest): Promise<PublisherResult<{ outcome: PublishOutcome }>>;
-  getStatus(conn: PublisherConnection, externalId: string): Promise<PublisherResult<{ post: PostStatus }>>;
+  /**
+   * Where a post stands at the service. `around` (epoch ms) is the date the post
+   * was scheduled for; adapters whose API can only list posts by date use it as
+   * the search window. A post the service no longer knows is reported `failed`.
+   */
+  getStatus(
+    conn: PublisherConnection,
+    externalId: string,
+    around?: number,
+  ): Promise<PublisherResult<{ post: PostStatus }>>;
 }

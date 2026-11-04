@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
@@ -120,6 +120,21 @@ function stubPostiz(postsResponse: () => Response = () => json([{ postId: "post-
   vi.stubGlobal("fetch", fn);
   return fn;
 }
+/** Adds Postiz's `GET /posts` listing (the poll) on top of the base fake. */
+function stubPostizListing(state: string | (() => Response), extra: Record<string, unknown> = {}) {
+  const base = stubPostiz();
+  const listing = vi.fn(async (url: unknown) => {
+    void url;
+    return typeof state === "function"
+      ? state()
+      : json({ posts: [{ id: "post-1", state, publishDate: new Date().toISOString(), ...extra }] });
+  });
+  vi.stubGlobal("fetch", (url: unknown, init?: RequestInit) =>
+    String(url).includes("/public/v1/posts?") && !init?.method ? listing(url) : base(url, init),
+  );
+  return listing;
+}
+
 const postedBody = (fn: ReturnType<typeof stubPostiz>) => {
   const call = fn.mock.calls.find(([url]) => String(url).endsWith("/posts"));
   return call ? JSON.parse(String((call[1] as RequestInit).body)) : undefined;
@@ -155,5 +170,66 @@ describe("publishAt", () => {
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p).toMatchObject({ status: "scheduled", externalId: "post-1", scheduledAt: publishAt });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+  });
+});
+
+describe("polling a scheduled Publication", () => {
+  async function scheduled() {
+    const ctx = await seed({ payload: { publishTarget: "instagram", publishAt: Date.now() + 2 * HOUR } });
+    stubPostiz();
+    await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
+    return ctx;
+  }
+  const makeDue = (t: Awaited<ReturnType<typeof seed>>["t"]) =>
+    t.run(async (ctx) => {
+      for (const p of await ctx.db.query("publications").collect()) await ctx.db.patch(p._id, { scheduledAt: Date.now() - 1000 });
+    });
+
+  it("moves it to published and completes the Mission once Postiz has published the post", async () => {
+    const { t, owner, missionId } = await scheduled();
+    await makeDue(t);
+    stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
+
+    await t.action(internal.publications.pollScheduled, {});
+
+    const [p] = await owner.query(api.publications.listForMission, { missionId });
+    expect(p).toMatchObject({ status: "published", externalUrl: "https://instagram.com/p/abc" });
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+  });
+
+  it("leaves it scheduled while Postiz still has the post queued", async () => {
+    const { t, owner, missionId } = await scheduled();
+    await makeDue(t);
+    stubPostizListing("QUEUE");
+    await t.action(internal.publications.pollScheduled, {});
+    const [p] = await owner.query(api.publications.listForMission, { missionId });
+    expect(p.status).toBe("scheduled");
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+  });
+
+  it("does not call Postiz before the scheduled date", async () => {
+    const { t } = await scheduled();
+    const listing = stubPostizListing("PUBLISHED");
+    await t.action(internal.publications.pollScheduled, {});
+    expect(listing).not.toHaveBeenCalled();
+  });
+
+  it("keeps it scheduled when Postiz cannot be reached", async () => {
+    const { t, owner, missionId } = await scheduled();
+    await makeDue(t);
+    stubPostizListing(() => json({}, 503));
+    await t.action(internal.publications.pollScheduled, {});
+    const [p] = await owner.query(api.publications.listForMission, { missionId });
+    expect(p.status).toBe("scheduled");
+  });
+
+  it("marks it failed with Postiz's error state", async () => {
+    const { t, owner, missionId } = await scheduled();
+    await makeDue(t);
+    stubPostizListing("ERROR");
+    await t.action(internal.publications.pollScheduled, {});
+    const [p] = await owner.query(api.publications.listForMission, { missionId });
+    expect(p.status).toBe("failed");
+    expect(p.error).toBeTruthy();
   });
 });
