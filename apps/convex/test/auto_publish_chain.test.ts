@@ -1,11 +1,11 @@
 import { insertInstance } from "./instance_fixture";
 import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { convexTest } from "convex-test";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import type { RunResult } from "../run_result";
-import { installTemplateRegistry, loadFixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+import { fixtureTemplate, installTemplateRegistry, loadFixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
 // The auto-publish chain is triggered from `internal.runs.markCompleted` via
 // `ctx.scheduler.runAfter(0, ...)`. convex-test only runs scheduled functions
@@ -35,6 +35,8 @@ const modules = {
   "../missions.ts": () => import("../missions.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../runs.ts": () => import("../runs.js"),
+  "../publications.ts": () => import("../publications.js"),
+  "../publishers.ts": () => import("../publishers.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
   "../project_templates.ts": () => import("../project_templates.js"),
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
@@ -43,7 +45,24 @@ const modules = {
 
 const INSTANCE_ID = "openclaw-instance-apc-1";
 
-useTemplateRegistry([INSTANCE_ID], ["@opengroow/seo"]);
+const IMAGE_TEMPLATE_ID = "@test/auto-image";
+const imageTemplate = fixtureTemplate(IMAGE_TEMPLATE_ID, {
+  missionTypes: [
+    {
+      type: "make_image",
+      publish: { kind: "image", targets: ["instagram"] },
+      review: {
+        kind: "image",
+        service: "workspace",
+        actions: [
+          { key: "approve", label: "Approve", requiredStatus: "to_validate", transition: "approved" },
+          { key: "publish", label: "Publish", requiredStatus: "approved", transition: "done" },
+        ],
+      },
+    },
+  ],
+} as never);
+useTemplateRegistry([INSTANCE_ID], ["@opengroow/seo", imageTemplate]);
 const TEMPLATE_ID = "@opengroow/seo";
 /** Fixture template declaring `reject` before `approve` (both gated on to_validate). */
 const REJECT_FIRST_TEMPLATE_ID = "seo-reject-first";
@@ -108,7 +127,7 @@ async function seedProjectAgent(
 
 async function seedMissionAndRun(
   t: ReturnType<typeof convexTest>,
-  opts: { autoPublish?: boolean; templateId?: string } = {},
+  opts: { autoPublish?: boolean; templateId?: string; type?: string; payload?: Record<string, unknown> } = {},
 ): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
   const now = Date.now();
   const templateId = opts.templateId ?? TEMPLATE_ID;
@@ -117,8 +136,8 @@ async function seedMissionAndRun(
       ownerId: OWNER_ID,
       instanceId: INSTANCE_ID,
       templateId,
-      type: "create_article",
-      payload: {},
+      type: opts.type ?? "create_article",
+      payload: opts.payload ?? {},
       status: "doing",
       ...(opts.autoPublish !== undefined ? { autoPublish: opts.autoPublish } : {}),
       createdAt: now,
@@ -323,5 +342,107 @@ describe("auto-publish chain (issue #329)", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  describe("through the Publisher (issue #21)", () => {
+    const OWNER = { name: "O", email: "o@e.com", tokenIdentifier: "test|apc", subject: OWNER_ID };
+    const imageResult: RunResult = {
+      status: "needs_human_review",
+      summary: "ready",
+      reviewQuestions: [],
+      artifact: {
+        kind: "image",
+        external: { service: "media", id: "42" },
+        metadata: {},
+        publishable: { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hi" },
+      },
+    } as never;
+
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    function stubPostiz() {
+      const fn = vi.fn(async (url: unknown, init?: RequestInit) => {
+        const path = String(url).replace("https://postiz.example.com/public/v1/", "");
+        if (path === "integrations") return json([{ id: "ch-1", name: "IG", identifier: "instagram" }]);
+        if (path === "upload-from-url") return json({ id: "m1", path: "https://postiz.example.com/u/1" });
+        if (path === "posts" && init?.method === "POST") return json([{ postId: "post-1", integration: "ch-1" }]);
+        return json({ error: "unexpected " + path }, 404);
+      });
+      vi.stubGlobal("fetch", fn);
+      return fn;
+    }
+    async function setup(opts: { map: boolean; payload?: Record<string, unknown> }) {
+      const t = convexTest(schema, modules);
+      await seedInstance(t);
+      await seedProjectAgent(t, IMAGE_TEMPLATE_ID);
+      const owner = t.withIdentity(OWNER);
+      await owner.mutation(api.publishers.save, {
+        instanceId: INSTANCE_ID,
+        adapter: "postiz",
+        url: "https://postiz.example.com",
+        apiKey: "secret",
+      });
+      await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "instagram" });
+      if (opts.map) {
+        await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "instagram", channelId: "ch-1" });
+      }
+      const ids = await seedMissionAndRun(t, {
+        autoPublish: true,
+        templateId: IMAGE_TEMPLATE_ID,
+        type: "make_image",
+        payload: opts.payload ?? { publishTarget: "instagram" },
+      });
+      return { t, owner, ...ids };
+    }
+    const postBody = (fn: ReturnType<typeof stubPostiz>) => {
+      const call = fn.mock.calls.find(([u]) => String(u).endsWith("/posts"));
+      return JSON.parse(String((call![1] as RequestInit).body));
+    };
+
+    it("publishes at approval with no click and completes the Mission", async () => {
+      const postiz = stubPostiz();
+      const { t, owner, missionId, runId } = await setup({ map: true });
+      await markCompletedAndFlush(t, { runId, result: imageResult });
+      expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+      expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([
+        { target: "instagram", status: "published", externalId: "post-1" },
+      ]);
+      expect(postBody(postiz).type).toBe("now");
+    });
+
+    it("honors the publishAt carried by the Schedule payload: the Publication is scheduled", async () => {
+      const postiz = stubPostiz();
+      const publishAt = Date.now() + 3_600_000;
+      const { t, owner, missionId, runId } = await setup({ map: true, payload: { publishTarget: "instagram", publishAt } });
+      await markCompletedAndFlush(t, { runId, result: imageResult });
+
+      expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([
+        { target: "instagram", status: "scheduled", scheduledAt: publishAt },
+      ]);
+      expect(postBody(postiz).type).toBe("schedule");
+      expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+    });
+
+    it("unmapped target: Mission stays approved with a failed Publication, retryable once the Publisher is fixed", async () => {
+      const postiz = stubPostiz();
+      const { t, owner, missionId, runId } = await setup({ map: false });
+      await markCompletedAndFlush(t, { runId, result: imageResult });
+
+      const mission = await owner.query(api.missions.get, { missionId });
+      expect(mission?.status).toBe("approved");
+      expect(mission?.errorMessage).toBeUndefined();
+      const [failed] = await owner.query(api.publications.listForMission, { missionId });
+      expect(failed).toMatchObject({ target: "instagram", status: "failed" });
+      expect(failed.error).toContain("not configured");
+      expect(postiz).not.toHaveBeenCalled();
+
+      await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "instagram", channelId: "ch-1" });
+      await owner.action(api.missions_node.retryPublication, { publicationId: failed.id });
+
+      expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+      expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([
+        { status: "published" },
+      ]);
+    });
   });
 });

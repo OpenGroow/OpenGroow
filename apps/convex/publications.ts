@@ -315,6 +315,42 @@ export const beginAll = internalMutation({
   },
 });
 
+/**
+ * `autoPublish` could not even start publishing (for example the target is
+ * not mapped): records a `failed` Publication with the explicit error for
+ * each of the Mission's targets that has none yet, so the human sees it and
+ * can retry it once the Publisher is fixed. The Mission stays `approved`.
+ * Returns false when the Mission has no target to attach the failure to.
+ */
+export const recordFailure = internalMutation({
+  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()), error: v.string() },
+  handler: async (ctx, args): Promise<boolean> => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) throw new Error("Mission not found");
+    const targets = effectivePublishTargets(mission.payload, args.declaredTargets).filter((t) =>
+      args.declaredTargets.includes(t),
+    );
+    const now = Date.now();
+    for (const target of targets) {
+      const existing = await ctx.db
+        .query("publications")
+        .withIndex("by_mission_target", (q) => q.eq("missionId", args.missionId).eq("target", target))
+        .unique();
+      if (existing) continue;
+      await ctx.db.insert("publications", {
+        missionId: args.missionId,
+        instanceId: mission.instanceId,
+        target,
+        status: "failed",
+        error: args.error,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return targets.length > 0;
+  },
+});
+
 export const getInternal = internalQuery({
   args: { publicationId: v.id("publications") },
   handler: async (ctx, args) => ctx.db.get(args.publicationId),
