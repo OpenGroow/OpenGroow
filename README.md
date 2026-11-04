@@ -66,7 +66,19 @@ To stop the development environment, press `Ctrl+C`. Run `pnpm dev:down` to stop
 
 Provider credentials used by your agents are configured per Project in the dashboard, not in `.env`.
 
-For deployment using published Docker images, see the [Self-hosting guide](docs/START.md).
+### Run from published images
+
+To run OpenGroow without editing the source, `pnpm start` runs the whole stack in Docker from the published images (no build):
+
+```bash
+pnpm start          # starts what is on your machine, downloads only what is missing
+pnpm start:update   # fetches the latest published images, then starts
+pnpm start:down     # stops the stack
+```
+
+Starting never upgrades you: `pnpm start` reuses the images you already have, and you update when you choose to with `pnpm start:update`. After an update, existing Projects keep running the containers they were created with.
+
+See the [Self-hosting guide](docs/START.md) for configuration, security considerations and the smoke test (`pnpm start:smoke`).
 
 > **Security note:** Some deployment modes require access to the Docker socket to provision project environments. This grants powerful host-level privileges. Review the deployment security considerations before exposing OpenGroow to untrusted users.
 
