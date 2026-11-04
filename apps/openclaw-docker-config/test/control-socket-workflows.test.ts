@@ -50,20 +50,96 @@ describe("node workflow", () => {
     expect(runGatewayNodeCommand).toHaveBeenCalledWith(["nodes", "remove", "--node", "stuck"], 60_000);
   });
 
-  it("falls back from modern approval to the gateway device approval adapter", async () => {
-    const approveGatewayDevicePairing = vi.fn().mockResolvedValue({ requestId: "legacy-request" });
-    const runGatewayNodeCommand = vi.fn().mockRejectedValue(new Error("Unknown node pairing requestId: legacy-request"));
+  it("lists node device pairing requests that never completed their first connect", async () => {
+    const runGatewayNodeCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === "nodes") {
+        return { stdout: JSON.stringify({ paired: [] }), stderr: "" };
+      }
+      return {
+        stdout: JSON.stringify({
+          pending: [
+            { requestId: "device-req-1", role: "node", roles: ["node"] },
+            { requestId: "operator-req", role: "operator", roles: ["operator"] },
+          ],
+          paired: [],
+        }),
+        stderr: "",
+      };
+    });
     const workflow = createNodeWorkflow({
-      fs: { readFile: vi.fn() },
+      fs: { readFile: vi.fn().mockRejectedValue(Object.assign(new Error("nope"), { code: "ENOENT" })) },
+      pendingDevicesPath: "/pending.json",
+      runGatewayNodeCommand,
+      approveGatewayDevicePairing: vi.fn(),
+      configTimeoutMs: 60_000,
+    });
+
+    const result = await workflow.pendingList();
+    expect(result.body.data.relayRequestIds).toEqual(["device-req-1"]);
+  });
+
+  it("lists the node capability request of an already paired device", async () => {
+    const runGatewayNodeCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === "nodes") return { stdout: JSON.stringify({ paired: [] }), stderr: "" };
+      return {
+        stdout: JSON.stringify({
+          pending: [],
+          paired: [{ role: "node", pendingNodeSurface: { requestId: "surface-req-1" } }, { role: "node" }],
+        }),
+        stderr: "",
+      };
+    });
+    const workflow = createNodeWorkflow({
+      fs: { readFile: vi.fn().mockRejectedValue(Object.assign(new Error("nope"), { code: "ENOENT" })) },
+      pendingDevicesPath: "/pending.json",
+      runGatewayNodeCommand,
+      approveGatewayDevicePairing: vi.fn(),
+      configTimeoutMs: 60_000,
+    });
+
+    const result = await workflow.pendingList();
+    expect(result.body.data.relayRequestIds).toEqual(["surface-req-1"]);
+  });
+
+  it("approves a device pairing request through the gateway device adapter", async () => {
+    const approveGatewayDevicePairing = vi.fn().mockResolvedValue({ requestId: "device-req-1" });
+    const runGatewayNodeCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === "devices") {
+        return { stdout: JSON.stringify({ pending: [{ requestId: "device-req-1", role: "node" }] }), stderr: "" };
+      }
+      throw new Error("nodes approve must not be called for device requests");
+    });
+    const workflow = createNodeWorkflow({
+      fs: {},
       pendingDevicesPath: "/pending.json",
       runGatewayNodeCommand,
       approveGatewayDevicePairing,
       configTimeoutMs: 60_000,
     });
 
-    const result = await workflow.approve({ requestId: "legacy-request" });
-    expect(result.body.data.output).toContain("legacy-request");
-    expect(approveGatewayDevicePairing).toHaveBeenCalledWith("legacy-request", { timeoutMs: 60_000 });
+    const result = await workflow.approve({ requestId: "device-req-1" });
+    expect(approveGatewayDevicePairing).toHaveBeenCalledWith("device-req-1", { timeoutMs: 60_000 });
+    expect(result.body.ok).toBe(true);
+  });
+
+  it("approves a node capability request with nodes approve", async () => {
+    const approveGatewayDevicePairing = vi.fn();
+    const runGatewayNodeCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === "devices") return { stdout: JSON.stringify({ pending: [] }), stderr: "" };
+      return { stdout: "approved", stderr: "" };
+    });
+    const workflow = createNodeWorkflow({
+      fs: {},
+      pendingDevicesPath: "/pending.json",
+      runGatewayNodeCommand,
+      approveGatewayDevicePairing,
+      configTimeoutMs: 60_000,
+    });
+
+    const result = await workflow.approve({ requestId: "node-req-1" });
+    expect(runGatewayNodeCommand).toHaveBeenCalledWith(["nodes", "approve", "node-req-1"], 60_000);
+    expect(approveGatewayDevicePairing).not.toHaveBeenCalled();
+    expect(result.body.data.output).toBe("approved");
   });
 
   it("check() reports connected system nodes and repairs stuck unapproved ones", async () => {

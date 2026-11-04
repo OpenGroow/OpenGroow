@@ -36,9 +36,15 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
   const [pendingRequestInFlight, setPendingRequestInFlight] = useState(false);
   const [approvalSubmitted, setApprovalSubmitted] = useState(false);
   const [approvingDevice, setApprovingDevice] = useState(false);
+  // Number of approvals already submitted in this wizard run: the gateway asks
+  // twice (device pairing, then node capabilities), so the pending request on
+  // screen is approval round `approvalsSubmitted + 1`.
+  const [approvalsSubmitted, setApprovalsSubmitted] = useState(0);
   const pendingPollStartedRef = useRef(false);
   const statusFailureCountRef = useRef(0);
   const pendingFailureCountRef = useRef(0);
+  const readyCheckInFlightRef = useRef(false);
+  const resumePollInFlightRef = useRef(false);
 
   const [connectedAt, setConnectedAt] = useState<Date | null>(null);
   const [deviceSaveStatus, setDeviceSaveStatus] = useState<
@@ -69,6 +75,7 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
     setPendingNodeRequestCount(0);
     setPendingRequestInFlight(false);
     setApprovalSubmitted(false);
+    setApprovalsSubmitted(0);
     pendingPollStartedRef.current = false;
     statusFailureCountRef.current = 0;
     pendingFailureCountRef.current = 0;
@@ -107,6 +114,23 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
       return null;
     }
     return await listPendingNodes({ instanceId: instance.openclawId });
+  }
+
+  // The relay reports "connected" before the gateway has created the second
+  // approval round (node capabilities), so an empty pending list is not proof
+  // that the device is usable. Only an approved node with capabilities is.
+  async function verifyDeviceReady(): Promise<boolean> {
+    if (!instance.openclawId || readyCheckInFlightRef.current) {
+      return false;
+    }
+    readyCheckInFlightRef.current = true;
+    try {
+      return await confirmConnectedDevices({ instanceId: instance.openclawId });
+    } catch {
+      return false;
+    } finally {
+      readyCheckInFlightRef.current = false;
+    }
   }
 
   async function requestPendingDevices(): Promise<void> {
@@ -171,6 +195,7 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
 
       setWizardError("");
       setApprovalSubmitted(true);
+      setApprovalsSubmitted((count) => count + 1);
       handleApproveResult(data);
     } catch (error: unknown) {
       setWizardPhase("failed");
@@ -254,6 +279,11 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
             setPendingNodeRequestCount(parsed.requestIds.length);
             setApprovalSubmitted(false);
             setWizardPhase("approval_required");
+            return;
+          }
+          if (!(await verifyDeviceReady())) {
+            // Not usable yet: stay in "reconnecting" and re-check on the
+            // next status tick (a second approval round may still appear).
             return;
           }
         }
@@ -354,6 +384,57 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
     });
     return () => { cancelled = true; };
   }, [instance.openclawId, wizardPhase]);
+
+  // Without an active connect ticket (page reload, ticket already consumed by
+  // the helper) the ticket-driven polling below never runs. Resume from the
+  // gateway state instead: surface a pending approval, and after approving
+  // wait until the device is actually ready.
+  const ticketless = !connectTicket.ticket && !connectTicket.status;
+  useEffect(() => {
+    if (
+      !instance.openclawId ||
+      !ticketless ||
+      (wizardPhase !== "idle" && wizardPhase !== "reconnecting")
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      if (resumePollInFlightRef.current) return;
+      resumePollInFlightRef.current = true;
+      try {
+        const parsed = await fetchPendingDevices();
+        if (cancelled || !parsed?.ok) return;
+        if (parsed.requestIds.length === 1) {
+          setPendingNodeRequestCount(1);
+          setPendingNodeRequestId(parsed.requestIds[0] ?? "");
+          setApprovalSubmitted(false);
+          setWizardPhase("approval_required");
+          return;
+        }
+        if (
+          wizardPhase === "reconnecting" &&
+          parsed.requestIds.length === 0 &&
+          (await verifyDeviceReady()) &&
+          !cancelled
+        ) {
+          setWizardPhase("connected");
+        }
+      } catch {
+        // Transient failure: the next tick retries.
+      } finally {
+        resumePollInFlightRef.current = false;
+      }
+    };
+
+    void tick();
+    const interval = window.setInterval(() => void tick(), PENDING_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [instance.openclawId, ticketless, wizardPhase]);
 
   useEffect(() => {
     if (!connectTicket.ticket || wizardPhase === "connected") {
@@ -456,6 +537,7 @@ export function useConnectWizard(instance: InstanceRecord, startFresh = false) {
   }, [wizardPhase, connectedAt]);
 
   return {
+    approvalRound: approvalsSubmitted + 1,
     approvalSubmitted,
     approvingDevice,
     connectedAt,
