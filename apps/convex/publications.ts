@@ -15,6 +15,21 @@ export function effectivePublishTarget(payload: unknown, declaredTargets: readon
   return typeof chosen === "string" && chosen !== "" ? chosen : declaredTargets[0];
 }
 
+/** When the human wants the post out (epoch ms), from `payload.publishAt`. A
+ * missing, invalid or already-past date means "publish immediately". */
+export function effectivePublishAt(payload: unknown, now: number): number | undefined {
+  const at = (payload as { publishAt?: unknown } | null | undefined)?.publishAt;
+  return typeof at === "number" && Number.isFinite(at) && at > now ? at : undefined;
+}
+
+/** Rejects a `publishAt` that is present but not a finite epoch-ms number. */
+export function assertValidPublishAt(payload: unknown): void {
+  const at = (payload as { publishAt?: unknown } | null | undefined)?.publishAt;
+  if (at !== undefined && at !== null && (typeof at !== "number" || !Number.isFinite(at))) {
+    throw new Error("publishAt must be a timestamp in milliseconds");
+  }
+}
+
 const publicationStatusV = v.union(
   v.literal("pending"),
   v.literal("scheduled"),
@@ -150,6 +165,7 @@ export const begin = internalMutation({
       channelId: mapping.channelId,
       settings: mapping.settings,
       publishable: publishable as Record<string, unknown>,
+      publishAt: effectivePublishAt(mission.payload, now),
     };
   },
 });
