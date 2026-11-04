@@ -923,6 +923,24 @@ export const autoPublishChain = internalAction({
     });
     if (!approvedMission) throw new Error("Mission not found after approve step");
 
+    // A Mission type that publishes through the Publisher (ADR-069): a failed
+    // publish is not a failed Mission. It stays `approved` with a `failed`
+    // Publication carrying the error, retryable via `retryPublication`.
+    const declaration = template.manifest.missionTypes?.find((m) => m.type === approvedMission.type)?.publish;
+    if (declaration) {
+      try {
+        await executeReviewAction(ctx, { mission: approvedMission, template, actionKey: "publish" });
+      } catch (err) {
+        const recorded = await ctx.runMutation(internal.publications.recordFailure, {
+          missionId: args.missionId,
+          declaredTargets: declaration.targets,
+          error: errorMessage(err),
+        });
+        if (!recorded) await failMission(`publish step failed — ${errorMessage(err)}`);
+      }
+      return;
+    }
+
     await runStep("publish", approvedMission);
   },
 });
