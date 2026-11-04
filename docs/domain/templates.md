@@ -53,6 +53,7 @@ Reusable blueprint defining the capabilities, available MCP tools, and instructi
 > 1. Copy an existing Template package from a hub repository (`seo` for a review + publish deliverable, `video-demo` for a long External Job) and adapt `profiles/opengroow.yml` and `workspace/AGENTS.md`. Iterate with `pnpm template:link <folder> --project <projectId>` (it syncs on save): no Template content is compiled into OpenGroow (#674).
 > 2. The manifest's **field contract** (`mcpServers`, `review`, `externalJobsByMissionType`, `actions`, `effect`, `requirements`) is typed in `packages/agent-templates/src/types.ts` — **source of truth**, read it instead of guessing.
 > 3. `validateManifest` (`packages/agent-templates/src/index.ts`) enforces the contract and returns actionable error messages that serve as a checklist (e.g. every referenced `server` must be declared in `mcpServers`; a `doing` transition requires a `revision_run` effect; `kind ∈ {markdown,metadata,image,video}`).
+> 3b. To hand publication to the Project's Publisher, declare `publish` on a Mission type and return a `publishable` (see "Migrating a Template to Publishable" in `docs/TEMPLATE_DEVELOPMENT.md`, ADR-069).
 > 4. Verify with `pnpm template:validate <folder>`; `npx vitest run packages/agent-templates` shows valid/invalid manifest shapes, and `fixtures/packages/` holds the packages the engine tests install.
 >
 > The _why_ of this declarative model (generic Artifact, review/External Job carried by the Template) is in **ADR-020** (`docs/adr/020-artifact-review-and-external-job-contracts-carried.md`).
