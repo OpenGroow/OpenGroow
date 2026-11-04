@@ -17,6 +17,20 @@ export async function resolveMissionTypeBlockerCodes(
     : undefined;
 }
 
+/** The Mission type's `publish` declaration (ADR-069), or undefined when it has none. */
+export async function resolveMissionTypePublish(
+  registry: TemplateRegistry,
+  projectId: string,
+  templateId: string,
+  missionType: string,
+  version?: string,
+): Promise<{ kind: string; targets: string[] } | undefined> {
+  const entry = (await registry.resolve(projectId, templateId, version))?.manifest.missionTypes?.find(
+    (candidate) => candidate.type === missionType,
+  );
+  return entry?.publish;
+}
+
 export async function validateTerminalRunResult(
   registry: TemplateRegistry,
   projectId: string,

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Card } from "@/components/ui/card";
+import { PublishablePreview } from "@/src/components/publishable-preview";
 
 type Props = {
   params: Promise<{ instanceId: string; missionId: string }>;
@@ -600,6 +601,8 @@ export function MissionReviewContent({
     (reviewContent === null || reviewKind !== "image" || carouselReview === null || carouselReview.missingImages.length > 0);
 
   const reviewActions = reviewProjection?.actions ?? [];
+  const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
+  const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;
 
   // Extract the reject capability for use by the dedicated RejectSection.
   const rejectCapability = reviewActions.find(
@@ -623,6 +626,8 @@ export function MissionReviewContent({
               : isVideoMission ? "Video Review" : isCarouselMission ? "Carousel Review" : "Article Review"}
         </h1>
       </header>
+
+      <PublishablePreview publishable={publishable} />
 
       {!reviewArtifact?.available ? (
         <Card className="p-6">

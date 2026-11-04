@@ -2,6 +2,7 @@ import type { ActivationBodyNode, AgentManifest, AgentTemplate, McpServerConfig,
 import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
+import { publishDeclarationProblem } from "./publish-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
 import { findUnknownManifestKey } from "./manifest-keys";
@@ -60,6 +61,12 @@ export {
   type ClawPackageFiles,
   type ClawPackageResult,
 } from "./claw-package";
+export {
+  PUBLISHABLE_KINDS,
+  isValidPublishTarget,
+  type PublishDeclaration,
+  type PublishableKind,
+} from "./publish-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
 export { executeActivationEffect } from "./execute-activation-effect";
@@ -488,6 +495,10 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         ok: false,
         reason: "every entry in 'missionTypes' must declare agentsMd",
       };
+    }
+    for (const entry of validatedMissionTypes) {
+      const problem = publishDeclarationProblem(entry.publish, `missionTypes[${JSON.stringify(entry.type)}]`);
+      if (problem) return { ok: false, reason: problem };
     }
     const missionTypeIds = validatedMissionTypes.map((entry) => entry.type as string);
     if (new Set(missionTypeIds).size !== missionTypeIds.length) {
