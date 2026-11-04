@@ -60,7 +60,7 @@ useTemplateRegistry([INSTANCE_ID], [imageTemplate, plainTemplate]);
 
 const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello world" };
 
-async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; templateId?: string; type?: string } = {}) {
+async function seed(opts: { publishable?: Record<string, unknown>; map?: boolean; payload?: Record<string, unknown>; templateId?: string; type?: string } = {}) {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
@@ -97,7 +97,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
         status: "needs_human_review",
         summary: "Ready",
         reviewQuestions: [],
-        artifact: { external: { service: "media", id: "42" }, publishable: PUBLISHABLE },
+        artifact: { external: { service: "media", id: "42" }, publishable: opts.publishable ?? PUBLISHABLE },
       },
       createdAt: now,
       updatedAt: now,
@@ -111,10 +111,14 @@ const json = (body: unknown, status = 200) =>
 
 /** A fake Postiz. `postsResponse` answers `POST /posts`. */
 function stubPostiz(postsResponse: () => Response = () => json([{ postId: "post-1", integration: "ch-1" }])) {
+  let uploads = 0;
   const fn = vi.fn(async (url: unknown, init?: RequestInit) => {
     const path = String(url).replace("https://postiz.example.com/public/v1/", "");
     if (path === "integrations") return json([{ id: "ch-1", name: "My IG", identifier: "instagram" }]);
-    if (path === "upload-from-url") return json({ id: "media-1", path: "https://postiz.example.com/uploads/i.png" });
+    if (path === "upload-from-url") {
+      const n = ++uploads;
+      return json({ id: `media-${n}`, path: `https://postiz.example.com/uploads/${n}` });
+    }
     if (path === "posts" && init?.method === "POST") return postsResponse();
     return json({ error: "unexpected " + path }, 404);
   });
@@ -257,5 +261,110 @@ describe("review projection", () => {
     const { owner, missionId } = await seed({ templateId: "@test/plain", type: "make_plain" });
     const review = await owner.action(api.missions_node.getReview, { missionId });
     expect(review.publish).toBeUndefined();
+  });
+});
+
+describe("publish a video Mission", () => {
+  const VIDEO = { kind: "video", videoUrl: "https://cdn.example.com/big.mp4", title: "T", caption: "Watch" };
+
+  it("hands the video to Postiz by reference, never downloading it in the Convex action", async () => {
+    const { owner, missionId } = await seed({ publishable: VIDEO });
+    const postiz = stubPostiz();
+
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+
+    const uploads = postiz.mock.calls.filter(([url]) => String(url).endsWith("/upload-from-url"));
+    expect(uploads).toHaveLength(1);
+    expect(JSON.parse(String((uploads[0][1] as RequestInit).body))).toEqual({ url: VIDEO.videoUrl });
+    expect(postiz.mock.calls.every(([url]) => String(url).startsWith("https://postiz.example.com/"))).toBe(true);
+    const post = postedBody(postiz).posts[0];
+    expect(post.value[0].content).toBe("Watch");
+    expect(post.value[0].image).toEqual([{ id: "media-1", path: "https://postiz.example.com/uploads/1" }]);
+    const [publication] = await owner.query(api.publications.listForMission, { missionId });
+    expect(publication.status).toBe("published");
+  });
+
+  it("applies per-target settings from the Publisher config, not from the Publishable", async () => {
+    const { owner, missionId } = await seed({
+      publishable: { ...VIDEO, metadata: { privacy_level: "PUBLIC" } },
+    });
+    await owner.mutation(api.publishers.mapTarget, {
+      instanceId: INSTANCE_ID,
+      target: "instagram",
+      channelId: "ch-1",
+      settings: { privacy_level: "SELF_ONLY" },
+    });
+    const postiz = stubPostiz();
+
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+
+    expect(postedBody(postiz).posts[0].settings).toMatchObject({ privacy_level: "SELF_ONLY" });
+  });
+});
+
+describe("publish a carousel Mission", () => {
+  it("uploads the slides in order and posts them in that order", async () => {
+    const slideUrls = ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png", "https://cdn.example.com/3.png"];
+    const { owner, missionId } = await seed({ publishable: { kind: "carousel", slideUrls, caption: "Swipe" } });
+    const postiz = stubPostiz();
+
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+
+    const uploaded = postiz.mock.calls
+      .filter(([url]) => String(url).endsWith("/upload-from-url"))
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body)).url);
+    expect(uploaded).toEqual(slideUrls);
+    const value = postedBody(postiz).posts[0].value;
+    expect(value).toHaveLength(1);
+    expect(value[0].content).toBe("Swipe");
+    expect(value[0].image.map((i: { id: string }) => i.id)).toEqual(["media-1", "media-2", "media-3"]);
+  });
+});
+
+describe("publish to several targets", () => {
+  async function twoTargets() {
+    const ctxs = await seed({ payload: {} });
+    const { owner, missionId } = ctxs;
+    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
+    await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes", channelId: "ch-2" });
+    await owner.mutation(api.publications.setPublishTargets, { missionId, targets: ["instagram", "pinterest:recipes"] });
+    return ctxs;
+  }
+
+  it("creates one independent Publication per target and completes the Mission when all are published", async () => {
+    const { owner, missionId } = await twoTargets();
+    const postiz = stubPostiz();
+
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+
+    const publications = await owner.query(api.publications.listForMission, { missionId });
+    expect(publications.map((p) => [p.target, p.status]).sort()).toEqual([
+      ["instagram", "published"],
+      ["pinterest:recipes", "published"],
+    ]);
+    const posts = postiz.mock.calls.filter(([url, init]) => String(url).endsWith("/posts") && (init as RequestInit)?.method === "POST");
+    expect(posts).toHaveLength(2);
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+  });
+
+  it("keeps the Mission approved when one target fails, and a retry only redoes the failed one", async () => {
+    const { owner, missionId } = await twoTargets();
+    let calls = 0;
+    stubPostiz(() => (++calls === 1 ? json([{ postId: "p-ok" }]) : json({ message: "boom" }, 500)));
+
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/Postiz responded 500/);
+
+    const byTarget = Object.fromEntries(
+      (await owner.query(api.publications.listForMission, { missionId })).map((p) => [p.target, p.status]),
+    );
+    expect(byTarget).toEqual({ instagram: "published", "pinterest:recipes": "failed" });
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect(postiz.mock.calls.filter(([url]) => String(url).endsWith("/posts"))).toHaveLength(1);
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
   });
 });

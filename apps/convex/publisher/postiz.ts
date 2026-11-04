@@ -40,6 +40,17 @@ async function call(
   }
 }
 
+/** The media a Publishable sends, in posting order. `image` and `video` have one, `carousel` its slides. */
+function mediaReferences(publishable: Record<string, unknown>): PublisherResult<{ urls: string[] }> {
+  const { kind } = publishable;
+  if (kind === "image" && typeof publishable.imageUrl === "string") return { ok: true, urls: [publishable.imageUrl] };
+  if (kind === "video" && typeof publishable.videoUrl === "string") return { ok: true, urls: [publishable.videoUrl] };
+  if (kind === "carousel" && Array.isArray(publishable.slideUrls) && publishable.slideUrls.length > 0) {
+    return { ok: true, urls: publishable.slideUrls.filter((u): u is string => typeof u === "string") };
+  }
+  return { ok: false, error: `Publishing a "${String(kind)}" is not supported (missing media reference)` };
+}
+
 export const postizAdapter: PublisherAdapter = {
   async testConnection(conn) {
     const res = await call(conn, "is-connected");
@@ -66,24 +77,29 @@ export const postizAdapter: PublisherAdapter = {
     return { ok: true, channels };
   },
 
-  // V1 publishes `image` Publishables. Media is fetched by Postiz from its
-  // reference (upload-from-url): OpenGroow never stores it (ADR-010).
+  // Media is fetched by Postiz from its reference (upload-from-url): OpenGroow
+  // never downloads nor stores it (ADR-010), which is what makes large videos
+  // safe in a Convex action (docs/domain/publishing.md, "Large videos").
   async publish(conn, request) {
-    const publishable = request.publishable as { kind?: string; imageUrl?: string; caption?: string };
-    if (publishable.kind !== "image" || typeof publishable.imageUrl !== "string") {
-      return { ok: false, error: `Publishing a "${String(publishable.kind)}" is not supported yet` };
-    }
+    const media = mediaReferences(request.publishable);
+    if (!media.ok) return media;
     const channels = await postizAdapter.listChannels(conn);
     if (!channels.ok) return channels;
     const channel = channels.channels.find((c) => c.id === request.channelId);
     if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
 
-    const upload = await call(conn, "upload-from-url", { url: publishable.imageUrl });
-    if (!upload.ok) return upload;
-    const media = upload.body as { id?: unknown; path?: unknown } | null;
-    if (typeof media?.id !== "string" || typeof media.path !== "string") {
-      return { ok: false, error: "Postiz returned an unexpected upload response" };
+    // Sequential: the order of the uploads is the order of the slides.
+    const uploaded: Array<{ id: string; path: string }> = [];
+    for (const url of media.urls) {
+      const upload = await call(conn, "upload-from-url", { url });
+      if (!upload.ok) return upload;
+      const item = upload.body as { id?: unknown; path?: unknown } | null;
+      if (typeof item?.id !== "string" || typeof item.path !== "string") {
+        return { ok: false, error: "Postiz returned an unexpected upload response" };
+      }
+      uploaded.push({ id: item.id, path: item.path });
     }
+    const publishable = request.publishable as { caption?: string };
 
     const scheduled = request.publishAt !== undefined;
     const posted = await call(conn, "posts", {
@@ -94,7 +110,7 @@ export const postizAdapter: PublisherAdapter = {
       posts: [
         {
           integration: { id: channel.id },
-          value: [{ content: publishable.caption ?? "", image: [{ id: media.id, path: media.path }] }],
+          value: [{ content: publishable.caption ?? "", image: uploaded }],
           settings: { __type: channel.service, ...(request.settings ?? {}) },
         },
       ],
