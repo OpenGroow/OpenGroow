@@ -16,8 +16,6 @@ mkdir -p \
   "$CONTEXT_DIR/scripts/docker" \
   "$CONTEXT_DIR/packages"
 
-cp "$REPO_ROOT/OPENCLAW_VERSION" \
-  "$CONTEXT_DIR/apps/openclaw-docker-config/OPENCLAW_VERSION"
 cp "$REPO_ROOT/docker/runtime-worker/Dockerfile" \
   "$CONTEXT_DIR/apps/openclaw-docker-config/docker/runtime-worker/Dockerfile"
 cp "$REPO_ROOT/docker/runtime-worker/entrypoint.sh" \

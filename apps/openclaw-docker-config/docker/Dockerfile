@@ -6,17 +6,17 @@
 # that needs a new binary, update this Dockerfile and rebuild.
 ###############################################################################
 
-FROM node:22-bookworm-slim
+# Node, git, tini, ca-certificates and the pinned `openclaw` live in the shared
+# base image (docker/base/Dockerfile) so the runtime-worker can reuse the layer.
+ARG OPENCLAW_BASE_IMAGE=opengroow/openclaw-base:local
+FROM ${OPENCLAW_BASE_IMAGE}
 
 # Install system dependencies as root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
     curl \
     chromium \
-    ca-certificates \
     gnupg \
     jq \
-    tini \
   && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI (required by github skill)
@@ -26,13 +26,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
       > /etc/apt/sources.list.d/github-cli.list \
   && apt-get update && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
-
-# Pin OpenClaw version for reproducible builds — bump apps/openclaw-docker-config/OPENCLAW_VERSION
-COPY OPENCLAW_VERSION /tmp/OPENCLAW_VERSION
-RUN OPENCLAW_VERSION="$(cat /tmp/OPENCLAW_VERSION)" \
-  && npm install -g "openclaw@${OPENCLAW_VERSION}" \
-  && cp /tmp/OPENCLAW_VERSION /opt/openclaw-expected-version \
-  && rm /tmp/OPENCLAW_VERSION
 
 # Install ClawHub CLI for skill management
 RUN npm install -g clawhub
