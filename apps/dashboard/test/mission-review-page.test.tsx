@@ -199,6 +199,68 @@ describe("MissionReviewContent", () => {
     });
   }
 
+  describe("Publishable preview (ADR-069)", () => {
+    function missionWithPublishable(publishable: Record<string, unknown>) {
+      return {
+        ...MISSION_WITH_ARTIFACT,
+        lastResult: {
+          ...MISSION_WITH_ARTIFACT.lastResult,
+          artifact: { ...MISSION_WITH_ARTIFACT.lastResult.artifact, publishable },
+        },
+        lastArtifact: { external: { service: "media", id: "42" }, publishable },
+      };
+    }
+
+    async function renderWith(publishable: Record<string, unknown>) {
+      useQueryMock.mockImplementation((key: string) =>
+        key === "missions.get" ? missionWithPublishable(publishable) : undefined,
+      );
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+    }
+
+    it("previews a video from its URL, with cover and caption", async () => {
+      await renderWith({
+        kind: "video",
+        videoUrl: "https://cdn.example.com/v.mp4",
+        coverUrl: "https://cdn.example.com/c.png",
+        caption: "Watch this",
+      });
+      const preview = document.querySelector('[data-testid="publishable-preview"]');
+      expect(preview?.textContent).toContain("Watch this");
+      const video = preview?.querySelector("video") as HTMLVideoElement | null;
+      expect(video?.src).toBe("https://cdn.example.com/v.mp4");
+      expect(video?.poster).toBe("https://cdn.example.com/c.png");
+    });
+
+    it("previews an image from its URL", async () => {
+      await renderWith({ kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Pic" });
+      const img = document.querySelector('[data-testid="publishable-preview"] img') as HTMLImageElement | null;
+      expect(img?.src).toBe("https://cdn.example.com/i.png");
+    });
+
+    it("previews every slide of a carousel in order", async () => {
+      await renderWith({
+        kind: "carousel",
+        slideUrls: ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"],
+        caption: "Swipe",
+      });
+      const imgs = [...document.querySelectorAll('[data-testid="publishable-preview"] img')] as HTMLImageElement[];
+      expect(imgs.map((img) => img.src)).toEqual([
+        "https://cdn.example.com/1.png",
+        "https://cdn.example.com/2.png",
+      ]);
+    });
+
+    it("shows no preview for a Mission without a Publishable", async () => {
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      expect(document.querySelector('[data-testid="publishable-preview"]')).toBeNull();
+    });
+  });
+
   it("shows keyword and articleId from artifact metadata", async () => {
     setupDefaultQuery();
     loadReviewContentMock.mockReturnValue(new Promise(() => {}));

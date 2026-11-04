@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PUBLISHABLE_KINDS } from "@opengroow/agent-templates";
+import { convexTest } from "convex-test";
+import { internal } from "../_generated/api";
+import schema from "../schema";
 import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation.js";
-import { publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
+import { type Publishable, publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
 import type { Id } from "../_generated/dataModel";
 
 // Issue #16, ADR-069: the Publishable of an Artifact, validated against the
@@ -42,9 +45,9 @@ function decide(
   );
 }
 
-const VIDEO = { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Hello" };
-const IMAGE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello" };
-const CAROUSEL = {
+const VIDEO: Publishable = { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Hello" };
+const IMAGE: Publishable = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello" };
+const CAROUSEL: Publishable = {
   kind: "carousel",
   slideUrls: ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"],
   caption: "Hello",
@@ -154,5 +157,39 @@ describe("Publishable schema definition", () => {
     };
     expect(schema.properties.kind.const).toBe("carousel");
     expect(schema.required).toEqual(expect.arrayContaining(["kind", "slideUrls", "caption"]));
+  });
+});
+
+describe("Publishable stored with a completed Run", () => {
+  const modules = {
+    "../_generated/api.ts": () => import("../_generated/api.js"),
+    "../missions.ts": () => import("../missions.js"),
+    "../runs.ts": () => import("../runs.js"),
+  };
+
+  it.each([VIDEO, IMAGE, CAROUSEL])("keeps the Publishable (%#) on the Mission's lastArtifact", async (publishable) => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const { missionId, runId } = await t.run(async (ctx) => {
+      const missionId = await ctx.db.insert("missions", {
+        ownerId: "o", instanceId: "i", templateId: "tpl", type: "make", payload: {}, status: "doing",
+        createdAt: now, updatedAt: now,
+      });
+      const runId = await ctx.db.insert("runs", {
+        missionId, ownerId: "o", instanceId: "i", templateId: "tpl", agentName: "a",
+        sessionKey: "s", status: "running", createdAt: now, updatedAt: now,
+      });
+      return { missionId, runId };
+    });
+    await t.mutation(internal.runs.markCompleted, {
+      runId,
+      result: {
+        status: "success",
+        summary: "done",
+        artifact: { external: { service: "media", id: "42" }, publishable },
+      },
+    });
+    const mission = await t.run((ctx) => ctx.db.get(missionId));
+    expect(mission?.lastArtifact?.publishable).toEqual(publishable);
   });
 });

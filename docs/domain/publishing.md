@@ -22,6 +22,8 @@ A logical, human-readable destination a Publishable can be sent to (for example 
 The deliverable of a Mission expressed in the unified publishing format, of one **kind** from a closed set defined by OpenGroow (V1: `video`, `image`, `carousel`). A Publishable carries **references only** (media URLs, ids at the producing service), never content (ADR-010). The Agent Template's manifest declares, per Mission type, the kind it produces and the Publish targets it may go to.
 
 - A new kind is added to the closed set by OpenGroow; it is not declared by a Template.
+- **Declaration**: a Mission type declares `"publish": { "kind": "carousel", "targets": ["instagram", "pinterest:recipes"] }` in its manifest entry; `validateManifest` checks the kind and the targets at Activation.
+- **Fields (V1)**: `video` = `videoUrl`, optional `coverUrl` / `title`, `caption`; `image` = `imageUrl`, `caption`; `carousel` = ordered `slideUrls`, `caption`. All accept a free `metadata` object. The Agent returns it as `artifact.publishable`; an invalid or missing one is rejected with per-field errors and the Agent retries.
 - _Avoid_: "payload", "post".
 
 ### Publication
