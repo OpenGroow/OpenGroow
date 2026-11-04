@@ -4,6 +4,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx } fr
 import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
+import { assertValidPublishAt } from "./publish_at.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { findLiveRunForMission } from "./runs.js";
 import { currentTemplateVersion } from "./template_registry.js";
@@ -133,6 +134,7 @@ export const create = mutation({
     autoPublish: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
     // When the user leaves the name field empty or whitespace-only, derive a
     // default from the mission type and the per-project sequential number

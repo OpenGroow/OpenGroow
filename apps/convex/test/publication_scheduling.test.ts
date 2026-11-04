@@ -19,6 +19,7 @@ const modules = {
   "../publications.ts": () => import("../publications.js"),
   "../publishers.ts": () => import("../publishers.js"),
   "../runs.ts": () => import("../runs.js"),
+  "../schedules.ts": () => import("../schedules.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
 };
 
@@ -170,6 +171,80 @@ describe("publishAt", () => {
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p).toMatchObject({ status: "scheduled", externalId: "post-1", scheduledAt: publishAt });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+  });
+});
+
+describe("editing publishAt at review", () => {
+  it("lets the owner set it, schedules accordingly, and clear it back to immediate", async () => {
+    const { owner, missionId } = await seed();
+    const publishAt = Date.now() + 5 * HOUR;
+    await owner.mutation(api.publications.setPublishAt, { missionId, publishAt });
+    expect((await owner.query(api.missions.get, { missionId }))?.payload).toMatchObject({ publishTarget: "instagram", publishAt });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish?.publishAt).toBe(publishAt);
+
+    await owner.mutation(api.publications.setPublishAt, { missionId, publishAt: null });
+    expect(((await owner.query(api.missions.get, { missionId }))?.payload as Record<string, unknown>).publishAt).toBeUndefined();
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect(postedBody(postiz).type).toBe("now");
+  });
+
+  it("cannot be edited by someone else", async () => {
+    const { t, missionId } = await seed();
+    await expect(
+      t.withIdentity(OTHER).mutation(api.publications.setPublishAt, { missionId, publishAt: Date.now() + HOUR }),
+    ).rejects.toThrow();
+  });
+
+  it("a past date publishes immediately", async () => {
+    const { owner, missionId } = await seed({ payload: { publishTarget: "instagram", publishAt: Date.now() - HOUR } });
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect(postedBody(postiz).type).toBe("now");
+  });
+});
+
+describe("publishAt on Mission and Schedule payloads", () => {
+  it("is kept on a Schedule payload (create and edit) and refused when it is not a timestamp", async () => {
+    const { owner } = await seed();
+    const publishAt = Date.now() + HOUR;
+    const frequency = { unit: "daily" as const, hour: 9, minute: 0 };
+    const { scheduleId } = await owner.mutation(api.schedules.create, {
+      instanceId: INSTANCE_ID,
+      templateId: TEMPLATE_ID,
+      type: "make_image",
+      payload: { publishAt },
+      frequency,
+      timezone: "UTC",
+    });
+    expect((await owner.query(api.schedules.listByInstance, { instanceId: INSTANCE_ID })).find((s) => s._id === scheduleId)?.payload).toEqual({ publishAt });
+    await owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishAt: publishAt + HOUR } });
+    await expect(
+      owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishAt: "tomorrow" } }),
+    ).rejects.toThrow(/publishAt/);
+    await expect(
+      owner.mutation(api.schedules.create, {
+        instanceId: INSTANCE_ID,
+        templateId: TEMPLATE_ID,
+        type: "make_image",
+        payload: { publishAt: "tomorrow" },
+        frequency,
+        timezone: "UTC",
+      }),
+    ).rejects.toThrow(/publishAt/);
+  });
+
+  it("is refused on a Mission when it is not a timestamp", async () => {
+    const { owner } = await seed();
+    await expect(
+      owner.mutation(api.missions.create, {
+        instanceId: INSTANCE_ID,
+        templateId: TEMPLATE_ID,
+        type: "make_image",
+        payload: { publishAt: "tomorrow" },
+      }),
+    ).rejects.toThrow(/publishAt/);
   });
 });
 

@@ -10,6 +10,7 @@ import { internal } from "./_generated/api.js";
 import { scheduleUnitV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
+import { assertValidPublishAt } from "./publish_at.js";
 
 export const frequencyV = v.object({
   unit: scheduleUnitV,
@@ -30,6 +31,7 @@ export const create = mutation({
     autoPublish: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
 
     const frequency = args.frequency as Frequency;
@@ -93,6 +95,7 @@ export const resume = mutation({
 export const updatePayload = mutation({
   args: { scheduleId: v.id("schedules"), payload: v.any() },
   handler: async (ctx, args) => {
+    assertValidPublishAt(args.payload);
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);

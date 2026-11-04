@@ -6,6 +6,7 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { adapterFor } from "./publisher/postiz.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
+import { effectivePublishAt } from "./publish_at.js";
 
 // Publications (ADR-069, docs/domain/publishing.md): the tracked outcome of
 // sending one Publishable to one Publish target. One row per (Mission, target).
@@ -16,21 +17,6 @@ import { markMissionDone } from "./missions.js";
 export function effectivePublishTarget(payload: unknown, declaredTargets: readonly string[]): string | undefined {
   const chosen = (payload as { publishTarget?: unknown } | null | undefined)?.publishTarget;
   return typeof chosen === "string" && chosen !== "" ? chosen : declaredTargets[0];
-}
-
-/** When the human wants the post out (epoch ms), from `payload.publishAt`. A
- * missing, invalid or already-past date means "publish immediately". */
-export function effectivePublishAt(payload: unknown, now: number): number | undefined {
-  const at = (payload as { publishAt?: unknown } | null | undefined)?.publishAt;
-  return typeof at === "number" && Number.isFinite(at) && at > now ? at : undefined;
-}
-
-/** Rejects a `publishAt` that is present but not a finite epoch-ms number. */
-export function assertValidPublishAt(payload: unknown): void {
-  const at = (payload as { publishAt?: unknown } | null | undefined)?.publishAt;
-  if (at !== undefined && at !== null && (typeof at !== "number" || !Number.isFinite(at))) {
-    throw new Error("publishAt must be a timestamp in milliseconds");
-  }
 }
 
 const publicationStatusV = v.union(
@@ -81,6 +67,33 @@ export const setPublishTarget = mutation({
   },
 });
 
+function optionalPublishAt(payload: unknown): { publishAt?: number } {
+  const publishAt = effectivePublishAt(payload, 0);
+  return publishAt === undefined ? {} : { publishAt };
+}
+
+/** The human schedules the post (epoch ms), or clears it (null) to publish immediately. */
+export const setPublishAt = mutation({
+  args: { missionId: v.id("missions"), publishAt: v.union(v.number(), v.null()) },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) throw new Error("Mission not found");
+    const ownerId = await ownerIdFor(ctx, mission.instanceId);
+    if (mission.ownerId !== ownerId) throw new Error("Forbidden");
+    if (mission.status !== "to_validate" && mission.status !== "approved") {
+      throw new Error(`The publication date can only be changed during review, got: "${mission.status}"`);
+    }
+    if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
+    const { publishAt: _previous, ...rest } = (
+      mission.payload && typeof mission.payload === "object" ? mission.payload : {}
+    ) as Record<string, unknown>;
+    await ctx.db.patch(args.missionId, {
+      payload: args.publishAt === null ? rest : { ...rest, publishAt: args.publishAt },
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /** What the review page needs to show and gate `publish`. */
 export const reviewState = internalQuery({
   args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
@@ -101,6 +114,7 @@ export const reviewState = internalQuery({
       target: target ?? null,
       declaredTargets: args.declaredTargets,
       mapped,
+      ...optionalPublishAt(mission.payload),
       publications: publications.map((p) => ({
         target: p.target,
         status: p.status,

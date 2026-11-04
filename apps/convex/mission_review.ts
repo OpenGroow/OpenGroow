@@ -60,6 +60,8 @@ export type MissionPublishProjection = {
   declaredTargets: string[];
   /** The target is mapped to a channel on the Project's Publisher. */
   mapped: boolean;
+  /** The date the human chose (epoch ms); absent = publish immediately. */
+  publishAt?: number;
   publications: Array<{
     target: string;
     status: "pending" | "scheduled" | "published" | "failed";
