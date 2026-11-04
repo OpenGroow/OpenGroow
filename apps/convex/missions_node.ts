@@ -419,40 +419,47 @@ async function publishThroughPublisher(
   mission: Doc<"missions">,
   declaredTargets: string[],
 ): Promise<void> {
-  const prepared = await ctx.runMutation(internal.publications.begin, {
+  const prepared = await ctx.runMutation(internal.publications.beginAll, {
     missionId: mission._id,
     declaredTargets,
   });
-  const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
-    channelId: prepared.channelId,
-    settings: prepared.settings,
-    publishable: prepared.publishable,
-    ...(prepared.publishAt !== undefined ? { publishAt: prepared.publishAt } : {}),
-  });
-  if (!result.ok) {
-    await ctx.runMutation(internal.publications.finish, {
-      publicationId: prepared.publicationId,
-      status: "failed",
-      error: result.error,
+  // One Publication per target, independent: a failing target does not stop
+  // the others, and the action fails at the end so the human can retry it.
+  const failures: string[] = [];
+  for (const item of prepared.publications) {
+    const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
+      channelId: item.channelId,
+      settings: item.settings,
+      publishable: prepared.publishable,
+      ...(prepared.publishAt !== undefined ? { publishAt: prepared.publishAt } : {}),
     });
-    throw new Error(`Publishing failed: ${result.error}`);
+    if (!result.ok) {
+      await ctx.runMutation(internal.publications.finish, {
+        publicationId: item.publicationId,
+        status: "failed",
+        error: result.error,
+      });
+      failures.push(`${item.target}: ${result.error}`);
+      continue;
+    }
+    await ctx.runMutation(internal.publications.finish, {
+      publicationId: item.publicationId,
+      status: result.outcome.status,
+      externalId: result.outcome.externalId,
+      ...(result.outcome.status === "scheduled" && prepared.publishAt !== undefined ? { scheduledAt: prepared.publishAt } : {}),
+      ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
+    });
+    await ctx.runMutation(internal.events.store, {
+      instanceId: mission.instanceId,
+      event: {
+        id: `ReviewPublished:${mission._id}:${item.publicationId}`,
+        type: "ReviewPublished",
+        payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
+        ts: Date.now(),
+      },
+    });
   }
-  await ctx.runMutation(internal.publications.finish, {
-    publicationId: prepared.publicationId,
-    status: result.outcome.status,
-    externalId: result.outcome.externalId,
-    ...(result.outcome.status === "scheduled" && prepared.publishAt !== undefined ? { scheduledAt: prepared.publishAt } : {}),
-    ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
-  });
-  await ctx.runMutation(internal.events.store, {
-    instanceId: mission.instanceId,
-    event: {
-      id: `ReviewPublished:${mission._id}:${prepared.publicationId}`,
-      type: "ReviewPublished",
-      payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
-      ts: Date.now(),
-    },
-  });
+  if (failures.length > 0) throw new Error(`Publishing failed: ${failures.join("; ")}`);
 }
 
 /**

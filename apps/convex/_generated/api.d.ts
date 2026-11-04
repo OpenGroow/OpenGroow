@@ -90,6 +90,7 @@ import type * as project_templates from "../project_templates.js";
 import type * as project_templates_node from "../project_templates_node.js";
 import type * as projects from "../projects.js";
 import type * as publications from "../publications.js";
+import type * as publish_at from "../publish_at.js";
 import type * as publishable from "../publishable.js";
 import type * as publisher_adapter from "../publisher/adapter.js";
 import type * as publisher_postiz from "../publisher/postiz.js";
@@ -221,6 +222,7 @@ declare const fullApi: ApiFromModules<{
   project_templates_node: typeof project_templates_node;
   projects: typeof projects;
   publications: typeof publications;
+  publish_at: typeof publish_at;
   publishable: typeof publishable;
   "publisher/adapter": typeof publisher_adapter;
   "publisher/postiz": typeof publisher_postiz;

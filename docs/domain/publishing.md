@@ -35,3 +35,13 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 - **Scheduled publication**: an optional `payload.publishAt` (epoch ms) on a Mission or a Schedule, editable in the review. Without it (or in the past) the post goes out immediately; with it the adapter schedules the post and the Publication is `scheduled` with `scheduledAt`. A cron polls the adapter for scheduled Publications that reached their date (no webhook, like External Job polling) and moves them to `published` (or `failed`).
 
 - **Do not confuse** with the Mission's `approved` status ("to publish"): `approved` is the human's validation of the deliverable; a Publication is what happens next.
+
+### Postiz translation (V1)
+
+- `image`, `video` and `carousel` all go through Postiz `upload-from-url` then `POST /posts`. A `carousel` uploads its slides **sequentially** (the upload order is the slide order) and sends them as the media list of one post; a `video` is a post with one media.
+- Per-target settings (for example TikTok privacy) come from the Publisher config of the target (`settings` of the mapping), never from the Publishable (`metadata` is not forwarded). The Publishable `coverUrl` is not forwarded yet.
+- **Several targets**: `payload.publishTargets` (set by the human in the review, each declared by the Mission type) makes one independent Publication per target. All are created `pending` up front; one failing does not stop the others. The `publish` action then fails, and replaying it redoes only the `failed` ones.
+
+### Large videos: runtime limits
+
+The video is never downloaded by OpenGroow: the Convex action only sends Postiz the URL (`upload-from-url`), and Postiz fetches the bytes itself. A test pins this (the only `fetch` calls of an action are to the Postiz API). So the size of the video does not count against the action's memory nor its argument/return limits (16 MiB). What does count is the time of the action, which waits for Postiz to fetch and store the video: Convex actions are limited to 10 minutes, and a single `fetch` has no separate timeout inside that budget. A video whose upload to Postiz takes longer than that fails the Publication with an error (it can be retried). The size limit that actually applies is the one of Postiz and of the target network (for example TikTok, Instagram), not Convex's. These limits come from the Convex documentation and the call design; they were not measured against a live Postiz with a multi-GB file.

@@ -19,6 +19,18 @@ export function effectivePublishTarget(payload: unknown, declaredTargets: readon
   return typeof chosen === "string" && chosen !== "" ? chosen : declaredTargets[0];
 }
 
+/** All Publish targets of a Mission: `payload.publishTargets` when the human
+ * chose several in the review, else the single target (see above). */
+export function effectivePublishTargets(payload: unknown, declaredTargets: readonly string[]): string[] {
+  const many = (payload as { publishTargets?: unknown } | null | undefined)?.publishTargets;
+  if (Array.isArray(many)) {
+    const targets = [...new Set(many.filter((t): t is string => typeof t === "string" && t !== ""))];
+    if (targets.length > 0) return targets;
+  }
+  const single = effectivePublishTarget(payload, declaredTargets);
+  return single ? [single] : [];
+}
+
 const publicationStatusV = v.union(
   v.literal("pending"),
   v.literal("scheduled"),
@@ -67,6 +79,29 @@ export const setPublishTarget = mutation({
   },
 });
 
+/** The human sends a Mission to several targets at once (one Publication each). */
+export const setPublishTargets = mutation({
+  args: { missionId: v.id("missions"), targets: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) throw new Error("Mission not found");
+    const ownerId = await ownerIdFor(ctx, mission.instanceId);
+    if (mission.ownerId !== ownerId) throw new Error("Forbidden");
+    if (mission.status !== "to_validate" && mission.status !== "approved") {
+      throw new Error(`The Publish targets can only be changed during review, got: "${mission.status}"`);
+    }
+    if (args.targets.length === 0) throw new Error("At least one Publish target is required");
+    for (const target of args.targets) {
+      if (!isValidPublishTarget(target)) throw new Error(`Invalid Publish target "${target}"`);
+    }
+    const payload = mission.payload && typeof mission.payload === "object" ? mission.payload : {};
+    await ctx.db.patch(args.missionId, {
+      payload: { ...(payload as Record<string, unknown>), publishTargets: [...new Set(args.targets)] },
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 function optionalPublishAt(payload: unknown): { publishAt?: number } {
   const publishAt = effectivePublishAt(payload, 0);
   return publishAt === undefined ? {} : { publishAt };
@@ -101,17 +136,21 @@ export const reviewState = internalQuery({
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
     const target = effectivePublishTarget(mission.payload, args.declaredTargets);
+    const targets = effectivePublishTargets(mission.payload, args.declaredTargets);
     const publisher = await ctx.db
       .query("publishers")
       .withIndex("by_instance", (q) => q.eq("instanceId", mission.instanceId))
       .unique();
-    const mapped = Boolean(target && publisher?.targets.some((t) => t.target === target && t.channelId));
+    const mapped =
+      targets.length > 0 &&
+      targets.every((name) => publisher?.targets.some((t) => t.target === name && t.channelId));
     const publications = await ctx.db
       .query("publications")
       .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
       .collect();
     return {
-      target: target ?? null,
+      target: targets[0] ?? target ?? null,
+      targets,
       declaredTargets: args.declaredTargets,
       mapped,
       ...optionalPublishAt(mission.payload),
@@ -182,6 +221,85 @@ export const begin = internalMutation({
       channelId: mapping.channelId,
       settings: mapping.settings,
       publishable: publishable as Record<string, unknown>,
+      publishAt: effectivePublishAt(mission.payload, now),
+    };
+  },
+});
+
+/**
+ * Starts publishing a Mission to every one of its Publish targets: validates
+ * them all first (nothing is created if one is unusable), creates a `pending`
+ * Publication per target up front (so the Mission only completes when all are
+ * `published`), and returns what the adapter needs for each target to send.
+ * Targets already `published`/`scheduled` are skipped, so a retry only redoes
+ * the `failed` ones.
+ */
+export const beginAll = internalMutation({
+  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) throw new Error("Mission not found");
+    const targets = effectivePublishTargets(mission.payload, args.declaredTargets);
+    if (targets.length === 0) throw new Error(`Publish target "" is not one this Mission type may use`);
+    for (const target of targets) {
+      if (!args.declaredTargets.includes(target)) {
+        throw new Error(`Publish target "${target}" is not one this Mission type may use`);
+      }
+    }
+    const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
+    const publishable = (resultArtifact ?? mission.lastArtifact)?.publishable;
+    if (!publishable) throw new Error("No Publishable available for this mission");
+
+    const publisher = await ctx.db
+      .query("publishers")
+      .withIndex("by_instance", (q) => q.eq("instanceId", mission.instanceId))
+      .unique();
+    if (!publisher) throw new Error("No Publisher is configured: set one up on the Publishers page");
+    for (const target of targets) {
+      if (!publisher.targets.find((t) => t.target === target)?.channelId) {
+        throw new Error(`Publish target "${target}" is not configured: map it on the Publishers page`);
+      }
+    }
+    if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
+
+    const now = Date.now();
+    const toSend = [];
+    const skipped: string[] = [];
+    for (const target of targets) {
+      const mapping = publisher.targets.find((t) => t.target === target)!;
+      const existing = await ctx.db
+        .query("publications")
+        .withIndex("by_mission_target", (q) => q.eq("missionId", args.missionId).eq("target", target))
+        .unique();
+      if (existing && existing.status !== "failed") {
+        skipped.push(`"${target}" is already ${existing.status}`);
+        continue;
+      }
+      let publicationId = existing?._id;
+      if (existing) {
+        await ctx.db.patch(existing._id, { status: "pending", error: undefined, updatedAt: now });
+      } else {
+        publicationId = await ctx.db.insert("publications", {
+          missionId: args.missionId,
+          instanceId: mission.instanceId,
+          target,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      toSend.push({
+        publicationId: publicationId!,
+        target,
+        channelId: mapping.channelId!,
+        settings: mapping.settings,
+      });
+    }
+    if (toSend.length === 0) throw new Error(`Publication to ${skipped.join(", ")}`);
+    return {
+      connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
+      publishable: publishable as Record<string, unknown>,
+      publications: toSend,
       publishAt: effectivePublishAt(mission.payload, now),
     };
   },
