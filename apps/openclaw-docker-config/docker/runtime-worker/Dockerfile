@@ -1,15 +1,12 @@
-FROM node:22-bookworm-slim
+# Node, git, tini and the pinned `openclaw` come from the shared base image
+# (apps/openclaw-docker-config/docker/base/Dockerfile): one copy of openclaw
+# for both this image and the gateway.
+ARG OPENCLAW_BASE_IMAGE=opengroow/openclaw-base:local
+FROM ${OPENCLAW_BASE_IMAGE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    git \
     socat \
-    tini \
   && rm -rf /var/lib/apt/lists/*
-
-COPY apps/openclaw-docker-config/OPENCLAW_VERSION /tmp/OPENCLAW_VERSION
-RUN npm install -g "openclaw@$(cat /tmp/OPENCLAW_VERSION)" \
-  && rm /tmp/OPENCLAW_VERSION
 
 WORKDIR /opt/runtime-worker
 

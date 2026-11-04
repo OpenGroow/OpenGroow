@@ -19,6 +19,12 @@ echo "==> Checking tracked files for secrets ..."
 "$REPO_ROOT/scripts/check-secrets.sh"
 echo ""
 
+# The runtime-worker is built FROM the shared base image (node + openclaw).
+BASE_IMAGE="$IMAGE_PREFIX/openclaw-base"
+echo "==> Building base image ..."
+docker buildx build --platform linux/amd64 -f "$REPO_ROOT/docker/base/Dockerfile" -t "$BASE_IMAGE:$SHA" --push "$REPO_ROOT"
+echo ""
+
 RW_IMAGE="$IMAGE_PREFIX/openclaw-runtime-worker"
 echo "==> Building runtime-worker image ..."
 echo "    Image: $RW_IMAGE"
@@ -31,6 +37,7 @@ trap 'rm -rf "$BUILD_CONTEXT"' EXIT
 
 docker buildx build \
   --platform linux/amd64 \
+  --build-arg "OPENCLAW_BASE_IMAGE=$BASE_IMAGE:$SHA" \
   -f "$BUILD_CONTEXT/apps/openclaw-docker-config/docker/runtime-worker/Dockerfile" \
   -t "$RW_IMAGE:$TAG" \
   -t "$RW_IMAGE:$SHA" \

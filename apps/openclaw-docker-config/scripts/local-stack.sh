@@ -25,12 +25,25 @@ if [ -f "$MONOREPO_ROOT/.env" ]; then
 fi
 GATEWAY_IMAGE_TAG="${OPENCLAW_LOCAL_GATEWAY_IMAGE_TAG:-opengroow/openclaw-gateway:local}"
 WORKER_IMAGE_TAG="${OPENCLAW_LOCAL_RUNTIME_WORKER_IMAGE_TAG:-opengroow/openclaw-runtime-worker:local}"
+# Gateway and runtime-worker are both built FROM this image (node + the pinned
+# openclaw CLI), so openclaw is stored once instead of twice.
+BASE_IMAGE_TAG="${OPENCLAW_LOCAL_BASE_IMAGE_TAG:-opengroow/openclaw-base:local}"
+
+build_base_image() {
+  echo "==> Building local openclaw base image"
+  echo "    tag: $BASE_IMAGE_TAG"
+  docker build \
+    -f "$DOCKER_DIR/base/Dockerfile" \
+    -t "$BASE_IMAGE_TAG" \
+    "$REPO_ROOT"
+}
 
 build_gateway_image() {
   echo "==> Building local gateway image"
   echo "    tag: $GATEWAY_IMAGE_TAG"
   docker build \
     -f "$DOCKER_DIR/Dockerfile" \
+    --build-arg "OPENCLAW_BASE_IMAGE=$BASE_IMAGE_TAG" \
     -t "$GATEWAY_IMAGE_TAG" \
     "$REPO_ROOT"
 }
@@ -47,6 +60,7 @@ build_runtime_worker_image() {
 
   docker build \
     -f "$build_context/apps/openclaw-docker-config/docker/runtime-worker/Dockerfile" \
+    --build-arg "OPENCLAW_BASE_IMAGE=$BASE_IMAGE_TAG" \
     -t "$WORKER_IMAGE_TAG" \
     "$build_context"
 }
@@ -62,6 +76,7 @@ run_rollout() {
     || echo "WARNING: rollout failed — existing local-multi instances may still be running the previous image (check that openclaw-local-control is running)" >&2
 }
 
+build_base_image
 build_gateway_image
 build_runtime_worker_image
 run_rollout

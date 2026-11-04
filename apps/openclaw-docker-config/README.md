@@ -35,8 +35,14 @@ This builds both images with the `:local` tag and rolls them out to running self
 To build a single image by hand:
 
 ```bash
-# Gateway (context: this folder)
+# Base image (node + the pinned openclaw CLI), shared by the gateway and the
+# runtime-worker so openclaw is stored once. Build it first.
+docker build -f apps/openclaw-docker-config/docker/base/Dockerfile \
+  -t opengroow/openclaw-base:local apps/openclaw-docker-config
+
+# Gateway (context: this folder); --build-arg is optional, the default is the tag above
 docker build -f apps/openclaw-docker-config/docker/Dockerfile \
+  --build-arg OPENCLAW_BASE_IMAGE=opengroow/openclaw-base:local \
   -t openclaw-gateway:dev apps/openclaw-docker-config
 
 # Runtime worker (needs a minimal monorepo context, prepared by a script)
@@ -72,6 +78,7 @@ pnpm openclaw:image:runtime-worker   # runtime-worker only
 
 Resulting images (platform `linux/amd64`):
 
+- `$OPENCLAW_IMAGE_REGISTRY/openclaw-base:<sha>` (shared base of the two below)
 - `$OPENCLAW_IMAGE_REGISTRY/openclaw-gateway:<tag>` and `:<sha>`
 - `$OPENCLAW_IMAGE_REGISTRY/openclaw-runtime-worker:<tag>` and `:<sha>`
 
