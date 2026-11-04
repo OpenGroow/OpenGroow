@@ -137,6 +137,32 @@ export function validateDeclaredBlockerCode(
 }
 
 /**
+ * Checks the Artifact's Publishable against the Mission type's `publish`
+ * declaration (ADR-069). `undefined` when the Mission type declares nothing
+ * (it behaves exactly as before) or the result is fine. The message is returned
+ * to the Agent, which corrects it in the same Mission.
+ */
+export function validateDeclaredPublishable(
+  result: RunResult,
+  ctx: { missionType: string; publish?: { kind: string } },
+): string | undefined {
+  if (!ctx.publish) return undefined;
+  const publishable = (result.status === "success" || result.status === "needs_human_review" || result.status === "failed")
+    ? result.artifact?.publishable
+    : undefined;
+  if (publishable === undefined) {
+    // Only a successful deliverable has to be publishable.
+    return result.status === "success"
+      ? `artifact.publishable is required: Mission type "${ctx.missionType}" declares publish.kind "${ctx.publish.kind}"`
+      : undefined;
+  }
+  if (publishable.kind !== ctx.publish.kind) {
+    return `artifact.publishable.kind is "${publishable.kind}" but this Mission type declares publish.kind "${ctx.publish.kind}"`;
+  }
+  return undefined;
+}
+
+/**
  * Workspace path where a Run's Agent writes its RunResult. A Mission's Run
  * keeps the historical per-Mission layout; a Job's Run writes under its Job
  * folder (`jobs/<job>/outputs/`, deleted once the Job settles).
@@ -168,6 +194,8 @@ export function decideReconciliation(
     runId: Id<"runs">;
     missionType: string;
     blockerCodes?: readonly string[];
+    /** The Mission type's `publish` declaration, when it has one (ADR-069). */
+    publish?: { kind: string; targets?: readonly string[] };
     retryableFailureCount: number;
   },
 ): ReconcileDecision {
@@ -380,6 +408,11 @@ export function decideReconciliation(
   const blockerError = validateDeclaredBlockerCode(validation.data, ctx);
   if (blockerError) {
     return decideInvalidOutput(blockerError, ctx);
+  }
+
+  const publishableError = validateDeclaredPublishable(validation.data, ctx);
+  if (publishableError) {
+    return decideInvalidOutput(publishableError, ctx);
   }
 
   return { type: "markCompleted", result: validation.data };

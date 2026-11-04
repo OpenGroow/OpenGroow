@@ -1,5 +1,6 @@
 import { v, type Infer } from "convex/values";
 import { z } from "zod";
+import { publishableSchema, publishableV } from "./publishable.js";
 
 const metadataValueZ = z.union([z.string(), z.number(), z.boolean()]);
 const metadataValueV = v.union(v.string(), v.number(), v.boolean());
@@ -54,6 +55,12 @@ const artifactZ = z
     external: artifactExternalZ,
     /** Display-only key-value pairs. Must NOT be used to resolve Artifact content. */
     metadata: z.record(z.string(), metadataValueZ).optional(),
+    /**
+     * The deliverable in the unified publishing format (ADR-069): references
+     * only. Required when the Mission type's manifest declares `publish`
+     * (checked at reconciliation against the declared kind).
+     */
+    publishable: publishableSchema.optional(),
   })
   .refine(
     (a) => typeof a.external?.id === "string" && a.external.id.length > 0,
@@ -74,6 +81,7 @@ export const artifactV = v.object({
   ),
   external: v.optional(artifactExternalV),
   metadata: v.optional(v.record(v.string(), metadataValueV)),
+  publishable: v.optional(publishableV),
 });
 
 export const runResultSchema = z.discriminatedUnion("status", [
