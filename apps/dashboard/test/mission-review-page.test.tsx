@@ -48,6 +48,10 @@ vi.mock("@convex/_generated/api", () => ({
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
     },
+    publications: {
+      setPublishTarget: "publications.setPublishTarget",
+      listForMission: "publications.listForMission",
+    },
     instances: { list: "instances.list" },
     project_agents: { get: "project_agents.get" },
     runtime_commands_node: {
@@ -258,6 +262,61 @@ describe("MissionReviewContent", () => {
       loadReviewContentMock.mockReturnValue(new Promise(() => {}));
       await render();
       expect(document.querySelector('[data-testid="publishable-preview"]')).toBeNull();
+    });
+  });
+
+  describe("Publish target (ADR-069)", () => {
+    function withPublish(mapped: boolean) {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        publish: {
+          target: "instagram",
+          declaredTargets: ["instagram", "pinterest:recipes"],
+          mapped,
+          publications: [{ target: "instagram", status: "failed", error: "Postiz responded 500" }],
+        },
+      }));
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+    }
+
+    it("links to the Publishers page when the target is not mapped, and lists Publications", async () => {
+      withPublish(false);
+      await render();
+      await act(async () => {});
+      const unmapped = document.querySelector('[data-testid="publish-unmapped"] a') as HTMLAnchorElement | null;
+      expect(unmapped?.getAttribute("href")).toBe("/projects/instance-1/publishers");
+      expect(document.querySelector('[data-testid="publication-instagram"]')?.textContent).toContain("failed");
+    });
+
+    it("shows no unmapped warning once the target is mapped", async () => {
+      withPublish(true);
+      await render();
+      await act(async () => {});
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="publish-unmapped"]')).toBeNull();
+    });
+
+    it("lets the reviewer change the Publish target", async () => {
+      withPublish(true);
+      const setTarget = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation(() => setTarget);
+      await render();
+      await act(async () => {});
+      const select = document.querySelector('[data-testid="publish-target"]') as HTMLSelectElement;
+      await act(async () => {
+        select.value = "pinterest:recipes";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(setTarget).toHaveBeenCalledWith({ missionId: "mission-1", target: "pinterest:recipes" });
+    });
+
+    it("has no publish section for a Mission type without publish", async () => {
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      expect(document.querySelector('[data-testid="publish-section"]')).toBeNull();
     });
   });
 
