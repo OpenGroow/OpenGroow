@@ -9,8 +9,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ACTION="${1:-up}"
 case "$ACTION" in
-  up | down | logs) ;;
-  *) echo "usage: scripts/start.sh [up|down|logs]" >&2; exit 2 ;;
+  up | update | down | logs) ;;
+  *) echo "usage: scripts/start.sh [up|update|down|logs]" >&2; exit 2 ;;
 esac
 
 # .env is NOT sourced as shell (it is data, not code): `docker compose
@@ -56,14 +56,14 @@ cat <<'NOTICE'
 
 NOTICE
 
-"${COMPOSE[@]}" pull
-
+# Updating is an explicit action. `pnpm start` runs what is already on this
+# machine and only downloads what is MISSING (first run); `pnpm start:update`
+# fetches the latest published images first.
+#
 # The per-Project gateway and runtime-worker images are not services of this
 # stack: openclaw-local-control starts them later, one compose project per
-# Project, and `docker compose up` only pulls an image that is ABSENT locally.
-# Without this, a stale `:latest` from an earlier run is reused forever (and
-# misses every fix published since). Read the refs from local-control's own
-# resolved environment so there is one source of truth.
+# Project. Read their refs from local-control's own resolved environment (one
+# source of truth) so they are fetched here too, not at the first Project.
 PROJECT_IMAGES="$("${COMPOSE[@]}" config --format json | node -e '
   const c = JSON.parse(require("fs").readFileSync(0, "utf8"));
   const env = c.services["openclaw-local-control"].environment;
@@ -71,9 +71,16 @@ PROJECT_IMAGES="$("${COMPOSE[@]}" config --format json | node -e '
     if (!env[k]) { console.error("missing " + k + " in openclaw-local-control environment"); process.exit(1); }
     console.log(env[k]);
   }')"
+
+if [ "$ACTION" = update ]; then
+  echo "Updating to the latest published images..."
+  "${COMPOSE[@]}" pull
+fi
 while IFS= read -r image; do
-  echo "Pulling Project image ${image}"
-  docker pull --quiet "$image" >/dev/null
+  if [ "$ACTION" = update ] || ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo "Pulling Project image ${image}"
+    docker pull --quiet "$image" >/dev/null
+  fi
 done <<< "$PROJECT_IMAGES"
 
 "${COMPOSE[@]}" up -d
@@ -83,3 +90,4 @@ DASHBOARD_PORT_VALUE="$(node scripts/start-check.mjs --get DASHBOARD_PORT)"
 echo
 echo "Dashboard: ${DASHBOARD_URL_VALUE:-http://localhost:${DASHBOARD_PORT_VALUE:-3912}}"
 echo "Logs:      pnpm start:logs      Stop: pnpm start:down"
+[ "$ACTION" = update ] || echo "Update:    pnpm start:update    (fetch the latest published images)"
