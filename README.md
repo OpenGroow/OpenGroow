@@ -39,48 +39,49 @@ Your agents run on OpenClaw. OpenGroow provides the interface and orchestration 
 
 ### Requirements
 
-- [Node.js](https://nodejs.org)
-- [pnpm](https://pnpm.io)
 - [Docker](https://www.docker.com) (running)
+- [Node.js](https://nodejs.org) and [pnpm](https://pnpm.io)
 
-### Installation
+### Run OpenGroow
+
+`pnpm start` runs the whole stack in Docker from the published images. There is nothing to build and no dependency to install.
 
 ```bash
 git clone https://github.com/OpenGroow/OpenGroow.git
 cd OpenGroow
-pnpm install
 pnpm run setup   # creates .env from .env.example and generates the local secrets
-```
-
-Configure the required environment variables in `.env`, then start OpenGroow:
-
-```bash
-pnpm dev
+pnpm start
 ```
 
 Open **http://localhost:3912** in your browser.
 
 Create an account, click **Create New Project**, and start adding agents.
 
-To stop the development environment, press `Ctrl+C`. Run `pnpm dev:down` to stop its Docker containers.
+```bash
+pnpm start:update   # fetch the latest published images, then start
+pnpm start:logs     # follow the logs
+pnpm start:down     # stop the stack
+```
+
+Starting never upgrades you: `pnpm start` reuses the images you already have and only downloads what is missing, and you update when you choose to with `pnpm start:update`. After an update, existing Projects keep running the containers they were created with.
 
 Provider credentials used by your agents are configured per Project in the dashboard, not in `.env`.
 
-### Run from published images
-
-To run OpenGroow without editing the source, `pnpm start` runs the whole stack in Docker from the published images (no build):
-
-```bash
-pnpm start          # starts what is on your machine, downloads only what is missing
-pnpm start:update   # fetches the latest published images, then starts
-pnpm start:down     # stops the stack
-```
-
-Starting never upgrades you: `pnpm start` reuses the images you already have, and you update when you choose to with `pnpm start:update`. After an update, existing Projects keep running the containers they were created with.
-
 See the [Self-hosting guide](docs/START.md) for configuration, security considerations and the smoke test (`pnpm start:smoke`).
 
-> **Security note:** Some deployment modes require access to the Docker socket to provision project environments. This grants powerful host-level privileges. Review the deployment security considerations before exposing OpenGroow to untrusted users.
+> **Security note:** `openclaw-local-control` mounts the Docker socket to create and delete project environments. This grants powerful host-level privileges. Review the deployment security considerations before exposing OpenGroow to untrusted users.
+
+### Develop OpenGroow
+
+To work on the source, `pnpm dev` runs Convex and the Dashboard on your machine with hot reload, and the broker and `openclaw-connect` in Docker.
+
+```bash
+pnpm install
+pnpm run setup
+pnpm dev
+```
+
+Open **http://localhost:3912**. Press `Ctrl+C` to stop, and run `pnpm dev:down` to stop its Docker containers.
 
 ## Built on OpenClaw
 

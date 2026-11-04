@@ -22,7 +22,7 @@ built-in one. `.env.example` defaults the registry to `ghcr.io/opengroow`; image
 `${OPENCLAW_IMAGE_REGISTRY}/opengroow-<name>:${OPENCLAW_IMAGE_TAG:-latest}`
 (`docker-compose.start.yml`).
 
-Images and the workflows that publish them (`.github/workflows/*-image.yml`,
+Images and the workflows that publish them (`.github/workflows/*-image*.yml`,
 registry from the repository variable `IMAGE_REGISTRY`, default
 `ghcr.io/<repository owner>`): `opengroow-broker`, `opengroow-dashboard`,
 `opengroow-convex-bootstrap`, `opengroow-openclaw-connect`,
