@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,16 +48,30 @@ type ParsedArgs = {
 };
 
 // Checks process.versions.node against the engines.node range from openclaw's
-// package.json. Prints a clear warning so the developer knows to upgrade Node
-// before openclaw fails with a cryptic preinstall error mid-pairing.
+// package.json and warns early, before openclaw itself exits with a terse error.
 function checkNodeVersion(): void {
   let required: string | undefined;
   try {
-    // createRequire resolves through the actual module resolution algorithm,
-    // which handles pnpm hoisting and non-standard layouts correctly.
+    // openclaw's "exports" map does not expose ./package.json, so resolve the
+    // package entry point and walk up to its package.json instead.
     const req = createRequire(import.meta.url);
-    const pkg = req("openclaw/package.json") as { engines?: { node?: string } };
-    required = pkg.engines?.node;
+    let dir = path.dirname(req.resolve("openclaw"));
+    for (;;) {
+      const candidate = path.join(dir, "package.json");
+      if (existsSync(candidate)) {
+        const pkg = JSON.parse(readFileSync(candidate, "utf8")) as {
+          name?: string;
+          engines?: { node?: string };
+        };
+        if (pkg.name === "openclaw") {
+          required = pkg.engines?.node;
+          break;
+        }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
   } catch {
     return; // openclaw not installed yet — skip
   }
@@ -65,10 +80,10 @@ function checkNodeVersion(): void {
   const current = process.versions.node;
   if (!semver.satisfies(current, required, { includePrerelease: true })) {
     console.error(
-      `[node-run-helper] Warning: Node ${current} does not satisfy the OpenClaw engine requirement (${required}).`,
+      `[node-run-helper] Warning: OpenClaw requires Node.js ${required} (current: v${current}).`,
     );
     console.error(
-      `[node-run-helper] If OpenClaw fails to start, upgrade Node (nvm install 22) and re-run pnpm install.`,
+      `[node-run-helper] Please install a compatible Node.js version, then restart this command.`,
     );
   }
 }
