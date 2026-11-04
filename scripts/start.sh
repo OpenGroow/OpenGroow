@@ -57,6 +57,25 @@ cat <<'NOTICE'
 NOTICE
 
 "${COMPOSE[@]}" pull
+
+# The per-Project gateway and runtime-worker images are not services of this
+# stack: openclaw-local-control starts them later, one compose project per
+# Project, and `docker compose up` only pulls an image that is ABSENT locally.
+# Without this, a stale `:latest` from an earlier run is reused forever (and
+# misses every fix published since). Read the refs from local-control's own
+# resolved environment so there is one source of truth.
+PROJECT_IMAGES="$("${COMPOSE[@]}" config --format json | node -e '
+  const c = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  const env = c.services["openclaw-local-control"].environment;
+  for (const k of ["OPENCLAW_LOCAL_GATEWAY_IMAGE_TAG", "OPENCLAW_LOCAL_RUNTIME_WORKER_IMAGE_TAG"]) {
+    if (!env[k]) { console.error("missing " + k + " in openclaw-local-control environment"); process.exit(1); }
+    console.log(env[k]);
+  }')"
+while IFS= read -r image; do
+  echo "Pulling Project image ${image}"
+  docker pull --quiet "$image" >/dev/null
+done <<< "$PROJECT_IMAGES"
+
 "${COMPOSE[@]}" up -d
 
 DASHBOARD_URL_VALUE="$(node scripts/start-check.mjs --get DASHBOARD_URL)"

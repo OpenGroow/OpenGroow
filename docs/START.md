@@ -29,7 +29,7 @@ registry from the repository variable `IMAGE_REGISTRY`, default
 images are `${OPENCLAW_IMAGE_REGISTRY}/openclaw-gateway` and
 `/openclaw-runtime-worker` (published by `openclaw-images.yml`, which first publishes the shared
 `/openclaw-base` image — node + the pinned `openclaw` CLI — that both are built
-FROM; the `openclaw:image:*` scripts remain for a manual push); they are pulled by `docker compose` when a Project is created.
+FROM; the `openclaw:image:*` scripts remain for a manual push); they are used by `docker compose` when a Project is created. Since `docker compose up` never re-pulls an image already present, `pnpm start` pulls both itself on every run, so a Project never starts from a stale `:latest`.
 
 All images are `linux/amd64` only (emulated on Apple Silicon). GHCR packages are
 private by default: set each one to Public (Package settings, Change
