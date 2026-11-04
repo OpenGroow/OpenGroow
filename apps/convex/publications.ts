@@ -140,11 +140,16 @@ export const reviewState = internalQuery({
  * needs. Throws when nothing can be published; no Publication is created then.
  */
 export const begin = internalMutation({
-  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
+  args: {
+    missionId: v.id("missions"),
+    declaredTargets: v.array(v.string()),
+    /** Retry of one existing Publication: use its target instead of the Mission's current one. */
+    target: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const target = effectivePublishTarget(mission.payload, args.declaredTargets);
+    const target = args.target ?? effectivePublishTarget(mission.payload, args.declaredTargets);
     if (!target || !args.declaredTargets.includes(target)) {
       throw new Error(`Publish target "${target ?? ""}" is not one this Mission type may use`);
     }
@@ -202,11 +207,16 @@ export const begin = internalMutation({
  * the `failed` ones.
  */
 export const beginAll = internalMutation({
-  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
+  args: {
+    missionId: v.id("missions"),
+    declaredTargets: v.array(v.string()),
+    /** Retry of one existing Publication: only that target, whatever the Mission's current targets are. */
+    target: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const targets = effectivePublishTargets(mission.payload, args.declaredTargets);
+    const targets = args.target ? [args.target] : effectivePublishTargets(mission.payload, args.declaredTargets);
     if (targets.length === 0) throw new Error(`Publish target "" is not one this Mission type may use`);
     for (const target of targets) {
       if (!args.declaredTargets.includes(target)) {
@@ -269,6 +279,11 @@ export const beginAll = internalMutation({
       publications: toSend,
     };
   },
+});
+
+export const getInternal = internalQuery({
+  args: { publicationId: v.id("publications") },
+  handler: async (ctx, args) => ctx.db.get(args.publicationId),
 });
 
 /** Records the adapter's answer, and completes the Mission once every Publication is published. */

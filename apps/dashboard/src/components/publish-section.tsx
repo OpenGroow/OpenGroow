@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Card } from "@/components/ui/card";
@@ -39,8 +40,6 @@ export function PublishSection({
   editable: boolean;
 }) {
   const setPublishTarget = useMutation(api.publications.setPublishTarget);
-  const live = useQuery(api.publications.listForMission, { missionId: missionId as Id<"missions"> });
-  const publications = live ?? publish.publications;
   const [error, setError] = useState<string | null>(null);
 
   async function changeTarget(target: string) {
@@ -85,24 +84,7 @@ export function PublishSection({
           </p>
         )}
       </div>
-      {publications.length > 0 && (
-        <ul className="m-0 grid list-none gap-2 p-0 text-sm" data-testid="publications">
-          {publications.map((publication) => (
-            <li key={publication.target} data-testid={`publication-${publication.target}`}>
-              <span className="font-semibold">{publication.target}</span>: {publication.status}
-              {publication.externalUrl && (
-                <>
-                  {" "}
-                  <a href={publication.externalUrl} className="underline" target="_blank" rel="noreferrer">
-                    view post
-                  </a>
-                </>
-              )}
-              {publication.error && <span className="text-destructive"> ({publication.error})</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+      <PublicationList missionId={missionId} />
     </Card>
   );
 }
