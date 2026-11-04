@@ -5,6 +5,10 @@
     "nodes": {
       "commands": {
         "allow": ["system.run", "system.run.prepare", "system.which"]
+      },
+      "pairing": {
+        "sshVerify": false,
+        "autoApproveLocal": false
       }
     }
   },

@@ -5,7 +5,7 @@
   "packageManager": "pnpm@11.9.0",
   "scripts": {
     "dev": "./scripts/dev-local.sh",
-    "dev:down": "docker compose --env-file .env -f apps/convex/docker/docker-compose.yml -f docker-compose.yml -f docker-compose.local-convex.yml --profile convex-docker down",
+    "dev:down": "bash ./scripts/dev-local-down.sh",
     "dev:docker": "./scripts/dev.sh",
     "start": "./scripts/start.sh",
     "start:logs": "./scripts/start.sh logs",

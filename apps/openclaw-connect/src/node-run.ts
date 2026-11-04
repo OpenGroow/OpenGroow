@@ -1,5 +1,7 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import semver from "semver";
 import { loadOpenClawConnectEnvFile } from "./env.js";
 import {
   type AttemptHandle,
@@ -44,7 +46,35 @@ type ParsedArgs = {
   forwardedArgs: string[];
 };
 
+// Checks process.versions.node against the engines.node range from openclaw's
+// package.json. Prints a clear warning so the developer knows to upgrade Node
+// before openclaw fails with a cryptic preinstall error mid-pairing.
+function checkNodeVersion(): void {
+  let required: string | undefined;
+  try {
+    // createRequire resolves through the actual module resolution algorithm,
+    // which handles pnpm hoisting and non-standard layouts correctly.
+    const req = createRequire(import.meta.url);
+    const pkg = req("openclaw/package.json") as { engines?: { node?: string } };
+    required = pkg.engines?.node;
+  } catch {
+    return; // openclaw not installed yet — skip
+  }
+  if (!required) return;
+
+  const current = process.versions.node;
+  if (!semver.satisfies(current, required, { includePrerelease: true })) {
+    console.error(
+      `[node-run-helper] Warning: Node ${current} does not satisfy the OpenClaw engine requirement (${required}).`,
+    );
+    console.error(
+      `[node-run-helper] If OpenClaw fails to start, upgrade Node (nvm install 22) and re-run pnpm install.`,
+    );
+  }
+}
+
 async function main(): Promise<number> {
+  checkNodeVersion();
   const args = parseArgs(process.argv.slice(2));
   const relayUrl = new URL(args.relayUrl);
   if (!["ws:", "wss:"].includes(relayUrl.protocol)) {

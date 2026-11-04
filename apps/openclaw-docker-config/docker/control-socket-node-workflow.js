@@ -82,7 +82,7 @@ function createNodeWorkflow({
       output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
     } catch (error) {
       const message = toErrorMessage(error);
-      if (!/unknown requestId/i.test(message)) {
+      if (!/unknown\s+node\s+pairing\s+requestId/i.test(message)) {
         throw error;
       }
       output = JSON.stringify(

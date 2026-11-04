@@ -52,7 +52,7 @@ describe("node workflow", () => {
 
   it("falls back from modern approval to the gateway device approval adapter", async () => {
     const approveGatewayDevicePairing = vi.fn().mockResolvedValue({ requestId: "legacy-request" });
-    const runGatewayNodeCommand = vi.fn().mockRejectedValue(new Error("unknown requestId"));
+    const runGatewayNodeCommand = vi.fn().mockRejectedValue(new Error("Unknown node pairing requestId: legacy-request"));
     const workflow = createNodeWorkflow({
       fs: { readFile: vi.fn() },
       pendingDevicesPath: "/pending.json",
