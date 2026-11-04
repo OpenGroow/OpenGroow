@@ -17,6 +17,7 @@ export type InstanceView =
   | "sources"
   | "jobs"
   | "schedules"
+  | "publishers"
   | "developer"
   | "settings";
 
