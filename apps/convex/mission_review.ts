@@ -42,6 +42,8 @@ export type MissionReviewProjection = {
   } | null;
   actions: MissionReviewAction[];
   defaultActionKey?: ReviewActionCapability["key"];
+  /** Present only when the Mission type declares `publish`. */
+  publish?: MissionPublishProjection;
   errors: string[];
 };
 
@@ -49,6 +51,23 @@ export type MissionReviewSnapshot = {
   status: string;
   missionType: string;
   lastResult?: unknown;
+};
+
+/** Where a Mission goes and what happened so far (ADR-069); only for Mission
+ * types that declare `publish`. */
+export type MissionPublishProjection = {
+  target: string | null;
+  declaredTargets: string[];
+  /** The target is mapped to a channel on the Project's Publisher. */
+  mapped: boolean;
+  publications: Array<{
+    target: string;
+    status: "pending" | "scheduled" | "published" | "failed";
+    externalId?: string;
+    externalUrl?: string;
+    scheduledAt?: number;
+    error?: string;
+  }>;
 };
 
 type ArtifactSnapshot = {
@@ -173,6 +192,7 @@ function actionEnabled(
 export function buildMissionReviewProjection(
   manifest: AgentManifest | undefined,
   snapshot: MissionReviewSnapshot,
+  publish?: MissionPublishProjection,
 ): MissionReviewProjection {
   const artifact = currentArtifact(snapshot.lastResult);
   const contract = manifest
@@ -201,7 +221,16 @@ export function buildMissionReviewProjection(
 
   const declaredActions = contract?.actions ?? [];
   const actions = declaredActions.map((action) => {
-    const availability = actionEnabled(action, snapshot, artifact);
+    let availability = actionEnabled(action, snapshot, artifact);
+    // An unmapped Publish target blocks `publish` until the Publisher is configured.
+    if (publish && action.key === "publish" && availability.enabled && !publish.mapped) {
+      availability = {
+        enabled: false,
+        disabledReason: publish.target
+          ? `Publish target "${publish.target}" is not configured: map it on the Publishers page`
+          : "No Publish target: configure one on the Publishers page",
+      };
+    }
     return {
       key: action.key,
       label: action.label,
@@ -223,6 +252,7 @@ export function buildMissionReviewProjection(
     content,
     actions,
     defaultActionKey: actions.find((action) => action.enabled)?.key,
+    ...(publish ? { publish } : {}),
     errors,
   };
 }

@@ -146,3 +146,114 @@ describe("publish an image Mission through the Publisher", () => {
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
   });
 });
+
+describe("a failing Publisher", () => {
+  it("leaves a failed Publication and an approved Mission, then a retry of the same publish succeeds", async () => {
+    const { owner, missionId } = await seed();
+    stubPostiz(() => json({ message: "boom" }, 500));
+
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/Postiz responded 500/);
+
+    const [failed] = await owner.query(api.publications.listForMission, { missionId });
+    expect(failed).toMatchObject({ target: "instagram", status: "failed" });
+    expect(failed.error).toContain("500");
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+
+    stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    const publications = await owner.query(api.publications.listForMission, { missionId });
+    expect(publications).toHaveLength(1);
+    expect(publications[0].status).toBe("published");
+    expect(publications[0].error).toBeUndefined();
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
+  });
+});
+
+describe("Publish target", () => {
+  it("is refused, without reaching Postiz, when it is not mapped to a channel", async () => {
+    const { owner, missionId } = await seed({ map: false });
+    const postiz = stubPostiz();
+
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/not configured/);
+
+    expect(postiz).not.toHaveBeenCalled();
+    expect(await owner.query(api.publications.listForMission, { missionId })).toEqual([]);
+    expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
+  });
+
+  it("defaults to the first declared target and can be changed by the human before publishing", async () => {
+    const { owner, missionId } = await seed({ payload: {} });
+    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
+    await owner.mutation(api.publishers.mapTarget, {
+      instanceId: INSTANCE_ID,
+      target: "pinterest:recipes",
+      channelId: "ch-1",
+      settings: { board: "b1" },
+    });
+    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "pinterest:recipes" });
+    const postiz = stubPostiz();
+
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+
+    const [publication] = await owner.query(api.publications.listForMission, { missionId });
+    expect(publication.target).toBe("pinterest:recipes");
+    expect(postedBody(postiz).posts[0].settings).toMatchObject({ __type: "instagram", board: "b1" });
+  });
+
+  it("cannot be set to a target the Mission type does not declare", async () => {
+    const { owner, missionId } = await seed();
+    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "tiktok" });
+    stubPostiz();
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/may use/);
+  });
+
+  it("can only be changed by the owner", async () => {
+    const { t, missionId } = await seed();
+    await expect(
+      t.withIdentity(OTHER).mutation(api.publications.setPublishTarget, { missionId, target: "instagram" }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("who can publish", () => {
+  it("is refused to anyone but the Mission owner (an Agent has no identity here)", async () => {
+    const { t, missionId } = await seed();
+    stubPostiz();
+    await expect(t.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" })).rejects.toThrow();
+    await expect(
+      t.withIdentity(OTHER).action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow("Forbidden");
+  });
+});
+
+describe("review projection", () => {
+  it("reports the Publish target and its Publications, and disables publish when the target is unmapped", async () => {
+    const { owner, missionId } = await seed({ map: false });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ target: "instagram", mapped: false, declaredTargets: ["instagram", "pinterest:recipes"] });
+    const publish = review.actions.find((a) => a.key === "publish");
+    expect(publish).toMatchObject({ enabled: false });
+    expect(publish?.disabledReason).toMatch(/Publishers page/);
+  });
+
+  it("keeps publish enabled once the target is mapped and lists the Publications", async () => {
+    const { owner, missionId } = await seed();
+    stubPostiz(() => json({ message: "boom" }, 500));
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ mapped: true, publications: [{ target: "instagram", status: "failed" }] });
+    expect(review.actions.find((a) => a.key === "publish")?.enabled).toBe(true);
+  });
+
+  it("has no publish section for a Mission type without publish", async () => {
+    const { owner, missionId } = await seed({ templateId: "@test/plain", type: "make_plain" });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toBeUndefined();
+  });
+});

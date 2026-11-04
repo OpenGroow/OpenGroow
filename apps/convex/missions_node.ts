@@ -43,11 +43,18 @@ export const getReview = action({
     if (mission.ownerId !== ownerId) throw new Error("Forbidden");
 
     const template = await resolveMissionTemplate(getTemplateRegistry(ctx), mission);
-    return buildMissionReviewProjection(template?.manifest, {
-      status: mission.status,
-      missionType: mission.type,
-      lastResult: mission.lastResult,
-    });
+    const declaration = template?.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+    const publish = declaration
+      ? await ctx.runQuery(internal.publications.reviewState, {
+          missionId: args.missionId,
+          declaredTargets: declaration.targets,
+        })
+      : undefined;
+    return buildMissionReviewProjection(
+      template?.manifest,
+      { status: mission.status, missionType: mission.type, lastResult: mission.lastResult },
+      publish,
+    );
   },
 });
 
