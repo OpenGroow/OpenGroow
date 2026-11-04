@@ -29,6 +29,13 @@ RUN node -p "require('./node_modules/convex/package.json').version" > /tmp/conve
 RUN --mount=type=cache,id=opengroow-pnpm-store,target=/pnpm/store --mount=type=cache,id=opengroow-pnpm-cache,target=/pnpm/cache \
     pnpm_config_store_dir=/pnpm/store pnpm_config_cache_dir=/pnpm/cache \
     pnpm --config.inject-workspace-packages=true --filter @opengroow/convex-app --prod deploy /prod/convex-app
+# `next` (+ its SWC binary and sharp's libvips) is only an *optional* peer of
+# better-auth, installed because the dashboard shares the same lockfile entry.
+# The Convex functions import `better-auth/api` and `better-auth/minimal` only,
+# never `better-auth/next-js`, so ~300 MB of Next.js never loads here.
+RUN cd /prod/convex-app/node_modules \
+  && rm -rf .pnpm/next@* .pnpm/@next+swc-* .pnpm/@img+* .pnpm/node_modules/next .pnpm/node_modules/@next .pnpm/node_modules/@img \
+  && find . -xtype l -delete
 # Convex walks the configured functions directory to discover entry points.
 # Keep the deployed dependencies outside that directory, otherwise every JS
 # file under apps/convex/node_modules is treated as a Convex function.
