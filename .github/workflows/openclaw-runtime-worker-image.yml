@@ -73,7 +73,7 @@ jobs:
         with:
           context: ${{ runner.temp }}/rw-context
           file: ${{ runner.temp }}/rw-context/apps/openclaw-docker-config/docker/runtime-worker/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
