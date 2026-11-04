@@ -53,3 +53,44 @@ A `machinePrerequisites` entry can also declare `install` so the tool is install
 ```
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
+
+## Migrating a Template to Publishable (ADR-069)
+
+By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`). Migration is an opt-in, per Mission type, with three steps.
+
+### 1. Declare `publish` in the manifest
+
+On the Mission type's entry in `missionTypes[]`:
+
+```json
+"publish": { "kind": "carousel", "targets": ["instagram", "pinterest:recipes"] }
+```
+
+- `kind` is one of the closed set below. A new kind is a product change in OpenGroow, never a Template declaration.
+- `targets` is a non-empty, duplicate-free list of logical **Publish targets**: lowercase letters, digits, `-` or `_`, with an optional `:qualifier` (for example `instagram`, `pinterest:recipes`). Never a service channel id, board id or account: the Publisher maps targets to real channels.
+- No other key is allowed. `validateManifest` (`packages/agent-templates/src/publish-declaration.ts`) checks all of this at Activation and `pnpm template:validate` reports it with the manifest path.
+
+### 2. Return a `publishable`
+
+The Agent sets `artifact.publishable` in its RunResult. OpenGroow appends a `## Publishable` section with the JSON Schema of the declared kind to the Mission's `context.md`, so the instructions need not restate it. An invalid or missing `publishable` is rejected with per-field errors and the Agent retries. It carries **references only** (URLs), never content (ADR-010).
+
+The three V1 kinds (source of truth: `apps/convex/publishable.ts`). All are strict objects (unknown fields are rejected); every kind also accepts an optional free `metadata` object.
+
+| `kind` | Required fields | Optional fields |
+| --- | --- | --- |
+| `video` | `videoUrl`, `caption` | `coverUrl`, `title` (max 500), `metadata` |
+| `image` | `imageUrl`, `caption` | `metadata` |
+| `carousel` | `slideUrls` (1 to 20 URLs, in slide order), `caption` | `metadata` |
+
+URLs are valid URLs of at most 2048 characters; `caption` is at most 5000 characters. Per-target settings (for example TikTok privacy) come from the Publisher configuration, never from the Publishable: `metadata` and `coverUrl` are not forwarded to Postiz today.
+
+### 3. Remove publishing from the MCP and the instructions
+
+A Mission type that declares `publish` **must not publish itself**:
+
+- **The Agent never publishes.** Remove every call to a publishing tool from its `AGENTS.md` file and tell it to return the `publishable` instead. Publication happens on the human `publish` action of the review, or automatically with `autoPublish`, executed by the Publisher.
+- **No dual-write.** Remove the publishing settings from the MCP too (Postiz channel, board id, credentials, `pinterestBoardId`-style parameters) and from its dashboard and `statusCheck`. The Template must not both publish through the MCP and declare `publish`, or the deliverable would be posted twice.
+- The target is not chosen by the Agent: it comes from `payload.publishTarget` (or `payload.publishTargets` for several), defaulting to the first declared target, and the human can change it in the review. Remove target or board parameters from Mission and Schedule payload instructions accordingly.
+- Keep the review's `publish` capability for the Mission type; the generic engine routes it to the Publisher instead of an MCP effect.
+
+Mission types that do not declare `publish` behave exactly as before. `article` publishing (GitHub, `seo`) is out of V1 and stays in its MCP.
