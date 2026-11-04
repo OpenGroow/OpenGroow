@@ -2,6 +2,8 @@
 
 **Status:** Accepted (amends [ADR-021](021-declarative-activation-reconfiguration-contract.md); related to [ADR-019](019-mcp-server-config-embedded-in-the-agent-template.md) and [ADR-020](020-artifact-review-and-external-job-contracts-carried.md))
 
+> **Amended by ADR-069:** the Postiz channel configuration no longer lives in the MCP dashboards; it moves to the Project's Publisher. The rest of this ADR is unchanged.
+
 ### Context
 
 seo-mcp and demo-video-mcp are each migrating their per-Project configuration (GitHub publisher, Postiz channels, Letter-server credentials, model overrides…) out of Megaclaw and into their own dashboards. Once that lands, a human creates the Project directly on the MCP's dashboard and gets a **Project API Key** scoped to it — that key is the only thing Megaclaw still needs to activate the SEO Agent or Video Agent.

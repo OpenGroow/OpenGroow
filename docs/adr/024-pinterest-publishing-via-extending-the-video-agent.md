@@ -21,6 +21,8 @@ We wanted to publish videos to themed Pinterest boards (Wedding Vows Ideas, Anni
 2. **Letter generation is already source-URL-free.** demo-video-mcp already generates letters from scratch (the `concept` field is unused in practice). Passing a `theme` in `missionContext` is a minor extension of the existing contract, not a paradigm shift.
 3. **Schedules carry the thematic variation.** The 5 themes × boards are a scheduling concern, not a Template concern. Each Schedule freezes `theme` + `pinterestBoardId` in its payload — that's the right level of abstraction.
 
+> **Amended by ADR-069:** board routing becomes a Publish target in the Schedule payload, resolved by the Project's Publisher, instead of a `pinterestBoardId` passed to the MCP.
+
 ### Open blockers (to validate with demo-video-mcp)
 
 1. **Themed generation**: demo-video-mcp must accept a `theme` in `missionContext` (or equivalent) to guide letter generation. Today generation is random.
