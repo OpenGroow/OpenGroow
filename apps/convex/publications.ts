@@ -1,8 +1,12 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel.js";
 import { isValidPublishTarget } from "@opengroow/agent-templates";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server.js";
+import { internal } from "./_generated/api.js";
+import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server.js";
+import { adapterFor } from "./publisher/postiz.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
+import { effectivePublishAt } from "./publish_at.js";
 
 // Publications (ADR-069, docs/domain/publishing.md): the tracked outcome of
 // sending one Publishable to one Publish target. One row per (Mission, target).
@@ -98,6 +102,33 @@ export const setPublishTargets = mutation({
   },
 });
 
+function optionalPublishAt(payload: unknown): { publishAt?: number } {
+  const publishAt = effectivePublishAt(payload, 0);
+  return publishAt === undefined ? {} : { publishAt };
+}
+
+/** The human schedules the post (epoch ms), or clears it (null) to publish immediately. */
+export const setPublishAt = mutation({
+  args: { missionId: v.id("missions"), publishAt: v.union(v.number(), v.null()) },
+  handler: async (ctx, args) => {
+    const mission = await ctx.db.get(args.missionId);
+    if (!mission) throw new Error("Mission not found");
+    const ownerId = await ownerIdFor(ctx, mission.instanceId);
+    if (mission.ownerId !== ownerId) throw new Error("Forbidden");
+    if (mission.status !== "to_validate" && mission.status !== "approved") {
+      throw new Error(`The publication date can only be changed during review, got: "${mission.status}"`);
+    }
+    if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
+    const { publishAt: _previous, ...rest } = (
+      mission.payload && typeof mission.payload === "object" ? mission.payload : {}
+    ) as Record<string, unknown>;
+    await ctx.db.patch(args.missionId, {
+      payload: args.publishAt === null ? rest : { ...rest, publishAt: args.publishAt },
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /** What the review page needs to show and gate `publish`. */
 export const reviewState = internalQuery({
   args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
@@ -122,6 +153,7 @@ export const reviewState = internalQuery({
       targets,
       declaredTargets: args.declaredTargets,
       mapped,
+      ...optionalPublishAt(mission.payload),
       publications: publications.map((p) => ({
         target: p.target,
         status: p.status,
@@ -194,6 +226,7 @@ export const begin = internalMutation({
       channelId: mapping.channelId,
       settings: mapping.settings,
       publishable: publishable as Record<string, unknown>,
+      publishAt: effectivePublishAt(mission.payload, now),
     };
   },
 });
@@ -277,6 +310,7 @@ export const beginAll = internalMutation({
       connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
       publishable: publishable as Record<string, unknown>,
       publications: toSend,
+      publishAt: effectivePublishAt(mission.payload, now),
     };
   },
 });
@@ -309,6 +343,69 @@ export const finish = internalMutation({
     const mission = await ctx.db.get(publication.missionId);
     if (mission?.status === "approved" && all.every((p) => p.status === "published")) {
       await markMissionDone(ctx, publication.missionId);
+    }
+  },
+});
+
+/** Scheduled Publications whose date has come, with what the adapter needs to ask for their status. */
+export const dueScheduled = internalQuery({
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    const scheduled = await ctx.db
+      .query("publications")
+      .withIndex("by_status", (q) => q.eq("status", "scheduled"))
+      .collect();
+    const due = [];
+    for (const publication of scheduled) {
+      if (publication.externalId === undefined) continue;
+      if (publication.scheduledAt !== undefined && publication.scheduledAt > args.now) continue;
+      const publisher = await ctx.db
+        .query("publishers")
+        .withIndex("by_instance", (q) => q.eq("instanceId", publication.instanceId))
+        .unique();
+      if (!publisher?.apiKey) continue;
+      due.push({
+        publicationId: publication._id,
+        externalId: publication.externalId,
+        scheduledAt: publication.scheduledAt,
+        connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
+      });
+    }
+    return due;
+  },
+});
+
+/**
+ * Polls the adapter for every scheduled Publication that is due (no webhook,
+ * like External Job polling): `published` and `failed` are recorded, anything
+ * else (still queued, service unreachable) is simply asked again next tick.
+ */
+export const pollScheduled = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const due: Array<{
+      publicationId: Id<"publications">;
+      externalId: string;
+      scheduledAt?: number;
+      connection: { adapter: "postiz"; url: string; apiKey: string };
+    }> = await ctx.runQuery(internal.publications.dueScheduled, { now: Date.now() });
+    for (const item of due) {
+      const result = await adapterFor(item.connection.adapter).getStatus(item.connection, item.externalId, item.scheduledAt);
+      if (!result.ok) continue;
+      const { post } = result;
+      if (post.status === "published") {
+        await ctx.runMutation(internal.publications.finish, {
+          publicationId: item.publicationId,
+          status: "published",
+          ...(post.externalUrl ? { externalUrl: post.externalUrl } : {}),
+        });
+      } else if (post.status === "failed") {
+        await ctx.runMutation(internal.publications.finish, {
+          publicationId: item.publicationId,
+          status: "failed",
+          error: post.error ?? "The Publisher could not publish the post",
+        });
+      }
     }
   },
 });

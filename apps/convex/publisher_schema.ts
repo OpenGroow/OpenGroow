@@ -44,5 +44,6 @@ export const publisherTables = {
     updatedAt: v.number(),
   })
     .index("by_mission", ["missionId"])
-    .index("by_mission_target", ["missionId", "target"]),
+    .index("by_mission_target", ["missionId", "target"])
+    .index("by_status", ["status"]),
 };

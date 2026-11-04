@@ -433,6 +433,7 @@ async function publishThroughPublisher(
       channelId: item.channelId,
       settings: item.settings,
       publishable: prepared.publishable,
+      ...(prepared.publishAt !== undefined ? { publishAt: prepared.publishAt } : {}),
     });
     if (!result.ok) {
       await ctx.runMutation(internal.publications.finish, {
@@ -447,6 +448,7 @@ async function publishThroughPublisher(
       publicationId: item.publicationId,
       status: result.outcome.status,
       externalId: result.outcome.externalId,
+      ...(result.outcome.status === "scheduled" && prepared.publishAt !== undefined ? { scheduledAt: prepared.publishAt } : {}),
       ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
     });
     await ctx.runMutation(internal.events.store, {

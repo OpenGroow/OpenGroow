@@ -5,8 +5,6 @@ import type {
   PublisherResult,
 } from "./adapter.js";
 
-const NOT_IMPLEMENTED = { ok: false, error: "Not implemented yet" } as const;
-
 function endpoint(conn: PublisherConnection, path: string): string {
   return `${conn.url.replace(/\/+$/, "")}/public/v1/${path}`;
 }
@@ -122,8 +120,31 @@ export const postizAdapter: PublisherAdapter = {
     }
     return { ok: true, outcome: { externalId: first.postId, status: scheduled ? "scheduled" : "published" } };
   },
-  async getStatus() {
-    return NOT_IMPLEMENTED;
+  // Postiz's public API has no per-post read: list the posts around the
+  // scheduled date and find ours. QUEUE = still scheduled.
+  async getStatus(conn, externalId, around = Date.now()) {
+    const DAY = 86_400_000;
+    const query = new URLSearchParams({
+      startDate: new Date(around - DAY).toISOString(),
+      endDate: new Date(Math.max(around, Date.now()) + DAY).toISOString(),
+    });
+    const res = await call(conn, `posts?${query.toString()}`);
+    if (!res.ok) return res;
+    const posts = (res.body as { posts?: unknown } | null)?.posts;
+    if (!Array.isArray(posts)) return { ok: false, error: "Postiz returned an unexpected post list" };
+    const post = (posts as Array<Record<string, unknown>>).find((p) => p?.id === externalId);
+    if (!post) return { ok: true, post: { status: "failed", error: "The post no longer exists in Postiz" } };
+    const url = typeof post.releaseURL === "string" && post.releaseURL !== "" ? post.releaseURL : undefined;
+    switch (post.state) {
+      case "PUBLISHED":
+        return { ok: true, post: { status: "published", ...(url ? { externalUrl: url } : {}) } };
+      case "ERROR":
+        return { ok: true, post: { status: "failed", error: "Postiz could not publish the post" } };
+      case "QUEUE":
+        return { ok: true, post: { status: "scheduled" } };
+      default:
+        return { ok: true, post: { status: "pending" } };
+    }
   },
 };
 
