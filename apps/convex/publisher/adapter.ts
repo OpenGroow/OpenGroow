@@ -3,6 +3,8 @@
 // single adapter, Postiz; a second service is a new implementation of this
 // interface, not a new architecture.
 
+import type { PublicationStatus } from "../publisher_schema.js";
+
 export const PUBLISHER_ADAPTER_IDS = ["postiz"] as const;
 export type PublisherAdapterId = (typeof PUBLISHER_ADAPTER_IDS)[number];
 
@@ -22,6 +24,8 @@ export type PublisherResult<T = Record<never, never>> = ({ ok: true } & T) | { o
 
 export type PublishRequest = {
   channelId: string;
+  /** The channel's service (for example `instagram`), when known from the mapping. */
+  channelService?: string;
   /** Service-specific settings stored on the Publish target. */
   settings?: Record<string, unknown>;
   /** The Publishable (unified format, references only). */
@@ -32,12 +36,12 @@ export type PublishRequest = {
 
 export type PublishOutcome = {
   externalId: string;
-  status: "scheduled" | "published" | "pending";
+  status: Exclude<PublicationStatus, "failed">;
   externalUrl?: string;
 };
 
 export type PostStatus = {
-  status: "scheduled" | "published" | "pending" | "failed";
+  status: PublicationStatus;
   externalUrl?: string;
   error?: string;
 };

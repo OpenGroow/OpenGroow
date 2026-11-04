@@ -81,10 +81,17 @@ export const postizAdapter: PublisherAdapter = {
   async publish(conn, request) {
     const media = mediaReferences(request.publishable);
     if (!media.ok) return media;
-    const channels = await postizAdapter.listChannels(conn);
-    if (!channels.ok) return channels;
-    const channel = channels.channels.find((c) => c.id === request.channelId);
-    if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
+    // The channel's service comes from the mapping (cached when the target was
+    // mapped), so publishing does not re-list every channel. Older mappings
+    // without it fall back to one listing.
+    let service = request.channelService;
+    if (service === undefined) {
+      const channels = await postizAdapter.listChannels(conn);
+      if (!channels.ok) return channels;
+      const channel = channels.channels.find((c) => c.id === request.channelId);
+      if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
+      service = channel.service;
+    }
 
     // Sequential: the order of the uploads is the order of the slides.
     const uploaded: Array<{ id: string; path: string }> = [];
@@ -97,7 +104,7 @@ export const postizAdapter: PublisherAdapter = {
       }
       uploaded.push({ id: item.id, path: item.path });
     }
-    const publishable = request.publishable as { caption?: string };
+    const caption = typeof request.publishable.caption === "string" ? request.publishable.caption : "";
 
     const scheduled = request.publishAt !== undefined;
     const posted = await call(conn, "posts", {
@@ -107,9 +114,9 @@ export const postizAdapter: PublisherAdapter = {
       tags: [],
       posts: [
         {
-          integration: { id: channel.id },
-          value: [{ content: publishable.caption ?? "", image: uploaded }],
-          settings: { __type: channel.service, ...(request.settings ?? {}) },
+          integration: { id: request.channelId },
+          value: [{ content: caption, image: uploaded }],
+          settings: { __type: service, ...(request.settings ?? {}) },
         },
       ],
     });

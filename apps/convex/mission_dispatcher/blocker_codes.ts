@@ -1,3 +1,4 @@
+import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { TemplateRegistry } from "@opengroow/agent-templates/registry";
 import type { RunResult } from "../run_result.js";
 import { validateDeclaredBlockerCode } from "./reconciliation.js";
@@ -25,10 +26,7 @@ export async function resolveMissionTypePublish(
   missionType: string,
   version?: string,
 ): Promise<{ kind: string; targets: string[] } | undefined> {
-  const entry = (await registry.resolve(projectId, templateId, version))?.manifest.missionTypes?.find(
-    (candidate) => candidate.type === missionType,
-  );
-  return entry?.publish;
+  return publishDeclarationFor((await registry.resolve(projectId, templateId, version))?.manifest, missionType);
 }
 
 export async function validateTerminalRunResult(

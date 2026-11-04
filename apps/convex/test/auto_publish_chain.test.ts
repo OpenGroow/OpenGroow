@@ -36,6 +36,8 @@ const modules = {
   "../missions_node.ts": () => import("../missions_node.js"),
   "../runs.ts": () => import("../runs.js"),
   "../publications.ts": () => import("../publications.js"),
+  "../publication_polling.ts": () => import("../publication_polling.js"),
+  "../publisher_node.ts": () => import("../publisher_node.js"),
   "../publishers.ts": () => import("../publishers.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
   "../project_templates.ts": () => import("../project_templates.js"),
@@ -423,6 +425,31 @@ describe("auto-publish chain (issue #329)", () => {
       expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
     });
 
+    it("a second attempt on an already failed Publication keeps the latest error", async () => {
+      stubPostiz();
+      const { t, owner, missionId, runId } = await setup({ map: false });
+      await markCompletedAndFlush(t, { runId, result: imageResult });
+      const [first] = await owner.query(api.publications.listForMission, { missionId });
+      await t.mutation(internal.publications.recordFailure, {
+        missionId,
+        declaredTargets: ["instagram"],
+        error: "A newer error",
+      });
+      const rows = await owner.query(api.publications.listForMission, { missionId });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: first.id, status: "failed", error: "A newer error" });
+    });
+
+    it("a Schedule payload naming a target the Mission type does not declare fails the Mission instead of publishing", async () => {
+      const postiz = stubPostiz();
+      const { t, owner, missionId, runId } = await setup({ map: true, payload: { publishTarget: "tiktok" } });
+      await markCompletedAndFlush(t, { runId, result: imageResult });
+      const mission = await owner.query(api.missions.get, { missionId });
+      expect(mission?.status).toBe("failed");
+      expect(mission?.errorMessage).toMatch(/may use/);
+      expect(postiz).not.toHaveBeenCalled();
+    });
+
     it("unmapped target: Mission stays approved with a failed Publication, retryable once the Publisher is fixed", async () => {
       const postiz = stubPostiz();
       const { t, owner, missionId, runId } = await setup({ map: false });
@@ -437,7 +464,7 @@ describe("auto-publish chain (issue #329)", () => {
       expect(postiz).not.toHaveBeenCalled();
 
       await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "instagram", channelId: "ch-1" });
-      await owner.action(api.missions_node.retryPublication, { publicationId: failed.id });
+      await owner.action(api.publisher_node.retryPublication, { publicationId: failed.id });
 
       expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
       expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([

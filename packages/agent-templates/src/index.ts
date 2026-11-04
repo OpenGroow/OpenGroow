@@ -64,6 +64,7 @@ export {
 export {
   PUBLISHABLE_KINDS,
   isValidPublishTarget,
+  publishDeclarationFor,
   type PublishDeclaration,
   type PublishableKind,
 } from "./publish-declaration";

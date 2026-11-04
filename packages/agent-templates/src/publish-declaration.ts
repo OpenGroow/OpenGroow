@@ -16,6 +16,15 @@ export type PublishDeclaration = {
   targets: string[];
 };
 
+/** The `publish` declaration of a Mission type, or undefined when it has none
+ * (or the Mission type is unknown). */
+export function publishDeclarationFor(
+  manifest: { missionTypes?: ReadonlyArray<{ type: string; publish?: PublishDeclaration }> } | undefined,
+  missionType: string,
+): PublishDeclaration | undefined {
+  return manifest?.missionTypes?.find((entry) => entry.type === missionType)?.publish;
+}
+
 /** A Publish target is a short logical name: lowercase words joined by `-` or
  * `_`, with an optional `:qualifier` (never a service channel id). */
 const TARGET_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)*(?::[a-z0-9]+(?:[_-][a-z0-9]+)*)?$/;

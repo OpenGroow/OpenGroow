@@ -57,7 +57,7 @@ crons.interval(
 crons.interval(
   "publication-poll",
   { minutes: 1 },
-  internal.publications.pollScheduled,
+  internal.publication_polling.pollScheduled,
 );
 
 export default crons;

@@ -102,6 +102,23 @@ describe("Publishable in the Artifact of a RunResult", () => {
     expect((decision as { error: string }).error).toContain("publishable");
   });
 
+  it("requires a Publishable from a needs_human_review result too: it reaches the review that publishes it", () => {
+    const review = (artifact: Record<string, unknown>) =>
+      decideReconciliation(
+        {
+          ...SNAPSHOT,
+          readResult: {
+            ok: true,
+            data: { content: JSON.stringify({ status: "needs_human_review", summary: "s", reviewQuestions: [], artifact }) },
+          },
+        },
+        { ...BASE_CTX, publish: { kind: "image", targets: ["instagram"] } },
+      );
+    const external = { service: "media", id: "42" };
+    expect(review({ external })).toMatchObject({ type: "markFailedRetryable" });
+    expect(review({ external, publishable: IMAGE })).toMatchObject({ type: "markCompleted" });
+  });
+
   it("ends the Run failed once the retry budget is exhausted", () => {
     const decision = decideReconciliation(
       {

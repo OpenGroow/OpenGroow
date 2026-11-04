@@ -151,8 +151,10 @@ export function validateDeclaredPublishable(
     ? result.artifact?.publishable
     : undefined;
   if (publishable === undefined) {
-    // Only a successful deliverable has to be publishable.
-    return result.status === "success"
+    // A deliverable that reaches the review (success, or needs_human_review
+    // which moves the Mission to `to_validate`) has to be publishable: the
+    // review `publish` action sends it. A failed Run has no deliverable.
+    return result.status === "success" || result.status === "needs_human_review"
       ? `artifact.publishable is required: Mission type "${ctx.missionType}" declares publish.kind "${ctx.publish.kind}"`
       : undefined;
   }

@@ -2,7 +2,7 @@
 
 import { renderPublishableSection } from "./publishable.js";
 import { composeAgentsMd } from "./mission_dispatcher/compose_agents_md.js";
-import { flattenRequirementFields, openClawAgentSlug, renderRunContext } from "@opengroow/agent-templates";
+import { flattenRequirementFields, openClawAgentSlug, publishDeclarationFor, renderRunContext } from "@opengroow/agent-templates";
 import { internalAction } from "./_generated/server.js";
 import type { ActionCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
@@ -350,6 +350,7 @@ export const dispatchPendingRuns = internalAction({
         const missionTypeManifest = template?.manifest.missionTypes?.find(
           (mt) => mt.type === mission.type,
         );
+        const publishDeclaration = publishDeclarationFor(template?.manifest, mission.type);
         const contextProviders =
           missionTypeManifest?.contextProviders ?? template?.manifest.contextProviders;
         // A declarative run context needs no config by itself: only a Template
@@ -372,8 +373,8 @@ export const dispatchPendingRuns = internalAction({
         }
         const { contextMd: baseMd, runMd } = buildMissionContext(mission, run);
         let contextMd = baseMd;
-        if (missionTypeManifest?.publish) {
-          contextMd += renderPublishableSection(missionTypeManifest.publish.kind);
+        if (publishDeclaration) {
+          contextMd += renderPublishableSection(publishDeclaration.kind);
         }
         if (runContext) {
           contextMd += renderRunContext(runContext, {

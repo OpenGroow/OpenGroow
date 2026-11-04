@@ -386,6 +386,56 @@ describe("activateProjectAgent", () => {
     expect(waitForRuntimeEvent).toHaveBeenCalledTimes(7);
   });
 
+  it("activates an Agent whose Mission type declares publish while the Project has no Publisher (publishing is checked at publish time)", async () => {
+    const seo = officialFixtureTemplate(TEMPLATE_ID);
+    const publishing = {
+      ...seo,
+      manifest: {
+        ...seo.manifest,
+        missionTypes: seo.manifest.missionTypes?.map((m) =>
+          m.type === "create_article" ? { ...m, publish: { kind: "image", targets: ["instagram"] } } : m,
+        ),
+      },
+    } as typeof seo;
+    expect(publishing.manifest.missionTypes?.some((m) => m.publish)).toBe(true);
+    const restore = installTemplateRegistry([INSTANCE_ID], [publishing]);
+    try {
+      const t = convexTest(schema, modules);
+      const waitForRuntimeEvent = await getWaitForRuntimeEvent();
+      await seedInstance(t);
+      waitForRuntimeEvent
+        .mockResolvedValueOnce({
+          status: 200, found: true, type: RUNTIME_WORKSPACE_CREATE_RESULT,
+          payload: { ok: true, commandId: "cmd-1", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-generated", label: TEMPLATE_ID, absolutePath: WORKSPACE_ABSOLUTE_PATH } },
+        })
+        .mockResolvedValueOnce({
+          status: 200, found: true, type: RUNTIME_MCP_SERVERS_MERGE_RESULT,
+          payload: { ok: true, commandId: "cmd-2", instanceId: INSTANCE_ID, data: { mergedKeys: SEO_MCP_KEYS } },
+        })
+        .mockResolvedValueOnce({
+          status: 200, found: true, type: RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT,
+          payload: { ok: true, commandId: "cmd-agents-add", instanceId: INSTANCE_ID, data: { agentId: TEMPLATE_ID, registered: true, configured: false } },
+        });
+      addFileDeleteMocks(waitForRuntimeEvent, "ws-generated");
+      waitForRuntimeEvent
+        .mockResolvedValueOnce({
+          status: 200, found: true, type: RUNTIME_WORKSPACE_FILE_WRITE_RESULT,
+          payload: { ok: true, commandId: "cmd-agents-md", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-generated", filePath: "AGENTS.md" } },
+        });
+      addSeoMissionInstructionWriteMocks(waitForRuntimeEvent, "ws-generated");
+
+      expect(await t.run(async (ctx) => ctx.db.query("publishers").collect())).toEqual([]);
+      const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.activateProjectAgent, {
+        instanceId: INSTANCE_ID,
+        templateId: TEMPLATE_ID,
+        userConfig: DEFAULT_SEO_USER_CONFIG,
+      });
+      expect(result.status).toBe("active");
+    } finally {
+      restore();
+    }
+  });
+
   it("cold activation registers a missing native OpenClaw agent in the created workspace", async () => {
     const t = convexTest(schema, modules);
     const waitForRuntimeEvent = await getWaitForRuntimeEvent();

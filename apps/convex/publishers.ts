@@ -55,6 +55,7 @@ export const get = query({
               mapped: true as const,
               channelId: t.channelId,
               channelName: t.channelName,
+              channelService: t.channelService,
               settings: t.settings,
             }
           : { target: t.target, mapped: false as const },
@@ -120,6 +121,7 @@ export const mapTarget = mutation({
     target: v.string(),
     channelId: v.string(),
     channelName: v.optional(v.string()),
+    channelService: v.optional(v.string()),
     settings: v.optional(v.record(v.string(), v.any())),
   },
   handler: async (ctx, args) => {
@@ -129,6 +131,7 @@ export const mapTarget = mutation({
       target,
       channelId: args.channelId,
       channelName: args.channelName,
+      channelService: args.channelService,
       settings: args.settings,
     };
     const exists = publisher.targets.some((t) => t.target === target);

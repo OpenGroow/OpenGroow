@@ -17,6 +17,8 @@ const modules = {
   "../missions.ts": () => import("../missions.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../publications.ts": () => import("../publications.js"),
+  "../publication_polling.ts": () => import("../publication_polling.js"),
+  "../publisher_node.ts": () => import("../publisher_node.js"),
   "../publishers.ts": () => import("../publishers.js"),
   "../runs.ts": () => import("../runs.js"),
   "../schedules.ts": () => import("../schedules.js"),
@@ -265,7 +267,7 @@ describe("polling a scheduled Publication", () => {
     await makeDue(t);
     stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
 
-    await t.action(internal.publications.pollScheduled, {});
+    await t.action(internal.publication_polling.pollScheduled, {});
 
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p).toMatchObject({ status: "published", externalUrl: "https://instagram.com/p/abc" });
@@ -276,7 +278,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing("QUEUE");
-    await t.action(internal.publications.pollScheduled, {});
+    await t.action(internal.publication_polling.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("scheduled");
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
@@ -285,7 +287,7 @@ describe("polling a scheduled Publication", () => {
   it("does not call Postiz before the scheduled date", async () => {
     const { t } = await scheduled();
     const listing = stubPostizListing("PUBLISHED");
-    await t.action(internal.publications.pollScheduled, {});
+    await t.action(internal.publication_polling.pollScheduled, {});
     expect(listing).not.toHaveBeenCalled();
   });
 
@@ -293,7 +295,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing(() => json({}, 503));
-    await t.action(internal.publications.pollScheduled, {});
+    await t.action(internal.publication_polling.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("scheduled");
   });
@@ -302,7 +304,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing("ERROR");
-    await t.action(internal.publications.pollScheduled, {});
+    await t.action(internal.publication_polling.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("failed");
     expect(p.error).toBeTruthy();

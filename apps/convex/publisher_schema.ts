@@ -1,5 +1,15 @@
 import { defineTable } from "convex/server";
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
+
+/** The one status vocabulary of a Publication, shared by the table, the adapter
+ * (`PostStatus`) and the review projection. */
+export const publicationStatusV = v.union(
+  v.literal("pending"),
+  v.literal("scheduled"),
+  v.literal("published"),
+  v.literal("failed"),
+);
+export type PublicationStatus = Infer<typeof publicationStatusV>;
 
 // Publisher tables (ADR-069), kept apart from schema.ts so publishing slices
 // stay localized. One Publisher per Project (V1).
@@ -16,6 +26,7 @@ export const publisherTables = {
         target: v.string(),
         channelId: v.optional(v.string()),
         channelName: v.optional(v.string()),
+        channelService: v.optional(v.string()),
         settings: v.optional(v.record(v.string(), v.any())),
       }),
     ),
@@ -29,12 +40,7 @@ export const publisherTables = {
     missionId: v.id("missions"),
     instanceId: v.string(),
     target: v.string(),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("scheduled"),
-      v.literal("published"),
-      v.literal("failed"),
-    ),
+    status: publicationStatusV,
     // The post at the external service (its id, and its URL when it has one).
     externalId: v.optional(v.string()),
     externalUrl: v.optional(v.string()),

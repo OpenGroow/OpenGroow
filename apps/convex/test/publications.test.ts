@@ -18,6 +18,8 @@ const modules = {
   "../missions.ts": () => import("../missions.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../publications.ts": () => import("../publications.js"),
+  "../publication_polling.ts": () => import("../publication_polling.js"),
+  "../publisher_node.ts": () => import("../publisher_node.js"),
   "../publishers.ts": () => import("../publishers.js"),
   "../runs.ts": () => import("../runs.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
@@ -200,7 +202,7 @@ describe("Publish target", () => {
       channelId: "ch-1",
       settings: { board: "b1" },
     });
-    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "pinterest:recipes" });
+    await owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["pinterest:recipes"] });
     const postiz = stubPostiz();
 
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
@@ -212,17 +214,32 @@ describe("Publish target", () => {
 
   it("cannot be set to a target the Mission type does not declare", async () => {
     const { owner, missionId } = await seed();
-    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "tiktok" });
-    stubPostiz();
     await expect(
-      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+      owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["tiktok"] }),
     ).rejects.toThrow(/may use/);
+    await expect(
+      owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["instagram", "tiktok"] }),
+    ).rejects.toThrow(/may use/);
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect((await owner.query(api.publications.listForMission, { missionId })).map((p) => p.target)).toEqual(["instagram"]);
+    expect(postiz).toHaveBeenCalled();
+  });
+
+  it("a later single choice replaces an earlier multiple one (no edit is silently ignored)", async () => {
+    const { owner, missionId } = await seed({ payload: {} });
+    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
+    await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes", channelId: "ch-2" });
+    await owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["instagram", "pinterest:recipes"] });
+    await owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["pinterest:recipes"] });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ target: "pinterest:recipes", targets: ["pinterest:recipes"] });
   });
 
   it("can only be changed by the owner", async () => {
     const { t, missionId } = await seed();
     await expect(
-      t.withIdentity(OTHER).mutation(api.publications.setPublishTarget, { missionId, target: "instagram" }),
+      t.withIdentity(OTHER).action(api.publisher_node.setPublishTargets, { missionId, targets: ["instagram"] }),
     ).rejects.toThrow();
   });
 });
@@ -246,6 +263,26 @@ describe("review projection", () => {
     const publish = review.actions.find((a) => a.key === "publish");
     expect(publish).toMatchObject({ enabled: false });
     expect(publish?.disabledReason).toMatch(/Publishers page/);
+  });
+
+  it("names the unmapped targets in the reason", async () => {
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram", "pinterest:recipes"] } });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ mapped: false, unmappedTargets: ["pinterest:recipes"] });
+    expect(review.actions.find((a) => a.key === "publish")?.disabledReason).toMatch(/"pinterest:recipes".*Publishers page/);
+  });
+
+  it("disables publish, pointing at the Publishers page, when the Publisher has no API key", async () => {
+    const { t, owner, missionId } = await seed();
+    await t.run(async (ctx) => {
+      const row = await ctx.db.query("publishers").first();
+      await ctx.db.patch(row!._id, { apiKey: undefined });
+    });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ publisherReady: false });
+    const publish = review.actions.find((a) => a.key === "publish");
+    expect(publish).toMatchObject({ enabled: false });
+    expect(publish?.disabledReason).toMatch(/API key.*Publishers page/);
   });
 
   it("keeps publish enabled once the target is mapped and lists the Publications", async () => {
@@ -302,6 +339,22 @@ describe("publish a video Mission", () => {
   });
 });
 
+describe("channel lookup", () => {
+  it("does not re-list the channels when the mapping already knows the channel's service", async () => {
+    const { owner, missionId } = await seed();
+    await owner.mutation(api.publishers.mapTarget, {
+      instanceId: INSTANCE_ID,
+      target: "instagram",
+      channelId: "ch-1",
+      channelService: "instagram",
+    });
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect(postiz.mock.calls.some(([u]) => String(u).endsWith("/integrations"))).toBe(false);
+    expect(postedBody(postiz).posts[0].settings).toMatchObject({ __type: "instagram" });
+  });
+});
+
 describe("publish a carousel Mission", () => {
   it("uploads the slides in order and posts them in that order", async () => {
     const slideUrls = ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png", "https://cdn.example.com/3.png"];
@@ -327,7 +380,7 @@ describe("publish to several targets", () => {
     const { owner, missionId } = ctxs;
     await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
     await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes", channelId: "ch-2" });
-    await owner.mutation(api.publications.setPublishTargets, { missionId, targets: ["instagram", "pinterest:recipes"] });
+    await owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["instagram", "pinterest:recipes"] });
     return ctxs;
   }
 
@@ -377,7 +430,7 @@ describe("retrying one failed Publication", () => {
     await owner.mutation(api.publishers.mapTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes", channelId: "ch-1" });
     stubPostiz(() => json({ message: "boom" }, 500));
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
-    await owner.mutation(api.publications.setPublishTarget, { missionId, target: "pinterest:recipes" });
+    await owner.action(api.publisher_node.setPublishTargets, { missionId, targets: ["pinterest:recipes"] });
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
     const rows = await owner.query(api.publications.listForMission, { missionId });
     expect(rows.map((r) => r.status)).toEqual(["failed", "failed"]);
@@ -390,7 +443,7 @@ describe("retrying one failed Publication", () => {
     const pinterest = rows.find((r) => r.target === "pinterest:recipes")!;
 
     const postiz = stubPostiz();
-    await owner.action(api.missions_node.retryPublication, { publicationId: instagram.id });
+    await owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id });
     expect(postiz.mock.calls.filter(([u]) => String(u).endsWith("/posts"))).toHaveLength(1);
 
     const after = await owner.query(api.publications.listForMission, { missionId });
@@ -398,7 +451,7 @@ describe("retrying one failed Publication", () => {
     expect(after.find((r) => r.target === "pinterest:recipes")).toMatchObject({ status: "failed", error: pinterest.error });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
 
-    await owner.action(api.missions_node.retryPublication, { publicationId: pinterest.id });
+    await owner.action(api.publisher_node.retryPublication, { publicationId: pinterest.id });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
   });
 
@@ -406,18 +459,22 @@ describe("retrying one failed Publication", () => {
     const { t, owner, missionId, rows } = await twoFailed();
     const instagram = rows.find((r) => r.target === "instagram")!;
     stubPostiz(() => json({ message: "still down" }, 502));
-    await expect(owner.action(api.missions_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/502/);
+    await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/502/);
     const again = (await owner.query(api.publications.listForMission, { missionId })).find((r) => r.target === "instagram");
     expect(again).toMatchObject({ status: "failed" });
     expect(again?.error).toContain("502");
 
+    await t.run(async (ctx) => ctx.db.patch(missionId, { status: "to_validate" }));
+    await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/approved/);
+    await t.run(async (ctx) => ctx.db.patch(missionId, { status: "approved" }));
+
     stubPostiz();
     await expect(
-      t.withIdentity(OTHER).action(api.missions_node.retryPublication, { publicationId: instagram.id }),
+      t.withIdentity(OTHER).action(api.publisher_node.retryPublication, { publicationId: instagram.id }),
     ).rejects.toThrow("Forbidden");
-    await owner.action(api.missions_node.retryPublication, { publicationId: instagram.id });
+    await owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id });
     await expect(
-      owner.action(api.missions_node.retryPublication, { publicationId: instagram.id }),
+      owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id }),
     ).rejects.toThrow(/already published/);
   });
 });

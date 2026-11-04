@@ -3,7 +3,7 @@
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
 import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
-import { interpolateReviewTemplate, resolveReviewContract } from "@opengroow/agent-templates";
+import { interpolateReviewTemplate, publishDeclarationFor, resolveReviewContract } from "@opengroow/agent-templates";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import type { FunctionReference } from "convex/server";
@@ -17,7 +17,7 @@ import {
 import { RUNTIME_WORKSPACE_FILE_READ, RUNTIME_WORKSPACE_FILE_READ_RESULT, RUNTIME_OPENCLAW_EXEC_CANCEL } from "@opengroow/protocol";
 import { parseRuntimeOpenClawExecCancelPayload } from "./runtime_commands_node_parsers.js";
 import { resolveMcpActivationUrl } from "./mcp_activation_url.js";
-import { adapterFor } from "./publisher/postiz.js";
+import { publishThroughPublisher, recordAutoPublishFailure } from "./publisher_node.js";
 import { errorMessage } from "./mission_dispatcher_node.js";
 import {
   buildMissionReviewProjection,
@@ -43,7 +43,7 @@ export const getReview = action({
     if (mission.ownerId !== ownerId) throw new Error("Forbidden");
 
     const template = await resolveMissionTemplate(getTemplateRegistry(ctx), mission);
-    const declaration = template?.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+    const declaration = publishDeclarationFor(template?.manifest, mission.type);
     const publish = declaration
       ? await ctx.runQuery(internal.publications.reviewState, {
           missionId: args.missionId,
@@ -409,62 +409,6 @@ async function loadMissionAndTemplate(
 }
 
 /**
- * Sends the Publishable of a Mission to its Publish target through the
- * Project's Publisher. The Publication is `pending` first, then `published`
- * (or `failed`, leaving the Mission `approved`); the Mission becomes `done`
- * once all its Publications are `published`.
- */
-async function publishThroughPublisher(
-  ctx: ActionCtx,
-  mission: Doc<"missions">,
-  declaredTargets: string[],
-  target?: string,
-): Promise<void> {
-  const prepared = await ctx.runMutation(internal.publications.beginAll, {
-    missionId: mission._id,
-    declaredTargets,
-    ...(target ? { target } : {}),
-  });
-  // One Publication per target, independent: a failing target does not stop
-  // the others, and the action fails at the end so the human can retry it.
-  const failures: string[] = [];
-  for (const item of prepared.publications) {
-    const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
-      channelId: item.channelId,
-      settings: item.settings,
-      publishable: prepared.publishable,
-      ...(prepared.publishAt !== undefined ? { publishAt: prepared.publishAt } : {}),
-    });
-    if (!result.ok) {
-      await ctx.runMutation(internal.publications.finish, {
-        publicationId: item.publicationId,
-        status: "failed",
-        error: result.error,
-      });
-      failures.push(`${item.target}: ${result.error}`);
-      continue;
-    }
-    await ctx.runMutation(internal.publications.finish, {
-      publicationId: item.publicationId,
-      status: result.outcome.status,
-      externalId: result.outcome.externalId,
-      ...(result.outcome.status === "scheduled" && prepared.publishAt !== undefined ? { scheduledAt: prepared.publishAt } : {}),
-      ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
-    });
-    await ctx.runMutation(internal.events.store, {
-      instanceId: mission.instanceId,
-      event: {
-        id: `ReviewPublished:${mission._id}:${item.publicationId}`,
-        type: "ReviewPublished",
-        payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
-        ts: Date.now(),
-      },
-    });
-  }
-  if (failures.length > 0) throw new Error(`Publishing failed: ${failures.join("; ")}`);
-}
-
-/**
  * Resolve a Template-declared review action's contract and execute its bounded
  * HTTP effect (or its `revision_run` effect) for a Mission, then apply the
  * declared Mission status transition.
@@ -551,7 +495,7 @@ async function executeReviewAction(
   }
 
   // --- Mission types that declare `publish`: the Publisher is the executor (ADR-069) ---
-  const publishDeclaration = template.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
+  const publishDeclaration = publishDeclarationFor(template.manifest, mission.type);
   if (publishDeclaration && actionDef.key === "publish") {
     await publishThroughPublisher(ctx, mission, publishDeclaration.targets);
     return { ok: true };
@@ -747,29 +691,6 @@ export const performReviewAction = action({
 });
 
 /**
- * Retries one `failed` Publication on its own (issue #20): the other
- * Publications of the Mission are untouched; the Mission becomes `done` once
- * all of them are `published`.
- */
-export const retryPublication = action({
-  args: { publicationId: v.id("publications") },
-  handler: async (ctx, args): Promise<{ ok: true }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
-    const publication: Doc<"publications"> | null = await ctx.runQuery(internal.publications.getInternal, {
-      publicationId: args.publicationId,
-    });
-    if (!publication) throw new Error("Publication not found");
-    const { mission, template } = await loadMissionAndTemplate(ctx, publication.missionId);
-    if (mission.ownerId !== (identity.subject ?? identity.tokenIdentifier)) throw new Error("Forbidden");
-    const declaration = template.manifest.missionTypes?.find((m) => m.type === mission.type)?.publish;
-    if (!declaration) throw new Error("This Mission type does not publish");
-    await publishThroughPublisher(ctx, mission, declaration.targets, publication.target);
-    return { ok: true };
-  },
-});
-
-/**
  * Stop action (issue #482): kills the OpenClaw agent process for a Mission's
  * live Run, then moves both the Run and the Mission to the terminal
  * `cancelled` status. Guarded on the Mission actually being `doing` with a
@@ -926,16 +847,12 @@ export const autoPublishChain = internalAction({
     // A Mission type that publishes through the Publisher (ADR-069): a failed
     // publish is not a failed Mission. It stays `approved` with a `failed`
     // Publication carrying the error, retryable via `retryPublication`.
-    const declaration = template.manifest.missionTypes?.find((m) => m.type === approvedMission.type)?.publish;
+    const declaration = publishDeclarationFor(template.manifest, approvedMission.type);
     if (declaration) {
       try {
         await executeReviewAction(ctx, { mission: approvedMission, template, actionKey: "publish" });
       } catch (err) {
-        const recorded = await ctx.runMutation(internal.publications.recordFailure, {
-          missionId: args.missionId,
-          declaredTargets: declaration.targets,
-          error: errorMessage(err),
-        });
+        const recorded = await recordAutoPublishFailure(ctx, args.missionId, declaration, err);
         if (!recorded) await failMission(`publish step failed — ${errorMessage(err)}`);
       }
       return;

@@ -6,6 +6,7 @@ import {
   type ReviewActionCapability,
   type ReviewContentContract,
 } from "@opengroow/agent-templates";
+import type { PublicationStatus } from "./publisher_schema.js";
 
 export type ReviewContentKind = "markdown" | "metadata" | "image" | "video";
 
@@ -58,15 +59,19 @@ export type MissionReviewSnapshot = {
 export type MissionPublishProjection = {
   target: string | null;
   /** Every target the Mission goes to (one Publication each). */
-  targets?: string[];
+  targets: string[];
   declaredTargets: string[];
-  /** The target is mapped to a channel on the Project's Publisher. */
+  /** Every target is mapped to a channel on the Project's Publisher. */
   mapped: boolean;
+  /** The targets that have no channel yet (empty when `mapped`). */
+  unmappedTargets: string[];
+  /** The Project has a Publisher with an API key. Without it nothing can be sent. */
+  publisherReady: boolean;
   /** The date the human chose (epoch ms); absent = publish immediately. */
   publishAt?: number;
   publications: Array<{
     target: string;
-    status: "pending" | "scheduled" | "published" | "failed";
+    status: PublicationStatus;
     externalId?: string;
     externalUrl?: string;
     scheduledAt?: number;
@@ -193,6 +198,21 @@ function actionEnabled(
   return { enabled: true };
 }
 
+function publishBlockedReason(publish: MissionPublishProjection): string | undefined {
+  if (!publish.publisherReady) {
+    return "The Publisher has no API key (or none is set up): configure it on the Publishers page";
+  }
+  if (publish.targets.length === 0) {
+    return "No Publish target: configure one on the Publishers page";
+  }
+  if (publish.unmappedTargets.length > 0) {
+    const names = publish.unmappedTargets.map((t) => `"${t}"`).join(", ");
+    const noun = publish.unmappedTargets.length > 1 ? "targets" : "target";
+    return `Publish ${noun} ${names} not configured: map ${publish.unmappedTargets.length > 1 ? "them" : "it"} on the Publishers page`;
+  }
+  return undefined;
+}
+
 export function buildMissionReviewProjection(
   manifest: AgentManifest | undefined,
   snapshot: MissionReviewSnapshot,
@@ -226,14 +246,10 @@ export function buildMissionReviewProjection(
   const declaredActions = contract?.actions ?? [];
   const actions = declaredActions.map((action) => {
     let availability = actionEnabled(action, snapshot, artifact);
-    // An unmapped Publish target blocks `publish` until the Publisher is configured.
-    if (publish && action.key === "publish" && availability.enabled && !publish.mapped) {
-      availability = {
-        enabled: false,
-        disabledReason: publish.target
-          ? `Publish target "${publish.target}" is not configured: map it on the Publishers page`
-          : "No Publish target: configure one on the Publishers page",
-      };
+    // A Publisher that cannot send (no API key) or an unmapped target blocks `publish`.
+    if (publish && action.key === "publish" && availability.enabled) {
+      const blocked = publishBlockedReason(publish);
+      if (blocked) availability = { enabled: false, disabledReason: blocked };
     }
     return {
       key: action.key,
