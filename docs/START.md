@@ -7,7 +7,8 @@ Dashboard, broker, `openclaw-connect` and `openclaw-local-control`.
 ```bash
 pnpm run setup            # creates .env
 # .env.example defaults OPENCLAW_IMAGE_REGISTRY=ghcr.io/opengroow (change it for a fork)
-pnpm start                # pre-flight check of .env, pull, up -d
+pnpm start                # pre-flight check of .env, up -d (downloads only what is missing)
+pnpm start:update         # fetch the latest published images, then start
 pnpm start:logs
 pnpm start:down
 ```
@@ -21,7 +22,7 @@ built-in one. `.env.example` defaults the registry to `ghcr.io/opengroow`; image
 `${OPENCLAW_IMAGE_REGISTRY}/opengroow-<name>:${OPENCLAW_IMAGE_TAG:-latest}`
 (`docker-compose.start.yml`).
 
-Images and the workflows that publish them (`.github/workflows/*-image.yml`,
+Images and the workflows that publish them (`.github/workflows/*-image*.yml`,
 registry from the repository variable `IMAGE_REGISTRY`, default
 `ghcr.io/<repository owner>`): `opengroow-broker`, `opengroow-dashboard`,
 `opengroow-convex-bootstrap`, `opengroow-openclaw-connect`,
@@ -29,7 +30,7 @@ registry from the repository variable `IMAGE_REGISTRY`, default
 images are `${OPENCLAW_IMAGE_REGISTRY}/openclaw-gateway` and
 `/openclaw-runtime-worker` (published by `openclaw-images.yml`, which first publishes the shared
 `/openclaw-base` image — node + the pinned `openclaw` CLI — that both are built
-FROM; the `openclaw:image:*` scripts remain for a manual push); they are used by `docker compose` when a Project is created. Since `docker compose up` never re-pulls an image already present, `pnpm start` pulls both itself on every run, so a Project never starts from a stale `:latest`.
+FROM; the `openclaw:image:*` scripts remain for a manual push); they are used by `docker compose` when a Project is created. `docker compose up` never re-pulls an image already present, so `pnpm start` downloads both only when missing (first run) and `pnpm start:update` re-pulls them: updating is an explicit action, never a side effect of starting. After an update, existing Projects keep running the containers they were created with.
 
 All images are `linux/amd64` only (emulated on Apple Silicon). GHCR packages are
 private by default: set each one to Public (Package settings, Change
