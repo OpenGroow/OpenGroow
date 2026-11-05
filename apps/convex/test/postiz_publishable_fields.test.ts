@@ -24,7 +24,9 @@ function stub() {
 }
 const post = (calls: ReturnType<typeof stub>) => calls.find((c) => c.path === "posts")!.body.posts[0];
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("Postiz adapter: optional Publishable fields", () => {
   it("forwards link to Pinterest", async () => {

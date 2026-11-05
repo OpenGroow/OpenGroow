@@ -22,8 +22,8 @@ A destination a Publishable can be sent to: one **channel of the Project's Publi
 The deliverable of a Mission expressed in the unified publishing format, of one **kind** from a closed set defined by OpenGroow (V1: `video`, `image`, `carousel`). A Publishable carries **references only** (media URLs, ids at the producing service), never content (ADR-010). The Agent Template's manifest declares, per Mission type, only the kind it produces.
 
 - A new kind is added to the closed set by OpenGroow; it is not declared by a Template.
-- **Declaration**: a Mission type declares `"publish": { "kind": "carousel" }` in its manifest entry; `validateManifest` checks the kind at Activation and rejects any other key (`targets` included).
-- **Fields (V1)**: `video` = `videoUrl`, optional `coverUrl` / `title`, `caption`; `image` = `imageUrl`, `caption`; `carousel` = ordered `slideUrls`, `caption`. All accept a free `metadata` object. The Agent returns it as `artifact.publishable` (required for `success` and `needs_human_review`, since both reach the review that publishes it); an invalid or missing one is rejected with per-field errors and the Agent retries.
+- **Declaration**: a Mission type declares `"publish": { "kind": "carousel" }` in its manifest entry, with optional `require` (optional fields the Template guarantees; can only tighten) and `media` (media field to path in the MCP output, validated but not yet applied: OpenGroow has no place to read the output of a synchronous MCP call). `validateManifest` checks them at Activation and rejects any other key (`targets` included). `require` is enforced on the RunResult (per-field error, the Agent retries) and listed in the Agent's `context.md`.
+- **Fields (V1)**: `video` = `videoUrl`, `caption`, optional `coverUrl` / `title` / `link` / `tags`; `image` = `imageUrl`, `caption`, optional `link` / `altText`; `carousel` = ordered `slideUrls`, `caption`, optional `link` / `altText`. All accept a free `metadata` object. The Agent returns it as `artifact.publishable` (required for `success` and `needs_human_review`, since both reach the review that publishes it); an invalid or missing one is rejected with per-field errors and the Agent retries.
 - _Avoid_: "payload", "post".
 
 ### Publication
@@ -44,7 +44,7 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 ### Postiz translation (V1)
 
 - `image`, `video` and `carousel` all go through Postiz `upload-from-url` then `POST /posts`. A `carousel` uploads its slides **sequentially** (the upload order is the slide order) and sends them as the media list of one post; a `video` is a post with one media.
-- Per-target settings (for example TikTok privacy) come from the Publisher config of the target (`settings` of the mapping), never from the Publishable (`metadata` is not forwarded). The Publishable `coverUrl` is not forwarded yet.
+- Per-target settings (for example TikTok privacy) come from the Publisher config of the target (`settings` of the mapping), never from the Publishable (`metadata` is not forwarded). Optional Publishable fields are forwarded where Postiz supports them and ignored silently elsewhere: `link` (Pinterest destination), `altText` (image `alt`), `tags` (YouTube tags), `coverUrl` (YouTube thumbnail, uploaded like a media). Per-platform table: docs/TEMPLATE_DEVELOPMENT.md.
 - **Several targets**: `payload.publishTargets` (set by the human, each a channel of the Publisher) makes one independent Publication per target. All are created `pending` up front; one failing does not stop the others. The `publish` action then fails, and replaying it redoes only the `failed` ones.
 
 ### Large videos: runtime limits

@@ -29,7 +29,7 @@ const SNAPSHOT: ReconcileSnapshot = {
 
 function decide(
   publishable: unknown,
-  publish: { kind: "video" | "image" | "carousel"; targets?: string[]; require?: string[] } | undefined,
+  publish: { kind: "video" | "image" | "carousel"; targets?: string[]; require?: readonly string[] } | undefined,
   extraArtifact: Record<string, unknown> = {},
 ) {
   const artifact = {
