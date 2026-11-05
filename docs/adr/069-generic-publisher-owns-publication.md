@@ -48,9 +48,9 @@ A past `publishAt` is rejected when a human creates or edits a Mission, Schedule
 
 ## Amendment: channel / content-kind capabilities
 
-Compatibility between a channel's platform and the Publishable `kind` belongs to the publishing service, so it lives behind the adapter-agnostic Publisher, not in Templates or the dashboard. It is **data**, not code: `apps/convex/publisher/postiz.capabilities.json` (`schemaVersion: 1`, `{ adapter, platforms: { <service>: { video|image|carousel: supported|uncertain|unsupported, reasons } } }`), read by a pure `capabilityOf(adapterId, service, kind)` with no per-platform branch; unknown platforms are `uncertain`. `unsupported` (set only when the service docs say so) is refused server-side at Mission/Schedule creation and edit, `setTargets` and publish time, and disabled with its reason in the dashboard; `uncertain` is allowed with a visible warning.
+Compatibility between a channel's platform and the Publishable `kind` belongs to the publishing service, so it lives behind the adapter-agnostic Publisher, not in Templates or the dashboard. It is **data**, not code: `packages/publisher-postiz/data/capabilities.json` (`schemaVersion: 1`, `{ adapter, platforms: { <service>: { video|image|carousel: supported|uncertain|unsupported, reasons } } }`), read by a pure `capabilityOf(adapterId, service, kind)` with no per-platform branch; unknown platforms are `uncertain`. `unsupported` (set only when the service docs say so) is refused server-side at Mission/Schedule creation and edit, `setTargets` and publish time, and disabled with its reason in the dashboard; `uncertain` is allowed with a visible warning.
 
-This JSON is the shape a Publisher plugin will ship in the hub (packages with manifests distributed through releases and `index.json`): moving it there later is a file move. No hub package and no loader of external plugins exist now; adapters and their data are still bundled in Convex.
+This JSON is one of the two data files of a Publisher plugin (ADR-070: an isolated code module with a function contract, a workspace package now, a hub package later). The adapter and its data now live in `packages/publisher-postiz`; the core in `apps/convex/publisher/` only holds the plugin registry. No loader of external plugins exists.
 
 ## Amendment: MCP output contract is a recommendation
 
