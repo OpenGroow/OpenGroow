@@ -182,4 +182,13 @@ describe("publishers", () => {
       owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "Bad Target!" }),
     ).rejects.toThrow("Invalid Publish target");
   });
+
+  it("lowercases target names so \"Instagram\" becomes \"instagram\"", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, CONNECTION);
+    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: " Instagram " });
+    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram"]);
+  });
 });

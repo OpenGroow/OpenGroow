@@ -18,9 +18,9 @@ const TARGET_PATTERN = /^[a-z0-9][a-z0-9_-]*(:[a-z0-9][a-z0-9_-]*)*$/;
 const NO_PUBLISHER = "No Publisher configured";
 
 function assertTarget(target: string): string {
-  const name = target.trim();
+  const name = target.trim().toLowerCase();
   if (!TARGET_PATTERN.test(name)) {
-    throw new Error(`Invalid Publish target "${target}": use lowercase words such as "instagram" or "pinterest:recipes"`);
+    throw new Error(`Invalid Publish target "${target}": use words such as "instagram" or "pinterest:recipes"`);
   }
   return name;
 }
