@@ -63,11 +63,11 @@ By default a Template publishes through its own MCP. A Mission type can instead 
 On the Mission type's entry in `missionTypes[]`:
 
 ```json
-"publish": { "kind": "carousel", "targets": ["instagram", "pinterest:recipes"] }
+"publish": { "kind": "carousel" }
 ```
 
 - `kind` is one of the closed set below. A new kind is a product change in OpenGroow, never a Template declaration.
-- `targets` is a non-empty, duplicate-free list of logical **Publish targets**: lowercase letters, digits, `-` or `_`, with an optional `:qualifier` (for example `instagram`, `pinterest:recipes`). Never a service channel id, board id or account: the Publisher maps targets to real channels.
+- A Template does not list destinations: `targets` is rejected as an unknown key. Where content goes is chosen when creating a Mission or a Schedule, among the channels of the Project's Publisher (ADR-069).
 - No other key is allowed. `validateManifest` (`packages/agent-templates/src/publish-declaration.ts`) checks all of this at Activation and `pnpm template:validate` reports it with the manifest path.
 
 ### 2. Return a `publishable`
@@ -90,7 +90,7 @@ A Mission type that declares `publish` **must not publish itself**:
 
 - **The Agent never publishes.** Remove every call to a publishing tool from its `AGENTS.md` file and tell it to return the `publishable` instead. Publication happens on the human `publish` action of the review, or automatically with `autoPublish`, executed by the Publisher.
 - **No dual-write.** Remove the publishing settings from the MCP too (Postiz channel, board id, credentials, `pinterestBoardId`-style parameters) and from its dashboard and `statusCheck`. The Template must not both publish through the MCP and declare `publish`, or the deliverable would be posted twice.
-- The target is not chosen by the Agent: it comes from `payload.publishTarget` (or `payload.publishTargets` for several), defaulting to the first declared target, and the human can change it in the review. Remove target or board parameters from Mission and Schedule payload instructions accordingly.
+- The destination is not chosen by the Agent: it comes from `payload.publishTargets` (keys of Publisher channels, chosen by the human when creating the Mission or Schedule and editable in the review, no default). Remove target or board parameters from Mission and Schedule payload instructions and from the Mission type's payload fields accordingly.
 - Keep the review's `publish` capability for the Mission type; the generic engine routes it to the Publisher instead of an MCP effect.
 
 Mission types that do not declare `publish` behave exactly as before. `article` publishing (GitHub, `seo`) is out of V1 and stays in its MCP.

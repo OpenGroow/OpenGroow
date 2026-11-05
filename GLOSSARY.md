@@ -76,7 +76,7 @@ Definitions are in `docs/domain/`. Read the file of the domain you work on; do n
 | **Replication Score** | A composite 0–1 score on a scored Source, expressing how good an inspiration it is to replicate for *this Instance's own product* — not how viral… Also defines: Weighted sum of four sub-scores, Optimizes for fit, not virality, Gated, not always-decisive. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Engagement Score** | The Replication Score's performance sub-score: | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Publisher** | A Project-level integration (adapter plus per-Project config) that publishes approved deliverables to an external service. | [docs/domain/publishing.md](docs/domain/publishing.md) |
-| **Publish target** | A logical destination (`instagram`, `pinterest:recipes`) carried by a Mission or Schedule payload and mapped by the Publisher. | [docs/domain/publishing.md](docs/domain/publishing.md) |
+| **Publish target** | A channel of the Project's Publisher (internal generated key, for example `instagram`) chosen per Mission or Schedule in `payload.publishTargets`; Templates do not declare it. | [docs/domain/publishing.md](docs/domain/publishing.md) |
 | **Publishable** | A deliverable in the unified publishing format, of a closed kind, carrying references only. | [docs/domain/publishing.md](docs/domain/publishing.md) |
 | **Publication** | The tracked outcome of one Publishable sent to one Publish target. | [docs/domain/publishing.md](docs/domain/publishing.md) |
 | **Android Plugin** | Local extension co-installed on the Mac host of the OpenClaw Instance. Also defines: App profiles. | [docs/domain/android.md](docs/domain/android.md) |

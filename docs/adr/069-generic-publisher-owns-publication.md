@@ -12,16 +12,24 @@ Postiz publishing config (channels, boards, credentials) is duplicated in every 
 - **Agents never publish.** An Agent Template returns a **Publishable** in the RunResult's Artifact (`publishable` field). OpenGroow publishes on the human `publish` action of the review, or automatically with `autoPublish`.
 - **The unified format is a closed set of kinds owned by OpenGroow**: `video`, `image`, `carousel` in V1, each with a fixed schema, plus a free `metadata` the adapter reads if it understands it. Adding a kind is a product change, not a Template declaration. This differs from ADR-051 on purpose: a Source is only described, a Publishable is interpreted by an adapter, so there must be no guessing.
 - **References only** (media URLs, ids at the producing service), never content (ADR-010 unchanged).
-- **The Template manifest declares**, per Mission type, the kind it produces and the Publish targets it may use. Convex validates the Publishable against the kind and returns errors to the Agent (same approach as ADR-051's `analysisSchema`).
-- **Publish targets are logical** (`instagram`, `pinterest:recipes`). A Mission or Schedule payload carries a target and an optional `publishAt`; the human can change both at review. The Publisher maps targets to the service's channels (Postiz channels are discovered through its API and picked from a menu) and holds the service-specific settings per target. None of that reaches the unified format.
+- **The Template manifest declares**, per Mission type, only the kind it produces: `publish: { kind }`. It lists no destination (see the amendment below). Convex validates the Publishable against the kind and returns errors to the Agent (same approach as ADR-051's `analysisSchema`).
+- **Publish targets are the channels of the Project's Publisher.** A Mission or Schedule payload carries `publishTargets` (the keys of one or several channels of the Publisher) and an optional `publishAt`; the human chooses them when creating the Mission or Schedule and can change both at review. The Publisher lists the service's channels (Postiz channels are discovered through its API and picked from a menu), generates the key of each (`instagram`, or `service:handle` when taken) and holds the service-specific settings per channel. None of that reaches the unified format. There is no default: no channel chosen means `publish` is disabled.
 - **A Publication** tracks each (Mission, target): `pending`, `scheduled`, `published`, `failed`, with external URL, scheduled date and error. A Mission is `done` when all its Publications are `published`; a failed one is retried alone. Status is followed by Convex polling, as for External Jobs.
-- **No activation gate** (unlike ADR-034). An unmapped target disables `publish`, or makes the Publication `failed` with an explicit message under `autoPublish`; it is retried after the Publisher is fixed.
+- **No activation gate** (unlike ADR-034). An unknown or unmapped channel, or no channel chosen, disables `publish`; under `autoPublish` an unknown or unmapped channel makes the Publication `failed` with an explicit message (the Mission stays `approved`), and no channel at all fails the Mission with an explicit message. A failed Publication is retried after the Publisher is fixed.
 - **Migration is by opt-in, template by template.** A Mission type that declares `publish` in its manifest no longer publishes itself: its instructions stop calling the MCP's publishing tools and the MCP stops receiving publishing settings. No dual-write. Templates not migrated behave as today.
 
 ## Consequences
 
 - Amends ADR-034: the "Postiz channels" configuration leaves the MCP dashboards and moves to the Publisher. The rest of ADR-034 (`apiKey`, `statusCheck`) is unchanged.
-- Amends ADR-024: Pinterest board routing becomes a Publish target in the Schedule payload instead of a `pinterestBoardId` passed to the MCP.
+- Amends ADR-024: Pinterest board routing becomes a Publisher channel (with its board in the channel settings) chosen in the Schedule payload instead of a `pinterestBoardId` passed to the MCP.
 - ADR-010 is confirmed. `article` publishing (GitHub, from `seo`) stays in `seo-mcp` and is out of V1.
 - The review's `publish` action gets a real executor in OpenGroow instead of depending on the MCP.
 - New Convex state: Publisher config per Project and Publications, plus the Artifact `publishable` field in the RunResult contract.
+
+## Amendment: destinations are chosen per Mission or Schedule, not declared by Templates
+
+**Decision (user, PR #25).** A Template does not list Publish targets. Its manifest declares only the kind it produces (`publish: { kind }`); `targets` is rejected as an unknown key. Where content goes is chosen when creating a Mission or a Schedule (and editable at review) by picking one or more channels of the Project's Publisher, never by typing a name.
+
+**Why.** The destination is a property of the Project (which accounts it has connected), not of a Template. A Template that names `instagram` or `pinterest:recipes` forces the author to guess the Project's channel names, makes every Project invent matching aliases, and fails late (at publish time) when they differ. Picking from the Publisher's actual channels removes the alias, the "declared targets" check and the "first declared target" default.
+
+**Consequences.** The stored key of each channel is generated by the Publisher (`addChannel`) and is internal. The mutations that save a Mission or Schedule payload check only that each key exists on the Publisher (they have no Template registry); mapping and the API key are checked when publishing. Existing data keeps whatever keys it has.
