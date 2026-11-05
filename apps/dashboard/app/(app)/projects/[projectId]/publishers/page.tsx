@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Save, Settings } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, Save, Settings } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -10,7 +10,9 @@ import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instanc
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { PageHeader } from "@/components/opengroow/page-header";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
@@ -40,6 +42,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
 
   const [url, setUrl] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -106,8 +110,49 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
     }`;
 
+  const showPostiz = Boolean(publisher) || adding;
+
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-8">
+      <PageHeader
+        title="Publishers"
+        description="Connect the services that will publish your content (e.g. Postiz), then add their channels (Instagram, TikTok, Pinterest, etc.). These publishers are available to all Agents in this project."
+        action={
+          <Button type="button" size="lg" disabled={showPostiz} onClick={() => setPicking(true)}>
+            <Plus aria-hidden="true" />
+            Add publisher
+          </Button>
+        }
+      />
+
+      <Dialog open={picking} onOpenChange={setPicking}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a publisher</DialogTitle>
+            <DialogDescription>Choose the service that will publish your content.</DialogDescription>
+          </DialogHeader>
+          <button
+            type="button"
+            className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted"
+            onClick={() => {
+              setPicking(false);
+              setAdding(true);
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/postiz.png" alt="" className="size-10 rounded-lg object-contain" />
+            <span className="grid">
+              <span className="text-base font-medium">Postiz</span>
+              <span className="text-sm text-muted-foreground">Social media scheduler &amp; publisher</span>
+            </span>
+          </button>
+        </DialogContent>
+      </Dialog>
+
+      {!showPostiz ? (
+        <Card className="p-5 text-sm text-muted-foreground">No publisher yet. Add one to publish your Agents&apos; content.</Card>
+      ) : (
+      <div className="grid gap-6">
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -200,6 +245,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         <PublishTargetsCard instanceId={id} publisher={publisher} />
       ) : (
         <Card className="p-5 text-sm text-muted-foreground">Save the connection first to list your channels.</Card>
+      )}
+      </div>
       )}
     </div>
   );
