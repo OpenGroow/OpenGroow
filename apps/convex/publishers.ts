@@ -21,18 +21,16 @@ function slug(value: string): string {
 }
 
 /**
- * The generated key of a channel entry (a Publish target): its service, or
- * `service:handle` when that is already taken, disambiguated by the channel id
- * as a last resort. The user never names it (ADR-069).
+ * The generated key of a channel entry (a Publish target): always
+ * `<platform>:<handle>`, with no exception. The handle is the account's profile
+ * on the service; a channel without one cannot be added. The user never names
+ * it (ADR-069).
  */
-export function generateTargetKey(
-  channel: { channelId: string; channelName: string; channelService: string; channelProfile?: string },
-  taken: ReadonlySet<string>,
-): string {
-  const base = slug(channel.channelService) || "channel";
-  if (!taken.has(base)) return base;
-  const qualified = `${base}:${slug(channel.channelProfile ?? channel.channelName) || channel.channelId.slice(0, 6)}`;
-  return taken.has(qualified) ? `${qualified}-${channel.channelId.slice(0, 4)}` : qualified;
+export function generateTargetKey(channel: { channelService: string; channelProfile?: string }): string {
+  const platform = slug(channel.channelService) || "channel";
+  const handle = slug(channel.channelProfile ?? "");
+  if (!handle) throw new Error("This channel has no handle, so it cannot be added");
+  return `${platform}:${handle}`;
 }
 
 async function requirePublisher(ctx: MutationCtx, instanceId: string) {
@@ -127,7 +125,10 @@ export const addChannel = mutation({
     const publisher = await requirePublisher(ctx, args.instanceId);
     const existing = publisher.targets.find((t) => t.channelId === args.channelId);
     if (existing) return existing.target;
-    const target = generateTargetKey(args, new Set(publisher.targets.map((t) => t.target)));
+    const target = generateTargetKey(args);
+    if (publisher.targets.some((t) => t.target === target)) {
+      throw new Error("A channel with this handle is already added");
+    }
     const { instanceId: _instanceId, ...channel } = args;
     await ctx.db.patch(publisher._id, {
       targets: [...publisher.targets, { target, ...channel }],

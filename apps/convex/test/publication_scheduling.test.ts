@@ -88,6 +88,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
       channelId: "ch-1",
       channelName: "My IG",
       channelService: "instagram",
+      channelProfile: "love_youmake",
     });
   }
   const now = Date.now();
@@ -97,7 +98,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
       instanceId: INSTANCE_ID,
       templateId: opts.templateId ?? TEMPLATE_ID,
       type: opts.type ?? "make_image",
-      payload: opts.payload ?? { publishTargets: ["instagram"] },
+      payload: opts.payload ?? { publishTargets: ["instagram:love_youmake"] },
       status: "approved",
       lastResult: {
         status: "needs_human_review",
@@ -166,7 +167,7 @@ describe("publishAt", () => {
 
   it("with a future publishAt yields a scheduled Publication and a schedule post in Postiz", async () => {
     const publishAt = Date.now() + 2 * HOUR;
-    const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram"], publishAt } });
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt } });
     const postiz = stubPostiz();
 
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
@@ -185,7 +186,7 @@ describe("editing publishAt at review", () => {
     const { owner, missionId } = await seed();
     const publishAt = Date.now() + 5 * HOUR;
     await owner.mutation(api.publications.setPublishAt, { missionId, publishAt });
-    expect((await owner.query(api.missions.get, { missionId }))?.payload).toMatchObject({ publishTargets: ["instagram"], publishAt });
+    expect((await owner.query(api.missions.get, { missionId }))?.payload).toMatchObject({ publishTargets: ["instagram:love_youmake"], publishAt });
     const review = await owner.action(api.missions_node.getReview, { missionId });
     expect(review.publish?.publishAt).toBe(publishAt);
 
@@ -204,7 +205,7 @@ describe("editing publishAt at review", () => {
   });
 
   it("a past date publishes immediately", async () => {
-    const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram"], publishAt: Date.now() - HOUR } });
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt: Date.now() - HOUR } });
     const postiz = stubPostiz();
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
     expect(postedBody(postiz).type).toBe("now");
@@ -256,7 +257,7 @@ describe("publishAt on Mission and Schedule payloads", () => {
 
 describe("polling a scheduled Publication", () => {
   async function scheduled() {
-    const ctx = await seed({ payload: { publishTargets: ["instagram"], publishAt: Date.now() + 2 * HOUR } });
+    const ctx = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt: Date.now() + 2 * HOUR } });
     stubPostiz();
     await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
     return ctx;

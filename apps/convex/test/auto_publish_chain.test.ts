@@ -390,19 +390,20 @@ describe("auto-publish chain (issue #329)", () => {
           channelId: "ch-1",
           channelName: "My IG",
           channelService: "instagram",
+          channelProfile: "love_youmake",
         });
       } else {
         // A legacy entry without a channel.
         await t.run(async (ctx) => {
         const row = await ctx.db.query("publishers").first();
-        await ctx.db.patch(row!._id, { targets: [{ target: "instagram" }] });
+        await ctx.db.patch(row!._id, { targets: [{ target: "instagram:love_youmake" }] });
       });
       }
       const ids = await seedMissionAndRun(t, {
         autoPublish: true,
         templateId: IMAGE_TEMPLATE_ID,
         type: "make_image",
-        payload: opts.payload ?? { publishTargets: ["instagram"] },
+        payload: opts.payload ?? { publishTargets: ["instagram:love_youmake"] },
       });
       return { t, owner, ...ids };
     }
@@ -417,7 +418,7 @@ describe("auto-publish chain (issue #329)", () => {
       await markCompletedAndFlush(t, { runId, result: imageResult });
       expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
       expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([
-        { target: "instagram", status: "published", externalId: "post-1" },
+        { target: "instagram:love_youmake", status: "published", externalId: "post-1" },
       ]);
       expect(postBody(postiz).type).toBe("now");
     });
@@ -425,11 +426,11 @@ describe("auto-publish chain (issue #329)", () => {
     it("honors the publishAt carried by the Schedule payload: the Publication is scheduled", async () => {
       const postiz = stubPostiz();
       const publishAt = Date.now() + 3_600_000;
-      const { t, owner, missionId, runId } = await setup({ map: true, payload: { publishTargets: ["instagram"], publishAt } });
+      const { t, owner, missionId, runId } = await setup({ map: true, payload: { publishTargets: ["instagram:love_youmake"], publishAt } });
       await markCompletedAndFlush(t, { runId, result: imageResult });
 
       expect(await owner.query(api.publications.listForMission, { missionId })).toMatchObject([
-        { target: "instagram", status: "scheduled", scheduledAt: publishAt },
+        { target: "instagram:love_youmake", status: "scheduled", scheduledAt: publishAt },
       ]);
       expect(postBody(postiz).type).toBe("schedule");
       expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
@@ -480,14 +481,14 @@ describe("auto-publish chain (issue #329)", () => {
       expect(mission?.status).toBe("approved");
       expect(mission?.errorMessage).toBeUndefined();
       const [failed] = await owner.query(api.publications.listForMission, { missionId });
-      expect(failed).toMatchObject({ target: "instagram", status: "failed" });
+      expect(failed).toMatchObject({ target: "instagram:love_youmake", status: "failed" });
       expect(failed.error).toContain("not configured");
       expect(postiz).not.toHaveBeenCalled();
 
       await t.run(async (ctx) => {
         const row = await ctx.db.query("publishers").first();
         await ctx.db.patch(row!._id, {
-          targets: [{ target: "instagram", channelId: "ch-1", channelName: "My IG", channelService: "instagram" }],
+          targets: [{ target: "instagram:love_youmake", channelId: "ch-1", channelName: "My IG", channelService: "instagram" }],
         });
       });
       await owner.action(api.publisher_node.retryPublication, { publicationId: failed.id });

@@ -154,7 +154,7 @@ describe("publishers", () => {
       channelProfile: "Other.Insta",
       settings: { board: "b" },
     });
-    expect(insta).toBe("instagram");
+    expect(insta).toBe("instagram:myinsta");
     expect(second).toBe("instagram:other-insta");
     // Adding the same channel again is idempotent.
     await expect(
@@ -164,12 +164,12 @@ describe("publishers", () => {
         channelName: "My Insta",
         channelService: "instagram",
       }),
-    ).resolves.toBe("instagram");
+    ).resolves.toBe("instagram:myinsta");
 
     await owner.mutation(api.publishers.updateSettings, { instanceId: INSTANCE_ID, target: second, settings: { board: "recipes" } });
     let publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
     expect(publisher?.targets).toEqual([
-      { target: "instagram", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta" },
+      { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta" },
       {
         target: "instagram:other-insta",
         mapped: true,
@@ -181,9 +181,26 @@ describe("publishers", () => {
       },
     ]);
 
-    await owner.mutation(api.publishers.removeTarget, { instanceId: INSTANCE_ID, target: "instagram" });
+    await owner.mutation(api.publishers.removeTarget, { instanceId: INSTANCE_ID, target: "instagram:myinsta" });
     publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:other-insta"]);
+  });
+
+  it("always generates `<platform>:<handle>` keys and refuses missing or duplicate handles", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, CONNECTION);
+    const add = (channelId: string, channelName: string, channelService: string, channelProfile?: string) =>
+      owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId, channelName, channelService, channelProfile });
+
+    expect(await add("c1", "My IG", "instagram", "love_youmake")).toBe("instagram:love_youmake");
+    // Adding the same channel twice returns the same key.
+    expect(await add("c1", "My IG", "instagram", "love_youmake")).toBe("instagram:love_youmake");
+    await expect(add("c2", "My Pins", "pinterest")).rejects.toThrow("This channel has no handle, so it cannot be added");
+    await expect(add("c2", "My Pins", "pinterest", "")).rejects.toThrow("no handle");
+    await expect(add("c3", "Other", "instagram", "Love_YouMake")).rejects.toThrow("A channel with this handle is already added");
+    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:love_youmake"]);
   });
 
   it("rejects adding a channel without a Publisher", async () => {
@@ -195,6 +212,7 @@ describe("publishers", () => {
         channelId: "c1",
         channelName: "x",
         channelService: "instagram",
+        channelProfile: "x",
       }),
     ).rejects.toThrow("No Publisher configured");
   });

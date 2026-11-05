@@ -272,8 +272,8 @@ describe("MissionReviewContent", () => {
     url: "https://postiz.example.com",
     hasApiKey: true,
     targets: [
-      { target: "instagram", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
-      { target: "pinterest", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest" },
+      { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
+      { target: "pinterest:pins", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" },
     ],
   };
 
@@ -283,18 +283,18 @@ describe("MissionReviewContent", () => {
       getReviewMock.mockImplementation(async () => ({
         ...(await base()),
         publish: {
-          targets: ["instagram"],
+          targets: ["instagram:myinsta"],
           mapped,
-          unmappedTargets: mapped ? [] : ["instagram"],
+          unmappedTargets: mapped ? [] : ["instagram:myinsta"],
           publisherReady: true,
-          publications: [{ target: "instagram", status: "failed", error: "Postiz responded 500" }],
+          publications: [{ target: "instagram:myinsta", status: "failed", error: "Postiz responded 500" }],
         },
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return MISSION_WITH_ARTIFACT;
         if (key === "publishers.get") return PUBLISHER;
         if (key === "publications.listForMission") {
-          return [{ id: "p1", target: "instagram", status: "failed", error: "Postiz responded 500" }];
+          return [{ id: "p1", target: "instagram:myinsta", status: "failed", error: "Postiz responded 500" }];
         }
         return undefined;
       });
@@ -307,7 +307,7 @@ describe("MissionReviewContent", () => {
       await act(async () => {});
       const unmapped = document.querySelector('[data-testid="publish-unmapped"] a') as HTMLAnchorElement | null;
       expect(unmapped?.getAttribute("href")).toBe("/projects/instance-1/publishers");
-      expect(document.querySelector('[data-testid="publication-instagram"]')?.textContent).toContain("failed");
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("failed");
     });
 
     it("shows no unmapped warning once the target is mapped", async () => {
@@ -322,8 +322,8 @@ describe("MissionReviewContent", () => {
       withPublish(true);
       await render();
       await act(async () => {});
-      const instagram = document.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
-      const pinterest = document.querySelector('[data-testid="publish-target-pinterest"]') as HTMLInputElement;
+      const instagram = document.querySelector('[data-testid="publish-target-instagram:myinsta"]') as HTMLInputElement;
+      const pinterest = document.querySelector('[data-testid="publish-target-pinterest:pins"]') as HTMLInputElement;
       expect(instagram.checked).toBe(true);
       expect(pinterest.checked).toBe(false);
       expect(document.body.textContent).toContain("@myinsta");
@@ -338,13 +338,13 @@ describe("MissionReviewContent", () => {
       useMutationMock.mockImplementation((key: string) => (key === "publications.setTargets" ? setTargets : vi.fn()));
       await render();
       await act(async () => {});
-      const pinterest = document.querySelector('[data-testid="publish-target-pinterest"]') as HTMLInputElement;
+      const pinterest = document.querySelector('[data-testid="publish-target-pinterest:pins"]') as HTMLInputElement;
       await act(async () => { pinterest.click(); });
-      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram", "pinterest"] });
-      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram, pinterest");
+      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram:myinsta", "pinterest:pins"] });
+      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram:myinsta, pinterest:pins");
 
       setTargets.mockClear();
-      const instagram = document.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
+      const instagram = document.querySelector('[data-testid="publish-target-instagram:myinsta"]') as HTMLInputElement;
       await act(async () => { instagram.click(); });
       await act(async () => { pinterest.click(); });
       expect(setTargets).toHaveBeenCalledTimes(1);
@@ -385,18 +385,18 @@ describe("MissionReviewContent", () => {
         ...(await base()),
         publish: {
           mapped: true,
-          targets: ["instagram"],
+          targets: ["instagram:myinsta"],
           unmappedTargets: [],
           publisherReady: true,
           publishAt: new Date("2030-01-02T09:30").getTime(),
-          publications: [{ target: "instagram", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }],
+          publications: [{ target: "instagram:myinsta", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }],
         },
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return MISSION_WITH_ARTIFACT;
         if (key === "publishers.get") return PUBLISHER;
         if (key === "publications.listForMission") {
-          return [{ id: "p1", target: "instagram", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }];
+          return [{ id: "p1", target: "instagram:myinsta", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }];
         }
         return undefined;
       });
@@ -404,7 +404,7 @@ describe("MissionReviewContent", () => {
       await render();
       await act(async () => {});
       expect((document.querySelector('[data-testid="publish-at"]') as HTMLInputElement).value).toBe("2030-01-02T09:30");
-      expect(document.querySelector('[data-testid="publication-instagram"]')?.textContent).toContain("scheduled");
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("scheduled");
     });
 
     it("has no publish section for a Mission type without publish", async () => {

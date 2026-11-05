@@ -60,8 +60,8 @@ const plainTemplate = fixtureTemplate("@test/plain", {
 } as never);
 useTemplateRegistry([INSTANCE_ID], [imageTemplate, plainTemplate]);
 
-const IG = { instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram" };
-const PIN = { instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My Pin", channelService: "pinterest", settings: { board: "b1" } };
+const IG = { instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "love_youmake" };
+const PIN = { instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My Pin", channelService: "pinterest", channelProfile: "pins", settings: { board: "b1" } };
 
 const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello world" };
 
@@ -91,7 +91,7 @@ async function seed(opts: { publishable?: Record<string, unknown>; map?: boolean
     // A legacy entry without a channel.
     await t.run(async (ctx) => {
       const row = await ctx.db.query("publishers").first();
-      await ctx.db.patch(row!._id, { targets: [{ target: "instagram" }] });
+      await ctx.db.patch(row!._id, { targets: [{ target: "instagram:love_youmake" }] });
     });
   }
   const now = Date.now();
@@ -101,7 +101,7 @@ async function seed(opts: { publishable?: Record<string, unknown>; map?: boolean
       instanceId: INSTANCE_ID,
       templateId: opts.templateId ?? TEMPLATE_ID,
       type: opts.type ?? "make_image",
-      payload: opts.payload ?? { publishTargets: ["instagram"] },
+      payload: opts.payload ?? { publishTargets: ["instagram:love_youmake"] },
       status: "approved",
       lastResult: {
         status: "needs_human_review",
@@ -153,7 +153,7 @@ describe("publish an image Mission through the Publisher", () => {
 
     const publications = await owner.query(api.publications.listForMission, { missionId });
     expect(publications).toHaveLength(1);
-    expect(publications[0]).toMatchObject({ target: "instagram", status: "published", externalId: "post-1" });
+    expect(publications[0]).toMatchObject({ target: "instagram:love_youmake", status: "published", externalId: "post-1" });
     const body = postedBody(postiz);
     expect(body.type).toBe("now");
     expect(body.posts[0].integration.id).toBe("ch-1");
@@ -173,7 +173,7 @@ describe("a failing Publisher", () => {
     ).rejects.toThrow(/Postiz responded 500/);
 
     const [failed] = await owner.query(api.publications.listForMission, { missionId });
-    expect(failed).toMatchObject({ target: "instagram", status: "failed" });
+    expect(failed).toMatchObject({ target: "instagram:love_youmake", status: "failed" });
     expect(failed.error).toContain("500");
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
 
@@ -210,11 +210,11 @@ describe("Publish target", () => {
     ).rejects.toThrow(/Choose a channel/);
     expect(postiz).not.toHaveBeenCalled();
 
-    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest"] });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest:pins"] });
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
 
     const [publication] = await owner.query(api.publications.listForMission, { missionId });
-    expect(publication.target).toBe("pinterest");
+    expect(publication.target).toBe("pinterest:pins");
     expect(postedBody(postiz).posts[0].settings).toMatchObject({ __type: "pinterest", board: "b1" });
   });
 
@@ -224,27 +224,27 @@ describe("Publish target", () => {
       owner.mutation(api.publications.setTargets, { missionId, targets: ["tiktok"] }),
     ).rejects.toThrow(/Unknown channel "tiktok"/);
     await expect(
-      owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram", "tiktok"] }),
+      owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram:love_youmake", "tiktok"] }),
     ).rejects.toThrow(/Unknown channel/);
     const postiz = stubPostiz();
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
-    expect((await owner.query(api.publications.listForMission, { missionId })).map((p) => p.target)).toEqual(["instagram"]);
+    expect((await owner.query(api.publications.listForMission, { missionId })).map((p) => p.target)).toEqual(["instagram:love_youmake"]);
     expect(postiz).toHaveBeenCalled();
   });
 
   it("a later single choice replaces an earlier multiple one (no edit is silently ignored)", async () => {
     const { owner, missionId } = await seed({ payload: {} });
     await owner.mutation(api.publishers.addChannel, { ...PIN, channelId: "ch-2" });
-    await owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram", "pinterest"] });
-    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest"] });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram:love_youmake", "pinterest:pins"] });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest:pins"] });
     const review = await owner.action(api.missions_node.getReview, { missionId });
-    expect(review.publish).toMatchObject({ targets: ["pinterest"] });
+    expect(review.publish).toMatchObject({ targets: ["pinterest:pins"] });
   });
 
   it("can only be changed by the owner", async () => {
     const { t, missionId } = await seed();
     await expect(
-      t.withIdentity(OTHER).mutation(api.publications.setTargets, { missionId, targets: ["instagram"] }),
+      t.withIdentity(OTHER).mutation(api.publications.setTargets, { missionId, targets: ["instagram:love_youmake"] }),
     ).rejects.toThrow();
   });
 });
@@ -264,7 +264,7 @@ describe("review projection", () => {
   it("reports the Publish target and its Publications, and disables publish when the target is unmapped", async () => {
     const { owner, missionId } = await seed({ map: false });
     const review = await owner.action(api.missions_node.getReview, { missionId });
-    expect(review.publish).toMatchObject({ targets: ["instagram"], mapped: false });
+    expect(review.publish).toMatchObject({ targets: ["instagram:love_youmake"], mapped: false });
     const publish = review.actions.find((a) => a.key === "publish");
     expect(publish).toMatchObject({ enabled: false });
     expect(publish?.disabledReason).toMatch(/Publishers page/);
@@ -278,15 +278,15 @@ describe("review projection", () => {
   });
 
   it("names the unmapped targets in the reason", async () => {
-    const { t, owner, missionId } = await seed({ payload: { publishTargets: ["instagram", "pinterest"] } });
+    const { t, owner, missionId } = await seed({ payload: { publishTargets: ["instagram:love_youmake", "pinterest:pins"] } });
     await owner.mutation(api.publishers.addChannel, PIN);
     await t.run(async (ctx) => {
       const row = await ctx.db.query("publishers").first();
-      await ctx.db.patch(row!._id, { targets: row!.targets.map((x) => (x.target === "pinterest" ? { target: "pinterest" } : x)) });
+      await ctx.db.patch(row!._id, { targets: row!.targets.map((x) => (x.target === "pinterest:pins" ? { target: "pinterest:pins" } : x)) });
     });
     const review = await owner.action(api.missions_node.getReview, { missionId });
-    expect(review.publish).toMatchObject({ mapped: false, unmappedTargets: ["pinterest"] });
-    expect(review.actions.find((a) => a.key === "publish")?.disabledReason).toMatch(/"pinterest".*Publishers page/);
+    expect(review.publish).toMatchObject({ mapped: false, unmappedTargets: ["pinterest:pins"] });
+    expect(review.actions.find((a) => a.key === "publish")?.disabledReason).toMatch(/"pinterest:pins".*Publishers page/);
   });
 
   it("disables publish, pointing at the Publishers page, when the Publisher has no API key", async () => {
@@ -307,7 +307,7 @@ describe("review projection", () => {
     stubPostiz(() => json({ message: "boom" }, 500));
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
     const review = await owner.action(api.missions_node.getReview, { missionId });
-    expect(review.publish).toMatchObject({ mapped: true, publications: [{ target: "instagram", status: "failed" }] });
+    expect(review.publish).toMatchObject({ mapped: true, publications: [{ target: "instagram:love_youmake", status: "failed" }] });
     expect(review.actions.find((a) => a.key === "publish")?.enabled).toBe(true);
   });
 
@@ -344,7 +344,7 @@ describe("publish a video Mission", () => {
     });
     await owner.mutation(api.publishers.updateSettings, {
       instanceId: INSTANCE_ID,
-      target: "instagram",
+      target: "instagram:love_youmake",
       settings: { privacy_level: "SELF_ONLY" },
     });
     const postiz = stubPostiz();
@@ -389,7 +389,7 @@ describe("publish to several targets", () => {
     const ctxs = await seed({ payload: {} });
     const { owner, missionId } = ctxs;
     await owner.mutation(api.publishers.addChannel, { ...PIN, channelId: "ch-2" });
-    await owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram", "pinterest"] });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: ["instagram:love_youmake", "pinterest:pins"] });
     return ctxs;
   }
 
@@ -401,8 +401,8 @@ describe("publish to several targets", () => {
 
     const publications = await owner.query(api.publications.listForMission, { missionId });
     expect(publications.map((p) => [p.target, p.status]).sort()).toEqual([
-      ["instagram", "published"],
-      ["pinterest", "published"],
+      ["instagram:love_youmake", "published"],
+      ["pinterest:pins", "published"],
     ]);
     const posts = postiz.mock.calls.filter(([url, init]) => String(url).endsWith("/posts") && (init as RequestInit)?.method === "POST");
     expect(posts).toHaveLength(2);
@@ -421,7 +421,7 @@ describe("publish to several targets", () => {
     const byTarget = Object.fromEntries(
       (await owner.query(api.publications.listForMission, { missionId })).map((p) => [p.target, p.status]),
     );
-    expect(byTarget).toEqual({ instagram: "published", "pinterest": "failed" });
+    expect(byTarget).toEqual({ "instagram:love_youmake": "published", "pinterest:pins": "failed" });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
 
     const postiz = stubPostiz();
@@ -438,7 +438,7 @@ describe("retrying one failed Publication", () => {
     await owner.mutation(api.publishers.addChannel, PIN);
     stubPostiz(() => json({ message: "boom" }, 500));
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
-    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest"] });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest:pins"] });
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
     const rows = await owner.query(api.publications.listForMission, { missionId });
     expect(rows.map((r) => r.status)).toEqual(["failed", "failed"]);
@@ -447,16 +447,16 @@ describe("retrying one failed Publication", () => {
 
   it("retries only that Publication, and completes the Mission once all are published", async () => {
     const { owner, missionId, rows } = await twoFailed();
-    const instagram = rows.find((r) => r.target === "instagram")!;
-    const pinterest = rows.find((r) => r.target === "pinterest")!;
+    const instagram = rows.find((r) => r.target === "instagram:love_youmake")!;
+    const pinterest = rows.find((r) => r.target === "pinterest:pins")!;
 
     const postiz = stubPostiz();
     await owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id });
     expect(postiz.mock.calls.filter(([u]) => String(u).endsWith("/posts"))).toHaveLength(1);
 
     const after = await owner.query(api.publications.listForMission, { missionId });
-    expect(after.find((r) => r.target === "instagram")).toMatchObject({ status: "published", externalId: "post-1" });
-    expect(after.find((r) => r.target === "pinterest")).toMatchObject({ status: "failed", error: pinterest.error });
+    expect(after.find((r) => r.target === "instagram:love_youmake")).toMatchObject({ status: "published", externalId: "post-1" });
+    expect(after.find((r) => r.target === "pinterest:pins")).toMatchObject({ status: "failed", error: pinterest.error });
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
 
     await owner.action(api.publisher_node.retryPublication, { publicationId: pinterest.id });
@@ -465,10 +465,10 @@ describe("retrying one failed Publication", () => {
 
   it("keeps a readable error when the retry fails again, and refuses foreign or already published Publications", async () => {
     const { t, owner, missionId, rows } = await twoFailed();
-    const instagram = rows.find((r) => r.target === "instagram")!;
+    const instagram = rows.find((r) => r.target === "instagram:love_youmake")!;
     stubPostiz(() => json({ message: "still down" }, 502));
     await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/502/);
-    const again = (await owner.query(api.publications.listForMission, { missionId })).find((r) => r.target === "instagram");
+    const again = (await owner.query(api.publications.listForMission, { missionId })).find((r) => r.target === "instagram:love_youmake");
     expect(again).toMatchObject({ status: "failed" });
     expect(again?.error).toContain("502");
 
@@ -489,9 +489,9 @@ describe("retrying one failed Publication", () => {
   it("supplies working Postiz defaults per platform without any channel settings", async () => {
     const { owner, missionId } = await seed({
       publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "Hi" },
-      payload: { publishTargets: ["tiktok"] },
+      payload: { publishTargets: ["tiktok:tok"] },
     });
-    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "Tik", channelService: "tiktok" });
+    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "Tik", channelService: "tiktok", channelProfile: "tok" });
     const postiz = stubPostiz();
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
     expect(postedBody(postiz).posts[0].settings).toMatchObject({
@@ -505,8 +505,8 @@ describe("retrying one failed Publication", () => {
   });
 
   it("asks for a board when a Pinterest channel has none", async () => {
-    const { owner, missionId } = await seed({ payload: { publishTargets: ["pinterest"] } });
-    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-9", channelName: "Pins", channelService: "pinterest" });
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["pinterest:pins"] } });
+    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-9", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" });
     stubPostiz();
     await expect(
       owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),

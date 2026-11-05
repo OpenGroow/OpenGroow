@@ -22,8 +22,8 @@ const PUBLISHER = {
   url: "https://postiz.example.com",
   hasApiKey: true,
   targets: [
-    { target: "instagram", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
-    { target: "pinterest", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest" },
+    { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
+    { target: "pinterest:pins", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" },
   ],
 };
 
@@ -53,15 +53,15 @@ describe("PublishChannelPicker", () => {
     const onChange = await render('{"topic":"x"}');
     expect(container.textContent).toContain("@myinsta");
     await act(async () => {
-      (container.querySelector('[data-testid="publish-target-pinterest"]') as HTMLInputElement).click();
+      (container.querySelector('[data-testid="publish-target-pinterest:pins"]') as HTMLInputElement).click();
     });
-    expect(JSON.parse(onChange.mock.calls[0][0] as string)).toEqual({ topic: "x", publishTargets: ["pinterest"] });
+    expect(JSON.parse(onChange.mock.calls[0][0] as string)).toEqual({ topic: "x", publishTargets: ["pinterest:pins"] });
   });
 
   it("pre-checks the channels of the payload and unchecking the last one removes the key", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
-    const onChange = await render('{"publishTargets":["instagram"]}');
-    const box = container.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
+    const onChange = await render('{"publishTargets":["instagram:myinsta"]}');
+    const box = container.querySelector('[data-testid="publish-target-instagram:myinsta"]') as HTMLInputElement;
     expect(box.checked).toBe(true);
     await act(async () => box.click());
     expect(onChange).toHaveBeenCalledWith("");
