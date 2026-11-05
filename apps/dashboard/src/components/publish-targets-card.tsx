@@ -94,6 +94,10 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     }
   }
 
+  // Entries added before the handle was stored get it from the live channel list.
+  const profileOf = (t: Target) =>
+    t.mapped ? (t.channelProfile ?? channels?.find((c) => c.id === t.channelId)?.profile) : undefined;
+
   const taken = new Set(publisher.targets.flatMap((t) => (t.mapped ? [t.channelId] : [])));
   const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled);
 
@@ -167,13 +171,13 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                 >
                   <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} />
                   <span className="grid flex-1 gap-1">
-                    <span className="font-medium">
+                    <span className="text-base font-medium">
                       {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
                     </span>
                     {t.mapped ? (
                       <span className="text-sm text-muted-foreground">
                         {t.channelName ?? t.channelId}
-                        {t.channelProfile ? ` · @${t.channelProfile}` : ""}
+                        {profileOf(t) ? ` · @${profileOf(t)}` : ""}
                       </span>
                     ) : (
                       <StatusBadge tone="warning" label="Not mapped" />
