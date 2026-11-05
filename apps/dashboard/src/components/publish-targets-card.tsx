@@ -74,23 +74,15 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     }
   }
 
-  async function handleSettings(current: Extract<Target, { mapped: true }>, raw: string) {
-    let settings: Record<string, unknown> = {};
-    if (raw.trim()) {
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error();
-        settings = parsed as Record<string, unknown>;
-      } catch {
-        setError("Settings must be a JSON object");
-        return;
-      }
-    }
+  /** Pinterest is the one service that needs input from the owner: the board to pin to. */
+  async function handleBoard(current: Extract<Target, { mapped: true }>, raw: string) {
+    const { board: _previous, ...others } = (current.settings ?? {}) as Record<string, unknown>;
+    const board = raw.trim();
     setError("");
     try {
-      await updateSettings({ instanceId: id, target: current.target, settings });
+      await updateSettings({ instanceId: id, target: current.target, settings: board ? { ...others, board } : others });
     } catch (e) {
-      setError(errorMessage(e, "Settings could not be saved"));
+      setError(errorMessage(e, "Board could not be saved"));
     }
   }
 
@@ -187,18 +179,21 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                 </button>
                 {expanded ? (
                   <div className="grid gap-3 border-t border-border p-4 md:grid-cols-[1fr_auto] md:items-end">
-                    <div className="grid gap-2">
-                      <Label htmlFor={`settings-${t.target}`}>Settings (JSON)</Label>
-                      <Input
-                        id={`settings-${t.target}`}
-                        key={JSON.stringify(t.mapped ? t.settings ?? {} : {})}
-                        autoComplete="off"
-                        disabled={!t.mapped}
-                        placeholder='{"board": "recipes"}'
-                        defaultValue={t.mapped && t.settings ? JSON.stringify(t.settings) : ""}
-                        onBlur={(event) => t.mapped && void handleSettings(t, event.target.value)}
-                      />
-                    </div>
+                    {t.mapped && t.channelService === "pinterest" ? (
+                      <div className="grid gap-2">
+                        <Label htmlFor={`board-${t.target}`}>Board ID</Label>
+                        <Input
+                          id={`board-${t.target}`}
+                          key={String(t.settings?.board ?? "")}
+                          autoComplete="off"
+                          placeholder="1234567890123456789"
+                          defaultValue={typeof t.settings?.board === "string" ? t.settings.board : ""}
+                          onBlur={(event) => void handleBoard(t, event.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <p className="m-0 text-sm text-muted-foreground">No setup needed for this channel.</p>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"

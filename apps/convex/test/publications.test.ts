@@ -61,7 +61,7 @@ const plainTemplate = fixtureTemplate("@test/plain", {
 useTemplateRegistry([INSTANCE_ID], [imageTemplate, plainTemplate]);
 
 const IG = { instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram" };
-const PIN = { instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My Pin", channelService: "pinterest" };
+const PIN = { instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My Pin", channelService: "pinterest", settings: { board: "b1" } };
 
 const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello world" };
 
@@ -484,5 +484,32 @@ describe("retrying one failed Publication", () => {
     await expect(
       owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id }),
     ).rejects.toThrow(/already published/);
+  });
+
+  it("supplies working Postiz defaults per platform without any channel settings", async () => {
+    const { owner, missionId } = await seed({
+      publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "Hi" },
+      payload: { publishTargets: ["tiktok"] },
+    });
+    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "Tik", channelService: "tiktok" });
+    const postiz = stubPostiz();
+    await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
+    expect(postedBody(postiz).posts[0].settings).toMatchObject({
+      __type: "tiktok",
+      privacy_level: "PUBLIC_TO_EVERYONE",
+      content_posting_method: "DIRECT_POST",
+      duet: true,
+      stitch: true,
+      title: "Hi",
+    });
+  });
+
+  it("asks for a board when a Pinterest channel has none", async () => {
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["pinterest"] } });
+    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-9", channelName: "Pins", channelService: "pinterest" });
+    stubPostiz();
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/Board ID/);
   });
 });

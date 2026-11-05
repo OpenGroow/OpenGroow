@@ -1,3 +1,4 @@
+import { postizSettings } from "./postiz_settings.js";
 import type {
   PublisherAdapter,
   PublisherChannel,
@@ -107,6 +108,9 @@ export const postizAdapter: PublisherAdapter = {
     }
     const caption = typeof request.publishable.caption === "string" ? request.publishable.caption : "";
 
+    const settings = postizSettings(service, request.publishable, request.settings);
+    if (!settings.ok) return settings;
+
     const scheduled = request.publishAt !== undefined;
     const posted = await call(conn, "posts", {
       type: scheduled ? "schedule" : "now",
@@ -117,7 +121,7 @@ export const postizAdapter: PublisherAdapter = {
         {
           integration: { id: request.channelId },
           value: [{ content: caption, image: uploaded }],
-          settings: { __type: service, ...(request.settings ?? {}) },
+          settings: settings.settings,
         },
       ],
     });
