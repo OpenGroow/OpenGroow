@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { optionsOf } from "@/src/components/channel-options";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 
@@ -74,15 +76,18 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     }
   }
 
-  /** Pinterest is the one service that needs input from the owner: the board to pin to. */
-  async function handleBoard(current: Extract<Target, { mapped: true }>, raw: string) {
-    const { board: _previous, ...others } = (current.settings ?? {}) as Record<string, unknown>;
-    const board = raw.trim();
+  async function handleOption(current: Extract<Target, { mapped: true }>, key: string, value: unknown) {
+    const { [key]: _previous, ...others } = (current.settings ?? {}) as Record<string, unknown>;
+    const empty = value === "" || value === undefined;
     setError("");
     try {
-      await updateSettings({ instanceId: id, target: current.target, settings: board ? { ...others, board } : others });
+      await updateSettings({
+        instanceId: id,
+        target: current.target,
+        settings: empty ? others : { ...others, [key]: value },
+      });
     } catch (e) {
-      setError(errorMessage(e, "Board could not be saved"));
+      setError(errorMessage(e, "Option could not be saved"));
     }
   }
 
@@ -152,56 +157,103 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
       ) : (
         <ul className="m-0 grid list-none gap-3 p-0">
           {publisher.targets.map((t) => {
-            const expanded = open === t.target;
+            const options = t.mapped ? optionsOf(t.channelService) : [];
+            const expandable = options.length > 0;
+            const expanded = expandable && open === t.target;
+            const header = (
+              <>
+                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} />
+                <span className="grid flex-1 gap-1">
+                  <span className="text-base font-medium">
+                    {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
+                  </span>
+                  {t.mapped ? (
+                    <span className="text-sm text-muted-foreground">
+                      {t.channelName ?? t.channelId}
+                      {profileOf(t) ? ` · @${profileOf(t)}` : ""}
+                    </span>
+                  ) : (
+                    <StatusBadge tone="warning" label="Not mapped" />
+                  )}
+                </span>
+                {expandable ? (
+                  <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
+                ) : null}
+              </>
+            );
             return (
               <li key={t.target} className="rounded-xl border border-border">
-                <button
-                  type="button"
-                  aria-expanded={expanded}
-                  className="flex w-full items-center gap-4 p-4 text-left"
-                  onClick={() => setOpen(expanded ? null : t.target)}
-                >
-                  <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} />
-                  <span className="grid flex-1 gap-1">
-                    <span className="text-base font-medium">
-                      {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
-                    </span>
-                    {t.mapped ? (
-                      <span className="text-sm text-muted-foreground">
-                        {t.channelName ?? t.channelId}
-                        {profileOf(t) ? ` · @${profileOf(t)}` : ""}
-                      </span>
-                    ) : (
-                      <StatusBadge tone="warning" label="Not mapped" />
-                    )}
-                  </span>
-                  <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
-                </button>
-                {expanded ? (
-                  <div className="grid gap-3 border-t border-border p-4 md:grid-cols-[1fr_auto] md:items-end">
-                    {t.mapped && t.channelService === "pinterest" ? (
-                      <div className="grid gap-2">
-                        <Label htmlFor={`board-${t.target}`}>Board ID</Label>
-                        <Input
-                          id={`board-${t.target}`}
-                          key={String(t.settings?.board ?? "")}
-                          autoComplete="off"
-                          placeholder="1234567890123456789"
-                          defaultValue={typeof t.settings?.board === "string" ? t.settings.board : ""}
-                          onBlur={(event) => void handleBoard(t, event.target.value)}
-                        />
-                      </div>
-                    ) : (
-                      <p className="m-0 text-sm text-muted-foreground">No setup needed for this channel.</p>
-                    )}
-                    <Button
+                <div className="flex items-center gap-2 pr-3">
+                  {expandable ? (
+                    <button
                       type="button"
-                      variant="ghost"
-                      aria-label={`Remove ${t.mapped && t.channelName ? t.channelName : t.target}`}
-                      onClick={() => void removeTarget({ instanceId: id, target: t.target })}
+                      aria-expanded={expanded}
+                      className="flex min-w-0 flex-1 items-center gap-4 p-4 text-left"
+                      onClick={() => setOpen(expanded ? null : t.target)}
                     >
-                      <Trash2 aria-hidden="true" />
-                    </Button>
+                      {header}
+                    </button>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center gap-4 p-4">{header}</div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Remove ${t.mapped && t.channelName ? t.channelName : t.target}`}
+                    onClick={() => void removeTarget({ instanceId: id, target: t.target })}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </Button>
+                </div>
+                {expanded && t.mapped ? (
+                  <div className="grid gap-4 border-t border-border p-4 md:grid-cols-2">
+                    {options.map((option) => {
+                      const stored = t.settings?.[option.key];
+                      const fieldId = `${option.key}-${t.target}`;
+                      if (option.type === "select") {
+                        return (
+                          <div key={option.key} className="grid gap-2">
+                            <Label htmlFor={fieldId}>{option.label}</Label>
+                            <NativeSelect
+                              id={fieldId}
+                              value={typeof stored === "string" ? stored : option.default}
+                              onChange={(event) => void handleOption(t, option.key, event.target.value)}
+                            >
+                              {option.options.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                          </div>
+                        );
+                      }
+                      if (option.type === "boolean") {
+                        return (
+                          <label key={option.key} className="flex items-center gap-3 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={typeof stored === "boolean" ? stored : option.default}
+                              onChange={(event) => void handleOption(t, option.key, event.target.checked)}
+                            />
+                            {option.label}
+                          </label>
+                        );
+                      }
+                      return (
+                        <div key={option.key} className="grid gap-2">
+                          <Label htmlFor={fieldId}>{option.label}</Label>
+                          <Input
+                            id={fieldId}
+                            key={String(stored ?? "")}
+                            autoComplete="off"
+                            placeholder={option.placeholder}
+                            defaultValue={typeof stored === "string" ? stored : ""}
+                            onBlur={(event) => void handleOption(t, option.key, event.target.value.trim())}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </li>
