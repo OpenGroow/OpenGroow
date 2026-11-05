@@ -17,7 +17,8 @@
       "@/*": ["./*"],
       "@convex/_generated/api": ["../convex/_generated/api"],
       "@convex/_generated/dataModel": ["../convex/_generated/dataModel"],
-      "@convex/template_manifest_contract": ["../convex/template_manifest_contract"]
+      "@convex/template_manifest_contract": ["../convex/template_manifest_contract"],
+      "@convex/publisher/capabilities": ["../convex/publisher/capabilities"]
     },
     "types": ["node"],
     "plugins": [

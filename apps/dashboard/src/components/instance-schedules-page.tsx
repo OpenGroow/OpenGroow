@@ -424,7 +424,12 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
             </div>
 
             {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
-              <PublishChannelPicker instanceId={instanceId} payloadText={payloadText} onChange={setPayloadText} />
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={effectiveManifest.missionTypes.find((t) => t.type === type.trim())?.publish?.kind}
+                onChange={setPayloadText}
+              />
             ) : null}
 
             <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
@@ -728,6 +733,9 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                       ?.missionTypes?.find((t) => t.type === schedule.type)?.publish ? (
                                       <PublishChannelPicker
                                         instanceId={instanceId}
+                                        kind={manifests
+                                          .find((m) => m.id === schedule.templateId)
+                                          ?.missionTypes?.find((t) => t.type === schedule.type)?.publish?.kind}
                                         payloadText={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
                                         onChange={(text) => {
                                           setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: text }));

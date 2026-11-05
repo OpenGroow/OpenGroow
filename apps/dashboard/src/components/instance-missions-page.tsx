@@ -318,7 +318,12 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
             </div>
 
             {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
-              <PublishChannelPicker instanceId={instanceId} payloadText={payloadText} onChange={setPayloadText} />
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={effectiveManifest.missionTypes.find((t) => t.type === type.trim())?.publish?.kind}
+                onChange={setPayloadText}
+              />
             ) : null}
 
             {error ? (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
+import { capabilityOf, type Capability } from "@convex/publisher/capabilities";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
@@ -18,28 +19,38 @@ export function toLocalInput(ms: number | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** What the adapter says about a channel carrying a Publishable `kind`; `supported` when no kind is known. */
+export function channelCapability(adapter: string, channel: PublisherChannel, kind: string | undefined): Capability {
+  if (!kind || !channel.mapped) return { level: "supported" };
+  return capabilityOf(adapter, channel.channelService, kind);
+}
+
 /** One channel of the Publisher as a checkbox row: logo, platform, channel name, @handle. */
 export function ChannelOption({
   publisherUrl,
   channel,
   checked,
   disabled,
+  capability,
   onChange,
 }: {
   publisherUrl: string;
   channel: PublisherChannel;
   checked: boolean;
   disabled?: boolean;
+  /** Absent = no constraint. `unsupported` disables the row with its reason; `uncertain` warns. */
+  capability?: Capability;
   onChange: (checked: boolean) => void;
 }) {
   const mapped = channel.mapped;
+  const unsupported = capability?.level === "unsupported";
   return (
     <label className="flex items-center gap-3 text-sm">
       <input
         type="checkbox"
         data-testid={`publish-target-${channel.target}`}
         checked={checked}
-        disabled={disabled || !mapped}
+        disabled={disabled || !mapped || (unsupported && !checked)}
         onChange={(e) => onChange(e.target.checked)}
       />
       <PlatformLogo baseUrl={publisherUrl} service={mapped ? channel.channelService : undefined} className="size-6" />
@@ -52,6 +63,16 @@ export function ChannelOption({
           <span className="text-xs text-muted-foreground">@{channel.channelProfile}</span>
         ) : null}
         {!mapped ? <span className="text-xs text-muted-foreground">Not configured</span> : null}
+        {capability?.level === "unsupported" ? (
+          <span data-testid={`publish-target-reason-${channel.target}`} className="text-xs text-destructive">
+            {capability.reason}
+          </span>
+        ) : null}
+        {capability?.level === "uncertain" ? (
+          <span data-testid={`publish-target-warning-${channel.target}`} className="text-xs text-amber-600">
+            Not confirmed: {capability.reason}
+          </span>
+        ) : null}
       </span>
     </label>
   );
@@ -76,10 +97,13 @@ function parsePayload(text: string): Record<string, unknown> | null {
 export function PublishChannelPicker({
   instanceId,
   payloadText,
+  kind,
   onChange,
 }: {
   instanceId: string;
   payloadText: string;
+  /** The Mission type's declared `publish.kind`: channels that cannot carry it are disabled. */
+  kind?: string;
   onChange: (payloadText: string) => void;
 }) {
   const publisher = useQuery(api.publishers.get, { instanceId });
@@ -119,6 +143,7 @@ export function PublishChannelPicker({
               publisherUrl={publisher.url}
               channel={channel}
               disabled={!payload}
+              capability={channelCapability(publisher.adapter, channel, kind)}
               checked={selected.includes(channel.target)}
               onChange={(checked) =>
                 write({

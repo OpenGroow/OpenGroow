@@ -636,6 +636,7 @@ export function MissionReviewContent({
           missionId={missionId}
           instanceId={instanceId}
           publish={reviewProjection.publish}
+          kind={typeof publishable?.kind === "string" ? publishable.kind : undefined}
           editable={!readOnly && isReviewable}
         />
       )}

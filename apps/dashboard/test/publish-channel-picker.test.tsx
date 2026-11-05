@@ -19,6 +19,7 @@ vi.mock("convex/react", () => ({ useQuery: (...args: unknown[]) => useQueryMock(
 vi.mock("@convex/_generated/api", () => ({ api: { publishers: { get: "publishers.get" } } }));
 
 const PUBLISHER = {
+  adapter: "postiz",
   url: "https://postiz.example.com",
   hasApiKey: true,
   targets: [
@@ -41,9 +42,9 @@ describe("PublishChannelPicker", () => {
     container.remove();
   });
 
-  async function render(payloadText: string, onChange = vi.fn()) {
+  async function render(payloadText: string, onChange = vi.fn(), kind?: string) {
     await act(async () => {
-      root.render(<PublishChannelPicker instanceId="inst-1" payloadText={payloadText} onChange={onChange} />);
+      root.render(<PublishChannelPicker instanceId="inst-1" payloadText={payloadText} kind={kind} onChange={onChange} />);
     });
     return onChange;
   }
@@ -65,6 +66,23 @@ describe("PublishChannelPicker", () => {
     expect(box.checked).toBe(true);
     await act(async () => box.click());
     expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("disables channels that cannot carry the kind (with the reason) and warns on uncertain ones", async () => {
+    useQueryMock.mockReturnValue({
+      ...PUBLISHER,
+      targets: [
+        ...PUBLISHER.targets,
+        { target: "youtube:yt", mapped: true, channelId: "c3", channelName: "YT", channelService: "youtube", channelProfile: "yt" },
+      ],
+    });
+    await render("", vi.fn(), "image");
+    expect((container.querySelector('[data-testid="publish-target-youtube:yt"]') as HTMLInputElement).disabled).toBe(true);
+    expect(container.textContent).toContain("YouTube cannot publish an image");
+    expect((container.querySelector('[data-testid="publish-target-instagram:myinsta"]') as HTMLInputElement).disabled).toBe(false);
+    await render("", vi.fn(), "video");
+    expect(container.querySelector('[data-testid="publish-target-warning-pinterest:pins"]')).not.toBeNull();
+    expect((container.querySelector('[data-testid="publish-target-pinterest:pins"]') as HTMLInputElement).disabled).toBe(false);
   });
 
   it("links to the Publishers page when the Project has no channel", async () => {

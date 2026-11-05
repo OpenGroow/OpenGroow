@@ -58,6 +58,17 @@ Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <i
 
 By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`): the Agent returns a **Publishable**, a small JSON object of references (URLs) and text, and OpenGroow posts it on the channels the human chose. This guide is the whole path for an author writing a Template for their own MCP. Opting in is per Mission type; Mission types without `publish` behave as before.
 
+### Contract at a glance
+
+| Who | Guarantees |
+| --- | --- |
+| **MCP** | Returns public HTTPS URLs reachable by Postiz. Recommended output names: `videoUrl`, `coverUrl`, `imageUrl`, `slideUrls` (ordered array). Not mandatory. |
+| **Manifest** | `publish.kind` (strict), `publish.require` (can only tighten), `publish.media` (optional escape hatch for another MCP shape: declared and validated, not applied at runtime yet). |
+| **Agent** | Returns `artifact.publishable` valid for the kind. With the recommended names it copies MCP fields 1:1; with another shape it translates. Never publishes. |
+| **OpenGroow** | Validates `artifact.publishable` per kind (and `require`), retries the Agent with the error, then publishes through the Publisher. Refuses channels whose platform cannot carry the kind. |
+
+The strict contract is the Agent's `publishable`; the MCP naming is a convention that keeps the Agent's work trivial, not a lock-in. OpenGroow does not yet see the MCP output, so the contract is verified at the Agent's `publishable`, never at the MCP. The JSON examples below show the recommended shapes.
+
 ### What your MCP must expose
 
 OpenGroow never downloads, stores or transcodes media (ADR-010): it passes **URLs** to the Publisher, and the Publisher (Postiz) fetches them itself. So the MCP must return, for each media:

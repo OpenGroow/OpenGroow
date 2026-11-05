@@ -310,6 +310,32 @@ describe("MissionReviewContent", () => {
       expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("failed");
     });
 
+    it("disables a channel that cannot carry the Publishable kind and warns on an uncertain one", async () => {
+      withPublish(true);
+      const withKind = { ...MISSION_WITH_ARTIFACT, lastArtifact: { external: { service: "media", id: "42" }, publishable: { kind: "image" } } };
+      const publisher = {
+        ...PUBLISHER,
+        adapter: "postiz",
+        targets: [
+          ...PUBLISHER.targets,
+          { target: "youtube:yt", mapped: true, channelId: "c3", channelName: "YT", channelService: "youtube", channelProfile: "yt" },
+          { target: "mastodon:m", mapped: true, channelId: "c4", channelName: "M", channelService: "mastodon", channelProfile: "m" },
+        ],
+      };
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return withKind;
+        if (key === "publishers.get") return publisher;
+        return undefined;
+      });
+      await render();
+      await act(async () => {});
+      const youtube = document.querySelector('[data-testid="publish-target-youtube:yt"]') as HTMLInputElement;
+      expect(youtube.disabled).toBe(true);
+      expect(document.querySelector('[data-testid="publish-target-reason-youtube:yt"]')?.textContent).toContain("YouTube cannot publish an image");
+      expect((document.querySelector('[data-testid="publish-target-mastodon:m"]') as HTMLInputElement).disabled).toBe(false);
+      expect(document.querySelector('[data-testid="publish-target-warning-mastodon:m"]')).not.toBeNull();
+    });
+
     it("shows no unmapped warning once the target is mapped", async () => {
       withPublish(true);
       await render();

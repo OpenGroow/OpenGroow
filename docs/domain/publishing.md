@@ -49,9 +49,31 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 - Per-target settings (for example TikTok privacy) come from the Publisher config of the target (`settings` of the mapping), never from the Publishable (`metadata` is not forwarded). Optional Publishable fields are forwarded where Postiz supports them and ignored silently elsewhere: `link` (Pinterest destination), `altText` (image `alt`), `tags` (YouTube tags), `coverUrl` (YouTube thumbnail, uploaded like a media). Per-platform table: docs/TEMPLATE_DEVELOPMENT.md.
 - **Several targets**: `payload.publishTargets` (set by the human, each a channel of the Publisher) makes one independent Publication per target. All are created `pending` up front; one failing does not stop the others. The `publish` action then fails, and replaying it redoes only the `failed` ones.
 
+### Channel / kind capabilities
+
+Whether a platform can carry a Publishable `kind` (`video`, `image`, `carousel`) is a property of the publishing service, so it is owned by the adapter, as **data**: `apps/convex/publisher/postiz.capabilities.json`, read by the pure `capabilityOf(adapterId, service, kind)` (`apps/convex/publisher/capabilities.ts`; no network, no per-platform branch, importable from Convex and the dashboard). It answers `supported`, `uncertain` or `unsupported`, with a human reason for the last two. An unknown adapter, platform or kind is `uncertain`.
+
+Data shape (`schemaVersion: 1`, validated by `parseCapabilities`):
+
+```json
+{ "schemaVersion": 1, "adapter": "postiz", "source": "<docs url>",
+  "platforms": { "youtube": { "name": "YouTube", "video": "supported", "image": "unsupported", "carousel": "unsupported",
+                              "reasons": { "image": "YouTube only takes a video" } } } }
+```
+
+Keys under `platforms` are the service's own platform identifiers (the channel's `channelService`). `unsupported` is set only when the service docs say so; anything not confirmed is `uncertain`.
+
+- `unsupported` is **refused** server-side with a clear message ("YouTube cannot publish an image") by `missions.create`, `schedules.create`, `schedules.updatePayload`, `publications.setTargets` (kind from the Mission type's `publish` declaration) and at publish time (kind of the Publishable).
+- `uncertain` is **allowed with a warning**.
+- Dashboard: in the channel picker (Mission and Schedule creation/edit) and the review `Publication` section, `unsupported` channels are disabled with the reason; `uncertain` ones are selectable with a "Not confirmed" note.
+
 ### Large videos: runtime limits
 
 The video is never downloaded by OpenGroow: the Convex action only sends Postiz the URL (`upload-from-url`), and Postiz fetches the bytes itself. A test pins this (the only `fetch` calls of an action are to the Postiz API). So the size of the video does not count against the action's memory nor its argument/return limits (16 MiB). What does count is the time of the action, which waits for Postiz to fetch and store the video: Convex actions are limited to 10 minutes, and a single `fetch` has no separate timeout inside that budget. A video whose upload to Postiz takes longer than that fails the Publication with an error (it can be retried). The size limit that actually applies is the one of Postiz and of the target network (for example TikTok, Instagram), not Convex's. These limits come from the Convex documentation and the call design; they were not measured against a live Postiz with a multi-GB file.
+
+## Contract for MCP outputs
+
+The **strict** contract is OpenGroow's: the Agent's `artifact.publishable`, validated per `kind` (`publish.require` can tighten it). The MCP output naming is a **recommended convention, not mandatory**: `videoUrl`, `coverUrl`, `imageUrl`, `slideUrls` (public HTTPS URLs reachable by Postiz), so the Agent copies fields 1:1. An MCP with another shape keeps working: the Agent translates. The manifest `publish.media` stays the declared, optional escape hatch for other shapes (validated, not applied at runtime). OpenGroow does not yet see an MCP output, so the contract is verified at the Agent's `publishable`. Who guarantees what: docs/TEMPLATE_DEVELOPMENT.md ("Contract at a glance").
 
 ## Postiz per-platform settings
 

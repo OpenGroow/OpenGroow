@@ -7,7 +7,7 @@ import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Card } from "@/components/ui/card";
-import { ChannelOption, toLocalInput } from "@/src/components/publish-channel-picker";
+import { ChannelOption, channelCapability, toLocalInput } from "@/src/components/publish-channel-picker";
 
 /**
  * Where a Mission will be published (ADR-069): the channels of the Project's
@@ -40,11 +40,14 @@ export function PublishSection({
   instanceId,
   publish,
   editable,
+  kind,
 }: {
   missionId: string;
   instanceId: string;
   publish: PublishProjection;
   editable: boolean;
+  /** The kind of the Publishable under review. */
+  kind?: string;
 }) {
   const setPublishTargets = useMutation(api.publications.setTargets);
   const publisher = useQuery(api.publishers.get, { instanceId });
@@ -104,6 +107,7 @@ export function PublishSection({
               key={channel.target}
               publisherUrl={publisher.url}
               channel={channel}
+              capability={channelCapability(publisher.adapter, channel, kind)}
               checked={targets.includes(channel.target)}
               onChange={(checked) => { void toggleTarget(channel.target, checked); }}
             />
