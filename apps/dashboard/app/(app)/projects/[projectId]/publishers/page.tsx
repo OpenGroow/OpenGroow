@@ -10,7 +10,6 @@ import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instanc
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
@@ -18,6 +17,12 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 type PublishersPageProps = {
   params: Promise<{ projectId: string }>;
 };
+
+// An input with leading/trailing icons: the icons are flex siblings of a bare input, so they never overlap the text.
+const FIELD_CLASS =
+  "flex h-10 w-full items-center gap-2 rounded-lg border border-input bg-transparent px-3 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30";
+const BARE_INPUT_CLASS =
+  "h-full w-full min-w-0 border-0 bg-transparent p-0 text-base outline-none placeholder:text-muted-foreground md:text-sm";
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -135,12 +140,12 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="publisher-url">Postiz URL</Label>
-              <div className="relative">
-                <Link2 className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
+              <div className={FIELD_CLASS}>
+                <Link2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <input
                   id="publisher-url"
                   name="url"
-                  className="pl-9"
+                  className={BARE_INPUT_CLASS}
                   autoComplete="off"
                   placeholder="https://postiz.example.com"
                   value={urlValue}
@@ -150,12 +155,12 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="publisher-api-key">API key</Label>
-              <div className="relative">
-                <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
+              <div className={FIELD_CLASS}>
+                <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <input
                   id="publisher-api-key"
                   name="apiKey"
-                  className="px-9"
+                  className={BARE_INPUT_CLASS}
                   type={showKey ? "text" : "password"}
                   autoComplete="off"
                   placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : "Postiz API key"}
@@ -165,7 +170,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                 <button
                   type="button"
                   aria-label={showKey ? "Hide API key" : "Show API key"}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() => setShowKey((v) => !v)}
                 >
                   {showKey ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
