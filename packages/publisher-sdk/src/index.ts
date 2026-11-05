@@ -1,3 +1,3 @@
-export * from "./plugin.js";
-export * from "./capabilities.js";
-export * from "./channel-options.js";
+export * from "./plugin";
+export * from "./capabilities";
+export * from "./channel-options";

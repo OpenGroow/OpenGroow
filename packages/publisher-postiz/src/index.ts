@@ -1,1 +1,1 @@
-export { postizPlugin } from "./postiz.js";
+export { postizPlugin } from "./postiz";

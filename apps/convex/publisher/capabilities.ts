@@ -4,7 +4,7 @@
 // Importable from Convex functions and from the dashboard.
 
 import { capabilityIn, type Capability } from "@opengroow/publisher-sdk";
-import { PUBLISHER_ADAPTER_IDS, pluginFor } from "./registry.js";
+import { PUBLISHER_ADAPTER_IDS, pluginFor } from "./registry";
 
 export { parseCapabilities, type Capability } from "@opengroow/publisher-sdk";
 

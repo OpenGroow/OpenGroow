@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { postizPlugin as postizAdapter } from "./postiz.js";
+import { postizPlugin as postizAdapter } from "./postiz";
 
 // Optional Publishable fields forwarded to Postiz (ADR-069 amendment): Postiz is
 // stubbed at fetch; we observe the body of the `posts` call.

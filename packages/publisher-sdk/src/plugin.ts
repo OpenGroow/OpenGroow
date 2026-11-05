@@ -4,8 +4,8 @@
 // external service. The core owns the Publication lifecycle (statuses,
 // submitting/uncertain, reconcile-before-resend, polling, publishAt rules).
 
-import type { CapabilitiesData } from "./capabilities.js";
-import type { ChannelOptionsData } from "./channel-options.js";
+import type { CapabilitiesData } from "./capabilities";
+import type { ChannelOptionsData } from "./channel-options";
 
 /** Per-Project connection to the external service. */
 export type PublisherConnection = { url: string; apiKey: string };

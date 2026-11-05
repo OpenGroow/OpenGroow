@@ -1,6 +1,6 @@
 import capabilitiesData from "../data/capabilities.json";
 import channelOptionsData from "../data/channel-options.json";
-import { postizSettings } from "./settings.js";
+import { postizSettings } from "./settings";
 import {
   parseCapabilities,
   type ChannelOptionsData,
