@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/opengroow/status-badge";
@@ -155,31 +156,37 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         <p className="m-0 text-sm text-muted-foreground">Save the connection first to list your channels.</p>
       ) : null}
 
-      {picking ? (
-        <div className="grid gap-2 rounded-xl border border-border p-3">
-          {available.length === 0 ? (
-            <p className="m-0 text-sm text-muted-foreground">Every channel of your Postiz account is already added.</p>
-          ) : (
-            available.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="flex items-center gap-3 rounded-lg p-2 text-left hover:bg-muted"
-                onClick={() => void handleAdd(c)}
-              >
-                <PlatformLogo baseUrl={publisher.url} service={c.service} />
-                <span className="grid">
-                  <span className="font-medium">{platformName(c.service)}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {c.name}
-                    {c.profile ? ` · @${c.profile}` : ""}
+      <Dialog open={picking} onOpenChange={setPicking}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a channel</DialogTitle>
+            <DialogDescription>Choose the channel of your Postiz account to add.</DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-96 gap-2 overflow-y-auto">
+            {available.length === 0 ? (
+              <p className="m-0 text-sm text-muted-foreground">Every channel of your Postiz account is already added.</p>
+            ) : (
+              available.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted"
+                  onClick={() => void handleAdd(c)}
+                >
+                  <PlatformLogo baseUrl={publisher.url} service={c.service} />
+                  <span className="grid">
+                    <span className="font-medium">{platformName(c.service)}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {c.name}
+                      {c.profile ? ` · @${c.profile}` : ""}
+                    </span>
                   </span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {publisher.targets.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">No channel added yet.</p>
