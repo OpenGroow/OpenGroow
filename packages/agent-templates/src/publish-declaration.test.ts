@@ -32,4 +32,21 @@ describe("validateManifest — missionTypes[].publish", () => {
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toContain('unknown key "targets"');
   });
+
+  it("accepts require with optional fields of the kind", () => {
+    expect(validateManifest(manifestWith({ kind: "video", require: ["title", "coverUrl"] })).ok).toBe(true);
+  });
+
+  it.each([
+    [{ kind: "video", require: ["videoUrl"] }, "videoUrl"],
+    [{ kind: "video", require: ["altText"] }, "altText"],
+    [{ kind: "image", require: ["coverUrl"] }, "coverUrl"],
+    [{ kind: "video", require: ["title", "title"] }, "twice"],
+    [{ kind: "video", require: "title" }, "array"],
+    [{ kind: "video", require: ["metadata"] }, "metadata"],
+  ])("rejects an invalid require %j", (publish, fragment) => {
+    const result = validateManifest(manifestWith(publish));
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain(fragment);
+  });
 });

@@ -63,6 +63,7 @@ export {
 } from "./claw-package";
 export {
   PUBLISHABLE_KINDS,
+  OPTIONAL_PUBLISHABLE_FIELDS,
   publishDeclarationFor,
   type PublishDeclaration,
   type PublishableKind,

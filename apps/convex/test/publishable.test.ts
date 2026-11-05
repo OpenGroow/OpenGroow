@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PUBLISHABLE_KINDS } from "@opengroow/agent-templates";
+import { z } from "zod";
+import { OPTIONAL_PUBLISHABLE_FIELDS, PUBLISHABLE_KINDS } from "@opengroow/agent-templates";
 import { convexTest } from "convex-test";
 import { internal } from "../_generated/api";
 import schema from "../schema";
@@ -28,7 +29,7 @@ const SNAPSHOT: ReconcileSnapshot = {
 
 function decide(
   publishable: unknown,
-  publish: { kind: "video" | "image" | "carousel"; targets: string[] } | undefined,
+  publish: { kind: "video" | "image" | "carousel"; targets?: string[]; require?: string[] } | undefined,
   extraArtifact: Record<string, unknown> = {},
 ) {
   const artifact = {
@@ -79,6 +80,18 @@ describe("Publishable in the Artifact of a RunResult", () => {
     expect(ok({ ...IMAGE, altText: "x".repeat(1001) }, "image")).toMatchObject({ type: "markFailedRetryable" });
     expect(ok({ ...IMAGE, link: "nope" }, "image")).toMatchObject({ type: "markFailedRetryable" });
     expect(ok({ ...VIDEO, altText: "x" }, "video")).toMatchObject({ type: "markFailedRetryable" });
+  });
+
+  it("enforces publish.require with a precise per-field error for the Agent", () => {
+    const publish = { kind: "video", require: ["title", "coverUrl"] } as const;
+    const decision = decide({ ...VIDEO, title: "T" }, publish);
+    expect(decision).toMatchObject({ type: "markFailedRetryable" });
+    const error = (decision as { error: string }).error;
+    expect(error).toContain("artifact.publishable.coverUrl is required");
+    expect(error).not.toContain("artifact.publishable.title");
+    expect(decide({ ...VIDEO, title: "T", coverUrl: "https://cdn.example.com/c.png" }, publish)).toMatchObject({
+      type: "markCompleted",
+    });
   });
 
   it("rejects an invalid Publishable with per-field errors for the Agent", () => {
@@ -175,6 +188,21 @@ describe("Publishable schema definition", () => {
     expect(md).toContain("artifact.publishable");
     expect(md).toContain("imageUrl");
     expect(md).toContain("Do not call any publishing tool");
+  });
+
+  it("lists the fields this Mission type requires in the Publishable section", () => {
+    const md = renderPublishableSection("video", { require: ["title", "coverUrl"] });
+    expect(md).toContain("`title`, `coverUrl`");
+    expect(renderPublishableSection("video")).not.toContain("also required");
+  });
+
+  it("pins the manifest's optional fields to the zod schema", () => {
+    for (const option of publishableSchema.options) {
+      const optional = Object.entries(option.shape)
+        .filter(([key, field]) => key !== "metadata" && (field as z.ZodType).safeParse(undefined).success)
+        .map(([key]) => key);
+      expect([...OPTIONAL_PUBLISHABLE_FIELDS[option.shape.kind.value]].sort()).toEqual(optional.sort());
+    }
   });
 
   it("derives the JSON Schema given to Agents for one kind", () => {

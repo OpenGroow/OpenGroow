@@ -374,7 +374,7 @@ export const dispatchPendingRuns = internalAction({
         const { contextMd: baseMd, runMd } = buildMissionContext(mission, run);
         let contextMd = baseMd;
         if (publishDeclaration) {
-          contextMd += renderPublishableSection(publishDeclaration.kind);
+          contextMd += renderPublishableSection(publishDeclaration.kind, { require: publishDeclaration.require });
         }
         if (runContext) {
           contextMd += renderRunContext(runContext, {

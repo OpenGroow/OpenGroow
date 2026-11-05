@@ -75,12 +75,22 @@ const SCHEMA_BY_KIND = {
 } satisfies Record<PublishableKind, z.ZodType>;
 
 /** The section of context.md that tells the Agent what to return (ADR-069). */
-export function renderPublishableSection(kind: PublishableKind): string {
+export function renderPublishableSection(
+  kind: PublishableKind,
+  options: { require?: readonly string[] } = {},
+): string {
+  const required = options.require ?? [];
   return [
     "",
     "## Publishable",
     "",
     `This Mission type produces a \`${kind}\` deliverable. In your RunResult, set \`artifact.publishable\` to an object matching this JSON Schema (references only, never content). You never publish yourself: a human review or auto-publish does it. Do not call any publishing tool.`,
+    ...(required.length > 0
+      ? [
+          "",
+          `This Mission type also requires these normally optional fields (the RunResult is rejected without them): ${required.map((f) => `\`${f}\``).join(", ")}.`,
+        ]
+      : []),
     "",
     "```json",
     JSON.stringify(publishableJsonSchema(kind), null, 2),

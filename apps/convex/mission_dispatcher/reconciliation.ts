@@ -144,7 +144,7 @@ export function validateDeclaredBlockerCode(
  */
 export function validateDeclaredPublishable(
   result: RunResult,
-  ctx: { missionType: string; publish?: { kind: string } },
+  ctx: { missionType: string; publish?: { kind: string; require?: readonly string[] } },
 ): string | undefined {
   if (!ctx.publish) return undefined;
   const publishable = (result.status === "success" || result.status === "needs_human_review" || result.status === "failed")
@@ -160,6 +160,16 @@ export function validateDeclaredPublishable(
   }
   if (publishable.kind !== ctx.publish.kind) {
     return `artifact.publishable.kind is "${publishable.kind}" but this Mission type declares publish.kind "${ctx.publish.kind}"`;
+  }
+  // `publish.require` can only tighten: fields the Template guarantees.
+  const missing = (ctx.publish.require ?? []).filter((field) => {
+    const value = (publishable as Record<string, unknown>)[field];
+    return value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  });
+  if (missing.length > 0) {
+    return missing
+      .map((field) => `artifact.publishable.${field} is required: Mission type "${ctx.missionType}" declares it in publish.require`)
+      .join("; ");
   }
   return undefined;
 }
@@ -197,7 +207,7 @@ export function decideReconciliation(
     missionType: string;
     blockerCodes?: readonly string[];
     /** The Mission type's `publish` declaration, when it has one (ADR-069). */
-    publish?: { kind: string; targets?: readonly string[] };
+    publish?: { kind: string; require?: readonly string[]; targets?: readonly string[] };
     retryableFailureCount: number;
   },
 ): ReconcileDecision {
