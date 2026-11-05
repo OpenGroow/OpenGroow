@@ -1,0 +1,50 @@
+name: Dashboard Build
+
+# Runs `next build` for the dashboard on pull requests and on main. dashboard-image.yml
+# only builds the Docker image after a push to main, so nothing checked a PR's build.
+# Typecheck (tsc) and vitest do not catch module-resolution errors that only Turbopack
+# raises, e.g. `.js` relative imports inside the workspace packages
+# (packages/publisher-sdk, packages/publisher-postiz).
+
+on:
+  pull_request:
+    paths:
+      - "apps/dashboard/**"
+      - "apps/convex/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/dashboard-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/dashboard/**"
+      - "apps/convex/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/dashboard-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the dashboard
+        working-directory: apps/dashboard
+        run: npx next build
+        env:
+          # The build reads no environment variables; the runtime URLs are read when the server starts.
+          NEXT_TELEMETRY_DISABLED: "1"
