@@ -126,6 +126,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
             <DialogTitle>Add a channel</DialogTitle>
             <DialogDescription>Choose the channel of your Postiz account to add.</DialogDescription>
           </DialogHeader>
+          {error ? <StatusBadge tone="error" label={error} /> : null}
           <div className="grid max-h-96 gap-2 overflow-y-auto">
             {available.length === 0 ? (
               <p className="m-0 text-sm text-muted-foreground">Every channel of your Postiz account is already added.</p>
@@ -134,7 +135,8 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                 <button
                   key={c.id}
                   type="button"
-                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted"
+                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!c.profile}
                   onClick={() => void handleAdd(c)}
                 >
                   <PlatformLogo baseUrl={publisher.url} service={c.service} />
@@ -144,6 +146,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                       {c.name}
                       {c.profile ? ` · @${c.profile}` : ""}
                     </span>
+                    {c.profile ? null : (
+                      <span className="text-xs text-muted-foreground">This channel has no handle, so it cannot be added.</span>
+                    )}
                   </span>
                 </button>
               ))

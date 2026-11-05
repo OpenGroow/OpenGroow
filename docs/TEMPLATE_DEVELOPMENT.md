@@ -206,7 +206,7 @@ A Mission type that declares `publish` **must not publish itself**:
 
 - **The Agent never publishes.** Remove every call to a publishing tool from its `AGENTS.md` and tell it to return the `publishable` instead. Publication happens on the human `publish` action of the review, or automatically with `autoPublish`, executed by the Publisher.
 - **No dual-write.** Remove the publishing settings from the MCP too (Postiz channel, board id, credentials, `pinterestBoardId`-style parameters) and from its dashboard and `statusCheck`. The Template must not both publish through the MCP and declare `publish`, or the deliverable would be posted twice.
-- The destination is not chosen by the Agent: it comes from `payload.publishTargets` (keys of Publisher channels, chosen by the human when creating the Mission or Schedule and editable in the review, no default). Remove target or board parameters from Mission and Schedule payload instructions and from the Mission type's payload fields accordingly.
+- The destination is not chosen by the Agent: it comes from `payload.publishTargets` (keys of Publisher channels, always `<platform>:<handle>`, chosen by the human when creating the Mission or Schedule and editable in the review, no default). Remove target or board parameters from Mission and Schedule payload instructions and from the Mission type's payload fields accordingly.
 - Keep the review's `publish` capability for the Mission type; the generic engine routes it to the Publisher instead of an MCP effect.
 
 `article` publishing (GitHub, `seo`) is out of V1 and stays in its MCP.
