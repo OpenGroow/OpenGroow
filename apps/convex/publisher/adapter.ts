@@ -22,7 +22,11 @@ export type PublisherChannel = {
   disabled?: boolean;
 };
 
-export type PublisherResult<T = Record<never, never>> = ({ ok: true } & T) | { ok: false; error: string };
+/** `uncertain`: the failure does not prove the service rejected the request (network error, timeout, 5xx, unreadable answer). */
+export type PublisherResult<T = Record<never, never>> = ({ ok: true } & T) | { ok: false; error: string; uncertain?: boolean };
+
+/** A media already uploaded to the service from its source `url`. */
+export type UploadedMedia = { url: string; id: string; path: string };
 
 export type PublishRequest = {
   channelId: string;
@@ -34,16 +38,36 @@ export type PublishRequest = {
   publishable: Record<string, unknown>;
   /** Absent = publish immediately. */
   publishAt?: number;
+  /** Media uploaded by an earlier attempt: reused instead of uploading again. */
+  media?: UploadedMedia[];
+  /**
+   * Called with the uploaded media right before the post is created. Returning
+   * false cancels the send (another caller owns this Publication).
+   */
+  beforePost?: (media: UploadedMedia[]) => Promise<boolean>;
+};
+
+/** The service states a post can be found in. */
+export type ExternalPostStatus = Exclude<PublicationStatus, "submitting" | "uncertain">;
+
+/** What `findPost` looks for: a post the service may have accepted without telling us. */
+export type FindPostQuery = {
+  channelId: string;
+  caption: string;
+  /** Epoch ms when the attempt started. */
+  attemptStartedAt: number;
+  /** The date the post was asked for (epoch ms): the schedule date, or the attempt time for "now". */
+  attemptDate: number;
 };
 
 export type PublishOutcome = {
   externalId: string;
-  status: Exclude<PublicationStatus, "failed">;
+  status: Exclude<ExternalPostStatus, "failed">;
   externalUrl?: string;
 };
 
 export type PostStatus = {
-  status: PublicationStatus;
+  status: ExternalPostStatus;
   externalUrl?: string;
   error?: string;
 };
@@ -57,6 +81,15 @@ export interface PublisherAdapter {
    * was scheduled for; adapters whose API can only list posts by date use it as
    * the search window. A post the service no longer knows is reported `failed`.
    */
+  /**
+   * Reconciliation before a re-send: the post on `channelId` whose content is
+   * `caption` and whose creation or publish date falls in the attempt window,
+   * or null. A post the service itself marked as errored is not a match.
+   */
+  findPost(
+    conn: PublisherConnection,
+    query: FindPostQuery,
+  ): Promise<PublisherResult<{ post: ({ externalId: string } & PostStatus) | null }>>;
   getStatus(
     conn: PublisherConnection,
     externalId: string,

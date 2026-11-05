@@ -166,15 +166,15 @@ describe("publish an image Mission through the Publisher", () => {
 describe("a failing Publisher", () => {
   it("leaves a failed Publication and an approved Mission, then a retry of the same publish succeeds", async () => {
     const { owner, missionId } = await seed();
-    stubPostiz(() => json({ message: "boom" }, 500));
+    stubPostiz(() => json({ message: "boom" }, 400));
 
     await expect(
       owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
-    ).rejects.toThrow(/Postiz responded 500/);
+    ).rejects.toThrow(/Postiz responded 400/);
 
     const [failed] = await owner.query(api.publications.listForMission, { missionId });
     expect(failed).toMatchObject({ target: "instagram:love_youmake", status: "failed" });
-    expect(failed.error).toContain("500");
+    expect(failed.error).toContain("400");
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
 
     stubPostiz();
@@ -304,7 +304,7 @@ describe("review projection", () => {
 
   it("keeps publish enabled once the target is mapped and lists the Publications", async () => {
     const { owner, missionId } = await seed();
-    stubPostiz(() => json({ message: "boom" }, 500));
+    stubPostiz(() => json({ message: "boom" }, 400));
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
     const review = await owner.action(api.missions_node.getReview, { missionId });
     expect(review.publish).toMatchObject({ mapped: true, publications: [{ target: "instagram:love_youmake", status: "failed" }] });
@@ -412,11 +412,11 @@ describe("publish to several targets", () => {
   it("keeps the Mission approved when one target fails, and a retry only redoes the failed one", async () => {
     const { owner, missionId } = await twoTargets();
     let calls = 0;
-    stubPostiz(() => (++calls === 1 ? json([{ postId: "p-ok" }]) : json({ message: "boom" }, 500)));
+    stubPostiz(() => (++calls === 1 ? json([{ postId: "p-ok" }]) : json({ message: "boom" }, 400)));
 
     await expect(
       owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
-    ).rejects.toThrow(/Postiz responded 500/);
+    ).rejects.toThrow(/Postiz responded 400/);
 
     const byTarget = Object.fromEntries(
       (await owner.query(api.publications.listForMission, { missionId })).map((p) => [p.target, p.status]),
@@ -436,7 +436,7 @@ describe("retrying one failed Publication", () => {
     const ctx = await seed();
     const { owner, missionId } = ctx;
     await owner.mutation(api.publishers.addChannel, PIN);
-    stubPostiz(() => json({ message: "boom" }, 500));
+    stubPostiz(() => json({ message: "boom" }, 400));
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
     await owner.mutation(api.publications.setTargets, { missionId, targets: ["pinterest:pins"] });
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }).catch(() => {});
@@ -466,11 +466,11 @@ describe("retrying one failed Publication", () => {
   it("keeps a readable error when the retry fails again, and refuses foreign or already published Publications", async () => {
     const { t, owner, missionId, rows } = await twoFailed();
     const instagram = rows.find((r) => r.target === "instagram:love_youmake")!;
-    stubPostiz(() => json({ message: "still down" }, 502));
-    await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/502/);
+    stubPostiz(() => json({ message: "still down" }, 400));
+    await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/400/);
     const again = (await owner.query(api.publications.listForMission, { missionId })).find((r) => r.target === "instagram:love_youmake");
     expect(again).toMatchObject({ status: "failed" });
-    expect(again?.error).toContain("502");
+    expect(again?.error).toContain("400");
 
     await t.run(async (ctx) => ctx.db.patch(missionId, { status: "to_validate" }));
     await expect(owner.action(api.publisher_node.retryPublication, { publicationId: instagram.id })).rejects.toThrow(/approved/);

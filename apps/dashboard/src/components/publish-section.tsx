@@ -27,7 +27,7 @@ export type PublishProjection = {
   publishAt?: number;
   publications: Array<{
     target: string;
-    status: "pending" | "scheduled" | "published" | "failed";
+    status: "pending" | "submitting" | "uncertain" | "scheduled" | "published" | "failed";
     externalId?: string;
     externalUrl?: string;
     scheduledAt?: number;

@@ -61,6 +61,23 @@ describe("PublicationList", () => {
     expect(retryMock).toHaveBeenCalledWith({ publicationId: "p1" });
   });
 
+  it("shows submitting and uncertain clearly, and allows Retry only on uncertain (and failed)", async () => {
+    useQueryMock.mockReturnValue([
+      { id: "p1", target: "instagram", status: "submitting" },
+      { id: "p2", target: "tiktok", status: "uncertain", error: "Postiz may have received this post; it will be checked before any new attempt (x)" },
+    ]);
+    await act(async () => root.render(<PublicationList missionId="m1" />));
+    const q = (t: string) => container.querySelector(`[data-testid="publication-${t}"]`)!;
+    expect(q("instagram").textContent).toContain("sending");
+    expect(q("instagram").querySelector("button")).toBeNull();
+    expect(q("tiktok").textContent).toContain("uncertain");
+    expect(q("tiktok").textContent).toContain("Postiz may have received this post");
+    await act(async () => {
+      (q("tiktok").querySelector("button") as HTMLButtonElement).click();
+    });
+    expect(retryMock).toHaveBeenCalledWith({ publicationId: "p2" });
+  });
+
   it("shows the retry error and renders nothing without Publications", async () => {
     useQueryMock.mockReturnValue(rows);
     retryMock.mockRejectedValue(new Error("Postiz responded 502"));

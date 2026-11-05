@@ -5,6 +5,10 @@ import { v, type Infer } from "convex/values";
  * (`PostStatus`) and the review projection. */
 export const publicationStatusV = v.union(
   v.literal("pending"),
+  // About to POST /posts (set just before the call); `uncertain` = the POST may
+  // have reached the service without us knowing (see ADR-069, retry amendment).
+  v.literal("submitting"),
+  v.literal("uncertain"),
   v.literal("scheduled"),
   v.literal("published"),
   v.literal("failed"),
@@ -48,6 +52,11 @@ export const publisherTables = {
     externalUrl: v.optional(v.string()),
     scheduledAt: v.optional(v.number()),
     error: v.optional(v.string()),
+    // Media already uploaded to the service (by source URL), reused by a retry.
+    media: v.optional(v.array(v.object({ url: v.string(), id: v.string(), path: v.string() }))),
+    // The window of the last POST /posts attempt: when it started and the date it asked for.
+    attemptStartedAt: v.optional(v.number()),
+    attemptDate: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

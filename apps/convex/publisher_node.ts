@@ -12,6 +12,8 @@ import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry
 // Publisher orchestration (ADR-069, docs/domain/publishing.md): sending a
 // Mission's Publishable through the Project's Publisher, and the retry of a failed Publication.
 
+const UNCERTAIN_MESSAGE = "Postiz may have received this post; it will be checked before any new attempt";
+
 /**
  * Sends the Publishable of a Mission to its Publish target(s) through the
  * Project's Publisher. Each Publication is `pending` first, then `published`
@@ -30,19 +32,77 @@ export async function publishThroughPublisher(
   // One Publication per target, independent: a failing target does not stop
   // the others, and the action fails at the end so the human can retry it.
   const failures: string[] = [];
+  const adapter = adapterFor(prepared.connection.adapter);
+  const caption = typeof prepared.publishable.caption === "string" ? prepared.publishable.caption : "";
+  const emitPublished = async (publicationId: Id<"publications">) => {
+    await ctx.runMutation(internal.events.store, {
+      instanceId: mission.instanceId,
+      event: {
+        id: `ReviewPublished:${mission._id}:${publicationId}`,
+        type: "ReviewPublished",
+        payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
+        ts: Date.now(),
+      },
+    });
+  };
   for (const item of prepared.publications) {
-    const result = await adapterFor(prepared.connection.adapter).publish(prepared.connection, {
+    // A previous attempt may have reached the service: look for its post first
+    // and never send again if it is there (the service has no idempotency key).
+    if (item.reconcile) {
+      const found = await adapter.findPost(prepared.connection, {
+        channelId: item.channelId,
+        caption,
+        attemptStartedAt: item.reconcile.attemptStartedAt,
+        attemptDate: item.reconcile.attemptDate,
+      });
+      if (!found.ok) {
+        await ctx.runMutation(internal.publications.finish, {
+          publicationId: item.publicationId,
+          status: "uncertain",
+          error: `${UNCERTAIN_MESSAGE} (could not check: ${found.error})`,
+        });
+        failures.push(`${item.target}: could not check for an earlier post (${found.error})`);
+        continue;
+      }
+      if (found.post) {
+        await ctx.runMutation(internal.publications.finish, {
+          publicationId: item.publicationId,
+          status: found.post.status,
+          externalId: found.post.externalId,
+          ...(found.post.status === "scheduled" ? { scheduledAt: item.reconcile.attemptDate } : {}),
+          ...(found.post.externalUrl ? { externalUrl: found.post.externalUrl } : {}),
+        });
+        await emitPublished(item.publicationId);
+        continue;
+      }
+    }
+    let claimed = false;
+    const result = await adapter.publish(prepared.connection, {
       channelId: item.channelId,
       ...(item.channelService ? { channelService: item.channelService } : {}),
       settings: item.settings,
       publishable: prepared.publishable,
       ...(prepared.publishAt !== undefined ? { publishAt: prepared.publishAt } : {}),
+      media: item.media,
+      beforePost: async (media) => {
+        claimed = await ctx.runMutation(internal.publications.markSubmitting, {
+          publicationId: item.publicationId,
+          media,
+          attemptDate: prepared.publishAt ?? Date.now(),
+        });
+        return claimed;
+      },
     });
     if (!result.ok) {
+      if (!claimed && result.error === "This Publication is already being sent") {
+        failures.push(`${item.target}: ${result.error}`);
+        continue;
+      }
       await ctx.runMutation(internal.publications.finish, {
         publicationId: item.publicationId,
-        status: "failed",
-        error: result.error,
+        status: result.uncertain && claimed ? "uncertain" : "failed",
+        error: result.uncertain && claimed ? `${UNCERTAIN_MESSAGE} (${result.error})` : result.error,
+        ...(!result.uncertain ? { rejected: true } : {}),
       });
       failures.push(`${item.target}: ${result.error}`);
       continue;
@@ -54,15 +114,7 @@ export async function publishThroughPublisher(
       ...(result.outcome.status === "scheduled" && prepared.publishAt !== undefined ? { scheduledAt: prepared.publishAt } : {}),
       ...(result.outcome.externalUrl ? { externalUrl: result.outcome.externalUrl } : {}),
     });
-    await ctx.runMutation(internal.events.store, {
-      instanceId: mission.instanceId,
-      event: {
-        id: `ReviewPublished:${mission._id}:${item.publicationId}`,
-        type: "ReviewPublished",
-        payload: { missionId: mission._id, templateId: mission.templateId, actionKey: "publish" },
-        ts: Date.now(),
-      },
-    });
+    await emitPublished(item.publicationId);
   }
   if (failures.length > 0) throw new Error(`Publishing failed: ${failures.join("; ")}`);
 }

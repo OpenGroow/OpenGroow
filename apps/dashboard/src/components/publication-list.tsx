@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
+const STATUS_LABEL: Record<string, string> = {
+  submitting: "sending to Postiz…",
+  uncertain: "uncertain (will be checked before any new attempt)",
+};
+
 /**
  * Every Publication of a Mission (ADR-069): status, external URL or id,
  * scheduled date and error. A `failed` one can be retried on its own.
@@ -38,7 +43,7 @@ export function PublicationList({ missionId, title }: { missionId: string; title
       <ul className="m-0 grid list-none gap-2 p-0 text-sm">
         {publications.map((publication) => (
           <li key={publication.id} className="flex flex-wrap items-center gap-2" data-testid={`publication-${publication.target}`}>
-            <span className="font-semibold">{publication.target}</span>: {publication.status}
+            <span className="font-semibold">{publication.target}</span>: {STATUS_LABEL[publication.status] ?? publication.status}
             {publication.externalUrl ? (
               <a href={publication.externalUrl} className="underline" target="_blank" rel="noreferrer">
                 view post
@@ -50,7 +55,7 @@ export function PublicationList({ missionId, title }: { missionId: string; title
               <span className="text-muted-foreground">scheduled {new Date(publication.scheduledAt).toLocaleString()}</span>
             )}
             {publication.error && <span className="text-destructive">({publication.error})</span>}
-            {publication.status === "failed" && (
+            {(publication.status === "failed" || publication.status === "uncertain") && (
               <Button
                 type="button"
                 size="sm"
@@ -58,7 +63,7 @@ export function PublicationList({ missionId, title }: { missionId: string; title
                 disabled={retrying !== null}
                 onClick={() => void retry(publication.id)}
               >
-                {retrying === publication.id ? "Retrying…" : "Retry"}
+                {retrying === publication.id ? "Retrying…" : publication.status === "uncertain" ? "Check and retry" : "Retry"}
               </Button>
             )}
           </li>

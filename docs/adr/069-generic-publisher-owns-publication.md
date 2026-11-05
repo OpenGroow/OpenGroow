@@ -40,3 +40,8 @@ Postiz publishing config (channels, boards, credentials) is duplicated in every 
 
 **Status of `media`.** Declaration and validation only. OpenGroow reads an MCP output in one place, the polling result of an External Job (`output`, kept as `lastIntermediateResult` for an intermediate one), and a terminal External Job writes the RunResult without Agent text. A synchronous MCP call made by the Agent during its Run leaves no output OpenGroow can read; building one (a declared tool OpenGroow would call, or a dedicated artifact field) is a separate decision, not taken here. Until then the Agent copies the URLs.
 
+## Amendment: retry without duplicate posts
+
+Postiz has no idempotency key, so "post accepted, connection dropped, Retry" would publish twice. A Publication is now `submitting` before `POST /posts`; a failure that does not prove a rejection (network, timeout, 5xx, unreadable answer) makes it `uncertain`, not `failed`; only a 4xx is `failed`. Retrying an `uncertain` Publication (or a `failed` one with a stored attempt window and no post id) first reconciles through the adapter-agnostic `findPost` (same channel, same caption, creation or publish date in the attempt window): a match is attached and nothing is sent, no match sends once, an unreadable listing keeps it `uncertain`. Uploaded media ids are stored on the Publication and reused. Only one caller can move a row to `pending`/`submitting` (serialized mutations), so a double click sends once. `uncertain` blocks the Mission from `done`.
+
+A past `publishAt` is rejected when a human creates or edits a Mission, Schedule or review date; a Mission spawned by a Schedule whose absolute `publishAt` went stale still publishes immediately.

@@ -143,6 +143,8 @@ export const reviewState = internalQuery({
   },
 });
 
+const ABANDONED_AFTER_MS = 5 * 60_000;
+
 /**
  * Starts publishing a Mission to every one of its Publish targets: validates
  * them all first (nothing is created if one is unusable), creates a `pending`
@@ -182,7 +184,12 @@ export const beginAll = internalMutation({
     for (const target of targets) {
       const mapping = publisher.targets.find((t) => t.target === target)!;
       const existing = await publicationFor(ctx, args.missionId, target);
-      if (existing && existing.status !== "failed") {
+      // Only one caller can move a row out of failed/uncertain (mutations are
+      // serialized): the next one sees `pending` and is refused. A `pending` or
+      // `submitting` row whose action died long ago is retried through reconciliation.
+      const abandoned =
+        existing && (existing.status === "pending" || existing.status === "submitting") && now - existing.updatedAt > ABANDONED_AFTER_MS;
+      if (existing && existing.status !== "failed" && existing.status !== "uncertain" && !abandoned) {
         skipped.push(`"${target}" is already ${existing.status}`);
         continue;
       }
@@ -202,6 +209,12 @@ export const beginAll = internalMutation({
       toSend.push({
         publicationId: publicationId!,
         target,
+        media: existing?.media ?? [],
+        // A previous POST may have reached the service: look for it before sending again.
+        reconcile:
+          existing && existing.attemptStartedAt !== undefined && existing.externalId === undefined
+            ? { attemptStartedAt: existing.attemptStartedAt, attemptDate: existing.attemptDate ?? existing.attemptStartedAt }
+            : undefined,
         channelId: mapping.channelId!,
         channelService: mapping.channelService,
         settings: mapping.settings,
@@ -258,6 +271,32 @@ export const getInternal = internalQuery({
   handler: async (ctx, args) => ctx.db.get(args.publicationId),
 });
 
+/**
+ * Claims a `pending` Publication for the POST that is about to be made: only one
+ * caller can move it to `submitting`, and it records the uploaded media and the
+ * attempt window the reconciliation will search. False = not yours, do not send.
+ */
+export const markSubmitting = internalMutation({
+  args: {
+    publicationId: v.id("publications"),
+    media: v.array(v.object({ url: v.string(), id: v.string(), path: v.string() })),
+    attemptDate: v.number(),
+  },
+  handler: async (ctx, args): Promise<boolean> => {
+    const publication = await ctx.db.get(args.publicationId);
+    if (!publication || publication.status !== "pending") return false;
+    const now = Date.now();
+    await ctx.db.patch(args.publicationId, {
+      status: "submitting",
+      media: args.media,
+      attemptStartedAt: now,
+      attemptDate: args.attemptDate,
+      updatedAt: now,
+    });
+    return true;
+  },
+});
+
 /** Records the adapter's answer, and completes the Mission once every Publication is published. */
 export const finish = internalMutation({
   args: {
@@ -267,12 +306,18 @@ export const finish = internalMutation({
     externalUrl: v.optional(v.string()),
     scheduledAt: v.optional(v.number()),
     error: v.optional(v.string()),
+    /** The service clearly rejected the request: nothing was created, so the attempt window is dropped. */
+    rejected: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { publicationId, ...fields } = args;
+    const { publicationId, rejected, ...fields } = args;
     const publication = await ctx.db.get(publicationId);
     if (!publication) throw new Error("Publication not found");
-    await ctx.db.patch(publicationId, { ...fields, updatedAt: Date.now() });
+    await ctx.db.patch(publicationId, {
+      ...fields,
+      ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined } : {}),
+      updatedAt: Date.now(),
+    });
 
     const all = await ctx.db
       .query("publications")
