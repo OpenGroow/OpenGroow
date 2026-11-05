@@ -171,16 +171,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                       {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
                     </span>
                     {t.mapped ? (
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm">
-                          {t.channelName ?? t.channelId}
-                        </span>
-                        <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm text-muted-foreground">
-                          Settings{t.settings && Object.keys(t.settings).length > 0 ? ` · ${Object.keys(t.settings).length}` : ""}
-                        </span>
-                        {t.channelProfile ? (
-                          <span className="text-sm text-muted-foreground">@{t.channelProfile}</span>
-                        ) : null}
+                      <span className="text-sm text-muted-foreground">
+                        {t.channelName ?? t.channelId}
+                        {t.channelProfile ? ` · @${t.channelProfile}` : ""}
                       </span>
                     ) : (
                       <StatusBadge tone="warning" label="Not mapped" />
