@@ -95,6 +95,7 @@ import type * as publications from "../publications.js";
 import type * as publish_at from "../publish_at.js";
 import type * as publishable from "../publishable.js";
 import type * as publisher_adapter from "../publisher/adapter.js";
+import type * as publisher_capabilities from "../publisher/capabilities.js";
 import type * as publisher_postiz from "../publisher/postiz.js";
 import type * as publisher_postiz_settings from "../publisher/postiz_settings.js";
 import type * as publisher_node from "../publisher_node.js";
@@ -231,6 +232,7 @@ declare const fullApi: ApiFromModules<{
   publish_at: typeof publish_at;
   publishable: typeof publishable;
   "publisher/adapter": typeof publisher_adapter;
+  "publisher/capabilities": typeof publisher_capabilities;
   "publisher/postiz": typeof publisher_postiz;
   "publisher/postiz_settings": typeof publisher_postiz_settings;
   publisher_node: typeof publisher_node;

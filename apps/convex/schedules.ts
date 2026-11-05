@@ -11,7 +11,7 @@ import { scheduleUnitV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { assertValidPublishAt } from "./publish_at.js";
-import { assertKnownPublishTargets } from "./publication_targets.js";
+import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType } from "./publication_targets.js";
 
 export const frequencyV = v.object({
   unit: scheduleUnitV,
@@ -35,6 +35,7 @@ export const create = mutation({
     assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
     await assertKnownPublishTargets(ctx, args.instanceId, args.payload);
+    await assertPayloadChannelsSupportMissionType(ctx, args);
 
     const frequency = args.frequency as Frequency;
     const now = Date.now();
@@ -104,6 +105,7 @@ export const updatePayload = mutation({
     // A stale absolute publishAt the edit leaves untouched is kept (it publishes immediately at spawn).
     assertValidPublishAt(args.payload, Date.now(), (schedule.payload as { publishAt?: unknown } | null)?.publishAt);
     await assertKnownPublishTargets(ctx, schedule.instanceId, args.payload);
+    await assertPayloadChannelsSupportMissionType(ctx, { ...args, instanceId: schedule.instanceId, templateId: schedule.templateId, type: schedule.type });
     await ctx.db.patch(args.scheduleId, { payload: args.payload, updatedAt: Date.now() });
   },
 });

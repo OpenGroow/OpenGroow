@@ -5,7 +5,7 @@ import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { assertValidPublishAt } from "./publish_at.js";
-import { assertKnownPublishTargets } from "./publication_targets.js";
+import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType } from "./publication_targets.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { findLiveRunForMission } from "./runs.js";
 import { currentTemplateVersion } from "./template_registry.js";
@@ -138,6 +138,7 @@ export const create = mutation({
     assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
     await assertKnownPublishTargets(ctx, args.instanceId, args.payload);
+    await assertPayloadChannelsSupportMissionType(ctx, args);
     // When the user leaves the name field empty or whitespace-only, derive a
     // default from the mission type and the per-project sequential number
     // (e.g. "create_article #14") so the board always has a readable label.

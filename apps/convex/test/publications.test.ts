@@ -249,6 +249,37 @@ describe("Publish target", () => {
   });
 });
 
+describe("channel capabilities for the Mission type's kind", () => {
+  const YT = { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "My YT", channelService: "youtube", channelProfile: "yt" };
+  const MASTO = { instanceId: INSTANCE_ID, channelId: "ch-4", channelName: "My Masto", channelService: "mastodon", channelProfile: "m" };
+
+  it("refuses a channel that cannot publish the kind when the human chooses targets", async () => {
+    const { owner, missionId } = await seed({ payload: {} });
+    await owner.mutation(api.publishers.addChannel, YT);
+    await expect(
+      owner.mutation(api.publications.setTargets, { missionId, targets: ["youtube:yt"] }),
+    ).rejects.toThrow(/YouTube cannot publish an image/);
+  });
+
+  it("allows an uncertain channel", async () => {
+    const { owner, missionId } = await seed({ payload: {} });
+    await owner.mutation(api.publishers.addChannel, MASTO);
+    await expect(
+      owner.mutation(api.publications.setTargets, { missionId, targets: ["mastodon:m"] }),
+    ).resolves.toBeNull();
+  });
+
+  it("refuses at publish time, without reaching Postiz", async () => {
+    const { owner, missionId } = await seed({ payload: { publishTargets: ["youtube:yt"] } });
+    await owner.mutation(api.publishers.addChannel, YT);
+    const postiz = stubPostiz();
+    await expect(
+      owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),
+    ).rejects.toThrow(/YouTube cannot publish an image/);
+    expect(postiz).not.toHaveBeenCalled();
+  });
+});
+
 describe("who can publish", () => {
   it("is refused to anyone but the Mission owner (an Agent has no identity here)", async () => {
     const { t, missionId } = await seed();

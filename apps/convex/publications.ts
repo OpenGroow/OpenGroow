@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
-import { effectivePublishTargets, unusableTargets } from "./publication_targets.js";
+import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
@@ -53,6 +53,12 @@ export const setTargets = mutation({
     if (unknown.length > 0) {
       throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
     }
+    await assertPayloadChannelsSupportMissionType(ctx, {
+      instanceId: mission.instanceId,
+      templateId: mission.templateId,
+      type: mission.type,
+      payload: { publishTargets: targets },
+    });
     const payload = mission.payload && typeof mission.payload === "object" ? mission.payload : {};
     await ctx.db.patch(args.missionId, {
       payload: { ...(payload as Record<string, unknown>), publishTargets: targets },
@@ -177,6 +183,7 @@ export const beginAll = internalMutation({
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
+    if (typeof publishable.kind === "string") assertChannelsSupportKind(publisher, targets, publishable.kind);
 
     const now = Date.now();
     const toSend = [];

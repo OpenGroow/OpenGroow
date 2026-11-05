@@ -2,7 +2,10 @@
 // A Publish target is the key of one channel entry of the Project's Publisher.
 // Shared by the Convex functions and the review projection.
 
+import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { QueryCtx } from "./_generated/server.js";
+import { capabilityOf } from "./publisher/capabilities.js";
+import { getTemplateRegistry } from "./template_registry.js";
 
 /** The Publish targets of a Mission or Schedule payload: `payload.publishTargets`,
  * chosen by the human among the Publisher's channels. Agents never choose them,
@@ -39,4 +42,38 @@ export async function assertKnownPublishTargets(ctx: QueryCtx, instanceId: strin
   if (unknown.length > 0) {
     throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
   }
+}
+
+/** Refuses targets whose channel cannot carry `kind` (capabilities are owned by the adapter). `uncertain` is allowed. */
+export function assertChannelsSupportKind(
+  publisher: { adapter: string; targets: ReadonlyArray<{ target: string; channelService?: string }> } | null | undefined,
+  targets: readonly string[],
+  kind: string,
+): void {
+  if (!publisher) return;
+  const refused = targets
+    .map((t) => publisher.targets.find((entry) => entry.target === t))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
+    .map((entry) => ({ target: entry.target, capability: capabilityOf(publisher.adapter, entry.channelService, kind) }))
+    .filter(({ capability }) => capability.level === "unsupported");
+  if (refused.length > 0) {
+    throw new Error(refused.map(({ target, capability }) => `${capability.reason} (channel "${target}")`).join("; "));
+  }
+}
+
+/** Same check at creation/edit of a Mission or Schedule payload: the kind comes from the Mission type's `publish` declaration. */
+export async function assertPayloadChannelsSupportMissionType(
+  ctx: QueryCtx,
+  args: { instanceId: string; templateId: string; type: string; payload: unknown },
+): Promise<void> {
+  const targets = effectivePublishTargets(args.payload);
+  if (targets.length === 0) return;
+  const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId);
+  const declaration = publishDeclarationFor(template?.manifest, args.type);
+  if (!declaration) return;
+  const publisher = await ctx.db
+    .query("publishers")
+    .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+    .unique();
+  assertChannelsSupportKind(publisher, targets, declaration.kind);
 }
