@@ -89,3 +89,19 @@ describe("Postiz adapter: optional Publishable fields", () => {
     expect(settings).not.toHaveProperty("thumbnail");
   });
 });
+
+describe("Postiz adapter: connection URL", () => {
+  it("requests exactly <host>/api/public/v1/... when the URL has trailing slashes", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        urls.push(String(url));
+        return new Response(JSON.stringify({ connected: true }), { status: 200 });
+      }),
+    );
+    const res = await postizAdapter.testConnection({ url: "https://postiz.example.com//", apiKey: "k" });
+    expect(res).toEqual({ ok: true });
+    expect(urls).toEqual(["https://postiz.example.com/api/public/v1/is-connected"]);
+  });
+});

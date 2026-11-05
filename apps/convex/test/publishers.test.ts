@@ -115,6 +115,15 @@ describe("publishers", () => {
     expect(down).toMatchObject({ ok: false, error: expect.stringContaining("ENOTFOUND") });
   });
 
+  it("calls Postiz at exactly <host>/api/public/v1/... when the URL was saved with trailing slashes", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, { ...CONNECTION, url: "https://postiz.example.com///" });
+    const fetchMock = stubFetch(() => json({ connected: true }));
+    await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(["https://postiz.example.com/api/public/v1/is-connected"]);
+  });
+
   it("lists the real channels of the Postiz account", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
@@ -201,6 +210,20 @@ describe("publishers", () => {
     await expect(add("c3", "Other", "instagram", "Love_YouMake")).rejects.toThrow("A channel with this handle is already added");
     const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:love_youmake"]);
+  });
+
+  it("slugs a handle with uppercase or special characters into a valid key", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, CONNECTION);
+    const key = await owner.mutation(api.publishers.addChannel, {
+      instanceId: INSTANCE_ID,
+      channelId: "c1",
+      channelName: "Cafe",
+      channelService: "Instagram",
+      channelProfile: "@Café.Du Coin!",
+    });
+    expect(key).toBe("instagram:caf-du-coin");
   });
 
   it("rejects adding a channel without a Publisher", async () => {
