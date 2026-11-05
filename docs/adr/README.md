@@ -71,3 +71,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 067 | Machine tools are installed on the paired machine, after consent, from a verified artifact | Accepted | yes | [067-machine-tool-install.md](067-machine-tool-install.md) |
 | 068 | Official OpenClaw Plugins are enabled by the operator at start, and the environment variable is the source of truth | Accepted | yes | [068-official-openclaw-plugins-enabled-at-start.md](068-official-openclaw-plugins-enabled-at-start.md) |
 | 069 | A generic Publisher owns publication; Agent Templates return a Publishable in a unified format | Accepted | yes | [069-generic-publisher-owns-publication.md](069-generic-publisher-owns-publication.md) |
+| 070 | Publishers are declarative plugins distributed by the hub; the core keeps the Publication lifecycle | Proposed | no | [070-declarative-publisher-plugins.md](070-declarative-publisher-plugins.md) |
