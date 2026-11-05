@@ -11,6 +11,7 @@ import { scheduleUnitV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { assertValidPublishAt } from "./publish_at.js";
+import { assertKnownPublishTargets } from "./publication_targets.js";
 
 export const frequencyV = v.object({
   unit: scheduleUnitV,
@@ -33,6 +34,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
+    await assertKnownPublishTargets(ctx, args.instanceId, args.payload);
 
     const frequency = args.frequency as Frequency;
     const now = Date.now();
@@ -100,6 +102,7 @@ export const updatePayload = mutation({
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    await assertKnownPublishTargets(ctx, schedule.instanceId, args.payload);
     await ctx.db.patch(args.scheduleId, { payload: args.payload, updatedAt: Date.now() });
   },
 });

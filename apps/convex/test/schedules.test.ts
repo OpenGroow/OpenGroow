@@ -343,3 +343,39 @@ describe("schedules.listByInstance", () => {
     expect(mine[0].ownerId).toBe(OWNER.subject);
   });
 });
+
+describe("publishTargets in a Schedule payload", () => {
+  async function withPublisher(t: ReturnType<typeof convexTest>) {
+    await seedInstance(t);
+    const owner = t.withIdentity(OWNER);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("publishers", {
+        instanceId: INSTANCE_ID,
+        adapter: "postiz",
+        url: "https://postiz.example.com",
+        targets: [{ target: "instagram", channelId: "c1", channelService: "instagram" }],
+        updatedAt: Date.now(),
+      });
+    });
+    return owner;
+  }
+  const base = { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article", frequency: DAILY, timezone: "UTC" };
+
+  it("accepts channels of the Project's Publisher", async () => {
+    const owner = await withPublisher(convexTest(schema, modules));
+    await expect(
+      owner.mutation(api.schedules.create, { ...base, payload: { publishTargets: ["instagram"] } }),
+    ).resolves.toBeDefined();
+  });
+
+  it("rejects an unknown channel on create and on payload update", async () => {
+    const owner = await withPublisher(convexTest(schema, modules));
+    await expect(
+      owner.mutation(api.schedules.create, { ...base, payload: { publishTargets: ["tiktok"] } }),
+    ).rejects.toThrow(/Unknown channel "tiktok"/);
+    const { scheduleId } = await owner.mutation(api.schedules.create, { ...base, payload: {} });
+    await expect(
+      owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishTargets: ["tiktok"] } }),
+    ).rejects.toThrow(/Unknown channel/);
+  });
+});
