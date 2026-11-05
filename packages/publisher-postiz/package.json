@@ -1,0 +1,16 @@
+{
+  "name": "@opengroow/publisher-postiz",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@opengroow/publisher-sdk": "workspace:*"
+  }
+}

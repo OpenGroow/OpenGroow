@@ -1,0 +1,65 @@
+// Channel / content-kind capabilities (ADR-069 amendment, docs/domain/publishing.md).
+// Which Publishable kinds a service can carry is a property of the publishing
+// service, so it is DATA shipped with the plugin (`capabilities.json`), read
+// through this pure module: no network, no per-platform branch in code.
+// Importable from Convex functions and from the dashboard.
+
+export const CAPABILITY_KINDS = ["video", "image", "carousel"] as const;
+export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
+export type CapabilityLevel = "supported" | "uncertain" | "unsupported";
+export type Capability = { level: CapabilityLevel; reason?: string };
+
+export const CAPABILITIES_SCHEMA_VERSION = 1;
+
+export type PlatformCapabilities = {
+  name?: string;
+  video?: CapabilityLevel;
+  image?: CapabilityLevel;
+  carousel?: CapabilityLevel;
+  reasons?: Partial<Record<CapabilityKind, string>>;
+};
+export type CapabilitiesData = {
+  schemaVersion: number;
+  adapter: string;
+  source?: string;
+  platforms: Record<string, PlatformCapabilities>;
+};
+
+const LEVELS: readonly string[] = ["supported", "uncertain", "unsupported"];
+
+/** Validates raw capability data (a JSON file); throws an actionable message. */
+export function parseCapabilities(raw: unknown): CapabilitiesData {
+  const obj = raw as Record<string, unknown> | null;
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("capabilities must be an object");
+  if (obj.schemaVersion !== CAPABILITIES_SCHEMA_VERSION) {
+    throw new Error(`capabilities.schemaVersion must be ${CAPABILITIES_SCHEMA_VERSION}`);
+  }
+  if (typeof obj.adapter !== "string" || obj.adapter === "") throw new Error("capabilities.adapter must be a non-empty string");
+  const platforms = obj.platforms as Record<string, Record<string, unknown>> | null;
+  if (!platforms || typeof platforms !== "object" || Array.isArray(platforms)) throw new Error("capabilities.platforms must be an object");
+  for (const [service, entry] of Object.entries(platforms)) {
+    if (!entry || typeof entry !== "object") throw new Error(`capabilities.platforms.${service} must be an object`);
+    for (const kind of CAPABILITY_KINDS) {
+      const level = entry[kind];
+      if (level !== undefined && !LEVELS.includes(level as string)) {
+        throw new Error(`capabilities.platforms.${service}.${kind} must be one of ${LEVELS.join(", ")}`);
+      }
+    }
+  }
+  return obj as unknown as CapabilitiesData;
+}
+
+/** Capability of a channel's service for a Publishable kind. Unknown service or kind: `uncertain`. */
+export function capabilityIn(data: CapabilitiesData | undefined, service: string | undefined, kind: string): Capability {
+  const entry = service ? data?.platforms[service] : undefined;
+  const level = entry?.[kind as CapabilityKind];
+  const name = entry?.name ?? service ?? "This channel";
+  if (!level || level === "uncertain") {
+    return { level: "uncertain", reason: entry?.reasons?.[kind as CapabilityKind] ?? `${name} publishing a ${kind} is not confirmed` };
+  }
+  if (level === "unsupported") {
+    const detail = entry?.reasons?.[kind as CapabilityKind];
+    return { level, reason: `${name} cannot publish ${kind === "image" ? "an" : "a"} ${kind}${detail ? ` (${detail})` : ""}` };
+  }
+  return { level };
+}

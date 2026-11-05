@@ -8,11 +8,11 @@ import {
 } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { adapterFor } from "./publisher/postiz.js";
-import type { PublisherChannel } from "./publisher/adapter.js";
+import { pluginFor } from "./publisher/registry.js";
+import type { PublisherChannel } from "@opengroow/publisher-sdk";
 
-// Project-level Publisher (ADR-069): one configuration per Project, V1 adapter
-// Postiz. The API key is write-only from the dashboard's point of view.
+// Project-level Publisher (ADR-069): one configuration per Project, backed by a
+// Publisher plugin (ADR-070). The API key is write-only from the dashboard's point of view.
 
 const NO_PUBLISHER = "No Publisher configured";
 
@@ -76,13 +76,14 @@ export const get = query({
 export const save = mutation({
   args: {
     instanceId: v.string(),
-    adapter: v.literal("postiz"),
+    adapter: v.string(),
     url: v.string(),
     // Omit to keep the stored key.
     apiKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
+    pluginFor(args.adapter); // refuses an unregistered plugin
     const url = args.url.trim().replace(/\/+$/, "");
     if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid Publisher URL");
     const apiKey = args.apiKey?.trim() || undefined;
@@ -183,7 +184,7 @@ export const testConnection = action({
     const conn = await ctx.runQuery(internal.publishers.loadConnection, args);
     if (!conn) return { ok: false, error: NO_PUBLISHER };
     if (!conn.apiKey) return { ok: false, error: "No API key configured" };
-    return await adapterFor(conn.adapter).testConnection(conn);
+    return await pluginFor(conn.adapter).testConnection(conn);
   },
 });
 
@@ -196,6 +197,6 @@ export const listChannels = action({
     const conn = await ctx.runQuery(internal.publishers.loadConnection, args);
     if (!conn) return { ok: false, error: NO_PUBLISHER };
     if (!conn.apiKey) return { ok: false, error: "No API key configured" };
-    return await adapterFor(conn.adapter).listChannels(conn);
+    return await pluginFor(conn.adapter).listChannels(conn);
   },
 });

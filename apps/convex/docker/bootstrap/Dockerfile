@@ -8,6 +8,8 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml convex.json tsconfig.base.j
 COPY packages/hmac/package.json packages/hmac/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/agent-templates/package.json packages/agent-templates/package.json
+COPY packages/publisher-sdk/package.json packages/publisher-sdk/package.json
+COPY packages/publisher-postiz/package.json packages/publisher-postiz/package.json
 COPY packages/reliability/package.json packages/reliability/package.json
 COPY apps/convex/package.json apps/convex/package.json
 
@@ -18,6 +20,8 @@ RUN --mount=type=cache,id=opengroow-pnpm-store,target=/pnpm/store --mount=type=c
 COPY packages/hmac packages/hmac
 COPY packages/protocol packages/protocol
 COPY packages/agent-templates packages/agent-templates
+COPY packages/publisher-sdk packages/publisher-sdk
+COPY packages/publisher-postiz packages/publisher-postiz
 COPY packages/reliability packages/reliability
 COPY apps/convex apps/convex
 COPY scripts/docker/load-secrets-file.sh scripts/docker/load-secrets-file.sh

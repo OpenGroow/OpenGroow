@@ -1,4 +1,4 @@
-import type { PublisherResult } from "./adapter.js";
+import type { PublisherResult } from "@opengroow/publisher-sdk";
 
 // Postiz requires per-platform `settings` on every post
 // (https://docs.postiz.com/public-api/providers/<provider>). OpenGroow supplies

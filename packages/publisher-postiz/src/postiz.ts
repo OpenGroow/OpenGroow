@@ -1,12 +1,16 @@
-import { postizSettings } from "./postiz_settings.js";
-import type {
-  PostStatus,
-  PublisherAdapter,
-  UploadedMedia,
-  PublisherChannel,
-  PublisherConnection,
-  PublisherResult,
-} from "./adapter.js";
+import capabilitiesData from "../data/capabilities.json";
+import channelOptionsData from "../data/channel-options.json";
+import { postizSettings } from "./settings.js";
+import {
+  parseCapabilities,
+  type ChannelOptionsData,
+  type PublisherPlugin,
+  type PostStatus,
+  type UploadedMedia,
+  type PublisherChannel,
+  type PublisherConnection,
+  type PublisherResult,
+} from "@opengroow/publisher-sdk";
 
 function endpoint(conn: PublisherConnection, path: string): string {
   return `${conn.url.replace(/\/+$/, "")}/api/public/v1/${path}`;
@@ -54,7 +58,12 @@ function mediaReferences(publishable: Record<string, unknown>): PublisherResult<
   return { ok: false, error: `Publishing a "${String(kind)}" is not supported (missing media reference)` };
 }
 
-export const postizAdapter: PublisherAdapter = {
+export const postizPlugin: PublisherPlugin = {
+  id: "postiz",
+  name: "Postiz",
+  capabilities: parseCapabilities(capabilitiesData),
+  channelOptions: channelOptionsData as ChannelOptionsData,
+
   async testConnection(conn) {
     const res = await call(conn, "is-connected");
     if (!res.ok) return res;
@@ -92,7 +101,7 @@ export const postizAdapter: PublisherAdapter = {
     // without it fall back to one listing.
     let service = request.channelService;
     if (service === undefined) {
-      const channels = await postizAdapter.listChannels(conn);
+      const channels = await postizPlugin.listChannels(conn);
       if (!channels.ok) return channels;
       const channel = channels.channels.find((c) => c.id === request.channelId);
       if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
@@ -250,8 +259,4 @@ function normalizeContent(value: unknown): string {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-export function adapterFor(id: "postiz"): PublisherAdapter {
-  return postizAdapter;
 }

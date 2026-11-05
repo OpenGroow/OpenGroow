@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { optionsOf } from "@/src/components/channel-options";
+import { channelOptionsOf } from "@convex/publisher/registry";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 
@@ -162,7 +162,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
       ) : (
         <ul className="m-0 grid list-none gap-3 p-0">
           {publisher.targets.map((t) => {
-            const options = t.mapped ? optionsOf(t.channelService) : [];
+            const options = t.mapped ? channelOptionsOf(publisher.adapter, t.channelService) : [];
             const expandable = options.length > 0;
             const expanded = expandable && open === t.target;
             const header = (

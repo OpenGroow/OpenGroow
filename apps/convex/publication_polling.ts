@@ -2,7 +2,7 @@ import type { Id } from "./_generated/dataModel.js";
 import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
 import { internalAction, internalQuery } from "./_generated/server.js";
-import { adapterFor } from "./publisher/postiz.js";
+import { pluginFor } from "./publisher/registry.js";
 
 /** Scheduled Publications whose date has come, with what the adapter needs to ask for their status. */
 export const dueScheduled = internalQuery({
@@ -44,10 +44,10 @@ export const pollScheduled = internalAction({
       publicationId: Id<"publications">;
       externalId: string;
       scheduledAt?: number;
-      connection: { adapter: "postiz"; url: string; apiKey: string };
+      connection: { adapter: string; url: string; apiKey: string };
     }> = await ctx.runQuery(internal.publication_polling.dueScheduled, { now: Date.now() });
     for (const item of due) {
-      const result = await adapterFor(item.connection.adapter).getStatus(item.connection, item.externalId, item.scheduledAt);
+      const result = await pluginFor(item.connection.adapter).getStatus(item.connection, item.externalId, item.scheduledAt);
       if (!result.ok) continue;
       const { post } = result;
       if (post.status === "published") {

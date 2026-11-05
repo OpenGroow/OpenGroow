@@ -19,6 +19,8 @@
     "@opengroow/agent-templates": "workspace:*",
     "@opengroow/hmac": "workspace:*",
     "@opengroow/protocol": "workspace:*",
+    "@opengroow/publisher-postiz": "workspace:*",
+    "@opengroow/publisher-sdk": "workspace:*",
     "@opengroow/reliability": "workspace:*",
     "better-auth": "1.5.3",
     "convex-helpers": "^0.1.119",
