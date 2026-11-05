@@ -59,6 +59,10 @@ export function PublishSection({
     setPublishAtInput(value);
     const at = value === "" ? null : new Date(value).getTime();
     if (at !== null && !Number.isFinite(at)) return;
+    if (at !== null && at <= Date.now()) {
+      setError("publishAt must be in the future");
+      return;
+    }
     try {
       await setPublishAt({ missionId: missionId as Id<"missions">, publishAt: at });
     } catch (err) {

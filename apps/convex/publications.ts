@@ -5,7 +5,7 @@ import { effectivePublishTargets, unusableTargets } from "./publication_targets.
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
-import { effectivePublishAt } from "./publish_at.js";
+import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 
 // Publications (ADR-069, docs/domain/publishing.md): the tracked outcome of
 // sending one Publishable to one Publish target. One row per (Mission, target).
@@ -78,6 +78,7 @@ export const setPublishAt = mutation({
       throw new Error(`The publication date can only be changed during review, got: "${mission.status}"`);
     }
     if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
+    if (args.publishAt !== null) assertValidPublishAt({ publishAt: args.publishAt });
     const { publishAt: _previous, ...rest } = (
       mission.payload && typeof mission.payload === "object" ? mission.payload : {}
     ) as Record<string, unknown>;

@@ -204,7 +204,14 @@ describe("editing publishAt at review", () => {
     ).rejects.toThrow();
   });
 
-  it("a past date publishes immediately", async () => {
+  it("refuses a past date at review", async () => {
+    const { owner, missionId } = await seed();
+    await expect(
+      owner.mutation(api.publications.setPublishAt, { missionId, publishAt: Date.now() - HOUR }),
+    ).rejects.toThrow(/publishAt must be in the future/);
+  });
+
+  it("a date that went past after being set publishes immediately", async () => {
     const { owner, missionId } = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt: Date.now() - HOUR } });
     const postiz = stubPostiz();
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
@@ -240,6 +247,34 @@ describe("publishAt on Mission and Schedule payloads", () => {
         timezone: "UTC",
       }),
     ).rejects.toThrow(/publishAt/);
+  });
+
+  it("refuses a past publishAt on Schedule create and edit, but keeps an untouched stale one", async () => {
+    const { owner, t } = await seed();
+    const frequency = { unit: "daily" as const, hour: 9, minute: 0 };
+    const base = { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "make_image", frequency, timezone: "UTC" };
+    await expect(
+      owner.mutation(api.schedules.create, { ...base, payload: { publishAt: Date.now() - HOUR } }),
+    ).rejects.toThrow(/publishAt must be in the future/);
+    const { scheduleId } = await owner.mutation(api.schedules.create, { ...base, payload: { publishAt: Date.now() + HOUR } });
+    await expect(
+      owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishAt: Date.now() - HOUR } }),
+    ).rejects.toThrow(/publishAt must be in the future/);
+    const stale = Date.now() - HOUR;
+    await t.run(async (ctx) => ctx.db.patch(scheduleId, { payload: { publishAt: stale } }));
+    await owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishAt: stale, note: "x" } });
+  });
+
+  it("refuses a past publishAt on a Mission", async () => {
+    const { owner } = await seed();
+    await expect(
+      owner.mutation(api.missions.create, {
+        instanceId: INSTANCE_ID,
+        templateId: TEMPLATE_ID,
+        type: "make_image",
+        payload: { publishAt: Date.now() - HOUR },
+      }),
+    ).rejects.toThrow(/publishAt must be in the future/);
   });
 
   it("is refused on a Mission when it is not a timestamp", async () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -82,6 +83,7 @@ export function PublishChannelPicker({
   onChange: (payloadText: string) => void;
 }) {
   const publisher = useQuery(api.publishers.get, { instanceId });
+  const [dateError, setDateError] = useState<string | null>(null);
   const payload = parsePayload(payloadText);
   const selected = Array.isArray(payload?.publishTargets)
     ? (payload.publishTargets as unknown[]).filter((t): t is string => typeof t === "string")
@@ -139,10 +141,16 @@ export function PublishChannelPicker({
           disabled={!payload}
           onChange={(e) => {
             const at = e.target.value === "" ? undefined : new Date(e.target.value).getTime();
+            if (at !== undefined && Number.isFinite(at) && at <= Date.now()) {
+              setDateError("publishAt must be in the future");
+              return;
+            }
+            setDateError(null);
             write({ publishAt: at !== undefined && Number.isFinite(at) ? at : undefined });
           }}
         />
       </label>
+      {dateError && <p data-testid="publish-at-error" className="m-0 text-sm text-destructive">{dateError}</p>}
     </fieldset>
   );
 }

@@ -97,11 +97,12 @@ export const resume = mutation({
 export const updatePayload = mutation({
   args: { scheduleId: v.id("schedules"), payload: v.any() },
   handler: async (ctx, args) => {
-    assertValidPublishAt(args.payload);
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    // A stale absolute publishAt the edit leaves untouched is kept (it publishes immediately at spawn).
+    assertValidPublishAt(args.payload, Date.now(), (schedule.payload as { publishAt?: unknown } | null)?.publishAt);
     await assertKnownPublishTargets(ctx, schedule.instanceId, args.payload);
     await ctx.db.patch(args.scheduleId, { payload: args.payload, updatedAt: Date.now() });
   },

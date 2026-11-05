@@ -379,6 +379,22 @@ describe("MissionReviewContent", () => {
       expect(setter).toHaveBeenLastCalledWith({ missionId: "mission-1", publishAt: null });
     });
 
+    it("refuses a past date before submitting and shows the message", async () => {
+      withPublish(true);
+      const setter = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation(() => setter);
+      await render();
+      await act(async () => {});
+      const input = document.querySelector('[data-testid="publish-at"]') as HTMLInputElement;
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      await act(async () => {
+        setValue.call(input, "2001-01-02T09:30");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(setter).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("publishAt must be in the future");
+    });
+
     it("shows the scheduled date of a scheduled Publication", async () => {
       const base = getReviewMock.getMockImplementation()!;
       getReviewMock.mockImplementation(async () => ({
