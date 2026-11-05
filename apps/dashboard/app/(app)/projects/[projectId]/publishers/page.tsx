@@ -143,7 +143,6 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             <img src="/postiz.png" alt="" className="size-10 rounded-lg object-contain" />
             <span className="grid">
               <span className="text-base font-medium">Postiz</span>
-              <span className="text-sm text-muted-foreground">Social media scheduler &amp; publisher</span>
             </span>
           </button>
         </DialogContent>
@@ -164,7 +163,6 @@ export default function PublishersPage({ params }: PublishersPageProps) {
               {connected === false ? <StatusBadge tone="error" label="Not connected" /> : null}
               {publisher && !publisher.hasApiKey ? <StatusBadge tone="warning" label="API key missing" /> : null}
             </div>
-            <p className="m-0 text-sm text-muted-foreground">Social media scheduler &amp; publisher</p>
           </div>
         </div>
         <div className="flex gap-2 border-b border-border" role="tablist">
