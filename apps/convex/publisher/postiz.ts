@@ -106,9 +106,26 @@ export const postizAdapter: PublisherAdapter = {
       }
       uploaded.push({ id: item.id, path: item.path });
     }
+    // Image alt text (Instagram, Bluesky, Mastodon...; other providers ignore it). Videos have none.
+    const { kind, altText } = request.publishable;
+    if (kind !== "video" && typeof altText === "string" && altText) {
+      for (const item of uploaded) (item as { alt?: string }).alt = altText;
+    }
+    // YouTube is the only provider whose thumbnail Postiz takes as an image (the
+    // cover is uploaded like any media). Elsewhere `coverUrl` is ignored.
+    let thumbnail: { id: string; path: string } | undefined;
+    if (service === "youtube" && typeof request.publishable.coverUrl === "string") {
+      const upload = await call(conn, "upload-from-url", { url: request.publishable.coverUrl });
+      if (!upload.ok) return upload;
+      const item = upload.body as { id?: unknown; path?: unknown } | null;
+      if (typeof item?.id !== "string" || typeof item.path !== "string") {
+        return { ok: false, error: "Postiz returned an unexpected upload response" };
+      }
+      thumbnail = { id: item.id, path: item.path };
+    }
     const caption = typeof request.publishable.caption === "string" ? request.publishable.caption : "";
 
-    const settings = postizSettings(service, request.publishable, request.settings);
+    const settings = postizSettings(service, request.publishable, request.settings, thumbnail);
     if (!settings.ok) return settings;
 
     const scheduled = request.publishAt !== undefined;

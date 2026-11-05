@@ -71,6 +71,16 @@ describe("Publishable in the Artifact of a RunResult", () => {
     expect(decide(publishable, { kind: "video", targets: ["instagram"] })).toMatchObject({ type: "markCompleted" });
   });
 
+  it("accepts link, altText and tags where they apply and rejects them elsewhere", () => {
+    const ok = (p: unknown, kind: "video" | "image" | "carousel") => decide(p, { kind, targets: ["x"] });
+    expect(ok({ ...VIDEO, link: "https://e.com/x", tags: ["a", "b"] }, "video")).toMatchObject({ type: "markCompleted" });
+    expect(ok({ ...IMAGE, link: "https://e.com/x", altText: "A cat" }, "image")).toMatchObject({ type: "markCompleted" });
+    expect(ok({ ...CAROUSEL, altText: "A cat" }, "carousel")).toMatchObject({ type: "markCompleted" });
+    expect(ok({ ...IMAGE, altText: "x".repeat(1001) }, "image")).toMatchObject({ type: "markFailedRetryable" });
+    expect(ok({ ...IMAGE, link: "nope" }, "image")).toMatchObject({ type: "markFailedRetryable" });
+    expect(ok({ ...VIDEO, altText: "x" }, "video")).toMatchObject({ type: "markFailedRetryable" });
+  });
+
   it("rejects an invalid Publishable with per-field errors for the Agent", () => {
     const decision = decide(
       { kind: "carousel", slideUrls: ["not a url"], caption: 3 },

@@ -17,9 +17,15 @@ export function postizSettings(
   service: string,
   publishable: Record<string, unknown>,
   stored: Settings | undefined,
+  /** The uploaded cover, for the services that take a custom thumbnail (YouTube). */
+  thumbnail?: { id: string; path: string },
 ): PublisherResult<{ settings: Settings }> {
   const kind = publishable.kind;
   const title = text(publishable.title, 100);
+  const link = text(publishable.link, 2048);
+  const tags = Array.isArray(publishable.tags)
+    ? publishable.tags.filter((t): t is string => typeof t === "string" && t.trim() !== "")
+    : [];
   let defaults: Settings = {};
 
   switch (service) {
@@ -42,10 +48,14 @@ export function postizSettings(
       break;
     }
     case "pinterest":
-      defaults = { ...(title ? { title } : {}) };
+      defaults = { ...(title ? { title } : {}), ...(link ? { link } : {}) };
       break;
     case "youtube":
-      if (title) defaults = { title };
+      defaults = {
+        ...(title ? { title } : {}),
+        ...(tags.length > 0 ? { tags: tags.map((value) => ({ value, label: value })) } : {}),
+        ...(thumbnail ? { thumbnail } : {}),
+      };
       break;
   }
 

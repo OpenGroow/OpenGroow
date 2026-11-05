@@ -14,6 +14,10 @@ import type { PublishableKind } from "@opengroow/agent-templates";
 const url = z.string().url().max(2048);
 const caption = z.string().max(5000);
 // Free, service-neutral extras (hashtags, a title...) an adapter may use.
+// Optional, service-neutral extras; an adapter forwards what its service supports.
+const link = url; // destination URL (Pinterest pin)
+const altText = z.string().max(1000); // image alt text
+const tags = z.array(z.string().min(1).max(100)).max(30); // YouTube tags
 const metadata = z.record(z.string(), z.any()).optional();
 
 export const videoPublishableSchema = z.strictObject({
@@ -22,6 +26,8 @@ export const videoPublishableSchema = z.strictObject({
   coverUrl: url.optional(),
   title: z.string().max(500).optional(),
   caption,
+  link: link.optional(),
+  tags: tags.optional(),
   metadata,
 });
 
@@ -29,6 +35,8 @@ export const imagePublishableSchema = z.strictObject({
   kind: z.literal("image"),
   imageUrl: url,
   caption,
+  link: link.optional(),
+  altText: altText.optional(),
   metadata,
 });
 
@@ -37,6 +45,8 @@ export const carouselPublishableSchema = z.strictObject({
   // Ordered: the first URL is the first slide.
   slideUrls: z.array(url).min(1).max(20),
   caption,
+  link: link.optional(),
+  altText: altText.optional(),
   metadata,
 });
 
