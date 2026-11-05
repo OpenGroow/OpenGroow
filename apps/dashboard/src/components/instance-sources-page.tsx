@@ -262,7 +262,7 @@ function SourceRowItem({ source, instanceId }: { source: SourceRow; instanceId: 
       >
         <div className="flex min-w-0 items-center gap-4">
           <SourceGlyph family={source.family} />
-          <div className="grid min-w-0 gap-0.5">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
               className="m-0 w-fit max-w-full truncate text-base font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
