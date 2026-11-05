@@ -97,7 +97,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
               id="publisher-url"
               name="url"
               autoComplete="off"
-              placeholder="https://postiz.example.com/api"
+              placeholder="https://postiz.example.com"
               value={urlValue}
               onChange={(event) => setUrl(event.target.value)}
             />

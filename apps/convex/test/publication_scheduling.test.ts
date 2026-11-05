@@ -114,7 +114,7 @@ const json = (body: unknown, status = 200) =>
 /** A fake Postiz. `postsResponse` answers `POST /posts`. */
 function stubPostiz(postsResponse: () => Response = () => json([{ postId: "post-1", integration: "ch-1" }])) {
   const fn = vi.fn(async (url: unknown, init?: RequestInit) => {
-    const path = String(url).replace("https://postiz.example.com/public/v1/", "");
+    const path = String(url).replace("https://postiz.example.com/api/public/v1/", "");
     if (path === "integrations") return json([{ id: "ch-1", name: "My IG", identifier: "instagram" }]);
     if (path === "upload-from-url") return json({ id: "media-1", path: "https://postiz.example.com/uploads/i.png" });
     if (path === "posts" && init?.method === "POST") return postsResponse();
@@ -133,7 +133,7 @@ function stubPostizListing(state: string | (() => Response), extra: Record<strin
       : json({ posts: [{ id: "post-1", state, publishDate: new Date().toISOString(), ...extra }] });
   });
   vi.stubGlobal("fetch", (url: unknown, init?: RequestInit) =>
-    String(url).includes("/public/v1/posts?") && !init?.method ? listing(url) : base(url, init),
+    String(url).includes("/api/public/v1/posts?") && !init?.method ? listing(url) : base(url, init),
   );
   return listing;
 }

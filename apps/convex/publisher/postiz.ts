@@ -6,7 +6,7 @@ import type {
 } from "./adapter.js";
 
 function endpoint(conn: PublisherConnection, path: string): string {
-  return `${conn.url.replace(/\/+$/, "")}/public/v1/${path}`;
+  return `${conn.url.replace(/\/+$/, "")}/api/public/v1/${path}`;
 }
 
 async function call(

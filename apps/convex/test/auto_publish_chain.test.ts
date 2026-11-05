@@ -364,7 +364,7 @@ describe("auto-publish chain (issue #329)", () => {
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     function stubPostiz() {
       const fn = vi.fn(async (url: unknown, init?: RequestInit) => {
-        const path = String(url).replace("https://postiz.example.com/public/v1/", "");
+        const path = String(url).replace("https://postiz.example.com/api/public/v1/", "");
         if (path === "integrations") return json([{ id: "ch-1", name: "IG", identifier: "instagram" }]);
         if (path === "upload-from-url") return json({ id: "m1", path: "https://postiz.example.com/u/1" });
         if (path === "posts" && init?.method === "POST") return json([{ postId: "post-1", integration: "ch-1" }]);

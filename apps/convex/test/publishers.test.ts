@@ -77,7 +77,7 @@ describe("publishers", () => {
     const fetchMock = stubFetch(() => json({ connected: true }));
     await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
     expect(fetchMock.mock.calls).toHaveLength(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("https://other.example.com/public/v1/is-connected");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://other.example.com/api/public/v1/is-connected");
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: "secret-key" });
   });
 

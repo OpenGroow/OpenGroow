@@ -115,7 +115,7 @@ const json = (body: unknown, status = 200) =>
 function stubPostiz(postsResponse: () => Response = () => json([{ postId: "post-1", integration: "ch-1" }])) {
   let uploads = 0;
   const fn = vi.fn(async (url: unknown, init?: RequestInit) => {
-    const path = String(url).replace("https://postiz.example.com/public/v1/", "");
+    const path = String(url).replace("https://postiz.example.com/api/public/v1/", "");
     if (path === "integrations") return json([{ id: "ch-1", name: "My IG", identifier: "instagram" }, { id: "ch-2", name: "My Pin", identifier: "pinterest" }]);
     if (path === "upload-from-url") {
       const n = ++uploads;
