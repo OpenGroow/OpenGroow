@@ -175,6 +175,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                         <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm">
                           {t.channelName ?? t.channelId}
                         </span>
+                        <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm text-muted-foreground">
+                          Settings{t.settings && Object.keys(t.settings).length > 0 ? ` · ${Object.keys(t.settings).length}` : ""}
+                        </span>
                         {t.channelProfile ? (
                           <span className="text-sm text-muted-foreground">@{t.channelProfile}</span>
                         ) : null}
