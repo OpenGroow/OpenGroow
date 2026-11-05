@@ -116,7 +116,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     <div className="grid gap-8">
       <PageHeader
         title="Publishers"
-        description="Connect the services that will publish your content (e.g. Postiz), then add their channels (Instagram, TikTok, Pinterest, etc.). These publishers are available to all Agents in this project."
+        description="Connect the services that will publish your content."
         action={
           <Button type="button" size="lg" disabled={showPostiz} onClick={() => setPicking(true)}>
             <Plus aria-hidden="true" />
