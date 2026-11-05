@@ -151,7 +151,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       {!showPostiz ? (
         <Card className="p-5 text-sm text-muted-foreground">No publisher yet. Add one to publish your Agents&apos; content.</Card>
       ) : (
-      <div className="grid gap-6">
+      <div className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5">
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
