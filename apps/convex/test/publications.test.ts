@@ -244,7 +244,7 @@ describe("Publish target", () => {
   it("can only be changed by the owner", async () => {
     const { t, missionId } = await seed();
     await expect(
-      t.withIdentity(OTHER).action(api.publisher_node.setTargets, { missionId, targets: ["instagram"] }),
+      t.withIdentity(OTHER).mutation(api.publications.setTargets, { missionId, targets: ["instagram"] }),
     ).rejects.toThrow();
   });
 });

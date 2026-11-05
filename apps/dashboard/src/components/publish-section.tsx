@@ -2,23 +2,22 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useAction, useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Card } from "@/components/ui/card";
+import { ChannelOption, toLocalInput } from "@/src/components/publish-channel-picker";
 
 /**
- * Where a Mission will be published (ADR-069): the logical Publish target
- * (editable by the reviewer), a pointer to the Publishers page when it is not
- * mapped, and the status of each Publication.
+ * Where a Mission will be published (ADR-069): the channels of the Project's
+ * Publisher (editable by the reviewer), a pointer to the Publishers page when
+ * one is not configured, and the status of each Publication.
  */
 
 export type PublishProjection = {
-  target: string | null;
   /** Every target the Mission goes to (one Publication each). */
   targets: string[];
-  declaredTargets: string[];
   /** Every target is mapped to a channel. */
   mapped: boolean;
   unmappedTargets: string[];
@@ -36,14 +35,6 @@ export type PublishProjection = {
   }>;
 };
 
-/** Epoch ms to the `YYYY-MM-DDTHH:mm` local time a datetime-local input expects. */
-function toLocalInput(ms: number | undefined): string {
-  if (ms === undefined) return "";
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 export function PublishSection({
   missionId,
   instanceId,
@@ -55,7 +46,8 @@ export function PublishSection({
   publish: PublishProjection;
   editable: boolean;
 }) {
-  const setPublishTargets = useAction(api.publisher_node.setPublishTargets);
+  const setPublishTargets = useMutation(api.publications.setTargets);
+  const publisher = useQuery(api.publishers.get, { instanceId });
   const setPublishAt = useMutation(api.publications.setPublishAt);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,19 +72,17 @@ export function PublishSection({
   async function toggleTarget(target: string, checked: boolean) {
     const next = checked ? [...targets, target] : targets.filter((t) => t !== target);
     if (next.length === 0) {
-      setError("At least one Publish target is required");
+      setError("Choose at least one channel");
       return;
     }
-    // Keep the declared order, whatever the order of the clicks.
-    const ordered = publish.declaredTargets.filter((t) => next.includes(t));
     setError(null);
     const previous = targets;
-    setTargets(ordered);
+    setTargets(next);
     try {
-      await setPublishTargets({ missionId: missionId as Id<"missions">, targets: ordered });
+      await setPublishTargets({ missionId: missionId as Id<"missions">, targets: next });
     } catch (err) {
       setTargets(previous);
-      setError(err instanceof Error ? err.message : "Could not change the Publish targets");
+      setError(err instanceof Error ? err.message : "Could not change the channels");
     }
   }
 
@@ -104,21 +94,19 @@ export function PublishSection({
       <h2 className="m-0 text-lg font-semibold text-foreground">Publication</h2>
       <div className="grid gap-2">
         <fieldset className="m-0 grid gap-2 border-0 p-0" disabled={!editable}>
-          <legend className="mb-1 p-0 text-xs font-semibold text-muted-foreground">Publish targets</legend>
-          {publish.declaredTargets.map((target) => (
-            <label key={target} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                data-testid={`publish-target-${target}`}
-                checked={targets.includes(target)}
-                onChange={(e) => { void toggleTarget(target, e.target.checked); }}
-              />
-              {target}
-            </label>
+          <legend className="mb-1 p-0 text-xs font-semibold text-muted-foreground">Publish to</legend>
+          {publisher?.targets.map((channel) => (
+            <ChannelOption
+              key={channel.target}
+              publisherUrl={publisher.url}
+              channel={channel}
+              checked={targets.includes(channel.target)}
+              onChange={(checked) => { void toggleTarget(channel.target, checked); }}
+            />
           ))}
         </fieldset>
         <p data-testid="publish-summary" className="m-0 text-sm text-muted-foreground">
-          Goes to {targets.join(", ")}{" "}
+          {targets.length === 0 ? "Choose a channel. " : `Goes to ${targets.join(", ")} `}
           {publishAtMs !== undefined && Number.isFinite(publishAtMs)
             ? `on ${new Date(publishAtMs).toLocaleString()}`
             : "immediately"}
@@ -141,7 +129,7 @@ export function PublishSection({
           <p data-testid="publish-unmapped" className="m-0 text-sm text-destructive">
             {!publish.publisherReady
               ? "The Publisher has no API key, so publishing is disabled."
-              : `Not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
+              : `Not on the Publisher or not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/publishers`}
               className="underline"

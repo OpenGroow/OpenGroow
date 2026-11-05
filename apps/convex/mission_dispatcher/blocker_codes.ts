@@ -25,7 +25,7 @@ export async function resolveMissionTypePublish(
   templateId: string,
   missionType: string,
   version?: string,
-): Promise<{ kind: string; targets: string[] } | undefined> {
+): Promise<{ kind: string } | undefined> {
   return publishDeclarationFor((await registry.resolve(projectId, templateId, version))?.manifest, missionType);
 }
 

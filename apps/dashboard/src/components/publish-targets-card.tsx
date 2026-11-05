@@ -11,55 +11,24 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 
 type Channel = { id: string; name: string; service: string; profile?: string; disabled?: boolean };
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
 type Target = Publisher["targets"][number];
 
-const PLATFORM_NAMES: Record<string, string> = { tiktok: "TikTok", linkedin: "LinkedIn", youtube: "YouTube", x: "X" };
-
-function platformName(service: string): string {
-  return PLATFORM_NAMES[service] ?? service.charAt(0).toUpperCase() + service.slice(1);
-}
-
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function slug(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-/** Default Publish target name of a channel: its service, or `service:handle` when that is already taken. */
-function defaultTargetName(channel: Channel, taken: Set<string>): string {
-  const base = slug(channel.service) || "channel";
-  if (!taken.has(base)) return base;
-  const qualified = `${base}:${slug(channel.profile ?? channel.name) || channel.id.slice(0, 6)}`;
-  return taken.has(qualified) ? `${qualified}-${channel.id.slice(0, 4)}` : qualified;
-}
-
-/** Postiz serves the logo of each platform next to its API (`<host>/icons/platforms/<service>.png`). */
-function PlatformLogo({ baseUrl, service }: { baseUrl: string; service?: string }) {
-  const [broken, setBroken] = useState(false);
-  if (!service || broken) return <span className="size-10 shrink-0 rounded-lg bg-muted" aria-hidden="true" />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`${baseUrl.replace(/\/+$/, "")}/icons/platforms/${encodeURIComponent(service)}.png`}
-      alt=""
-      className="size-10 shrink-0 rounded-lg object-contain"
-      onError={() => setBroken(true)}
-    />
-  );
-}
-
 /**
- * The channels of the Project's Publisher. Adding a channel creates the logical
- * Publish target an Agent's Template refers to (ADR-069), named after the
- * service by default; the name and the service-specific settings are editable.
+ * The channels of the Project's Publisher (ADR-069). Adding a channel gives it
+ * a generated key; Missions and Schedules pick channels from this list. The
+ * service-specific settings of each channel are editable.
  */
 export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: string; publisher: Publisher }) {
-  const mapTarget = useMutation(api.publishers.mapTarget);
+  const addChannel = useMutation(api.publishers.addChannel);
+  const updateSettings = useMutation(api.publishers.updateSettings);
   const removeTarget = useMutation(api.publishers.removeTarget);
   const listChannels = useAction(api.publishers.listChannels);
 
@@ -88,31 +57,20 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     if (publisher.hasApiKey) void loadChannels();
   }, [publisher.hasApiKey, loadChannels]);
 
-  async function save(channelId: string, channelName: string | undefined, service: string | undefined, target: string, settings?: Record<string, unknown>) {
+  async function handleAdd(channel: Channel) {
     setError("");
     try {
-      await mapTarget({ instanceId: id, target, channelId, channelName, channelService: service, settings });
-      return true;
-    } catch (e) {
-      setError(errorMessage(e, "Publish target could not be saved"));
-      return false;
-    }
-  }
-
-  async function handleAdd(channel: Channel) {
-    const name = defaultTargetName(channel, new Set(publisher.targets.map((t) => t.target)));
-    if (await save(channel.id, channel.name, channel.service, name)) {
+      const key = await addChannel({
+        instanceId: id,
+        channelId: channel.id,
+        channelName: channel.name,
+        channelService: channel.service,
+        ...(channel.profile ? { channelProfile: channel.profile } : {}),
+      });
       setPicking(false);
-      setOpen(name);
-    }
-  }
-
-  async function handleRename(current: Extract<Target, { mapped: true }>, raw: string) {
-    const next = raw.trim().toLowerCase();
-    if (!next || next === current.target) return;
-    if (await save(current.channelId, current.channelName, current.channelService, next, current.settings)) {
-      await removeTarget({ instanceId: id, target: current.target });
-      setOpen(next);
+      setOpen(key);
+    } catch (e) {
+      setError(errorMessage(e, "Channel could not be added"));
     }
   }
 
@@ -124,11 +82,16 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error();
         settings = parsed as Record<string, unknown>;
       } catch {
-        setError(`Settings of "${current.target}" must be a JSON object`);
+        setError("Settings must be a JSON object");
         return;
       }
     }
-    await save(current.channelId, current.channelName, current.channelService, current.target, settings);
+    setError("");
+    try {
+      await updateSettings({ instanceId: id, target: current.target, settings });
+    } catch (e) {
+      setError(errorMessage(e, "Settings could not be saved"));
+    }
   }
 
   const taken = new Set(publisher.targets.flatMap((t) => (t.mapped ? [t.channelId] : [])));
@@ -208,8 +171,13 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                       {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
                     </span>
                     {t.mapped ? (
-                      <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm">
-                        {t.channelName ?? t.channelId}
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="w-fit rounded-full border border-border px-3 py-0.5 text-sm">
+                          {t.channelName ?? t.channelId}
+                        </span>
+                        {t.channelProfile ? (
+                          <span className="text-sm text-muted-foreground">@{t.channelProfile}</span>
+                        ) : null}
                       </span>
                     ) : (
                       <StatusBadge tone="warning" label="Not mapped" />
@@ -218,17 +186,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
                 </button>
                 {expanded ? (
-                  <div className="grid gap-3 border-t border-border p-4 md:grid-cols-[1fr_2fr_auto] md:items-end">
-                    <div className="grid gap-2">
-                      <Label htmlFor={`target-${t.target}`}>Publish target name</Label>
-                      <Input
-                        id={`target-${t.target}`}
-                        autoComplete="off"
-                        defaultValue={t.target}
-                        disabled={!t.mapped}
-                        onBlur={(event) => t.mapped && void handleRename(t, event.target.value)}
-                      />
-                    </div>
+                  <div className="grid gap-3 border-t border-border p-4 md:grid-cols-[1fr_auto] md:items-end">
                     <div className="grid gap-2">
                       <Label htmlFor={`settings-${t.target}`}>Settings (JSON)</Label>
                       <Input
@@ -244,7 +202,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     <Button
                       type="button"
                       variant="ghost"
-                      aria-label={`Remove ${t.target}`}
+                      aria-label={`Remove ${t.mapped && t.channelName ? t.channelName : t.target}`}
                       onClick={() => void removeTarget({ instanceId: id, target: t.target })}
                     >
                       <Trash2 aria-hidden="true" />

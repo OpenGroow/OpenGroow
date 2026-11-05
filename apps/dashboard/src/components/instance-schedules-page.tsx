@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { PublishChannelPicker } from "./publish-channel-picker";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
   AutoPublishToggle,
@@ -422,6 +423,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               </div>
             </div>
 
+            {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
+              <PublishChannelPicker instanceId={instanceId} payloadText={payloadText} onChange={setPayloadText} />
+            ) : null}
+
             <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
               <legend className="px-1 text-sm font-semibold text-muted-foreground">
                 Frequency
@@ -718,6 +723,18 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                       <span className="font-semibold text-muted-foreground">Timezone</span>
                                       <span>{schedule.timezone}</span>
                                     </div>
+                                    {manifests
+                                      .find((m) => m.id === schedule.templateId)
+                                      ?.missionTypes?.find((t) => t.type === schedule.type)?.publish ? (
+                                      <PublishChannelPicker
+                                        instanceId={instanceId}
+                                        payloadText={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
+                                        onChange={(text) => {
+                                          setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: text }));
+                                          void savePayloadDraft(schedule._id, text);
+                                        }}
+                                      />
+                                    ) : null}
                                     <div className="grid gap-1">
                                       <span className="font-semibold text-muted-foreground">Payload</span>
                                       <Textarea

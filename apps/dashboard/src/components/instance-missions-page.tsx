@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
 import { COLUMNS, columnForMission, MissionKanbanBoard } from "./mission-kanban-board";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { PublishChannelPicker } from "./publish-channel-picker";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
@@ -315,6 +316,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 />
               </div>
             </div>
+
+            {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
+              <PublishChannelPicker instanceId={instanceId} payloadText={payloadText} onChange={setPayloadText} />
+            ) : null}
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

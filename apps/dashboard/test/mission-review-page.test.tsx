@@ -48,9 +48,11 @@ vi.mock("@convex/_generated/api", () => ({
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
     },
-    publisher_node: { setPublishTargets: "publisher_node.setPublishTargets", retryPublication: "publisher_node.retryPublication" },
+    publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publishers: { get: "publishers.get" },
     publications: {
       setPublishAt: "publications.setPublishAt",
+      setTargets: "publications.setTargets",
       listForMission: "publications.listForMission",
     },
     instances: { list: "instances.list" },
@@ -266,15 +268,22 @@ describe("MissionReviewContent", () => {
     });
   });
 
+  const PUBLISHER = {
+    url: "https://postiz.example.com",
+    hasApiKey: true,
+    targets: [
+      { target: "instagram", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
+      { target: "pinterest", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest" },
+    ],
+  };
+
   describe("Publish target (ADR-069)", () => {
     function withPublish(mapped: boolean) {
       const base = getReviewMock.getMockImplementation()!;
       getReviewMock.mockImplementation(async () => ({
         ...(await base()),
         publish: {
-          target: "instagram",
           targets: ["instagram"],
-          declaredTargets: ["instagram", "pinterest:recipes"],
           mapped,
           unmappedTargets: mapped ? [] : ["instagram"],
           publisherReady: true,
@@ -283,6 +292,7 @@ describe("MissionReviewContent", () => {
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return MISSION_WITH_ARTIFACT;
+        if (key === "publishers.get") return PUBLISHER;
         if (key === "publications.listForMission") {
           return [{ id: "p1", target: "instagram", status: "failed", error: "Postiz responded 500" }];
         }
@@ -308,26 +318,37 @@ describe("MissionReviewContent", () => {
       expect(document.querySelector('[data-testid="publish-unmapped"]')).toBeNull();
     });
 
-    it("lets the reviewer pick several Publish targets, and refuses to empty the list", async () => {
+    it("lists every channel of the Publisher with logo and handle, pre-checked from the Mission", async () => {
       withPublish(true);
-      const setTargets = vi.fn().mockResolvedValue(undefined);
-      const baseAction = useActionMock.getMockImplementation()!;
-      useActionMock.mockImplementation((action: string) =>
-        action === "publisher_node.setPublishTargets" ? setTargets : baseAction(action),
-      );
       await render();
       await act(async () => {});
-      const pinterest = document.querySelector('[data-testid="publish-target-pinterest:recipes"]') as HTMLInputElement;
+      const instagram = document.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
+      const pinterest = document.querySelector('[data-testid="publish-target-pinterest"]') as HTMLInputElement;
+      expect(instagram.checked).toBe(true);
+      expect(pinterest.checked).toBe(false);
+      expect(document.body.textContent).toContain("@myinsta");
+      expect(document.querySelector('[data-testid="publish-section"] img')?.getAttribute("src")).toBe(
+        "https://postiz.example.com/icons/platforms/instagram.png",
+      );
+    });
+
+    it("lets the reviewer pick several channels, and refuses to empty the list", async () => {
+      withPublish(true);
+      const setTargets = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation((key: string) => (key === "publications.setTargets" ? setTargets : vi.fn()));
+      await render();
+      await act(async () => {});
+      const pinterest = document.querySelector('[data-testid="publish-target-pinterest"]') as HTMLInputElement;
       await act(async () => { pinterest.click(); });
-      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram", "pinterest:recipes"] });
-      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram, pinterest:recipes");
+      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram", "pinterest"] });
+      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram, pinterest");
 
       setTargets.mockClear();
       const instagram = document.querySelector('[data-testid="publish-target-instagram"]') as HTMLInputElement;
       await act(async () => { instagram.click(); });
       await act(async () => { pinterest.click(); });
       expect(setTargets).toHaveBeenCalledTimes(1);
-      expect(document.body.textContent).toContain("At least one Publish target is required");
+      expect(document.body.textContent).toContain("Choose at least one channel");
     });
 
     it("names the unmapped target in the warning", async () => {
@@ -363,8 +384,6 @@ describe("MissionReviewContent", () => {
       getReviewMock.mockImplementation(async () => ({
         ...(await base()),
         publish: {
-          target: "instagram",
-          declaredTargets: ["instagram"],
           mapped: true,
           targets: ["instagram"],
           unmappedTargets: [],
@@ -375,6 +394,7 @@ describe("MissionReviewContent", () => {
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return MISSION_WITH_ARTIFACT;
+        if (key === "publishers.get") return PUBLISHER;
         if (key === "publications.listForMission") {
           return [{ id: "p1", target: "instagram", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }];
         }
