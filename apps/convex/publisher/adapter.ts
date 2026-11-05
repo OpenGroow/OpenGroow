@@ -17,6 +17,8 @@ export type PublisherChannel = {
   name: string;
   service: string;
   picture?: string;
+  /** The account handle on the service (for example `love_youmake`). */
+  profile?: string;
   disabled?: boolean;
 };
 

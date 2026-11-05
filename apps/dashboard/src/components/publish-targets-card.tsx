@@ -1,79 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/native-select";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
-type Channel = { id: string; name: string; service: string; disabled?: boolean };
+type Channel = { id: string; name: string; service: string; picture?: string; profile?: string; disabled?: boolean };
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
+type Target = Publisher["targets"][number];
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-/** The Publish targets of a Project's Publisher and their mapping to the service's channels (ADR-069). */
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Default Publish target name of a channel: its service, or `service:profile` when that is already taken. */
+function defaultTargetName(channel: Channel, taken: Set<string>): string {
+  const base = slug(channel.service) || "channel";
+  if (!taken.has(base)) return base;
+  const qualified = `${base}:${slug(channel.profile ?? channel.name) || channel.id.slice(0, 6)}`;
+  return taken.has(qualified) ? `${qualified}-${channel.id.slice(0, 4)}` : qualified;
+}
+
+/**
+ * The channels of the Project's Publisher. Enabling a channel creates the
+ * logical Publish target an Agent's Template refers to (ADR-069); the target
+ * is named after the service and can be renamed.
+ */
 export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: string; publisher: Publisher }) {
-  const addTarget = useMutation(api.publishers.addTarget);
   const mapTarget = useMutation(api.publishers.mapTarget);
   const removeTarget = useMutation(api.publishers.removeTarget);
   const listChannels = useAction(api.publishers.listChannels);
 
-  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [channels, setChannels] = useState<Channel[] | null>(null);
-  const [newTarget, setNewTarget] = useState("");
-  const [targetError, setTargetError] = useState("");
+  const [error, setError] = useState("");
 
-
-  async function handleLoadChannels() {
-    setLoadingChannels(true);
+  const loadChannels = useCallback(async () => {
+    setLoading(true);
     setMessage(null);
     try {
       const result = await listChannels({ instanceId: id });
       if (result.ok) setChannels(result.channels);
       else setMessage(result.error);
-    } catch (error) {
-      setMessage(errorMessage(error, "Channels could not be loaded"));
+    } catch (e) {
+      setMessage(errorMessage(e, "Channels could not be loaded"));
     } finally {
-      setLoadingChannels(false);
+      setLoading(false);
     }
-  }
+  }, [id, listChannels]);
 
-  async function handleAddTarget() {
-    setTargetError("");
+  useEffect(() => {
+    if (publisher.hasApiKey) void loadChannels();
+  }, [publisher.hasApiKey, loadChannels]);
+
+  const targetOf = (channelId: string): Target | undefined =>
+    publisher.targets.find((t) => t.mapped && t.channelId === channelId);
+
+  async function save(channel: Channel, target: string, settings?: Record<string, unknown>): Promise<boolean> {
+    setError("");
     try {
-      await addTarget({ instanceId: id, target: newTarget });
-      setNewTarget("");
-    } catch (error) {
-      setTargetError(errorMessage(error, "Publish target could not be added"));
+      await mapTarget({
+        instanceId: id,
+        target,
+        channelId: channel.id,
+        channelName: channel.name,
+        channelService: channel.service,
+        settings,
+      });
+      return true;
+    } catch (e) {
+      setError(errorMessage(e, "Publish target could not be saved"));
+      return false;
     }
   }
 
-  async function handleMap(target: string, channelId: string) {
-    const channel = channels?.find((c) => c.id === channelId);
-    if (!channel) return;
-    const current = publisher?.targets.find((t) => t.target === target);
-    await mapTarget({
-      instanceId: id,
-      target,
-      channelId: channel.id,
-      channelName: channel.name,
-      channelService: channel.service,
-      settings: current?.mapped ? current.settings : undefined,
-    });
+  async function handleToggle(channel: Channel, enabled: boolean) {
+    const current = targetOf(channel.id);
+    if (!enabled) {
+      if (current) await removeTarget({ instanceId: id, target: current.target });
+      return;
+    }
+    if (current) return;
+    await save(channel, defaultTargetName(channel, new Set(publisher.targets.map((t) => t.target))));
   }
 
-  async function handleSettings(target: string, raw: string) {
-    const current = publisher?.targets.find((t) => t.target === target);
-    if (!current?.mapped) return;
+  async function handleRename(channel: Channel, current: Target, raw: string) {
+    const next = raw.trim().toLowerCase();
+    if (!next || next === current.target || !current.mapped) return;
+    if (await save(channel, next, current.settings)) await removeTarget({ instanceId: id, target: current.target });
+  }
+
+  async function handleSettings(channel: Channel, current: Target, raw: string) {
+    if (!current.mapped) return;
     let settings: Record<string, unknown> = {};
     if (raw.trim()) {
       try {
@@ -81,121 +110,130 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error();
         settings = parsed as Record<string, unknown>;
       } catch {
-        setTargetError(`Settings of "${target}" must be a JSON object`);
+        setError(`Settings of "${current.target}" must be a JSON object`);
         return;
       }
     }
-    setTargetError("");
-    await mapTarget({
-      instanceId: id,
-      target,
-      channelId: current.channelId,
-      channelName: current.channelName,
-      channelService: current.channelService,
-      settings,
-    });
+    await save(channel, current.target, settings);
   }
+
+  const orphans = publisher.targets.filter((t) => !t.mapped || !channels?.some((c) => c.id === t.channelId));
 
   return (
     <Card className="gap-4 p-5">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="m-0 text-base font-semibold">Publish targets</h2>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={loadingChannels}
-          onClick={() => void handleLoadChannels()}
-        >
-          {loadingChannels ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
-          {channels ? "Refresh channels" : "Load channels"}
+        <h2 className="m-0 text-base font-semibold">Channels</h2>
+        <Button type="button" variant="outline" disabled={loading} onClick={() => void loadChannels()}>
+          {loading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+          Refresh channels
         </Button>
       </div>
       <p className="m-0 text-sm text-muted-foreground">
-        A Publish target is the logical destination an Agent&apos;s content goes to, such as
-        instagram or pinterest:recipes. Map each one to a channel of your Postiz account.
+        Enable the channels of your Postiz account that Agents may publish to. Each enabled channel becomes a Publish
+        target, such as <code>instagram</code> or <code>pinterest:recipes</code>, which is the name Templates refer to.
+        Rename it if you have several channels on the same service.
       </p>
       {message ? <StatusBadge tone="error" label={message} /> : null}
+      {!publisher.hasApiKey ? (
+        <p className="m-0 text-sm text-muted-foreground">Save the connection first to list your channels.</p>
+      ) : null}
 
-      {publisher.targets.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">No Publish target yet.</p>
-      ) : (
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {publisher.targets.map((t) => (
-            <li key={t.target} className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-              <div className="grid gap-2">
-                <span className="font-medium">{t.target}</span>
-                {t.mapped ? (
-                  <StatusBadge tone="active" label={`Mapped to ${t.channelName ?? t.channelId}`} />
-                ) : (
-                  <StatusBadge tone="warning" label="Not mapped" />
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor={`channel-${t.target}`}>Channel</Label>
-                <NativeSelect
-                  id={`channel-${t.target}`}
-                  aria-label={`Channel for ${t.target}`}
-                  disabled={!channels}
-                  value={t.mapped ? t.channelId : ""}
-                  onChange={(event) => void handleMap(t.target, event.target.value)}
-                >
-                  <option value="" disabled>
-                    {channels ? "Choose a channel" : "Load channels first"}
-                  </option>
-                  {(channels ?? []).map((c) => (
-                    <option key={c.id} value={c.id} disabled={c.disabled}>
-                      {c.name} ({c.service})
-                    </option>
-                  ))}
-                  {t.mapped && !channels?.some((c) => c.id === t.channelId) ? (
-                    <option value={t.channelId}>{t.channelName ?? t.channelId}</option>
-                  ) : null}
-                </NativeSelect>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor={`settings-${t.target}`}>Settings (JSON)</Label>
-                <Input
-                  id={`settings-${t.target}`}
-                  key={JSON.stringify(t.mapped ? t.settings ?? {} : {})}
-                  autoComplete="off"
-                  disabled={!t.mapped}
-                  placeholder='{"board": "recipes"}'
-                  defaultValue={t.mapped && t.settings ? JSON.stringify(t.settings) : ""}
-                  onBlur={(event) => void handleSettings(t.target, event.target.value)}
+      {channels && channels.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">Your Postiz account has no channel yet.</p>
+      ) : null}
+
+      <ul className="m-0 grid list-none gap-3 p-0">
+        {(channels ?? []).map((channel) => {
+          const current = targetOf(channel.id);
+          return (
+            <li
+              key={channel.id}
+              className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-[auto_1fr_1fr_1fr] md:items-center"
+            >
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  aria-label={`Enable ${channel.name}`}
+                  checked={Boolean(current)}
+                  disabled={channel.disabled}
+                  onChange={(event) => void handleToggle(channel, event.target.checked)}
                 />
+                {channel.picture ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={channel.picture} alt="" className="size-10 rounded-full object-cover" />
+                ) : (
+                  <span className="size-10 rounded-full bg-muted" aria-hidden="true" />
+                )}
+              </label>
+              <div className="grid gap-1">
+                <span className="font-medium">{channel.name}</span>
+                <span className="text-sm text-muted-foreground">
+                  {channel.service}
+                  {channel.profile ? ` · @${channel.profile}` : ""}
+                  {channel.disabled ? " · disabled in Postiz" : ""}
+                </span>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label={`Remove ${t.target}`}
-                onClick={() => void removeTarget({ instanceId: id, target: t.target })}
-              >
-                <Trash2 aria-hidden="true" />
-              </Button>
+              {current && current.mapped ? (
+                <>
+                  <div className="grid gap-2">
+                    <Label htmlFor={`target-${channel.id}`}>Publish target</Label>
+                    <Input
+                      id={`target-${channel.id}`}
+                      key={current.target}
+                      autoComplete="off"
+                      defaultValue={current.target}
+                      onBlur={(event) => void handleRename(channel, current, event.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor={`settings-${channel.id}`}>Settings (JSON)</Label>
+                    <Input
+                      id={`settings-${channel.id}`}
+                      key={JSON.stringify(current.settings ?? {})}
+                      autoComplete="off"
+                      placeholder='{"board": "recipes"}'
+                      defaultValue={current.settings ? JSON.stringify(current.settings) : ""}
+                      onBlur={(event) => void handleSettings(channel, current, event.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm text-muted-foreground md:col-span-2">Not enabled</span>
+              )}
             </li>
-          ))}
-        </ul>
-      )}
+          );
+        })}
+      </ul>
 
-      <div className="flex flex-wrap items-end gap-3">
+      {channels && orphans.length > 0 ? (
         <div className="grid gap-2">
-          <Label htmlFor="new-target">New Publish target</Label>
-          <Input
-            id="new-target"
-            autoComplete="off"
-            placeholder="pinterest:recipes"
-            value={newTarget}
-            onChange={(event) => setNewTarget(event.target.value)}
-          />
+          <h3 className="m-0 text-sm font-medium">Other Publish targets</h3>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {orphans.map((t) => (
+              <li key={t.target} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {t.target}{" "}
+                  <span className="text-muted-foreground">
+                    {t.mapped ? `(${t.channelName ?? t.channelId}, no longer in Postiz)` : "(no channel)"}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={`Remove ${t.target}`}
+                  onClick={() => void removeTarget({ instanceId: id, target: t.target })}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
         </div>
-        <Button type="button" variant="outline" disabled={!newTarget.trim()} onClick={() => void handleAddTarget()}>
-          <Plus aria-hidden="true" />
-          Add target
-        </Button>
-      </div>
-      {targetError ? (
+      ) : null}
+
+      {error ? (
         <p className="m-0 text-sm text-destructive" aria-live="polite">
-          {targetError}
+          {error}
         </p>
       ) : null}
     </Card>

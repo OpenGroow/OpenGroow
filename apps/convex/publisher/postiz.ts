@@ -69,6 +69,7 @@ export const postizAdapter: PublisherAdapter = {
         name: typeof raw.name === "string" ? raw.name : raw.id,
         service: typeof raw.identifier === "string" ? raw.identifier : "unknown",
         ...(typeof raw.picture === "string" ? { picture: raw.picture } : {}),
+        ...(typeof raw.profile === "string" && raw.profile ? { profile: raw.profile } : {}),
         ...(typeof raw.disabled === "boolean" ? { disabled: raw.disabled } : {}),
       });
     }
