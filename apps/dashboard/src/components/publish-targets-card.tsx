@@ -32,7 +32,6 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const [newTarget, setNewTarget] = useState("");
   const [targetError, setTargetError] = useState("");
 
-  const unmappedCount = publisher.targets.filter((t) => !t.mapped).length;
 
   async function handleLoadChannels() {
     setLoadingChannels(true);
@@ -115,12 +114,6 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         A Publish target is the logical destination an Agent&apos;s content goes to, such as
         instagram or pinterest:recipes. Map each one to a channel of your Postiz account.
       </p>
-      {unmappedCount > 0 ? (
-        <p data-testid="unmapped-targets-warning" className="m-0 text-sm text-destructive" role="status">
-          {unmappedCount === 1 ? "1 Publish target is not mapped" : `${unmappedCount} Publish targets are not mapped`}
-          : publishing to {unmappedCount === 1 ? "it is" : "them is"} disabled until you choose a channel.
-        </p>
-      ) : null}
       {message ? <StatusBadge tone="error" label={message} /> : null}
 
       {publisher.targets.length === 0 ? (
