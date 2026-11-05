@@ -49,4 +49,28 @@ describe("validateManifest — missionTypes[].publish", () => {
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toContain(fragment);
   });
+
+  it("accepts media paths for the media fields of the kind", () => {
+    expect(
+      validateManifest(manifestWith({ kind: "carousel", media: { slideUrls: "result.slides[*].url" } })).ok,
+    ).toBe(true);
+    expect(
+      validateManifest(
+        manifestWith({ kind: "video", media: { videoUrl: "result.video.url", coverUrl: "result.cover[0]" } }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  it.each([
+    [{ kind: "video", media: { imageUrl: "a.b" } }, "imageUrl"],
+    [{ kind: "video", media: { videoUrl: "" } }, "path"],
+    [{ kind: "video", media: { videoUrl: "a..b" } }, "path"],
+    [{ kind: "video", media: { videoUrl: "a[*].b" } }, "[*]"],
+    [{ kind: "carousel", media: { slideUrls: "$.a/b" } }, "path"],
+    [{ kind: "video", media: ["a"] }, "object"],
+  ])("rejects an invalid media %j", (publish, fragment) => {
+    const result = validateManifest(manifestWith(publish));
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain(fragment);
+  });
 });
