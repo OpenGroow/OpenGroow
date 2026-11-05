@@ -9,8 +9,8 @@ import PublishersPage from "../app/(app)/projects/[projectId]/publishers/page";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
-const mutations: Record<string, ReturnType<typeof vi.fn>> = {};
-const actions: Record<string, ReturnType<typeof vi.fn>> = {};
+const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
+const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),

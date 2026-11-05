@@ -8,7 +8,7 @@ import { PublishTargetsCard } from "../src/components/publish-targets-card";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const mutations: Record<string, ReturnType<typeof vi.fn>> = {};
+const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const listChannels = vi.fn();
 
 vi.mock("convex/react", () => ({
