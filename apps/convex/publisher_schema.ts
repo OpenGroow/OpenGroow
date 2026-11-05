@@ -20,13 +20,15 @@ export const publisherTables = {
     url: v.string(),
     // Never returned to the dashboard in clear: queries expose `hasApiKey` only.
     apiKey: v.optional(v.string()),
-    // Logical Publish targets. A target without `channelId` is unmapped.
+    // The channels of the Publisher. `target` is the generated key of an entry
+    // (a Publish target); a legacy entry without `channelId` is unmapped.
     targets: v.array(
       v.object({
         target: v.string(),
         channelId: v.optional(v.string()),
         channelName: v.optional(v.string()),
         channelService: v.optional(v.string()),
+        channelProfile: v.optional(v.string()),
         settings: v.optional(v.record(v.string(), v.any())),
       }),
     ),

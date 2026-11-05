@@ -60,7 +60,6 @@ export type MissionPublishProjection = {
   target: string | null;
   /** Every target the Mission goes to (one Publication each). */
   targets: string[];
-  declaredTargets: string[];
   /** Every target is mapped to a channel on the Project's Publisher. */
   mapped: boolean;
   /** The targets that have no channel yet (empty when `mapped`). */
@@ -203,12 +202,11 @@ function publishBlockedReason(publish: MissionPublishProjection): string | undef
     return "The Publisher has no API key (or none is set up): configure it on the Publishers page";
   }
   if (publish.targets.length === 0) {
-    return "No Publish target: configure one on the Publishers page";
+    return "Choose a channel";
   }
   if (publish.unmappedTargets.length > 0) {
     const names = publish.unmappedTargets.map((t) => `"${t}"`).join(", ");
-    const noun = publish.unmappedTargets.length > 1 ? "targets" : "target";
-    return `Publish ${noun} ${names} not configured: map ${publish.unmappedTargets.length > 1 ? "them" : "it"} on the Publishers page`;
+    return `Channel ${names} is not on the Project's Publisher (or not configured): check the Publishers page`;
   }
   return undefined;
 }

@@ -408,7 +408,7 @@ export type MissionType = {
   contextProviders?: string[];
   /**
    * Publishing declaration (ADR-069): the Publishable kind this Mission type
-   * produces and the Publish targets it may be sent to. When present, the
+   * produces (destinations are chosen per Mission or Schedule). When present, the
    * Artifact of a Run must carry a `publishable` of this kind. The Agent never
    * publishes. Absent: the Mission type behaves as before.
    */

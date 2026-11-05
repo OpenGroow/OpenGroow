@@ -393,7 +393,7 @@ describe("activateProjectAgent", () => {
       manifest: {
         ...seo.manifest,
         missionTypes: seo.manifest.missionTypes?.map((m) =>
-          m.type === "create_article" ? { ...m, publish: { kind: "image", targets: ["instagram"] } } : m,
+          m.type === "create_article" ? { ...m, publish: { kind: "image" } } : m,
         ),
       },
     } as typeof seo;

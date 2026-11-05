@@ -134,61 +134,68 @@ describe("publishers", () => {
     });
   });
 
-  it("maps a Publish target to a channel with per-target settings, and flags unmapped targets", async () => {
+  it("adds channels under generated keys, stores their profile, edits settings and removes them", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, CONNECTION);
 
-    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "pinterest:recipes" });
-    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "instagram" });
+    const insta = await owner.mutation(api.publishers.addChannel, {
+      instanceId: INSTANCE_ID,
+      channelId: "c1",
+      channelName: "My Insta",
+      channelService: "instagram",
+      channelProfile: "myinsta",
+    });
+    const second = await owner.mutation(api.publishers.addChannel, {
+      instanceId: INSTANCE_ID,
+      channelId: "c2",
+      channelName: "Other Insta",
+      channelService: "instagram",
+      channelProfile: "Other.Insta",
+      settings: { board: "b" },
+    });
+    expect(insta).toBe("instagram");
+    expect(second).toBe("instagram:other-insta");
+    // Adding the same channel again is idempotent.
+    await expect(
+      owner.mutation(api.publishers.addChannel, {
+        instanceId: INSTANCE_ID,
+        channelId: "c1",
+        channelName: "My Insta",
+        channelService: "instagram",
+      }),
+    ).resolves.toBe("instagram");
+
+    await owner.mutation(api.publishers.updateSettings, { instanceId: INSTANCE_ID, target: second, settings: { board: "recipes" } });
     let publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
     expect(publisher?.targets).toEqual([
-      { target: "pinterest:recipes", mapped: false },
-      { target: "instagram", mapped: false },
-    ]);
-
-    await owner.mutation(api.publishers.mapTarget, {
-      instanceId: INSTANCE_ID,
-      target: "pinterest:recipes",
-      channelId: "c2",
-      channelName: "Pins",
-      settings: { board: "recipes-board" },
-    });
-    publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
-    expect(publisher?.targets).toEqual([
+      { target: "instagram", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta" },
       {
-        target: "pinterest:recipes",
+        target: "instagram:other-insta",
         mapped: true,
         channelId: "c2",
-        channelName: "Pins",
-        settings: { board: "recipes-board" },
+        channelName: "Other Insta",
+        channelService: "instagram",
+        channelProfile: "Other.Insta",
+        settings: { board: "recipes" },
       },
-      { target: "instagram", mapped: false },
     ]);
 
     await owner.mutation(api.publishers.removeTarget, { instanceId: INSTANCE_ID, target: "instagram" });
     publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
-    expect(publisher?.targets.map((x) => x.target)).toEqual(["pinterest:recipes"]);
+    expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:other-insta"]);
   });
 
-  it("rejects targets without a Publisher and malformed target names", async () => {
+  it("rejects adding a channel without a Publisher", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
     await expect(
-      owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "instagram" }),
+      owner.mutation(api.publishers.addChannel, {
+        instanceId: INSTANCE_ID,
+        channelId: "c1",
+        channelName: "x",
+        channelService: "instagram",
+      }),
     ).rejects.toThrow("No Publisher configured");
-    await owner.mutation(api.publishers.save, CONNECTION);
-    await expect(
-      owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: "Bad Target!" }),
-    ).rejects.toThrow("Invalid Publish target");
-  });
-
-  it("lowercases target names so \"Instagram\" becomes \"instagram\"", async () => {
-    const t = await seed();
-    const owner = t.withIdentity(OWNER);
-    await owner.mutation(api.publishers.save, CONNECTION);
-    await owner.mutation(api.publishers.addTarget, { instanceId: INSTANCE_ID, target: " Instagram " });
-    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
-    expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram"]);
   });
 });

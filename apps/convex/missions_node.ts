@@ -47,7 +47,6 @@ export const getReview = action({
     const publish = declaration
       ? await ctx.runQuery(internal.publications.reviewState, {
           missionId: args.missionId,
-          declaredTargets: declaration.targets,
         })
       : undefined;
     return buildMissionReviewProjection(
@@ -497,7 +496,7 @@ async function executeReviewAction(
   // --- Mission types that declare `publish`: the Publisher is the executor (ADR-069) ---
   const publishDeclaration = publishDeclarationFor(template.manifest, mission.type);
   if (publishDeclaration && actionDef.key === "publish") {
-    await publishThroughPublisher(ctx, mission, publishDeclaration.targets);
+    await publishThroughPublisher(ctx, mission);
     return { ok: true };
   }
 
@@ -852,7 +851,7 @@ export const autoPublishChain = internalAction({
       try {
         await executeReviewAction(ctx, { mission: approvedMission, template, actionKey: "publish" });
       } catch (err) {
-        const recorded = await recordAutoPublishFailure(ctx, args.missionId, declaration, err);
+        const recorded = await recordAutoPublishFailure(ctx, args.missionId, err);
         if (!recorded) await failMission(`publish step failed — ${errorMessage(err)}`);
       }
       return;

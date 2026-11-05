@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { validateManifest } from "./index.js";
 
 // Issue #16, ADR-069: a Mission type declares the Publishable kind it produces
-// and the Publish targets it may use.
+// only; destinations are chosen per Mission/Schedule.
 const manifestWith = (publish: unknown) => ({
   id: "t",
   name: "T",
@@ -13,9 +13,8 @@ const manifestWith = (publish: unknown) => ({
 });
 
 describe("validateManifest — missionTypes[].publish", () => {
-  it("accepts a known kind with well-formed targets", () => {
-    const result = validateManifest(manifestWith({ kind: "carousel", targets: ["instagram", "pinterest:recipes"] }));
-    expect(result.ok).toBe(true);
+  it("accepts a known kind", () => {
+    expect(validateManifest(manifestWith({ kind: "carousel" })).ok).toBe(true);
   });
 
   it("accepts a Mission type without publish", () => {
@@ -23,25 +22,14 @@ describe("validateManifest — missionTypes[].publish", () => {
   });
 
   it("rejects an unknown kind", () => {
-    const result = validateManifest(manifestWith({ kind: "article", targets: ["instagram"] }));
+    const result = validateManifest(manifestWith({ kind: "article" }));
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toContain('"article"');
   });
 
-  it.each([
-    ["no targets", { kind: "video" }],
-    ["empty targets", { kind: "video", targets: [] }],
-    ["non-string target", { kind: "video", targets: [3] }],
-    ["blank target", { kind: "video", targets: [" "] }],
-    ["target with spaces", { kind: "video", targets: ["my channel"] }],
-    ["duplicate targets", { kind: "video", targets: ["x", "x"] }],
-  ])("rejects malformed targets: %s", (_name, publish) => {
-    const result = validateManifest(manifestWith(publish));
+  it("rejects targets: destinations are not declared by Templates", () => {
+    const result = validateManifest(manifestWith({ kind: "video", targets: ["instagram"] }));
     expect(result.ok).toBe(false);
-    expect((result as { reason: string }).reason).toContain("publish");
-  });
-
-  it("rejects an unknown key inside publish", () => {
-    expect(validateManifest(manifestWith({ kind: "video", targets: ["x"], channelId: "1" })).ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain('unknown key "targets"');
   });
 });

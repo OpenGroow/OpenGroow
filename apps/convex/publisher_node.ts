@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { publishDeclarationFor, type PublishDeclaration } from "@opengroow/agent-templates";
+import { publishDeclarationFor } from "@opengroow/agent-templates";
 import { internal } from "./_generated/api.js";
 import { action, type ActionCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
@@ -10,8 +10,7 @@ import { errorMessage } from "./mission_dispatcher_node.js";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 
 // Publisher orchestration (ADR-069, docs/domain/publishing.md): sending a
-// Mission's Publishable through the Project's Publisher, the human's edits of
-// its Publish targets, and the retry of a failed Publication.
+// Mission's Publishable through the Project's Publisher, and the retry of a failed Publication.
 
 /**
  * Sends the Publishable of a Mission to its Publish target(s) through the
@@ -22,12 +21,10 @@ import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry
 export async function publishThroughPublisher(
   ctx: ActionCtx,
   mission: Doc<"missions">,
-  declaredTargets: string[],
   target?: string,
 ): Promise<void> {
   const prepared = await ctx.runMutation(internal.publications.beginAll, {
     missionId: mission._id,
-    declaredTargets,
     ...(target ? { target } : {}),
   });
   // One Publication per target, independent: a failing target does not stop
@@ -73,17 +70,15 @@ export async function publishThroughPublisher(
 /**
  * `autoPublish` could not publish: keeps the error on the Mission's
  * Publications (the Mission stays `approved`, retryable). Returns false when
- * there is no Publish target to attach it to, so the caller fails the Mission.
+ * no channel was chosen to attach it to, so the caller fails the Mission.
  */
 export async function recordAutoPublishFailure(
   ctx: ActionCtx,
   missionId: Id<"missions">,
-  declaration: PublishDeclaration,
   err: unknown,
 ): Promise<boolean> {
   return await ctx.runMutation(internal.publications.recordFailure, {
     missionId,
-    declaredTargets: declaration.targets,
     error: errorMessage(err),
   });
 }
@@ -102,19 +97,6 @@ async function ownedPublishingMission(ctx: ActionCtx, missionId: Id<"missions">)
   return { mission, declaration };
 }
 
-/** The human sends a Mission to one or several targets during review (one Publication each). */
-export const setPublishTargets = action({
-  args: { missionId: v.id("missions"), targets: v.array(v.string()) },
-  handler: async (ctx, args): Promise<void> => {
-    const { declaration } = await ownedPublishingMission(ctx, args.missionId);
-    await ctx.runMutation(internal.publications.storeTargets, {
-      missionId: args.missionId,
-      targets: args.targets,
-      declaredTargets: declaration.targets,
-    });
-  },
-});
-
 /**
  * Retries one `failed` Publication on its own (issue #20): the other
  * Publications of the Mission are untouched; the Mission becomes `done` once
@@ -127,11 +109,11 @@ export const retryPublication = action({
       publicationId: args.publicationId,
     });
     if (!publication) throw new Error("Publication not found");
-    const { mission, declaration } = await ownedPublishingMission(ctx, publication.missionId);
+    const { mission } = await ownedPublishingMission(ctx, publication.missionId);
     if (mission.status !== "approved") {
       throw new Error(`A Publication can only be retried while the Mission is approved, got: "${mission.status}"`);
     }
-    await publishThroughPublisher(ctx, mission, declaration.targets, publication.target);
+    await publishThroughPublisher(ctx, mission, publication.target);
     return { ok: true };
   },
 });

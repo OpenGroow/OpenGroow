@@ -1,8 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { isValidPublishTarget } from "@opengroow/agent-templates";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
-import { effectivePublishTargets } from "./publication_targets.js";
+import { effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
@@ -34,29 +33,29 @@ export const listForMission = query({
 });
 
 /**
- * Stores the Publish targets the human chose in the review. Called by the
- * `setPublishTargets` action (publisher_node.ts), which checked the caller and
- * resolved the targets the Mission type declares. `publishTarget` and
- * `publishTargets` are always written together so they cannot disagree.
+ * The human chooses the Publish targets of a Mission during review: one or
+ * several channels of the Project's Publisher (one Publication each).
  */
-export const storeTargets = internalMutation({
-  args: { missionId: v.id("missions"), targets: v.array(v.string()), declaredTargets: v.array(v.string()) },
+export const setTargets = mutation({
+  args: { missionId: v.id("missions"), targets: v.array(v.string()) },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
+    const ownerId = await ownerIdFor(ctx, mission.instanceId);
+    if (mission.ownerId !== ownerId) throw new Error("Forbidden");
     if (mission.status !== "to_validate" && mission.status !== "approved") {
       throw new Error(`The Publish targets can only be changed during review, got: "${mission.status}"`);
     }
     const targets = [...new Set(args.targets)];
-    if (targets.length === 0) throw new Error("At least one Publish target is required");
-    for (const target of targets) {
-      if (!isValidPublishTarget(target) || !args.declaredTargets.includes(target)) {
-        throw new Error(`Publish target "${target}" is not one this Mission type may use`);
-      }
+    if (targets.length === 0) throw new Error("Choose at least one channel");
+    const publisher = await publisherOf(ctx, mission.instanceId);
+    const { unknown } = unusableTargets(publisher?.targets, targets);
+    if (unknown.length > 0) {
+      throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
     }
     const payload = mission.payload && typeof mission.payload === "object" ? mission.payload : {};
     await ctx.db.patch(args.missionId, {
-      payload: { ...(payload as Record<string, unknown>), publishTarget: targets[0], publishTargets: targets },
+      payload: { ...(payload as Record<string, unknown>), publishTargets: targets },
       updatedAt: Date.now(),
     });
   },
@@ -111,11 +110,11 @@ async function publicationFor(ctx: QueryCtx, missionId: Id<"missions">, target: 
 
 /** What the review page needs to show and gate `publish`. */
 export const reviewState = internalQuery({
-  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()) },
+  args: { missionId: v.id("missions") },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const targets = effectivePublishTargets(mission.payload, args.declaredTargets);
+    const targets = effectivePublishTargets(mission.payload);
     const publisher = await publisherOf(ctx, mission.instanceId);
     const unmappedTargets = targets.filter(
       (name) => !publisher?.targets.some((t) => t.target === name && t.channelId),
@@ -127,7 +126,6 @@ export const reviewState = internalQuery({
     return {
       target: targets[0] ?? null,
       targets,
-      declaredTargets: args.declaredTargets,
       mapped: targets.length > 0 && unmappedTargets.length === 0,
       unmappedTargets,
       publisherReady: Boolean(publisher?.apiKey),
@@ -155,29 +153,25 @@ export const reviewState = internalQuery({
 export const beginAll = internalMutation({
   args: {
     missionId: v.id("missions"),
-    declaredTargets: v.array(v.string()),
     /** Retry of one existing Publication: only that target, whatever the Mission's current targets are. */
     target: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const targets = args.target ? [args.target] : effectivePublishTargets(mission.payload, args.declaredTargets);
-    if (targets.length === 0) throw new Error(`Publish target "" is not one this Mission type may use`);
-    for (const target of targets) {
-      if (!args.declaredTargets.includes(target)) {
-        throw new Error(`Publish target "${target}" is not one this Mission type may use`);
-      }
-    }
+    const targets = args.target ? [args.target] : effectivePublishTargets(mission.payload);
+    if (targets.length === 0) throw new Error("Choose a channel to publish to");
     const publishable = publishableOf(mission);
     if (!publishable) throw new Error("No Publishable available for this mission");
 
     const publisher = await publisherOf(ctx, mission.instanceId);
     if (!publisher) throw new Error("No Publisher is configured: set one up on the Publishers page");
-    for (const target of targets) {
-      if (!publisher.targets.find((t) => t.target === target)?.channelId) {
-        throw new Error(`Publish target "${target}" is not configured: map it on the Publishers page`);
-      }
+    const { unknown, unmapped } = unusableTargets(publisher.targets, targets);
+    if (unknown.length > 0) {
+      throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
+    }
+    if (unmapped.length > 0) {
+      throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
 
@@ -228,17 +222,15 @@ export const beginAll = internalMutation({
  * each of the Mission's targets, so the human sees it and can retry it once
  * the Publisher is fixed. A Publication already `failed` (an earlier attempt)
  * gets the latest error; one in any other state is left alone. The Mission
- * stays `approved`. Returns false when the Mission has no target to attach
- * the failure to.
+ * stays `approved`. Returns false when the Mission has no target (no channel
+ * chosen) to attach the failure to.
  */
 export const recordFailure = internalMutation({
-  args: { missionId: v.id("missions"), declaredTargets: v.array(v.string()), error: v.string() },
+  args: { missionId: v.id("missions"), error: v.string() },
   handler: async (ctx, args): Promise<boolean> => {
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
-    const targets = effectivePublishTargets(mission.payload, args.declaredTargets).filter((t) =>
-      args.declaredTargets.includes(t),
-    );
+    const targets = effectivePublishTargets(mission.payload);
     const now = Date.now();
     for (const target of targets) {
       const existing = await publicationFor(ctx, args.missionId, target);

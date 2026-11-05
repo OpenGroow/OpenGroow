@@ -14,15 +14,25 @@ import type { PublisherChannel } from "./publisher/adapter.js";
 // Project-level Publisher (ADR-069): one configuration per Project, V1 adapter
 // Postiz. The API key is write-only from the dashboard's point of view.
 
-const TARGET_PATTERN = /^[a-z0-9][a-z0-9_-]*(:[a-z0-9][a-z0-9_-]*)*$/;
 const NO_PUBLISHER = "No Publisher configured";
 
-function assertTarget(target: string): string {
-  const name = target.trim().toLowerCase();
-  if (!TARGET_PATTERN.test(name)) {
-    throw new Error(`Invalid Publish target "${target}": use words such as "instagram" or "pinterest:recipes"`);
-  }
-  return name;
+function slug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/**
+ * The generated key of a channel entry (a Publish target): its service, or
+ * `service:handle` when that is already taken, disambiguated by the channel id
+ * as a last resort. The user never names it (ADR-069).
+ */
+export function generateTargetKey(
+  channel: { channelId: string; channelName: string; channelService: string; channelProfile?: string },
+  taken: ReadonlySet<string>,
+): string {
+  const base = slug(channel.channelService) || "channel";
+  if (!taken.has(base)) return base;
+  const qualified = `${base}:${slug(channel.channelProfile ?? channel.channelName) || channel.channelId.slice(0, 6)}`;
+  return taken.has(qualified) ? `${qualified}-${channel.channelId.slice(0, 4)}` : qualified;
 }
 
 async function requirePublisher(ctx: MutationCtx, instanceId: string) {
@@ -56,6 +66,7 @@ export const get = query({
               channelId: t.channelId,
               channelName: t.channelName,
               channelService: t.channelService,
+              channelProfile: t.channelProfile,
               settings: t.settings,
             }
           : { target: t.target, mapped: false as const },
@@ -102,43 +113,39 @@ export const save = mutation({
   },
 });
 
-export const addTarget = mutation({
-  args: { instanceId: v.string(), target: v.string() },
-  handler: async (ctx, args) => {
-    const target = assertTarget(args.target);
+/** Adds a channel of the Publisher's account; returns its generated key. Adding the same channel again returns its existing key. */
+export const addChannel = mutation({
+  args: {
+    instanceId: v.string(),
+    channelId: v.string(),
+    channelName: v.string(),
+    channelService: v.string(),
+    channelProfile: v.optional(v.string()),
+    settings: v.optional(v.record(v.string(), v.any())),
+  },
+  handler: async (ctx, args): Promise<string> => {
     const publisher = await requirePublisher(ctx, args.instanceId);
-    if (publisher.targets.some((t) => t.target === target)) return;
+    const existing = publisher.targets.find((t) => t.channelId === args.channelId);
+    if (existing) return existing.target;
+    const target = generateTargetKey(args, new Set(publisher.targets.map((t) => t.target)));
+    const { instanceId: _instanceId, ...channel } = args;
     await ctx.db.patch(publisher._id, {
-      targets: [...publisher.targets, { target }],
+      targets: [...publisher.targets, { target, ...channel }],
       updatedAt: Date.now(),
     });
+    return target;
   },
 });
 
-export const mapTarget = mutation({
-  args: {
-    instanceId: v.string(),
-    target: v.string(),
-    channelId: v.string(),
-    channelName: v.optional(v.string()),
-    channelService: v.optional(v.string()),
-    settings: v.optional(v.record(v.string(), v.any())),
-  },
+export const updateSettings = mutation({
+  args: { instanceId: v.string(), target: v.string(), settings: v.record(v.string(), v.any()) },
   handler: async (ctx, args) => {
-    const target = assertTarget(args.target);
     const publisher = await requirePublisher(ctx, args.instanceId);
-    const entry = {
-      target,
-      channelId: args.channelId,
-      channelName: args.channelName,
-      channelService: args.channelService,
-      settings: args.settings,
-    };
-    const exists = publisher.targets.some((t) => t.target === target);
+    if (!publisher.targets.some((t) => t.target === args.target)) {
+      throw new Error(`Unknown channel "${args.target}"`);
+    }
     await ctx.db.patch(publisher._id, {
-      targets: exists
-        ? publisher.targets.map((t) => (t.target === target ? entry : t))
-        : [...publisher.targets, entry],
+      targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, settings: args.settings } : t)),
       updatedAt: Date.now(),
     });
   },
