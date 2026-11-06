@@ -6,8 +6,12 @@ import { useMutation, useQuery } from "convex/react";
 import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { Calendar, Send, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { ChannelOption, channelCapability, toLocalInput } from "@/src/components/publish-channel-picker";
+import { PlatformLogo, platformName } from "@/src/components/platform-logo";
+import { AutoPublishToggle, type AutoPublishControl } from "@/src/components/auto-publish-toggle";
+import { CapabilityWarning, ChannelSelect, accountLabel, channelCapability } from "@/src/components/publish-channel-picker";
+import { DateTimePicker, formatDateTime } from "@/src/components/date-time-picker";
 
 /**
  * Where a Mission will be published (ADR-069): the channels of the Project's
@@ -41,13 +45,17 @@ export function PublishSection({
   publish,
   editable,
   kind,
+  autoPublish,
 }: {
   missionId: string;
   instanceId: string;
   publish: PublishProjection;
+  /** The channels and the date can be changed (the "To publish" step); otherwise a read-only summary. */
   editable: boolean;
   /** The kind of the Publishable under review. */
   kind?: string;
+  /** Auto-publish of the Mission, when its Template supports it (changeable only until the Run finishes). */
+  autoPublish?: AutoPublishControl;
 }) {
   const setPublishTargets = useMutation(api.publications.setTargets);
   const publisher = useQuery(api.publishers.get, { instanceId });
@@ -55,20 +63,16 @@ export function PublishSection({
   const [error, setError] = useState<string | null>(null);
 
   // The projection is fetched once, so the date is held locally after the first edit.
-  const [publishAtInput, setPublishAtInput] = useState(() => toLocalInput(publish.publishAt));
+  const [publishAtMs, setPublishAtMs] = useState<number | undefined>(publish.publishAt);
 
-  async function changePublishAt(value: string) {
+  async function changePublishAt(at: number | undefined) {
     setError(null);
-    setPublishAtInput(value);
-    const at = value === "" ? null : new Date(value).getTime();
-    if (at !== null && !Number.isFinite(at)) return;
-    if (at !== null && at <= Date.now()) {
-      setError("publishAt must be in the future");
-      return;
-    }
+    const previous = publishAtMs;
+    setPublishAtMs(at);
     try {
-      await setPublishAt({ missionId: missionId as Id<"missions">, publishAt: at });
+      await setPublishAt({ missionId: missionId as Id<"missions">, publishAt: at ?? null });
     } catch (err) {
+      setPublishAtMs(previous);
       setError(err instanceof Error ? err.message : "Could not change the publication date");
     }
   }
@@ -76,8 +80,7 @@ export function PublishSection({
   // Held locally after the first edit, like the date (the projection is fetched once).
   const [targets, setTargets] = useState(publish.targets);
 
-  async function toggleTarget(target: string, checked: boolean) {
-    const next = checked ? [...targets, target] : targets.filter((t) => t !== target);
+  async function changeTargets(next: string[]) {
     if (next.length === 0) {
       setError("Choose at least one channel");
       return;
@@ -94,59 +97,93 @@ export function PublishSection({
   }
 
   const unmapped = publish.unmappedTargets.filter((t) => targets.includes(t));
-  const publishAtMs = publishAtInput === "" ? undefined : new Date(publishAtInput).getTime();
+
+  const hasDate = publishAtMs !== undefined && Number.isFinite(publishAtMs);
+  const formattedDate = hasDate ? formatDateTime(publishAtMs) : "Immediately";
 
   return (
     <Card className="grid gap-4 p-6" data-testid="publish-section">
-      <h2 className="m-0 text-lg font-semibold text-foreground">Publication</h2>
-      <div className="grid gap-2">
-        <fieldset className="m-0 grid gap-2 border-0 p-0" disabled={!editable}>
-          <legend className="mb-1 p-0 text-xs font-semibold text-muted-foreground">Publish to</legend>
-          {publisher?.targets.map((channel) => (
-            <ChannelOption
-              key={channel.target}
-              publisherUrl={publisher.url}
-              channel={channel}
-              capability={channelCapability(publisher.adapter, channel, kind)}
-              checked={targets.includes(channel.target)}
-              onChange={(checked) => { void toggleTarget(channel.target, checked); }}
+      <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-foreground">
+        <Send aria-hidden="true" className="size-5 text-muted-foreground" />
+        Publishing
+      </h2>
+      {editable ? (
+        <div className="grid gap-2">
+          <span className="text-sm font-semibold text-muted-foreground">Channels</span>
+          {publisher ? (
+            <ChannelSelect
+              publisher={publisher}
+              kind={kind}
+              selected={targets}
+              disabled={!editable}
+              onChange={(next) => { void changeTargets(next); }}
             />
-          ))}
-        </fieldset>
-        <p data-testid="publish-summary" className="m-0 text-sm text-muted-foreground">
-          {targets.length === 0 ? "Choose a channel. " : `Goes to ${targets.join(", ")} `}
-          {publishAtMs !== undefined && Number.isFinite(publishAtMs)
-            ? `on ${new Date(publishAtMs).toLocaleString()}`
-            : "immediately"}
-          .
-        </p>
-        <label htmlFor="publish-at" className="mt-2 text-xs font-semibold text-muted-foreground">
-          Publish at (leave empty to publish immediately)
-        </label>
-        <input
-          id="publish-at"
-          data-testid="publish-at"
-          type="datetime-local"
-          className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm"
-          value={publishAtInput}
-          disabled={!editable}
-          onChange={(e) => { void changePublishAt(e.target.value); }}
-        />
-        {error && <p className="m-0 text-sm text-destructive">{error}</p>}
-        {(unmapped.length > 0 || !publish.publisherReady) && (
-          <p data-testid="publish-unmapped" className="m-0 text-sm text-destructive">
-            {!publish.publisherReady
-              ? "The Publisher has no API key, so publishing is disabled."
-              : `Not on the Publisher or not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
-            <Link
-              href={`/projects/${encodeURIComponent(instanceId)}/publishers`}
-              className="underline"
-            >
-              Open the Publishers page
-            </Link>
+          ) : null}
+          <p data-testid="publish-summary" className="m-0 text-sm text-muted-foreground">
+            {targets.length === 0 ? "Choose a channel. " : `Goes to ${targets.join(", ")} `}
+            {hasDate ? `on ${formattedDate}` : "immediately"}.
           </p>
+          <span className="mt-2 text-sm font-semibold text-muted-foreground">Publish at</span>
+          <DateTimePicker value={publishAtMs} onChange={(at) => { void changePublishAt(at); }} onError={setError} />
+        </div>
+      ) : (
+        <dl data-testid="publish-readonly" className="m-0 grid gap-2 text-sm">
+          {targets.map((target) => {
+            const channel = publisher?.targets.find((c) => c.target === target);
+            const capability = channel && publisher ? channelCapability(publisher.adapter, channel, kind) : undefined;
+            return (
+              <div key={target} data-testid={`publish-row-${target}`} className="flex items-center gap-3 border-b border-border pb-2 last:border-0">
+                <PlatformLogo
+                  baseUrl={publisher?.url ?? ""}
+                  service={channel?.mapped ? channel.channelService : undefined}
+                  className="size-8"
+                />
+                <span className="flex-1 font-medium text-foreground">
+                  {channel?.mapped && channel.channelService ? platformName(channel.channelService) : target}
+                  {channel?.mapped ? (
+                    <span className="font-normal text-muted-foreground"> · {accountLabel(channel)}</span>
+                  ) : null}
+                </span>
+                {capability ? <CapabilityWarning capability={capability} testId={`publish-row-warning-${target}`} /> : null}
+              </div>
+            );
+          })}
+          {targets.length === 0 && <p className="m-0 text-muted-foreground">No channel chosen.</p>}
+        </dl>
+      )}
+      <div className="grid gap-2 border-t border-border pt-4 text-sm">
+        {autoPublish && (
+          <div className="flex items-center gap-3">
+            <Zap aria-hidden="true" className="size-4 text-muted-foreground" />
+            {autoPublish.editable ? (
+              <AutoPublishToggle checked={autoPublish.checked} onChange={autoPublish.onChange} hint={autoPublish.hint} />
+            ) : (
+              <>
+                <span className="flex-1 text-muted-foreground">Auto-publish</span>
+                <span data-testid="publish-auto" className="text-foreground">{autoPublish.checked ? "On" : "Off"}</span>
+              </>
+            )}
+          </div>
+        )}
+        {!editable && (
+          <div className="flex items-center gap-3">
+            <Calendar aria-hidden="true" className="size-4 text-muted-foreground" />
+            <span className="flex-1 text-muted-foreground">Publish at</span>
+            <span data-testid="publish-at-readonly" className="text-foreground">{formattedDate}</span>
+          </div>
         )}
       </div>
+      {error && <p className="m-0 text-sm text-destructive">{error}</p>}
+      {(unmapped.length > 0 || !publish.publisherReady) && (
+        <p data-testid="publish-unmapped" className="m-0 text-sm text-destructive">
+          {!publish.publisherReady
+            ? "The Publisher has no API key, so publishing is disabled."
+            : `Not on the Publisher or not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
+          <Link href={`/projects/${encodeURIComponent(instanceId)}/publishers`} className="underline">
+            Open the Publishers page
+          </Link>
+        </p>
+      )}
       <PublicationList missionId={missionId} />
     </Card>
   );

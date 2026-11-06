@@ -90,6 +90,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
   const setPayloadOpen = setPayloadOpenOverride;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
+  // A Mission type that declares `publish` groups channels, Auto-publish and the
+  // date in one "Publish" card; others keep the standalone toggle.
+  const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
+  const declaresPublish = publishDecl !== undefined;
 
   useEffect(() => {
     // When the agent changes, default to its first known mission type (and its
@@ -288,10 +292,20 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-              {autoPublishAllowed && (
+              {autoPublishAllowed && !declaresPublish && (
                 <AutoPublishToggle checked={autoPublish} onChange={setAutoPublish} />
               )}
             </div>
+
+            {declaresPublish ? (
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={publishDecl?.kind}
+                onChange={setPayloadText}
+                autoPublish={autoPublishAllowed ? { checked: autoPublish, onChange: setAutoPublish } : undefined}
+              />
+            ) : null}
 
             <div className="grid gap-3">
               <Button
@@ -316,15 +330,6 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 />
               </div>
             </div>
-
-            {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
-              <PublishChannelPicker
-                instanceId={instanceId}
-                payloadText={payloadText}
-                kind={effectiveManifest.missionTypes.find((t) => t.type === type.trim())?.publish?.kind}
-                onChange={setPayloadText}
-              />
-            ) : null}
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

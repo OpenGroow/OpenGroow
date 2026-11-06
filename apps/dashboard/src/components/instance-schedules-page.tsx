@@ -165,6 +165,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const payloadOpen =
     payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
+  const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
+  const declaresPublish = publishDecl !== undefined;
 
   useEffect(() => {
     const [firstType] = missionTypes;
@@ -391,13 +393,27 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               )}
             </label>
 
-            {autoPublishAllowed && (
+            {autoPublishAllowed && !declaresPublish && (
               <AutoPublishToggle
                 checked={autoPublish}
                 onChange={setAutoPublish}
                 hint={AUTO_PUBLISH_SCHEDULE_HINT}
               />
             )}
+
+            {declaresPublish ? (
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={publishDecl?.kind}
+                onChange={setPayloadText}
+                autoPublish={
+                  autoPublishAllowed
+                    ? { checked: autoPublish, onChange: setAutoPublish, hint: AUTO_PUBLISH_SCHEDULE_HINT }
+                    : undefined
+                }
+              />
+            ) : null}
 
             <div className="grid gap-3">
               <Button
@@ -422,15 +438,6 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                 />
               </div>
             </div>
-
-            {effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish ? (
-              <PublishChannelPicker
-                instanceId={instanceId}
-                payloadText={payloadText}
-                kind={effectiveManifest.missionTypes.find((t) => t.type === type.trim())?.publish?.kind}
-                onChange={setPayloadText}
-              />
-            ) : null}
 
             <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
               <legend className="px-1 text-sm font-semibold text-muted-foreground">

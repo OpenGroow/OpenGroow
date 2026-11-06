@@ -20,7 +20,7 @@ function httpUrl(value: unknown): string | null {
   }
 }
 
-const KIND_LABEL: Record<string, string> = { video: "Video", image: "Image", carousel: "Carousel" };
+const KIND_LABEL: Record<string, string> = { video: "Final video", image: "Final image", carousel: "Final carousel" };
 
 export function PublishablePreview({ publishable }: PreviewProps) {
   if (!publishable || typeof publishable !== "object") return null;
@@ -36,15 +36,24 @@ export function PublishablePreview({ publishable }: PreviewProps) {
     const src = httpUrl(p.videoUrl);
     const poster = httpUrl(p.coverUrl) ?? undefined;
     if (src) {
+      // A reel is vertical: keep it to a readable size, centered on black, instead of the full width of the card.
       media = (
-        <video controls src={src} poster={poster} className="w-full rounded-xl" data-testid="publishable-video" />
+        <div className="flex justify-center overflow-hidden rounded-xl bg-black">
+          <video
+            controls
+            src={src}
+            poster={poster}
+            className="max-h-[70vh] w-auto max-w-full"
+            data-testid="publishable-video"
+          />
+        </div>
       );
     }
   } else if (kind === "image") {
     const src = httpUrl(p.imageUrl);
     if (src) {
       // eslint-disable-next-line @next/next/no-img-element
-      media = <img src={src} alt="Image to publish" className="w-full rounded-xl object-contain" />;
+      media = <img src={src} alt="Image to publish" className="mx-auto max-h-[70vh] w-auto max-w-full rounded-xl object-contain" />;
     }
   } else if (kind === "carousel" && Array.isArray(p.slideUrls)) {
     const slides = p.slideUrls.map(httpUrl).filter((url): url is string => url !== null);
@@ -64,8 +73,8 @@ export function PublishablePreview({ publishable }: PreviewProps) {
   }
 
   return (
-    <Card className="grid gap-4 p-6" data-testid="publishable-preview">
-      <h2 className="m-0 text-lg font-semibold text-foreground">To publish: {KIND_LABEL[kind]}</h2>
+    <Card className="grid min-w-0 gap-4 p-6" data-testid="publishable-preview">
+      <h2 className="m-0 text-lg font-semibold text-foreground">{KIND_LABEL[kind]}</h2>
       {title && <p className="m-0 text-sm font-semibold text-foreground">{title}</p>}
       {media ?? <p className="m-0 text-sm text-muted-foreground">No previewable media.</p>}
       {caption && <p className="m-0 whitespace-pre-wrap text-sm text-foreground">{caption}</p>}

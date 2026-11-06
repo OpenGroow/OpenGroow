@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@convex/_generated/api";
@@ -11,17 +10,15 @@ import {
   SocialEngagementReport,
   isSocialEngagementReport,
 } from "@/src/components/social-engagement-report/social-engagement-report";
+import { Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Card } from "@/components/ui/card";
+import type { AutoPublishControl } from "@/src/components/auto-publish-toggle";
 import { PublishablePreview } from "@/src/components/publishable-preview";
 import { PublishSection, type PublishProjection } from "@/src/components/publish-section";
-
-type Props = {
-  params: Promise<{ instanceId: string; missionId: string }>;
-};
 
 type CarouselReviewSlide = {
   text: string;
@@ -195,27 +192,6 @@ function ReviewCover({ src }: { src: string }) {
         }}
       />
     </section>
-  );
-}
-
-export function MissionReviewPage({ params }: Props) {
-  const { instanceId, missionId } = use(params);
-  return (
-    <MissionReviewContent
-      instanceId={decodeURIComponent(instanceId)}
-      missionId={decodeURIComponent(missionId)}
-    />
-  );
-}
-
-export function MissionViewPage({ params }: Props) {
-  const { instanceId, missionId } = use(params);
-  return (
-    <MissionReviewContent
-      instanceId={decodeURIComponent(instanceId)}
-      missionId={decodeURIComponent(missionId)}
-      readOnly
-    />
   );
 }
 
@@ -461,11 +437,15 @@ function RejectSection({
 export function MissionReviewContent({
   instanceId,
   missionId,
-  readOnly = false,
+  aside,
+  autoPublish,
 }: {
   instanceId: string;
   missionId: string;
-  readOnly?: boolean;
+  /** Shown above the Publishing card, in the right column. */
+  aside?: React.ReactNode;
+  /** Auto-publish of the Mission, shown in the Publishing card. */
+  autoPublish?: AutoPublishControl;
 }) {
   const router = useRouter();
   const mission = useQuery(api.missions.get, { missionId: missionId as Id<"missions"> });
@@ -602,6 +582,9 @@ export function MissionReviewContent({
     isCarouselMission &&
     (reviewContent === null || reviewKind !== "image" || carouselReview === null || carouselReview.missingImages.length > 0);
 
+  // A Mission type that declares `publish` is reviewed from its publishable
+  // (PublishablePreview above), not from a review.path content route.
+  const publishDriven = reviewProjection?.publish !== undefined;
   const reviewActions = reviewProjection?.actions ?? [];
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;
@@ -611,45 +594,27 @@ export function MissionReviewContent({
     (a) => a.key === "reject" && a.requiredStatus === mission.status && a.enabled,
   );
 
-  return (
-    <div className="grid gap-8">
-      <header className="grid gap-1">
-        <Link
-          href={`/projects/${encodeURIComponent(instanceId)}/missions`}
-          className="text-xs font-semibold text-muted-foreground hover:text-primary"
-        >
-          ← Missions
-        </Link>
-        <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
-          {isSocialEngagement
-            ? "Engagement Report"
-            : readOnly
-              ? isVideoMission ? "Video View" : isCarouselMission ? "Carousel View" : "Article View"
-              : isVideoMission ? "Video Review" : isCarouselMission ? "Carousel Review" : "Article Review"}
-        </h1>
-      </header>
+  // Where it goes: editable while the Mission can still be validated or published (To validate, To publish), a read-only summary after.
+  const publishingNode =
+    reviewProjection.publish ? (
+      <PublishSection
+        missionId={missionId}
+        instanceId={instanceId}
+        publish={reviewProjection.publish}
+        kind={typeof publishable?.kind === "string" ? publishable.kind : undefined}
+        editable={isReviewable}
+        autoPublish={autoPublish}
+      />
+    ) : null;
 
+  const main = (
+    <>
       <PublishablePreview publishable={publishable} />
-
-      {reviewProjection.publish && (
-        <PublishSection
-          missionId={missionId}
-          instanceId={instanceId}
-          publish={reviewProjection.publish}
-          kind={typeof publishable?.kind === "string" ? publishable.kind : undefined}
-          editable={!readOnly && isReviewable}
-        />
-      )}
-
-      {!reviewArtifact?.available ? (
-        <Card className="p-6">
-          <p className="text-sm text-muted-foreground">No artifact available for this mission.</p>
-        </Card>
-      ) : (
+      {!reviewArtifact?.available ? null : (
         <>
-          {!isVideoMission && !isCarouselMission && !isWorkspaceArtifact && <IndexingBadge indexing={mission.indexing} />}
+          {!publishDriven && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && <IndexingBadge indexing={mission.indexing} />}
 
-          {!isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
+          {!publishDriven && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
             <Card className="grid gap-4 p-6">
               <h2 className="m-0 text-lg font-semibold text-foreground">
                 SEO Metadata
@@ -677,12 +642,12 @@ export function MissionReviewContent({
             </Card>
           )}
 
-          {reviewCoverUrl && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
+          {!publishDriven && reviewCoverUrl && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && (
             <ReviewCover src={reviewCoverUrl} />
           )}
 
           {/* Generic content renderer — switches on kind returned by loadReviewContent */}
-          <Card className="grid gap-4 p-6">
+          {!publishDriven && <Card className="grid gap-4 p-6">
             {!isSocialEngagement && (
               <h2 className="m-0 text-lg font-semibold text-foreground">
                 {isVideoMission ? "Final Video" : isCarouselMission ? "Carousel images" : "Article"}
@@ -717,17 +682,33 @@ export function MissionReviewContent({
                 {isVideoMission ? "Loading video…" : isCarouselMission ? "Loading carousel images…" : isSocialEngagement ? "Loading engagement report…" : "Loading article…"}
               </p>
             )}
-          </Card>
+          </Card>}
 
           {/* Generic review action panel + generic reject affordance (ADR-020) */}
-          {!readOnly && isReviewable && (
-            <section className="grid gap-3">
-              <div className="flex flex-wrap gap-4 items-center">
+          {isReviewable && (
+            <section
+              data-testid="review-bar"
+              className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-4"
+            >
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex min-w-56 flex-1 items-center gap-3">
+                  <Clock aria-hidden="true" className="size-6 shrink-0 text-status-warning" />
+                  <div className="grid gap-0.5">
+                    <p className="m-0 text-sm font-semibold text-foreground">
+                      {mission.status === "approved" ? "Ready to publish" : "Ready for review"}
+                    </p>
+                    <p className="m-0 text-xs text-muted-foreground">
+                      {mission.status === "approved"
+                        ? "Choose the channels and the date, then publish."
+                        : "Review the generated content before approving it."}
+                    </p>
+                  </div>
+                </div>
                 <ReviewActionsSection
                   missionId={missionId}
                   instanceId={instanceId}
                   status={mission.status}
-                actions={reviewActions}
+                  actions={reviewActions}
                   disabled={carouselReviewBlocked}
                 />
                 {/* Reject is only available from to_validate, not after approval */}
@@ -743,6 +724,16 @@ export function MissionReviewContent({
           )}
         </>
       )}
+    </>
+  );
+
+  return (
+    <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid min-w-0 gap-6">{main}</div>
+      <aside className="grid min-w-0 gap-6">
+        {aside}
+        {publishingNode}
+      </aside>
     </div>
   );
 }

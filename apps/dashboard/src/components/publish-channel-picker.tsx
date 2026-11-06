@@ -1,23 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { capabilityOf, type Capability } from "@convex/publisher/capabilities";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
+import { AlertTriangle, ChevronDown } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
+import { DateTimePicker } from "@/src/components/date-time-picker";
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxItemCheck,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+  useComboboxAnchor,
+} from "@/components/ui/combobox";
+import { AutoPublishToggle } from "@/src/components/auto-publish-toggle";
 
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
 export type PublisherChannel = Publisher["targets"][number];
-
-/** Epoch ms to the `YYYY-MM-DDTHH:mm` local time a datetime-local input expects. */
-export function toLocalInput(ms: number | undefined): string {
-  if (ms === undefined) return "";
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 /** What the adapter says about a channel carrying a Publishable `kind`; `supported` when no kind is known. */
 export function channelCapability(adapter: string, channel: PublisherChannel, kind: string | undefined): Capability {
@@ -25,56 +37,158 @@ export function channelCapability(adapter: string, channel: PublisherChannel, ki
   return capabilityOf(adapter, channel.channelService, kind);
 }
 
-/** One channel of the Publisher as a checkbox row: logo, platform, channel name, @handle. */
-export function ChannelOption({
-  publisherUrl,
-  channel,
-  checked,
+/**
+ * What identifies a channel's account: `@handle` from the stored profile, else
+ * the handle of its key (`<platform>:<handle>`, ADR-069). A channel added before
+ * handles were kept has a bare key (`instagram`): no handle is invented from it,
+ * the Postiz channel name is shown without an `@` until the Publishers page
+ * stores the real profile.
+ */
+export function accountLabel(channel: PublisherChannel): string {
+  if (channel.mapped && channel.channelProfile) return `@${channel.channelProfile}`;
+  const colon = channel.target.indexOf(":");
+  if (colon >= 0) return `@${channel.target.slice(colon + 1)}`;
+  return channel.mapped ? (channel.channelName ?? channel.channelId) : channel.target;
+}
+
+/**
+ * The warning icon of a channel that may not carry the kind: hover (or focus) it
+ * to read why. `uncertain` is amber ("Not confirmed: ..."), `unsupported` red.
+ */
+export function CapabilityWarning({ capability, testId }: { capability: Capability; testId: string }) {
+  if (capability.level === "supported") return null;
+  const message = capability.level === "uncertain" ? `Not confirmed: ${capability.reason}` : capability.reason;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={100}
+        data-testid={testId}
+        aria-label={message}
+        render={<span tabIndex={0} className={capability.level === "unsupported" ? "text-destructive" : "text-amber-600"} />}
+      >
+        <AlertTriangle className="size-4" />
+      </TooltipTrigger>
+      <TooltipContent>{message}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The channels as a multi-select (shadcn Combobox): the chosen ones as chips
+ * with their @handle, a searchable list with logo, platform and handle, and a
+ * Done button. Same rules as the checkbox rows: unmapped channels and channels
+ * that cannot carry the kind are disabled with their reason, uncertain ones warn.
+ */
+export function ChannelSelect({
+  publisher,
+  kind,
+  selected,
   disabled,
-  capability,
   onChange,
 }: {
-  publisherUrl: string;
-  channel: PublisherChannel;
-  checked: boolean;
-  disabled?: boolean;
-  /** Absent = no constraint. `unsupported` disables the row with its reason; `uncertain` warns. */
-  capability?: Capability;
-  onChange: (checked: boolean) => void;
+  publisher: Publisher;
+  kind: string | undefined;
+  selected: string[];
+  disabled: boolean;
+  onChange: (targets: string[]) => void;
 }) {
-  const mapped = channel.mapped;
-  const unsupported = capability?.level === "unsupported";
+  const anchor = useComboboxAnchor();
+  const [open, setOpen] = useState(false);
+  // Stable between renders: the Combobox filters on the identity of `items`.
+  const { byTarget, items } = useMemo(
+    () => ({
+      byTarget: new Map(publisher.targets.map((channel) => [channel.target, channel])),
+      items: publisher.targets.map((channel) => channel.target),
+    }),
+    [publisher.targets],
+  );
+  const labelOf = (target: string) => {
+    const channel = byTarget.get(target);
+    if (!channel) return target;
+    return `${channel.mapped && channel.channelService ? platformName(channel.channelService) : ""} ${accountLabel(channel)}`.trim();
+  };
+
   return (
-    <label className="flex items-center gap-3 text-sm">
-      <input
-        type="checkbox"
-        data-testid={`publish-target-${channel.target}`}
-        checked={checked}
-        disabled={disabled || !mapped || (unsupported && !checked)}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <PlatformLogo baseUrl={publisherUrl} service={mapped ? channel.channelService : undefined} className="size-6" />
-      <span className="grid">
-        <span className="font-medium">
-          {mapped && channel.channelService ? platformName(channel.channelService) : channel.target}
-          {mapped ? <span className="font-normal text-muted-foreground"> · {channel.channelName ?? channel.channelId}</span> : null}
-        </span>
-        {mapped && channel.channelProfile ? (
-          <span className="text-xs text-muted-foreground">@{channel.channelProfile}</span>
-        ) : null}
-        {!mapped ? <span className="text-xs text-muted-foreground">Not configured</span> : null}
-        {capability?.level === "unsupported" ? (
-          <span data-testid={`publish-target-reason-${channel.target}`} className="text-xs text-destructive">
-            {capability.reason}
-          </span>
-        ) : null}
-        {capability?.level === "uncertain" ? (
-          <span data-testid={`publish-target-warning-${channel.target}`} className="text-xs text-amber-600">
-            Not confirmed: {capability.reason}
-          </span>
-        ) : null}
-      </span>
-    </label>
+    <Combobox
+      multiple
+      items={items}
+      value={selected}
+      onValueChange={(next) => onChange(next as string[])}
+      open={open}
+      onOpenChange={setOpen}
+      itemToStringLabel={labelOf}
+      disabled={disabled}
+    >
+      <ComboboxChips ref={anchor} data-testid="publish-channel-select">
+        <ComboboxValue>
+          {(values: string[]) => (
+            <>
+              {values.map((target) => {
+                const channel = byTarget.get(target);
+                return (
+                  <ComboboxChip key={target} data-testid={`publish-chip-${target}`}>
+                    <PlatformLogo
+                      baseUrl={publisher.url}
+                      service={channel?.mapped ? channel.channelService : undefined}
+                      className="size-4"
+                    />
+                    {channel ? accountLabel(channel) : target}
+                  </ComboboxChip>
+                );
+              })}
+              <ComboboxChipsInput placeholder={values.length === 0 ? "Search channels…" : ""} />
+            </>
+          )}
+        </ComboboxValue>
+        <ComboboxTrigger aria-label="Show channels" className="ml-auto flex size-7 items-center justify-center text-muted-foreground">
+          <ChevronDown />
+        </ComboboxTrigger>
+      </ComboboxChips>
+      <ComboboxContent anchor={anchor}>
+        <ComboboxEmpty>No channel found.</ComboboxEmpty>
+        <ComboboxList>
+          {(target: string) => {
+            const channel = byTarget.get(target);
+            if (!channel) return null;
+            const capability = channelCapability(publisher.adapter, channel, kind);
+            const unsupported = capability.level === "unsupported";
+            const isSelected = selected.includes(target);
+            return (
+              <ComboboxItem
+                key={target}
+                value={target}
+                disabled={!channel.mapped || (unsupported && !isSelected)}
+                data-testid={`publish-target-${target}`}
+              >
+                <ComboboxItemCheck />
+                <PlatformLogo baseUrl={publisher.url} service={channel.mapped ? channel.channelService : undefined} className="size-8" />
+                <span className="grid flex-1">
+                  <span className="font-medium">
+                    {channel.mapped && channel.channelService ? platformName(channel.channelService) : channel.target}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {channel.mapped ? accountLabel(channel) : "Not configured"}
+                  </span>
+                  {unsupported ? (
+                    <span data-testid={`publish-target-reason-${target}`} className="text-xs text-destructive">
+                      {capability.reason}
+                    </span>
+                  ) : null}
+                </span>
+                {capability.level === "uncertain" ? (
+                  <CapabilityWarning capability={capability} testId={`publish-target-warning-${target}`} />
+                ) : null}
+              </ComboboxItem>
+            );
+          }}
+        </ComboboxList>
+        <div className="flex justify-end border-t border-border p-2">
+          <Button size="sm" type="button" onClick={() => setOpen(false)}>
+            Done
+          </Button>
+        </div>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 
@@ -99,14 +213,18 @@ export function PublishChannelPicker({
   payloadText,
   kind,
   onChange,
+  autoPublish,
 }: {
   instanceId: string;
   payloadText: string;
+  /** When given, the Auto-publish toggle sits in this card next to the date, so everything about publishing is in one place. */
+  autoPublish?: { checked: boolean; onChange: (next: boolean) => void; hint?: string };
   /** The Mission type's declared `publish.kind`: channels that cannot carry it are disabled. */
   kind?: string;
   onChange: (payloadText: string) => void;
 }) {
   const publisher = useQuery(api.publishers.get, { instanceId });
+  useStoreMissingHandles(instanceId, publisher);
   const [dateError, setDateError] = useState<string | null>(null);
   const payload = parsePayload(payloadText);
   const selected = Array.isArray(payload?.publishTargets)
@@ -126,8 +244,9 @@ export function PublishChannelPicker({
   const publishersHref = `/projects/${encodeURIComponent(instanceId)}/publishers`;
 
   return (
-    <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4" data-testid="publish-channel-picker">
-      <legend className="px-1 text-sm font-semibold text-muted-foreground">Publish to</legend>
+    <fieldset className="grid gap-3 rounded-xl border border-border p-4" data-testid="publish-channel-picker">
+      <legend className="px-1 text-sm font-semibold text-muted-foreground">Publish</legend>
+      <p className="m-0 text-xs text-muted-foreground">Channels</p>
       {!publisher || publisher.targets.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">
           No channel yet.{" "}
@@ -136,45 +255,31 @@ export function PublishChannelPicker({
           </Link>
         </p>
       ) : (
-        <div className="grid gap-2">
-          {publisher.targets.map((channel) => (
-            <ChannelOption
-              key={channel.target}
-              publisherUrl={publisher.url}
-              channel={channel}
-              disabled={!payload}
-              capability={channelCapability(publisher.adapter, channel, kind)}
-              checked={selected.includes(channel.target)}
-              onChange={(checked) =>
-                write({
-                  publishTargets: checked
-                    ? [...selected, channel.target]
-                    : selected.filter((t) => t !== channel.target),
-                })
-              }
-            />
-          ))}
-        </div>
-      )}
-      <label className="grid gap-1.5">
-        <span className="text-xs font-semibold text-muted-foreground">Publish at (leave empty to publish immediately)</span>
-        <input
-          type="datetime-local"
-          data-testid="publish-at"
-          className="w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm"
-          value={toLocalInput(publishAt)}
+        <ChannelSelect
+          publisher={publisher}
+          kind={kind}
+          selected={selected}
           disabled={!payload}
-          onChange={(e) => {
-            const at = e.target.value === "" ? undefined : new Date(e.target.value).getTime();
-            if (at !== undefined && Number.isFinite(at) && at <= Date.now()) {
-              setDateError("publishAt must be in the future");
-              return;
-            }
-            setDateError(null);
-            write({ publishAt: at !== undefined && Number.isFinite(at) ? at : undefined });
-          }}
+          onChange={(targets) => write({ publishTargets: targets })}
         />
-      </label>
+      )}
+      <div
+        className={autoPublish ? "grid gap-4 border-t border-border pt-4 md:grid-cols-2 md:items-start" : "grid"}
+        data-testid="publish-options"
+      >
+        {autoPublish && (
+          <AutoPublishToggle checked={autoPublish.checked} onChange={autoPublish.onChange} hint={autoPublish.hint} />
+        )}
+        <div className="grid gap-1.5">
+          <span className="text-sm font-semibold text-muted-foreground">Publish at</span>
+          <DateTimePicker
+            value={publishAt}
+            disabled={!payload}
+            onError={setDateError}
+            onChange={(at) => write({ publishAt: at })}
+          />
+        </div>
+      </div>
       {dateError && <p data-testid="publish-at-error" className="m-0 text-sm text-destructive">{dateError}</p>}
     </fieldset>
   );
