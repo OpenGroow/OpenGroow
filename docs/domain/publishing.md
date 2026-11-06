@@ -71,6 +71,8 @@ Keys under `platforms` are the service's own platform identifiers (the channel's
 
 ### Large videos: runtime limits
 
+**Local development exception:** Postiz only fetches public HTTPS URLs ending with `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp` or `.mp4` (SSRF protection). For any other media URL (an MCP on `http://localhost`, a private host, a URL without extension such as `/videos/<id>/final`) the Postiz plugin downloads the media and sends its bytes to Postiz (`POST /upload`, multipart) instead. This is automatic, decided per URL (`postizCanFetch`), with no mode to configure. The file then lives in memory during the action, so it suits local-size videos; production MCPs should serve public HTTPS URLs so that Postiz fetches them itself.
+
 The video is never downloaded by OpenGroow: the Convex action only sends Postiz the URL (`upload-from-url`), and Postiz fetches the bytes itself. A test pins this (the only `fetch` calls of an action are to the Postiz API). So the size of the video does not count against the action's memory nor its argument/return limits (16 MiB). What does count is the time of the action, which waits for Postiz to fetch and store the video: Convex actions are limited to 10 minutes, and a single `fetch` has no separate timeout inside that budget. A video whose upload to Postiz takes longer than that fails the Publication with an error (it can be retried). The size limit that actually applies is the one of Postiz and of the target network (for example TikTok, Instagram), not Convex's. These limits come from the Convex documentation and the call design; they were not measured against a live Postiz with a multi-GB file.
 
 ## Contract for MCP outputs

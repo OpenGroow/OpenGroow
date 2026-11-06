@@ -16,19 +16,45 @@ function endpoint(conn: PublisherConnection, path: string): string {
   return `${conn.url.replace(/\/+$/, "")}/api/public/v1/${path}`;
 }
 
+/** Postiz explains a rejection in its body (`message`, validation errors): keep a short excerpt. */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const raw = (await response.text()).trim();
+    if (!raw) return "";
+    let text = raw;
+    try {
+      const body = JSON.parse(raw) as { message?: unknown };
+      if (body && typeof body === "object") {
+        text = typeof body.message === "string" ? body.message : Array.isArray(body.message) ? body.message.join("; ") : raw;
+      }
+    } catch {
+      // Not JSON: keep the raw text.
+    }
+    return `: ${text.replace(/\s+/g, " ").slice(0, 300)}`;
+  } catch {
+    return "";
+  }
+}
+
 async function call(
   conn: PublisherConnection,
   path: string,
   json?: unknown,
+  /** A multipart body (the content-type, with its boundary, is set by fetch). */
+  form?: FormData,
 ): Promise<PublisherResult<{ body: unknown }>> {
   let response: Response;
   try {
     response = await fetch(endpoint(conn, path), {
-      ...(json !== undefined ? { method: "POST", body: JSON.stringify(json) } : {}),
+      ...(form !== undefined
+        ? { method: "POST", body: form }
+        : json !== undefined
+          ? { method: "POST", body: JSON.stringify(json) }
+          : {}),
       headers: {
         Authorization: conn.apiKey,
         Accept: "application/json",
-        ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(json !== undefined && form === undefined ? { "Content-Type": "application/json" } : {}),
       },
     });
   } catch (error) {
@@ -38,13 +64,73 @@ async function call(
     const hint = response.status === 401 || response.status === 403 ? " (check the API key)" : "";
     // A 4xx proves Postiz rejected the request; a 5xx (or 408) does not prove it did not act.
     const rejected = response.status >= 400 && response.status < 500 && response.status !== 408;
-    return { ok: false, ...(rejected ? {} : { uncertain: true }), error: `Postiz responded ${response.status}${hint}` };
+    const detail = await errorDetail(response);
+    return { ok: false, ...(rejected ? {} : { uncertain: true }), error: `Postiz responded ${response.status}${hint}${detail}` };
   }
   try {
     return { ok: true, body: await response.json() };
   } catch {
     return { ok: false, uncertain: true, error: "Postiz returned an unreadable response (check the URL)" };
   }
+}
+
+const FETCHABLE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4"];
+const EXTENSION_BY_TYPE: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "video/mp4": ".mp4",
+};
+
+/**
+ * Whether Postiz will accept to fetch this URL itself (`upload-from-url`): a
+ * public HTTPS URL ending with a supported extension. Postiz refuses anything
+ * else (SSRF protection), e.g. a local MCP on `http://localhost` or a URL such as
+ * `/videos/<id>/final`. Checked on the literal host only (no DNS lookup).
+ */
+export function postizCanFetch(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  if (/^(0|10|127)\./.test(host) || /^169\.254\./.test(host) || /^192\.168\./.test(host)) return false;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host)) return false;
+  if (host.includes(":")) return false; // IPv6 literal: loopback, link-local... not worth parsing
+  if (!host.includes(".")) return false; // single-label name (a Docker service, an intranet host)
+  const path = url.pathname.toLowerCase();
+  return FETCHABLE_EXTENSIONS.some((ext) => path.endsWith(ext));
+}
+
+/**
+ * Downloads a media Postiz cannot fetch itself and sends its bytes to Postiz
+ * (`upload`, multipart). Local development mostly: a production MCP serves
+ * public HTTPS URLs, which Postiz fetches (ADR-010). The file lives in memory
+ * for the duration of the call.
+ */
+async function uploadBytes(conn: PublisherConnection, url: string): Promise<PublisherResult<{ body: unknown }>> {
+  let source: Response;
+  try {
+    source = await fetch(url);
+  } catch (error) {
+    return { ok: false, error: `Could not download the media ${url}: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (!source.ok) return { ok: false, error: `Could not download the media ${url}: it responded ${source.status}` };
+  const type = (source.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  let name = decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "media");
+  if (!FETCHABLE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext))) {
+    const ext = EXTENSION_BY_TYPE[type];
+    if (!ext) return { ok: false, error: `Could not send the media ${url} to Postiz: unsupported type "${type || "unknown"}"` };
+    name = `${name}${ext}`;
+  }
+  const form = new FormData();
+  form.append("file", new Blob([await source.arrayBuffer()], { type: type || undefined }), name);
+  return call(conn, "upload", undefined, form);
 }
 
 /** The media a Publishable sends, in posting order. `image` and `video` have one, `carousel` its slides. */
@@ -92,7 +178,9 @@ export const postizPlugin: PublisherPlugin = {
 
   // Media is fetched by Postiz from its reference (upload-from-url): OpenGroow
   // never downloads nor stores it (ADR-010), which is what makes large videos
-  // safe in a Convex action (docs/domain/publishing.md, "Large videos").
+  // safe in a Convex action (docs/domain/publishing.md, "Large videos"). The
+  // exception is a URL Postiz refuses to fetch (local MCP, no extension): its
+  // bytes are then downloaded and sent (`uploadBytes`).
   async publish(conn, request) {
     const media = mediaReferences(request.publishable);
     if (!media.ok) return media;
@@ -117,7 +205,7 @@ export const postizPlugin: PublisherPlugin = {
         uploadedMedia.push(known);
         return { ok: true, item: known };
       }
-      const res = await call(conn, "upload-from-url", { url });
+      const res = postizCanFetch(url) ? await call(conn, "upload-from-url", { url }) : await uploadBytes(conn, url);
       if (!res.ok) return { ok: false, error: res.error };
       const body = res.body as { id?: unknown; path?: unknown } | null;
       if (typeof body?.id !== "string" || typeof body.path !== "string") {
@@ -174,6 +262,10 @@ export const postizPlugin: PublisherPlugin = {
       return { ok: false, uncertain: true, error: "Postiz returned an unexpected response when creating the post" };
     }
     return { ok: true, outcome: { externalId: first.postId, status: scheduled ? "scheduled" : "published" } };
+  },
+  // Postiz's public preview page of a post (no sign-in needed).
+  postUrl(conn, externalId) {
+    return `${conn.url.replace(/\/+$/, "")}/p/${encodeURIComponent(externalId)}`;
   },
   async findPost(conn, query) {
     const MARGIN = 120_000;

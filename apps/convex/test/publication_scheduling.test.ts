@@ -350,3 +350,34 @@ describe("polling a scheduled Publication", () => {
     expect(p.error).toBeTruthy();
   });
 });
+
+describe("the link of an immediate Publication", () => {
+  async function published() {
+    const ctx = await seed();
+    stubPostiz();
+    await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
+    return ctx;
+  }
+
+  it("is filled in by the poll once Postiz knows the release URL", async () => {
+    const { t, owner, missionId } = await published();
+    stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
+    await t.action(internal.publication_polling.pollScheduled, {});
+    const [p] = await owner.query(api.publications.listForMission, { missionId });
+    expect(p).toMatchObject({ status: "published", externalUrl: "https://instagram.com/p/abc" });
+  });
+
+  it("stays without a link while Postiz has not published it, and is not asked again once it has one", async () => {
+    const { t, owner, missionId } = await published();
+    stubPostizListing("QUEUE");
+    await t.action(internal.publication_polling.pollScheduled, {});
+    expect((await owner.query(api.publications.listForMission, { missionId }))[0]!.externalUrl).toBeUndefined();
+
+    stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
+    await t.action(internal.publication_polling.pollScheduled, {});
+    const listing = stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/other" });
+    await t.action(internal.publication_polling.pollScheduled, {});
+    expect(listing).not.toHaveBeenCalled();
+    expect((await owner.query(api.publications.listForMission, { missionId }))[0]!.externalUrl).toBe("https://instagram.com/p/abc");
+  });
+});

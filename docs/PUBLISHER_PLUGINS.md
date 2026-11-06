@@ -27,6 +27,7 @@ The plugin must not import from `apps/*`. It receives everything through argumen
 | `publish(conn, request)` | Uploads media, builds the platform settings (defaults overridden by `request.settings`), creates the post. Returns `{ externalId, status: "scheduled" \| "published" \| "pending" }`. |
 | `findPost(conn, query)` | Reconciliation before a re-send: the post on `channelId` with that caption and date window, or `null`. Never match a post the service itself marked failed. |
 | `getStatus(conn, externalId, around?)` | Where a post stands (`pending`, `scheduled`, `published`, `failed`). A post the service no longer knows is `failed`. |
+| `postUrl?(conn, externalId)` | Optional. A URL that opens the post in the service's own UI (Postiz: its public preview page `/p/<id>`), shown as "open in <name>" next to the post's network URL. |
 
 Every function returns `PublisherResult`: `{ ok: true, ... }` or `{ ok: false, error, uncertain? }`.
 

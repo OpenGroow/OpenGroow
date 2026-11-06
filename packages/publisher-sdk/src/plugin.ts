@@ -99,4 +99,10 @@ export interface PublisherPlugin {
    * the search window. A post the service no longer knows is reported `failed`.
    */
   getStatus(conn: PublisherConnection, externalId: string, around?: number): Promise<PublisherResult<{ post: PostStatus }>>;
+  /**
+   * A URL that opens the post in the service itself (its own UI), distinct from
+   * the post's public URL on the network. Optional: no entry when the service
+   * has no such page.
+   */
+  postUrl?(conn: Pick<PublisherConnection, "url">, externalId: string): string;
 }
