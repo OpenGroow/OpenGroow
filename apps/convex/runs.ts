@@ -212,6 +212,7 @@ export const markAwaitingJob = internalMutation({
       sourceRef: v.optional(v.string()),
       // SourceJob handoff (#568): position of the enriched Source in `sources`.
       sourcePosition: v.optional(v.number()),
+      publishableDraft: v.optional(v.any()),
     }),
     // SourceJob handoff (#568): the Sources of the result file, inserted here.
     sources: v.optional(v.array(v.any())),

@@ -65,7 +65,11 @@ export {
   PUBLISHABLE_KINDS,
   OPTIONAL_PUBLISHABLE_FIELDS,
   publishDeclarationFor,
+  DEFAULT_RESOURCE_ID_ARG,
+  MEDIA_PUBLISHABLE_FIELDS,
+  readMediaPath,
   type PublishDeclaration,
+  type PublishResource,
   type PublishableKind,
 } from "./publish-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
@@ -500,6 +504,13 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
     for (const entry of validatedMissionTypes) {
       const problem = publishDeclarationProblem(entry.publish, `missionTypes[${JSON.stringify(entry.type)}]`);
       if (problem) return { ok: false, reason: problem };
+      const jobs = (m as { externalJobsByMissionType?: Record<string, unknown> }).externalJobsByMissionType;
+      if ((entry.publish as { resource?: unknown } | undefined)?.resource !== undefined && !jobs?.[entry.type as string]) {
+        return {
+          ok: false,
+          reason: `missionTypes[${JSON.stringify(entry.type)}].publish.resource needs an External Job: declare externalJobsByMissionType[${JSON.stringify(entry.type)}] (the tool is called when that job completes)`,
+        };
+      }
     }
     const missionTypeIds = validatedMissionTypes.map((entry) => entry.type as string);
     if (new Set(missionTypeIds).size !== missionTypeIds.length) {

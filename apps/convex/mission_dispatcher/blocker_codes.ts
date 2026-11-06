@@ -1,4 +1,4 @@
-import { publishDeclarationFor } from "@opengroow/agent-templates";
+import { publishDeclarationFor, type PublishDeclaration } from "@opengroow/agent-templates";
 import type { TemplateRegistry } from "@opengroow/agent-templates/registry";
 import type { RunResult } from "../run_result.js";
 import { validateDeclaredBlockerCode } from "./reconciliation.js";
@@ -25,7 +25,7 @@ export async function resolveMissionTypePublish(
   templateId: string,
   missionType: string,
   version?: string,
-): Promise<{ kind: string } | undefined> {
+): Promise<PublishDeclaration | undefined> {
   return publishDeclarationFor((await registry.resolve(projectId, templateId, version))?.manifest, missionType);
 }
 

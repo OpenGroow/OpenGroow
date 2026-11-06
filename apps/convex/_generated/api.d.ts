@@ -57,6 +57,7 @@ import type * as mission_dispatcher_error_message from "../mission_dispatcher/er
 import type * as mission_dispatcher_external_job_poll_node from "../mission_dispatcher/external_job_poll_node.js";
 import type * as mission_dispatcher_external_job_polling from "../mission_dispatcher/external_job_polling.js";
 import type * as mission_dispatcher_mission_context from "../mission_dispatcher/mission_context.js";
+import type * as mission_dispatcher_publish_resource from "../mission_dispatcher/publish_resource.js";
 import type * as mission_dispatcher_reconcile_apply_node from "../mission_dispatcher/reconcile_apply_node.js";
 import type * as mission_dispatcher_reconciliation from "../mission_dispatcher/reconciliation.js";
 import type * as mission_dispatcher_session_budget from "../mission_dispatcher/session_budget.js";
@@ -192,6 +193,7 @@ declare const fullApi: ApiFromModules<{
   "mission_dispatcher/external_job_poll_node": typeof mission_dispatcher_external_job_poll_node;
   "mission_dispatcher/external_job_polling": typeof mission_dispatcher_external_job_polling;
   "mission_dispatcher/mission_context": typeof mission_dispatcher_mission_context;
+  "mission_dispatcher/publish_resource": typeof mission_dispatcher_publish_resource;
   "mission_dispatcher/reconcile_apply_node": typeof mission_dispatcher_reconcile_apply_node;
   "mission_dispatcher/reconciliation": typeof mission_dispatcher_reconciliation;
   "mission_dispatcher/session_budget": typeof mission_dispatcher_session_budget;

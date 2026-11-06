@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateManifest } from "./index.js";
+import { readMediaPath } from "./publish-declaration.js";
 
 // Issue #16, ADR-069: a Mission type declares the Publishable kind it produces
 // only; destinations are chosen per Mission/Schedule.
@@ -10,6 +11,26 @@ const manifestWith = (publish: unknown) => ({
   category: "test",
   mcpServers: [],
   missionTypes: [{ type: "make", label: "Make", payload: "{}", agentsMd: "make.md", publish }],
+});
+
+// A `publish.resource` is applied when an External Job completes: the Mission
+// type must declare one.
+const withJob = (publish: unknown) => ({
+  ...manifestWith(publish),
+  mcpServers: [{ name: "mcp", transport: "streamable-http", url: "http://localhost/mcp" }],
+  externalJobsByMissionType: {
+    make: {
+      produce: {
+        server: "mcp",
+        mcpTool: "get_run_status",
+        statusField: "status",
+        terminalStates: { completed: ["done"], failed: ["error"] },
+        resultStatus: "needs_human_review",
+        artifactKind: "video",
+        onComplete: "terminal",
+      },
+    },
+  },
 });
 
 describe("validateManifest — missionTypes[].publish", () => {
@@ -50,27 +71,69 @@ describe("validateManifest — missionTypes[].publish", () => {
     expect((result as { reason: string }).reason).toContain(fragment);
   });
 
-  it("accepts media paths for the media fields of the kind", () => {
+  it("accepts a resource with the defaults, a custom idArg and a map for the media fields of the kind", () => {
+    expect(validateManifest(withJob({ kind: "video", resource: { tool: "get_video" } })).ok).toBe(true);
     expect(
-      validateManifest(manifestWith({ kind: "carousel", media: { slideUrls: "result.slides[*].url" } })).ok,
+      validateManifest(
+        withJob({
+          kind: "carousel",
+          resource: { tool: "get_slides", idArg: "carouselId", map: { slideUrls: "result.slides[*].url" } },
+        }),
+      ).ok,
     ).toBe(true);
     expect(
       validateManifest(
-        manifestWith({ kind: "video", media: { videoUrl: "result.video.url", coverUrl: "result.cover[0]" } }),
+        withJob({
+          kind: "video",
+          resource: { tool: "get_video", map: { videoUrl: "result.video.url", coverUrl: "result.cover[0]" } },
+        }),
       ).ok,
     ).toBe(true);
   });
 
   it.each([
-    [{ kind: "video", media: { imageUrl: "a.b" } }, "imageUrl"],
-    [{ kind: "video", media: { videoUrl: "" } }, "path"],
-    [{ kind: "video", media: { videoUrl: "a..b" } }, "path"],
-    [{ kind: "video", media: { videoUrl: "a[*].b" } }, "[*]"],
-    [{ kind: "carousel", media: { slideUrls: "$.a/b" } }, "path"],
-    [{ kind: "video", media: ["a"] }, "object"],
-  ])("rejects an invalid media %j", (publish, fragment) => {
-    const result = validateManifest(manifestWith(publish));
+    [{ kind: "video", resource: {} }, "tool"],
+    [{ kind: "video", resource: { tool: "get video" } }, "tool"],
+    [{ kind: "video", resource: { tool: "t", idArg: "" } }, "idArg"],
+    [{ kind: "video", resource: { tool: "t", url: "x" } }, 'unknown key "url"'],
+    [{ kind: "video", resource: { tool: "t", map: { imageUrl: "a.b" } } }, "imageUrl"],
+    [{ kind: "video", resource: { tool: "t", map: { videoUrl: "" } } }, "path"],
+    [{ kind: "video", resource: { tool: "t", map: { videoUrl: "a..b" } } }, "path"],
+    [{ kind: "video", resource: { tool: "t", map: { videoUrl: "a[*].b" } } }, "[*]"],
+    [{ kind: "carousel", resource: { tool: "t", map: { slideUrls: "$.a/b" } } }, "path"],
+    [{ kind: "video", resource: { tool: "t", map: ["a"] } }, "object"],
+    [{ kind: "video", resource: "get_video" }, "object"],
+  ])("rejects an invalid resource %j", (publish, fragment) => {
+    const result = validateManifest(withJob(publish));
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toContain(fragment);
+  });
+
+  it("rejects the removed publish.media with a migration message", () => {
+    const result = validateManifest(withJob({ kind: "video", media: { videoUrl: "a.b" } }));
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain("publish.resource");
+  });
+
+  it("rejects a resource on a Mission type that declares no External Job", () => {
+    const result = validateManifest(manifestWith({ kind: "video", resource: { tool: "get_video" } }));
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain("externalJobsByMissionType");
+  });
+});
+
+describe("readMediaPath", () => {
+  const output = { videoUrl: "https://a/v.mp4", result: { slides: [{ url: "https://a/1" }, { url: "https://a/2" }] } };
+
+  it("reads keys, indexes and every item of a list", () => {
+    expect(readMediaPath(output, "videoUrl")).toBe("https://a/v.mp4");
+    expect(readMediaPath(output, "result.slides[1].url")).toBe("https://a/2");
+    expect(readMediaPath(output, "result.slides[*].url")).toEqual(["https://a/1", "https://a/2"]);
+  });
+
+  it("returns undefined for anything missing, including a list with a hole", () => {
+    expect(readMediaPath(output, "result.nope")).toBeUndefined();
+    expect(readMediaPath(output, "videoUrl.x")).toBeUndefined();
+    expect(readMediaPath({ s: [{ url: "a" }, {}] }, "s[*].url")).toBeUndefined();
   });
 });

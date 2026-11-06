@@ -1,6 +1,6 @@
 import { v, type Infer } from "convex/values";
 import { z } from "zod";
-import { publishableSchema, publishableV } from "./publishable.js";
+import { publishableDraftSchema, publishableSchema, publishableV } from "./publishable.js";
 
 const metadataValueZ = z.union([z.string(), z.number(), z.boolean()]);
 const metadataValueV = v.union(v.string(), v.number(), v.boolean());
@@ -141,6 +141,12 @@ export const runResultSchema = z.discriminatedUnion("status", [
       status: z.literal("in_progress"),
       summary: z.string(),
       reviewQuestions: z.array(z.string()),
+      /**
+       * Mission types whose `publish` declares a `resource`: the text part of
+       * the Publishable (no media URL). The media is fetched from the MCP when
+       * the job completes and merged into it.
+       */
+      publishable: publishableDraftSchema.optional(),
       job: z
         .object({
           mcpServer: z.string(),

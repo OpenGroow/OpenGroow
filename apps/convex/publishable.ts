@@ -58,6 +58,20 @@ export const publishableSchema = z.discriminatedUnion("kind", [
 
 export type Publishable = z.output<typeof publishableSchema>;
 
+/**
+ * The text part of a Publishable: what an Agent writes in the `in_progress`
+ * RunResult of an asynchronous MCP. The media (`videoUrl`, `coverUrl`,
+ * `imageUrl`, `slideUrls`) is rejected here, it comes from the MCP through
+ * `publish.resource` when the External Job completes.
+ */
+export const publishableDraftSchema = z.discriminatedUnion("kind", [
+  videoPublishableSchema.omit({ videoUrl: true, coverUrl: true }),
+  imagePublishableSchema.omit({ imageUrl: true }),
+  carouselPublishableSchema.omit({ slideUrls: true }),
+]);
+
+export type PublishableDraft = z.output<typeof publishableDraftSchema>;
+
 /** The Convex validator of a stored Publishable, derived from the zod schema.
  * (URL/length bounds are enforced by the RunResult validation, the only writer.) */
 // Typed explicitly (the derived union type is too deep for table-wide type

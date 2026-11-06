@@ -18,7 +18,8 @@ export const OPTIONAL_PUBLISHABLE_FIELDS = {
   carousel: ["link", "altText"],
 } as const satisfies Record<PublishableKind, readonly string[]>;
 
-/** The media fields of each kind, the only ones `publish.media` may map. */
+/** The media fields of each kind: the only ones `publish.resource` fetches and
+ * `publish.resource.map` may map. The Agent never writes them. */
 export const MEDIA_PUBLISHABLE_FIELDS = {
   video: ["videoUrl", "coverUrl"],
   image: ["imageUrl"],
@@ -37,13 +38,26 @@ export type PublishDeclaration = {
   kind: PublishableKind;
   require?: string[];
   /**
-   * Intended contract (ADR-069 amendment): map from a media field to the path
-   * of its value in the MCP tool output, so URLs and slide order come from the
-   * MCP and the Agent only writes text. Validated here; NOT applied yet (no
-   * place where OpenGroow reads the tool output of a synchronous Run).
+   * For an asynchronous MCP (launch, poll, then fetch): the MCP tool OpenGroow
+   * calls once when the External Job completes, to get the media (ADR-069
+   * amendment). The Agent only writes the text part of the `publishable` in its
+   * `in_progress` RunResult; the media returned by the tool is merged into it.
    */
-  media?: Record<string, string>;
+  resource?: PublishResource;
 };
+
+export type PublishResource = {
+  /** An MCP tool of the server that ran the External Job. */
+  tool: string;
+  /** Argument carrying the job id. Default `runId`. */
+  idArg?: string;
+  /** Media field -> path in the tool output, when it does not use the
+   * recommended names (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`). */
+  map?: Record<string, string>;
+};
+
+/** The default name of the argument that carries the job id. */
+export const DEFAULT_RESOURCE_ID_ARG = "runId";
 
 /** The `publish` declaration of a Mission type, or undefined when it has none
  * (or the Mission type is unknown). */
@@ -58,11 +72,11 @@ export function publishDeclarationFor(
 export function publishDeclarationProblem(raw: unknown, at: string): string | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return `${at}.publish must be an object { kind, require?, media? }`;
+    return `${at}.publish must be an object { kind, require?, resource? }`;
   }
   const publish = raw as Record<string, unknown>;
   for (const key of Object.keys(publish)) {
-    if (key !== "kind" && key !== "require" && key !== "media") return `${at}.publish has unknown key "${key}"`;
+    if (key !== "kind" && key !== "require" && key !== "media" && key !== "resource") return `${at}.publish has unknown key "${key}"`;
   }
   if (!(PUBLISHABLE_KINDS as readonly unknown[]).includes(publish.kind)) {
     return `${at}.publish.kind ${JSON.stringify(publish.kind)} is not a known Publishable kind — one of ${PUBLISHABLE_KINDS.join(", ")}`;
@@ -80,22 +94,71 @@ export function publishDeclarationProblem(raw: unknown, at: string): string | un
     }
   }
   if (publish.media !== undefined) {
-    if (!publish.media || typeof publish.media !== "object" || Array.isArray(publish.media)) {
-      return `${at}.publish.media must be an object mapping a media field to a path`;
+    return `${at}.publish.media was replaced by publish.resource: { tool, idArg?, map? } — OpenGroow now calls the MCP tool \`resource.tool\` when the External Job completes (move your paths to resource.map)`;
+  }
+  if (publish.resource !== undefined) return publishResourceProblem(publish.resource, publish.kind as PublishableKind, at);
+  return undefined;
+}
+
+const IDENTIFIER = /^[A-Za-z_][\w.-]*$/;
+
+function publishResourceProblem(raw: unknown, kind: PublishableKind, at: string): string | undefined {
+  const where = `${at}.publish.resource`;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return `${where} must be an object { tool, idArg?, map? }`;
+  const resource = raw as Record<string, unknown>;
+  for (const key of Object.keys(resource)) {
+    if (key !== "tool" && key !== "idArg" && key !== "map") return `${where} has unknown key "${key}"`;
+  }
+  if (typeof resource.tool !== "string" || !IDENTIFIER.test(resource.tool)) {
+    return `${where}.tool must be the name of an MCP tool: ${JSON.stringify(resource.tool)}`;
+  }
+  if (resource.idArg !== undefined && (typeof resource.idArg !== "string" || !IDENTIFIER.test(resource.idArg))) {
+    return `${where}.idArg must be an argument name: ${JSON.stringify(resource.idArg)}`;
+  }
+  if (resource.map !== undefined) {
+    if (!resource.map || typeof resource.map !== "object" || Array.isArray(resource.map)) {
+      return `${where}.map must be an object mapping a media field to a path`;
     }
-    const allowed: readonly string[] = MEDIA_PUBLISHABLE_FIELDS[publish.kind as PublishableKind];
-    for (const [field, path] of Object.entries(publish.media as Record<string, unknown>)) {
+    const allowed: readonly string[] = MEDIA_PUBLISHABLE_FIELDS[kind];
+    for (const [field, path] of Object.entries(resource.map as Record<string, unknown>)) {
       if (!allowed.includes(field)) {
-        return `${at}.publish.media "${field}" is not a media field of kind "${String(publish.kind)}" — one of ${allowed.join(", ")}`;
+        return `${where}.map "${field}" is not a media field of kind "${kind}" — one of ${allowed.join(", ")}`;
       }
       const segments = typeof path === "string" ? path.split(".") : [];
       if (!segments.length || !segments.every((segment) => MEDIA_PATH_SEGMENT.test(segment))) {
-        return `${at}.publish.media.${field} is not a valid path (dot-separated keys, optional [n] or [*]): ${JSON.stringify(path)}`;
+        return `${where}.map.${field} is not a valid path (dot-separated keys, optional [n] or [*]): ${JSON.stringify(path)}`;
       }
       if (field !== "slideUrls" && String(path).includes("[*]")) {
-        return `${at}.publish.media.${field} cannot use [*]: only slideUrls takes a list`;
+        return `${where}.map.${field} cannot use [*]: only slideUrls takes a list`;
       }
     }
   }
   return undefined;
+}
+
+/**
+ * Reads a value at a manifest media path (dot keys, `[n]`, `[*]`) from an MCP
+ * tool output. `[*]` collects the rest of the path over every item of an array.
+ */
+export function readMediaPath(value: unknown, path: string): unknown {
+  const tokens: Array<string | number | "*"> = [];
+  for (const segment of path.split(".")) {
+    const match = /^([^[]+)((?:\[(?:\*|\d+)\])*)$/.exec(segment);
+    if (!match) return undefined;
+    tokens.push(match[1]);
+    for (const index of match[2].matchAll(/\[(\*|\d+)\]/g)) tokens.push(index[1] === "*" ? "*" : Number(index[1]));
+  }
+  const walk = (current: unknown, position: number): unknown => {
+    if (position === tokens.length) return current;
+    const token = tokens[position];
+    if (token === "*") {
+      if (!Array.isArray(current)) return undefined;
+      const items = current.map((item) => walk(item, position + 1));
+      return items.some((item) => item === undefined) ? undefined : items;
+    }
+    if (typeof token === "number") return Array.isArray(current) ? walk(current[token], position + 1) : undefined;
+    if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
+    return walk((current as Record<string, unknown>)[token], position + 1);
+  };
+  return walk(value, 0);
 }

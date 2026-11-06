@@ -227,12 +227,18 @@ export function buildMissionReviewProjection(
     errors.push("Mission type does not declare a review contract");
   }
 
-  const artifactError = contentError(artifact, contract);
+  // A Mission type that declares `publish` is reviewed from its `publishable`
+  // (references to public media), never from a review.path HTTP route: the
+  // content is not fetched, so its contract is not checked either (#26).
+  const publishDriven = publish !== undefined;
+  const artifactError = publishDriven
+    ? artifact ? undefined : "No artifact available for this mission"
+    : contentError(artifact, contract);
   if (artifactError && !errors.includes(artifactError)) errors.push(artifactError);
 
   const source = contentSource(artifact, contract);
   const content =
-    artifact && source
+    artifact && source && !publishDriven
       ? {
           kind: contract?.kind ?? artifact.kind ?? "metadata",
           source,
