@@ -267,7 +267,8 @@ function ReviewActionsSection({
 
   return (
     <section className="grid gap-3">
-      {actionError && (
+      {/* A failed publish is already listed per channel in the Publications "Errors" section. */}
+      {actionError && !actionError.includes("Publishing failed:") && (
         <p className="text-sm text-destructive">{actionError}</p>
       )}
 
@@ -603,6 +604,7 @@ export function MissionReviewContent({
         publish={reviewProjection.publish}
         kind={typeof publishable?.kind === "string" ? publishable.kind : undefined}
         editable={isReviewable}
+        done={mission.status === "done"}
         autoPublish={autoPublish}
       />
     ) : null;

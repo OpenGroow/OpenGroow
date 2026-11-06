@@ -437,7 +437,7 @@ describe("MissionReviewContent", () => {
       await act(async () => {});
       const unmapped = document.querySelector('[data-testid="publish-unmapped"] a') as HTMLAnchorElement | null;
       expect(unmapped?.getAttribute("href")).toBe("/projects/instance-1/publishers");
-      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("failed");
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("Failed");
     });
 
     it("disables a channel that cannot carry the Publishable kind and warns on an uncertain one", async () => {
@@ -602,7 +602,7 @@ describe("MissionReviewContent", () => {
       expect(document.querySelector('[data-testid="publish-at"]')?.textContent).toContain(
         new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date("2030-01-02T09:30")),
       );
-      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("scheduled");
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("Scheduled");
     });
 
     it("has no publish section for a Mission type without publish", async () => {

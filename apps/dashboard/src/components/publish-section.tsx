@@ -44,6 +44,7 @@ export function PublishSection({
   instanceId,
   publish,
   editable,
+  done,
   kind,
   autoPublish,
 }: {
@@ -52,6 +53,8 @@ export function PublishSection({
   publish: PublishProjection;
   /** The channels and the date can be changed (the "To publish" step); otherwise a read-only summary. */
   editable: boolean;
+  /** The Mission is done: the Publications say it all, so the summary of where it goes is left out. */
+  done?: boolean;
   /** The kind of the Publishable under review. */
   kind?: string;
   /** Auto-publish of the Mission, when its Template supports it (changeable only until the Run finishes). */
@@ -97,6 +100,8 @@ export function PublishSection({
   }
 
   const unmapped = publish.unmappedTargets.filter((t) => targets.includes(t));
+
+  if (done && publish.publications.length > 0) return <PublicationList missionId={missionId} title="Publications" />;
 
   const hasDate = publishAtMs !== undefined && Number.isFinite(publishAtMs);
   const formattedDate = hasDate ? formatDateTime(publishAtMs) : "Immediately";

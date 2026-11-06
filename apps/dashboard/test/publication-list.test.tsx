@@ -48,15 +48,17 @@ describe("PublicationList", () => {
     useQueryMock.mockReturnValue(rows);
     await act(async () => root.render(<PublicationList missionId="m1" />));
     const q = (t: string) => container.querySelector(`[data-testid="publication-${t}"]`)!;
-    expect(q("instagram").textContent).toContain("failed");
-    expect(q("instagram").textContent).toContain("Postiz responded 500");
+    const e = (t: string) => container.querySelector(`[data-testid="publication-error-${t}"]`)!;
+    expect(q("instagram").textContent).toContain("Failed");
+    expect(q("instagram").textContent).not.toContain("Postiz responded 500");
+    expect(e("instagram").textContent).toContain("Postiz responded 500");
     expect(q("pinterest:recipes").querySelector("a")?.getAttribute("href")).toBe("https://x.test/p/9");
     expect(q("tiktok").textContent).toContain("post-3");
     expect(q("tiktok").textContent).toContain("2030");
     expect(container.querySelectorAll("button")).toHaveLength(1);
 
     await act(async () => {
-      (q("instagram").querySelector("button") as HTMLButtonElement).click();
+      (e("instagram").querySelector("button") as HTMLButtonElement).click();
     });
     expect(retryMock).toHaveBeenCalledWith({ publicationId: "p1" });
   });
@@ -68,12 +70,13 @@ describe("PublicationList", () => {
     ]);
     await act(async () => root.render(<PublicationList missionId="m1" />));
     const q = (t: string) => container.querySelector(`[data-testid="publication-${t}"]`)!;
-    expect(q("instagram").textContent).toContain("sending");
+    const e = (t: string) => container.querySelector(`[data-testid="publication-error-${t}"]`)!;
+    expect(q("instagram").textContent).toContain("Sending");
     expect(q("instagram").querySelector("button")).toBeNull();
-    expect(q("tiktok").textContent).toContain("uncertain");
-    expect(q("tiktok").textContent).toContain("Postiz may have received this post");
+    expect(q("tiktok").textContent).toContain("Uncertain");
+    expect(e("tiktok").textContent).toContain("Postiz may have received this post");
     await act(async () => {
-      (q("tiktok").querySelector("button") as HTMLButtonElement).click();
+      (e("tiktok").querySelector("button") as HTMLButtonElement).click();
     });
     expect(retryMock).toHaveBeenCalledWith({ publicationId: "p2" });
   });
@@ -89,5 +92,15 @@ describe("PublicationList", () => {
     useQueryMock.mockReturnValue([]);
     await act(async () => root.render(<PublicationList missionId="m1" />));
     expect(container.innerHTML).toBe("");
+  });
+
+  it("links to the post in the Publisher's own UI", async () => {
+    useQueryMock.mockReturnValue([
+      { id: "p1", target: "instagram", status: "published", externalId: "abc", managerUrl: "https://postiz.example.com/p/abc", managerName: "Postiz" },
+    ]);
+    await act(async () => root.render(<PublicationList missionId="m1" />));
+    const link = container.querySelector('[data-testid="publication-instagram"] a');
+    expect(link?.getAttribute("href")).toBe("https://postiz.example.com/p/abc");
+    expect(link?.textContent).toBe("Open in Postiz");
   });
 });

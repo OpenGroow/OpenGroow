@@ -2,20 +2,37 @@
 
 import { useState } from "react";
 import { useAction, useQuery } from "convex/react";
+import { ExternalLink, Layers } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { PlatformLogo, platformName } from "@/src/components/platform-logo";
+import { cn } from "@/lib/utils";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
-const STATUS_LABEL: Record<string, string> = {
-  submitting: "sending to Postiz…",
-  uncertain: "uncertain (will be checked before any new attempt)",
+const STATUS: Record<string, { label: string; tone: "active" | "info" | "progress" | "warning" | "error" | "neutral" }> = {
+  published: { label: "Published", tone: "active" },
+  scheduled: { label: "Scheduled", tone: "info" },
+  submitting: { label: "Sending…", tone: "progress" },
+  uncertain: { label: "Uncertain (will be checked before any new attempt)", tone: "warning" },
+  failed: { label: "Failed", tone: "error" },
+  pending: { label: "Pending", tone: "neutral" },
 };
 
+/** The account the post goes to: `@profile`, else `@` + what follows the colon of the target, else the channel name. */
+function accountOf(p: { target: string; channelProfile?: string; channelName?: string }): string | undefined {
+  if (p.channelProfile) return `@${p.channelProfile}`;
+  const colon = p.target.indexOf(":");
+  if (colon >= 0) return `@${p.target.slice(colon + 1)}`;
+  return p.channelName;
+}
+
 /**
- * Every Publication of a Mission (ADR-069): status, external URL or id,
- * scheduled date and error. A `failed` one can be retried on its own.
+ * Every Publication of a Mission (ADR-069): the channel, its status, the link
+ * to the post (on the network, and in the Publisher's UI), the scheduled date.
+ * The errors are listed apart, and a `failed` one can be retried on its own.
  */
 export function PublicationList({ missionId, title }: { missionId: string; title?: string }) {
   const publications = useQuery(api.publications.listForMission, { missionId: missionId as Id<"missions"> });
@@ -31,45 +48,104 @@ export function PublicationList({ missionId, title }: { missionId: string; title
     try {
       await retryPublication({ publicationId });
     } catch (err) {
-      setError(extractConvexErrorMessage(err, "Could not retry the Publication"));
+      const message = extractConvexErrorMessage(err, "Could not retry the Publication");
+      // A failed attempt is already recorded on the Publication and shown in "Errors".
+      setError(message.includes("Publishing failed:") ? null : message);
     } finally {
       setRetrying(null);
     }
   }
 
+  const problems = publications.filter((p) => p.status === "failed" || p.status === "uncertain" || p.error);
+
   const body = (
-    <div className="grid gap-2" data-testid="publications">
-      {title && <h2 className="m-0 text-lg font-semibold text-foreground">{title}</h2>}
-      <ul className="m-0 grid list-none gap-2 p-0 text-sm">
-        {publications.map((publication) => (
-          <li key={publication.id} className="flex flex-wrap items-center gap-2" data-testid={`publication-${publication.target}`}>
-            <span className="font-semibold">{publication.target}</span>: {STATUS_LABEL[publication.status] ?? publication.status}
-            {publication.externalUrl ? (
-              <a href={publication.externalUrl} className="underline" target="_blank" rel="noreferrer">
-                view post
-              </a>
-            ) : (
-              publication.externalId && <span className="text-muted-foreground">id {publication.externalId}</span>
-            )}
-            {publication.scheduledAt !== undefined && (
-              <span className="text-muted-foreground">scheduled {new Date(publication.scheduledAt).toLocaleString()}</span>
-            )}
-            {publication.error && <span className="text-destructive">({publication.error})</span>}
-            {(publication.status === "failed" || publication.status === "uncertain") && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={retrying !== null}
-                onClick={() => void retry(publication.id)}
-              >
-                {retrying === publication.id ? "Retrying…" : publication.status === "uncertain" ? "Check and retry" : "Retry"}
-              </Button>
-            )}
-          </li>
-        ))}
+    <div className={title ? "grid gap-4" : "grid gap-4 border-t border-border pt-4"} data-testid="publications">
+      <div className="flex items-center gap-2">
+        <Layers aria-hidden="true" className="size-5 text-muted-foreground" />
+        {title ? (
+          <h2 className="m-0 text-lg font-semibold text-foreground">{title}</h2>
+        ) : (
+          <h3 className="m-0 text-base font-semibold text-foreground">Publications</h3>
+        )}
+      </div>
+      <ul className="m-0 mt-1 grid list-none gap-4 p-0 text-sm">
+        {publications.map((publication) => {
+          const status = STATUS[publication.status] ?? { label: publication.status, tone: "neutral" as const };
+          return (
+            <li
+              key={publication.id}
+              data-testid={`publication-${publication.target}`}
+              className="grid gap-4 py-1"
+            >
+              <div className="flex items-center gap-3">
+                <PlatformLogo baseUrl={publication.publisherUrl ?? ""} service={publication.channelService} className="size-8" />
+                <div className="grid min-w-0 flex-1 gap-0.5">
+                  <span className="truncate font-semibold text-foreground">
+                    {publication.channelService ? platformName(publication.channelService) : publication.target}
+                  </span>
+                  <span className="truncate text-muted-foreground">
+                    {accountOf(publication)}
+                    {!publication.externalUrl && publication.externalId && ` · id ${publication.externalId}`}
+                    {publication.scheduledAt !== undefined && ` · ${new Date(publication.scheduledAt).toLocaleString()}`}
+                  </span>
+                </div>
+                <StatusBadge tone={status.tone} label={status.label} className="shrink-0" />
+              </div>
+              <span className="flex flex-wrap gap-2 empty:hidden">
+                {publication.managerUrl && (
+                  <a
+                    href={publication.managerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(buttonVariants({ size: "sm", variant: "outline" }), "flex-1 justify-center")}
+                  >
+                    <ExternalLink aria-hidden="true" />
+                    Open in {publication.managerName ?? "the Publisher"}
+                  </a>
+                )}
+                {publication.externalUrl && (
+                  <a
+                    href={publication.externalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(buttonVariants({ size: "sm", variant: "outline" }), "flex-1 justify-center")}
+                  >
+                    <ExternalLink aria-hidden="true" />
+                    View post
+                  </a>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ul>
-      {error && <p className="m-0 text-sm text-destructive">{error}</p>}
+      {problems.length > 0 && (
+        <section data-testid="publication-errors" className="grid gap-3 border-t border-border pt-4">
+          <h3 className="m-0 text-sm font-semibold text-destructive">Errors</h3>
+          <ul className="m-0 grid list-none gap-3 p-0 text-sm">
+            {problems.map((publication) => (
+              <li key={publication.id} className="grid gap-2" data-testid={`publication-error-${publication.target}`}>
+                <p className="m-0 text-destructive">
+                  <span className="font-semibold">{publication.target}</span>
+                  {publication.error ? `: ${publication.error}` : ""}
+                </p>
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={retrying !== null}
+                    onClick={() => void retry(publication.id)}
+                  >
+                    {retrying === publication.id ? "Retrying…" : publication.status === "uncertain" ? "Check and retry" : "Retry"}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {error && <p className="m-0 text-sm text-destructive">{error}</p>}
+        </section>
+      )}
     </div>
   );
   return title ? <Card className="grid gap-4 p-6">{body}</Card> : body;
