@@ -22,6 +22,7 @@ vi.mock("@convex/_generated/api", () => ({
       addChannel: "publishers.addChannel",
       updateSettings: "publishers.updateSettings",
       removeTarget: "publishers.removeTarget",
+      setChannelProfiles: "publishers.setChannelProfiles",
       listChannels: "publishers.listChannels",
     },
   },
@@ -84,11 +85,11 @@ describe("PublishTargetsCard", () => {
     await render([{ ...target("instagram", "already"), channelId: "c1" }]);
     await click(byText("Add channel"));
     const dialog = document.body.querySelector('[role="dialog"]')!;
-    expect(dialog.textContent).toContain("Fresh");
+    expect(dialog.textContent).toContain("@fresh");
     expect(dialog.textContent).not.toContain("Already");
     expect(dialog.textContent).toContain("This channel has no handle, so it cannot be added.");
     const option = (name: string) => Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes(name))!;
-    expect(option("Fresh").disabled).toBe(false);
+    expect(option("@fresh").disabled).toBe(false);
     expect(option("Nameless").disabled).toBe(true);
   });
 
@@ -100,7 +101,7 @@ describe("PublishTargetsCard", () => {
     await render([]);
     await click(byText("Add channel"));
     const dialog = document.body.querySelector('[role="dialog"]')!;
-    await click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes("Fresh")));
+    await click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes("@fresh")));
     expect(mutations["publishers.addChannel"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
       channelId: "c9",
@@ -114,7 +115,7 @@ describe("PublishTargetsCard", () => {
   it("saves the Board ID of a Pinterest channel and keeps its other settings", async () => {
     listChannels.mockResolvedValue({ ok: true, channels: [] });
     await render([target("pinterest", "pins", { board: "old", title: "T" })]);
-    await click(byText("pinterest name"));
+    await click(byText("@pins"));
     const input = document.getElementById("board-pinterest:pins") as HTMLInputElement;
     expect(input.value).toBe("old");
     await act(async () => {
@@ -132,7 +133,7 @@ describe("PublishTargetsCard", () => {
   it("offers TikTok Visibility and Posting method and saves a changed choice", async () => {
     listChannels.mockResolvedValue({ ok: true, channels: [] });
     await render([target("tiktok", "tt", { comment: false })]);
-    await click(byText("tiktok name"));
+    await click(byText("@tt"));
     const visibility = document.getElementById("privacy_level-tiktok:tt") as HTMLSelectElement;
     const method = document.getElementById("content_posting_method-tiktok:tt") as HTMLSelectElement;
     expect(text()).toContain("Visibility");
@@ -144,6 +145,24 @@ describe("PublishTargetsCard", () => {
       instanceId: "inst-1",
       target: "tiktok:tt",
       settings: { comment: false, privacy_level: "SELF_ONLY" },
+    });
+  });
+
+  it("stores the live handle of a channel added before handles were kept, once, never for one that has it", async () => {
+    listChannels.mockResolvedValue({
+      ok: true,
+      channels: [
+        { id: "old", name: "Love You Make", service: "instagram", profile: "love_youmake" },
+        { id: "c9", name: "Has one", service: "tiktok", profile: "tt" },
+      ],
+    });
+    const legacy = { ...target("instagram", "old"), target: "instagram", channelProfile: undefined } as unknown as Target;
+    await render([legacy, target("tiktok", "c9")]);
+    expect(text()).toContain("@love_youmake");
+    expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledTimes(1);
+    expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledWith({
+      instanceId: "inst-1",
+      profiles: [{ target: "instagram", channelProfile: "love_youmake" }],
     });
   });
 

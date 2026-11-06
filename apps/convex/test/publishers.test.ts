@@ -195,6 +195,35 @@ describe("publishers", () => {
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:other-insta"]);
   });
 
+  it("stores the handles of channels added without one, in one write, once, without changing their keys", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, CONNECTION);
+    await t.run(async (ctx) => {
+      const publisher = await ctx.db.query("publishers").first();
+      await ctx.db.patch(publisher!._id, {
+        targets: [
+          { target: "instagram", channelId: "c1", channelName: "Love You Make", channelService: "instagram" },
+          { target: "tiktok", channelId: "c2", channelName: "Loveyoumake", channelService: "tiktok", channelProfile: "kept" },
+        ],
+      });
+    });
+    await owner.mutation(api.publishers.setChannelProfiles, {
+      instanceId: INSTANCE_ID,
+      profiles: [
+        { target: "instagram", channelProfile: "love_youmake" },
+        // A stored handle is never overwritten, and a channel that is gone is skipped.
+        { target: "tiktok", channelProfile: "other" },
+        { target: "nope", channelProfile: "x" },
+      ],
+    });
+    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    expect(publisher?.targets).toMatchObject([
+      { target: "instagram", channelProfile: "love_youmake" },
+      { target: "tiktok", channelProfile: "kept" },
+    ]);
+  });
+
   it("always generates `<platform>:<handle>` keys and refuses missing or duplicate handles", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);

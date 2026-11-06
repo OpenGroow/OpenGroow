@@ -82,7 +82,8 @@ describe("Publishers page", () => {
     expect(byText("Channels")?.textContent).toBe("Channels (2)");
     await click(byText("Channels"));
     expect(text()).not.toContain("Postiz URL");
-    expect(text()).toContain("My IG");
+    expect(text()).toContain("@myinsta");
+    expect(text()).not.toContain("My IG");
     await click(byText("Configuration"));
     expect(text()).toContain("Postiz URL");
   });

@@ -153,6 +153,31 @@ export const updateSettings = mutation({
   },
 });
 
+/**
+ * Stores the account handles of channels added before the handle was kept (their
+ * key may then be a bare `instagram`), in one write. Never overwrites a stored
+ * handle, skips a channel that is no longer on the Publisher, and leaves the
+ * keys untouched so Missions and Schedules that reference them keep working.
+ */
+export const setChannelProfiles = mutation({
+  args: {
+    instanceId: v.string(),
+    profiles: v.array(v.object({ target: v.string(), channelProfile: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    const publisher = await requirePublisher(ctx, args.instanceId);
+    const byTarget = new Map(args.profiles.filter((p) => p.channelProfile.trim()).map((p) => [p.target, p.channelProfile]));
+    let changed = false;
+    const targets = publisher.targets.map((t) => {
+      const profile = byTarget.get(t.target);
+      if (!profile || t.channelProfile) return t;
+      changed = true;
+      return { ...t, channelProfile: profile };
+    });
+    if (changed) await ctx.db.patch(publisher._id, { targets, updatedAt: Date.now() });
+  },
+});
+
 export const removeTarget = mutation({
   args: { instanceId: v.string(), target: v.string() },
   handler: async (ctx, args) => {

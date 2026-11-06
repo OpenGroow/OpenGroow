@@ -14,6 +14,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { channelOptionsOf } from "@convex/publisher/registry";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
+import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 
 type Channel = { id: string; name: string; service: string; profile?: string; disabled?: boolean };
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
@@ -95,6 +96,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const profileOf = (t: Target) =>
     t.mapped ? (t.channelProfile ?? channels?.find((c) => c.id === t.channelId)?.profile) : undefined;
 
+  // Entries added before handles were kept get theirs stored from the live list.
+  useStoreMissingHandles(id, publisher, channels);
+
   const taken = new Set(publisher.targets.flatMap((t) => (t.mapped ? [t.channelId] : [])));
   const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled);
 
@@ -143,8 +147,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   <span className="grid">
                     <span className="font-medium">{platformName(c.service)}</span>
                     <span className="text-sm text-muted-foreground">
-                      {c.name}
-                      {c.profile ? ` · @${c.profile}` : ""}
+                      {c.profile ? `@${c.profile}` : c.name}
                     </span>
                     {c.profile ? null : (
                       <span className="text-xs text-muted-foreground">This channel has no handle, so it cannot be added.</span>
@@ -174,8 +177,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   </span>
                   {t.mapped ? (
                     <span className="text-sm text-muted-foreground">
-                      {t.channelName ?? t.channelId}
-                      {profileOf(t) ? ` · @${profileOf(t)}` : ""}
+                      {profileOf(t) ? `@${profileOf(t)}` : (t.channelName ?? t.channelId)}
                     </span>
                   ) : (
                     <StatusBadge tone="warning" label="Not mapped" />
