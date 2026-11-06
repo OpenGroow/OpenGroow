@@ -1,3 +1,4 @@
+import { publishDeclarationFor, type PublishDeclaration } from "@opengroow/agent-templates";
 import type { TemplateRegistry } from "@opengroow/agent-templates/registry";
 import type { RunResult } from "../run_result.js";
 import { validateDeclaredBlockerCode } from "./reconciliation.js";
@@ -15,6 +16,17 @@ export async function resolveMissionTypeBlockerCodes(
   return missionTypeEntry
     ? missionTypeEntry.blockers?.map((blocker) => blocker.code) ?? []
     : undefined;
+}
+
+/** The Mission type's `publish` declaration (ADR-069), or undefined when it has none. */
+export async function resolveMissionTypePublish(
+  registry: TemplateRegistry,
+  projectId: string,
+  templateId: string,
+  missionType: string,
+  version?: string,
+): Promise<PublishDeclaration | undefined> {
+  return publishDeclarationFor((await registry.resolve(projectId, templateId, version))?.manifest, missionType);
 }
 
 export async function validateTerminalRunResult(

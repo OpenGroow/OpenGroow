@@ -1,4 +1,5 @@
 import type { MachineToolInstall } from "./machine-tool";
+import type { PublishDeclaration } from "./publish-declaration";
 export type McpServerConfig = {
   name: string;
   transport: string;
@@ -405,6 +406,13 @@ export type MissionType = {
    * every Mission type paying for every provider's fetch.
    */
   contextProviders?: string[];
+  /**
+   * Publishing declaration (ADR-069): the Publishable kind this Mission type
+   * produces (destinations are chosen per Mission or Schedule). When present, the
+   * Artifact of a Run must carry a `publishable` of this kind. The Agent never
+   * publishes. Absent: the Mission type behaves as before.
+   */
+  publish?: PublishDeclaration;
 };
 
 /** How a human resolves a Template-declared Mission blocker. */

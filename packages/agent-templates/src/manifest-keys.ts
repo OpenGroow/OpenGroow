@@ -70,7 +70,7 @@ const GROUP_REQUIREMENT = keySetOf<Extract<RequirementField, { type: "group" }>>
 const SKILL = keySetOf<TemplateSkillDeclaration>({ source: true, spec: true, version: true });
 const MISSION_TYPE = keySetOf<MissionType>({
   type: true, label: true, description: true, payload: true, agentsMd: true, fields: true, sessionDurationMs: true,
-  review: true, blockers: true, contextProviders: true,
+  review: true, blockers: true, contextProviders: true, publish: true,
 });
 const PAYLOAD_FIELD = keySetOf<MissionPayloadField>({
   key: true, label: true, required: true, type: true, options: true, min: true, max: true,

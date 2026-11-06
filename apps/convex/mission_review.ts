@@ -6,6 +6,7 @@ import {
   type ReviewActionCapability,
   type ReviewContentContract,
 } from "@opengroow/agent-templates";
+import type { PublicationStatus } from "./publisher_schema.js";
 
 export type ReviewContentKind = "markdown" | "metadata" | "image" | "video";
 
@@ -42,6 +43,8 @@ export type MissionReviewProjection = {
   } | null;
   actions: MissionReviewAction[];
   defaultActionKey?: ReviewActionCapability["key"];
+  /** Present only when the Mission type declares `publish`. */
+  publish?: MissionPublishProjection;
   errors: string[];
 };
 
@@ -49,6 +52,30 @@ export type MissionReviewSnapshot = {
   status: string;
   missionType: string;
   lastResult?: unknown;
+};
+
+/** Where a Mission goes and what happened so far (ADR-069); only for Mission
+ * types that declare `publish`. */
+export type MissionPublishProjection = {
+  target: string | null;
+  /** Every target the Mission goes to (one Publication each). */
+  targets: string[];
+  /** Every target is mapped to a channel on the Project's Publisher. */
+  mapped: boolean;
+  /** The targets that have no channel yet (empty when `mapped`). */
+  unmappedTargets: string[];
+  /** The Project has a Publisher with an API key. Without it nothing can be sent. */
+  publisherReady: boolean;
+  /** The date the human chose (epoch ms); absent = publish immediately. */
+  publishAt?: number;
+  publications: Array<{
+    target: string;
+    status: PublicationStatus;
+    externalId?: string;
+    externalUrl?: string;
+    scheduledAt?: number;
+    error?: string;
+  }>;
 };
 
 type ArtifactSnapshot = {
@@ -170,9 +197,24 @@ function actionEnabled(
   return { enabled: true };
 }
 
+function publishBlockedReason(publish: MissionPublishProjection): string | undefined {
+  if (!publish.publisherReady) {
+    return "The Publisher has no API key (or none is set up): configure it on the Publishers page";
+  }
+  if (publish.targets.length === 0) {
+    return "Choose a channel";
+  }
+  if (publish.unmappedTargets.length > 0) {
+    const names = publish.unmappedTargets.map((t) => `"${t}"`).join(", ");
+    return `Channel ${names} is not on the Project's Publisher (or not configured): check the Publishers page`;
+  }
+  return undefined;
+}
+
 export function buildMissionReviewProjection(
   manifest: AgentManifest | undefined,
   snapshot: MissionReviewSnapshot,
+  publish?: MissionPublishProjection,
 ): MissionReviewProjection {
   const artifact = currentArtifact(snapshot.lastResult);
   const contract = manifest
@@ -185,12 +227,18 @@ export function buildMissionReviewProjection(
     errors.push("Mission type does not declare a review contract");
   }
 
-  const artifactError = contentError(artifact, contract);
+  // A Mission type that declares `publish` is reviewed from its `publishable`
+  // (references to public media), never from a review.path HTTP route: the
+  // content is not fetched, so its contract is not checked either (#26).
+  const publishDriven = publish !== undefined;
+  const artifactError = publishDriven
+    ? artifact ? undefined : "No artifact available for this mission"
+    : contentError(artifact, contract);
   if (artifactError && !errors.includes(artifactError)) errors.push(artifactError);
 
   const source = contentSource(artifact, contract);
   const content =
-    artifact && source
+    artifact && source && !publishDriven
       ? {
           kind: contract?.kind ?? artifact.kind ?? "metadata",
           source,
@@ -201,7 +249,12 @@ export function buildMissionReviewProjection(
 
   const declaredActions = contract?.actions ?? [];
   const actions = declaredActions.map((action) => {
-    const availability = actionEnabled(action, snapshot, artifact);
+    let availability = actionEnabled(action, snapshot, artifact);
+    // A Publisher that cannot send (no API key) or an unmapped target blocks `publish`.
+    if (publish && action.key === "publish" && availability.enabled) {
+      const blocked = publishBlockedReason(publish);
+      if (blocked) availability = { enabled: false, disabledReason: blocked };
+    }
     return {
       key: action.key,
       label: action.label,
@@ -223,6 +276,7 @@ export function buildMissionReviewProjection(
     content,
     actions,
     defaultActionKey: actions.find((action) => action.enabled)?.key,
+    ...(publish ? { publish } : {}),
     errors,
   };
 }

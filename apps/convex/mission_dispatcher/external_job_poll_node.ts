@@ -5,6 +5,7 @@ import { RUNTIME_WORKSPACE_FILE_READ } from "@opengroow/protocol";
 import { decideExternalJobPoll } from "./external_job_polling.js";
 import { resolveTemplateMcpEndpoint } from "../mcp_endpoint.js";
 import {
+  publishDeclarationFor,
   resolveExternalJobContract as resolveExternalJobContractFromManifest,
 } from "@opengroow/agent-templates";
 import type {
@@ -18,6 +19,8 @@ import { callMcpTool } from "../mcp_node.js";
 import { errorMessage } from "./error_message.js";
 import { validateTerminalRunResult } from "./blocker_codes.js";
 import { parentMissionId, type RunParent } from "../run_parent.js";
+import { mergePublishResource, publishResourceCall } from "./publish_resource.js";
+import type { PollDecision } from "./external_job_polling.js";
 
 const MCP_JOB_STATUS_TIMEOUT_MS = 30_000;
 
@@ -254,8 +257,75 @@ export type AwaitingJobRun = {
     missionType?: string;
     // SourceJob execution only (issue #533): the Source this job enriches.
     sourceRef?: string;
+    // Text part of the Publishable the Agent wrote (`publish.resource`).
+    publishableDraft?: unknown;
   };
 };
+
+const MCP_PUBLISH_RESOURCE_TIMEOUT_MS = 30_000;
+
+/**
+ * A Mission type that declares `publish.resource` gets its media from the MCP
+ * when the External Job completes: one call to the declared tool, merged into
+ * the text part the Agent wrote, validated as a whole. Anything else is
+ * returned untouched. A failure (tool error, missing or invalid media) fails
+ * the Run with a per-field message and keeps no partial `publishable`; an
+ * unreachable MCP throws `TransientExternalJobPollError` so a later tick
+ * retries the (idempotent, read-only) call.
+ */
+async function attachPublishResource(
+  decision: PollDecision,
+  opts: {
+    ctx: ActionCtx;
+    template: AgentTemplate;
+    contract: ExternalJobPollingContract;
+    run: AwaitingJobRun;
+    jobId: string;
+  },
+): Promise<PollDecision> {
+  if (decision.type !== "markCompleted") return decision;
+  const declaration = publishDeclarationFor(opts.template.manifest, opts.run.missionType);
+  const resource = declaration?.resource;
+  if (!declaration || !resource) return decision;
+  const fail = (message: string): PollDecision => ({
+    type: "markFailed",
+    code: "external_job_poll_failed",
+    message: `Publishable media could not be fetched with "${resource.tool}": ${message}`,
+  });
+
+  const call = publishResourceCall(resource, opts.jobId);
+  // Loaded only now: most polls never reach a completed job with a resource.
+  const apiKey = await loadProjectAgentApiKey(opts.ctx, opts.run.instanceId, opts.run.templateId);
+  const endpoint = resolveTemplateMcpEndpoint(opts.template, opts.contract.server, apiKey);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MCP_PUBLISH_RESOURCE_TIMEOUT_MS);
+  let toolOutput: unknown;
+  try {
+    toolOutput = await callMcpTool(endpoint.mcpUrl, call.tool, call.args, {
+      headers: endpoint.headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (isTransientMcpStatusPollFailure(err)) throw new TransientExternalJobPollError(err);
+    return fail(errorMessage(err));
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const merged = mergePublishResource({
+    missionType: opts.run.missionType,
+    declaration: { ...declaration, resource },
+    draft: opts.run.mcpJob?.publishableDraft,
+    toolOutput,
+  });
+  if (!merged.ok) return fail(merged.message);
+  const { result } = decision;
+  if (result.status !== "success" && result.status !== "needs_human_review") return decision;
+  return {
+    type: "markCompleted",
+    result: { ...result, artifact: { ...result.artifact, publishable: merged.publishable } },
+  } as PollDecision;
+}
 
 /**
  * Poll one `awaiting_job` run by calling the Template's declared External Job
@@ -415,20 +485,30 @@ export async function pollExternalJobRun(
     return;
   }
 
-  await applyDecision(
-    decideExternalJobPoll(
-      job,
-      contract,
-      {
-        serverName,
-        jobId,
-        summary,
-        reviewQuestions,
-        maxMs: opts.maxMs,
-        jobType,
-        retryableFailureCount: run.retryableFailureCount,
-      },
-      opts.timedOut,
-    ),
+  let decision = decideExternalJobPoll(
+    job,
+    contract,
+    {
+      serverName,
+      jobId,
+      summary,
+      reviewQuestions,
+      maxMs: opts.maxMs,
+      jobType,
+      retryableFailureCount: run.retryableFailureCount,
+    },
+    opts.timedOut,
   );
+  try {
+    decision = await attachPublishResource(decision, { ctx, template, contract, run, jobId });
+  } catch (err) {
+    if (!(err instanceof TransientExternalJobPollError)) throw err;
+    // The MCP was unreachable: the Run stays `awaiting_job`, the next tick
+    // polls and fetches again. The timeout is the only safety net.
+    if (opts.timedOut) {
+      await applyDecision({ type: "markFailed", code: "timeout", message: `Run exceeded ${opts.maxMs} ms` });
+    }
+    return;
+  }
+  await applyDecision(decision);
 }

@@ -3,7 +3,7 @@
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
 import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
-import { interpolateReviewTemplate, resolveReviewContract } from "@opengroow/agent-templates";
+import { interpolateReviewTemplate, publishDeclarationFor, resolveReviewContract } from "@opengroow/agent-templates";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import type { FunctionReference } from "convex/server";
@@ -17,6 +17,7 @@ import {
 import { RUNTIME_WORKSPACE_FILE_READ, RUNTIME_WORKSPACE_FILE_READ_RESULT, RUNTIME_OPENCLAW_EXEC_CANCEL } from "@opengroow/protocol";
 import { parseRuntimeOpenClawExecCancelPayload } from "./runtime_commands_node_parsers.js";
 import { resolveMcpActivationUrl } from "./mcp_activation_url.js";
+import { publishThroughPublisher, recordAutoPublishFailure } from "./publisher_node.js";
 import { errorMessage } from "./mission_dispatcher_node.js";
 import {
   buildMissionReviewProjection,
@@ -42,11 +43,17 @@ export const getReview = action({
     if (mission.ownerId !== ownerId) throw new Error("Forbidden");
 
     const template = await resolveMissionTemplate(getTemplateRegistry(ctx), mission);
-    return buildMissionReviewProjection(template?.manifest, {
-      status: mission.status,
-      missionType: mission.type,
-      lastResult: mission.lastResult,
-    });
+    const declaration = publishDeclarationFor(template?.manifest, mission.type);
+    const publish = declaration
+      ? await ctx.runQuery(internal.publications.reviewState, {
+          missionId: args.missionId,
+        })
+      : undefined;
+    return buildMissionReviewProjection(
+      template?.manifest,
+      { status: mission.status, missionType: mission.type, lastResult: mission.lastResult },
+      publish,
+    );
   },
 });
 
@@ -486,6 +493,13 @@ async function executeReviewAction(
     return { ok: true };
   }
 
+  // --- Mission types that declare `publish`: the Publisher is the executor (ADR-069) ---
+  const publishDeclaration = publishDeclarationFor(template.manifest, mission.type);
+  if (publishDeclaration && actionDef.key === "publish") {
+    await publishThroughPublisher(ctx, mission);
+    return { ok: true };
+  }
+
   // --- Resolve the Artifact external id ---
   const lastResult = mission.lastResult;
   const artifact =
@@ -828,6 +842,20 @@ export const autoPublishChain = internalAction({
       missionId: args.missionId,
     });
     if (!approvedMission) throw new Error("Mission not found after approve step");
+
+    // A Mission type that publishes through the Publisher (ADR-069): a failed
+    // publish is not a failed Mission. It stays `approved` with a `failed`
+    // Publication carrying the error, retryable via `retryPublication`.
+    const declaration = publishDeclarationFor(template.manifest, approvedMission.type);
+    if (declaration) {
+      try {
+        await executeReviewAction(ctx, { mission: approvedMission, template, actionKey: "publish" });
+      } catch (err) {
+        const recorded = await recordAutoPublishFailure(ctx, args.missionId, err);
+        if (!recorded) await failMission(`publish step failed — ${errorMessage(err)}`);
+      }
+      return;
+    }
 
     await runStep("publish", approvedMission);
   },

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { PublishChannelPicker } from "./publish-channel-picker";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
   AutoPublishToggle,
@@ -164,6 +165,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const payloadOpen =
     payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
+  const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
+  const declaresPublish = publishDecl !== undefined;
 
   useEffect(() => {
     const [firstType] = missionTypes;
@@ -390,13 +393,27 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               )}
             </label>
 
-            {autoPublishAllowed && (
+            {autoPublishAllowed && !declaresPublish && (
               <AutoPublishToggle
                 checked={autoPublish}
                 onChange={setAutoPublish}
                 hint={AUTO_PUBLISH_SCHEDULE_HINT}
               />
             )}
+
+            {declaresPublish ? (
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={publishDecl?.kind}
+                onChange={setPayloadText}
+                autoPublish={
+                  autoPublishAllowed
+                    ? { checked: autoPublish, onChange: setAutoPublish, hint: AUTO_PUBLISH_SCHEDULE_HINT }
+                    : undefined
+                }
+              />
+            ) : null}
 
             <div className="grid gap-3">
               <Button
@@ -718,6 +735,21 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                       <span className="font-semibold text-muted-foreground">Timezone</span>
                                       <span>{schedule.timezone}</span>
                                     </div>
+                                    {manifests
+                                      .find((m) => m.id === schedule.templateId)
+                                      ?.missionTypes?.find((t) => t.type === schedule.type)?.publish ? (
+                                      <PublishChannelPicker
+                                        instanceId={instanceId}
+                                        kind={manifests
+                                          .find((m) => m.id === schedule.templateId)
+                                          ?.missionTypes?.find((t) => t.type === schedule.type)?.publish?.kind}
+                                        payloadText={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
+                                        onChange={(text) => {
+                                          setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: text }));
+                                          void savePayloadDraft(schedule._id, text);
+                                        }}
+                                      />
+                                    ) : null}
                                     <div className="grid gap-1">
                                       <span className="font-semibold text-muted-foreground">Payload</span>
                                       <Textarea

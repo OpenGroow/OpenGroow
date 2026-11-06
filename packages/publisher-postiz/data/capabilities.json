@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "adapter": "postiz",
+  "source": "https://docs.postiz.com/general/platforms/overview",
+  "platforms": {
+    "x": { "name": "X", "video": "supported", "image": "supported", "carousel": "supported" },
+    "linkedin": { "name": "LinkedIn", "video": "supported", "image": "supported", "carousel": "supported" },
+    "linkedin-page": { "name": "LinkedIn Page", "video": "supported", "image": "supported", "carousel": "supported" },
+    "reddit": {
+      "name": "Reddit",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "unsupported",
+      "reasons": { "carousel": "Reddit media posts take exactly one attachment" }
+    },
+    "instagram": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
+    "instagram-standalone": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
+    "facebook": {
+      "name": "Facebook Page",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "uncertain",
+      "reasons": { "carousel": "The Postiz docs do not say whether Facebook feed posts take several images" }
+    },
+    "youtube": {
+      "name": "YouTube",
+      "video": "supported",
+      "image": "unsupported",
+      "carousel": "unsupported",
+      "reasons": { "image": "YouTube only takes a video", "carousel": "YouTube only takes a video" }
+    },
+    "gmb": {
+      "name": "Google Business Profile",
+      "video": "unsupported",
+      "image": "supported",
+      "carousel": "unsupported",
+      "reasons": { "video": "Google Business Profile posts take exactly one image", "carousel": "Google Business Profile posts take exactly one image" }
+    },
+    "tiktok": { "name": "TikTok", "video": "supported", "image": "supported", "carousel": "supported" },
+    "pinterest": {
+      "name": "Pinterest",
+      "video": "uncertain",
+      "image": "supported",
+      "carousel": "uncertain",
+      "reasons": {
+        "video": "A Pinterest video pin needs a cover image; the Postiz provider page does not document it",
+        "carousel": "Pinterest takes up to 5 images, but the Postiz provider page does not document it"
+      }
+    },
+    "dribbble": {
+      "name": "Dribbble",
+      "video": "unsupported",
+      "image": "supported",
+      "carousel": "unsupported",
+      "reasons": { "video": "Dribbble shots take exactly one image", "carousel": "Dribbble shots take exactly one image" }
+    },
+    "bluesky": { "name": "Bluesky", "video": "supported", "image": "supported", "carousel": "supported" },
+    "wrapcast": {
+      "name": "Farcaster",
+      "video": "unsupported",
+      "image": "supported",
+      "carousel": "uncertain",
+      "reasons": { "video": "Farcaster does not take videos through Postiz", "carousel": "The Postiz docs do not say whether Farcaster takes several images" }
+    },
+    "tumblr": { "name": "Tumblr", "video": "supported", "image": "supported", "carousel": "supported" }
+  }
+}

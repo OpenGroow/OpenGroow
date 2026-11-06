@@ -49,6 +49,7 @@ export const reconcileDecisionLogV = v.union(
       sourceRef: v.optional(v.string()),
       // SourceJob handoff (#568): the Source's position in the result file.
       sourcePosition: v.optional(v.number()),
+      publishableDraft: v.optional(v.any()),
     }),
   }),
   v.object({

@@ -52,4 +52,12 @@ crons.interval(
   internal.source_routing.tick,
 );
 
+// Scheduled Publications (ADR-069): asks the Publisher whether the posts that
+// reached their date are published. Polling, no webhook.
+crons.interval(
+  "publication-poll",
+  { minutes: 1 },
+  internal.publication_polling.pollScheduled,
+);
+
 export default crons;

@@ -35,6 +35,8 @@ The canonical UI term for `approved` is **"To publish"** (analogy: "to deploy" c
 - An agent can filter `approved` missions to trigger publication autonomously, without querying seo-mcp article by article.
 - The review page is status-aware: it shows "Approve" at `to_validate` and "Publish" at `approved`.
 - The mission list exposes both states (`to_validate` and `approved`) as entry points to the review page, with different CTA labels.
+
+**Amendment (issue #26 follow-up).** Review and publishing now live on the Overview of the one Mission page. The cards link to it without a Review or Publish button, `/review` and `/view` redirect to it, and the status-aware action bar ("Ready for review" with Approve and Reject at `to_validate`, "Ready to publish" at `approved`) sits under the deliverable. The Publishing card (channels, date, Auto-publish) sits in the right column and is editable while the Mission is `to_validate` or `approved`, a read-only summary afterwards.
 - The Convex schema and the `status` field validator must include `"approved"`.
 - Statuses are not blocking — each mission type follows its own path to `done`. `approved` is only reached by missions that have a publication step (e.g. SEO articles); others go directly from `to_validate` to `done`.
 - The `approved` state is Megaclaw-only — seo-mcp has its own `approved` on `seo_articles`; the two are synchronized via the `approve_article` / `publish_article` calls.

@@ -1,0 +1,15 @@
+{
+  "name": "@opengroow/publisher-sdk",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./channel-options": "./src/channel-options.ts"
+  }
+}

@@ -21,20 +21,23 @@ function StatusBadge({
   tone,
   label,
   className,
+  size = "xs",
 }: {
   tone: StatusTone
   label: string
   className?: string
+  /** `default` for a page header (the Mission page); `xs` inline in lists and cards. */
+  size?: "xs" | "default"
 }) {
   const { pill, dot } = TONES[tone]
   return (
     <Badge
       data-slot="status-badge"
       variant="outline"
-      size="xs"
-      className={cn("text-foreground", pill, className)}
+      size={size}
+      className={cn("text-foreground", size !== "xs" && "gap-2 font-medium", pill, className)}
     >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", dot)} />
+      <span aria-hidden="true" className={cn(size === "xs" ? "size-1.5" : "size-2", "rounded-full", dot)} />
       {label}
     </Badge>
   )

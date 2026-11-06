@@ -153,7 +153,7 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(col?.textContent).toContain("Create Article");
   });
 
-  it("shows review link for to_validate missions with artifact.external.id (strict contract)", async () => {
+  it("opens the mission page, not a /review page, from a to_validate card (the review is on the page)", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.listActiveByInstance") return [makeMission()];
       if (key === "project_agents.listByInstance") return [];
@@ -163,10 +163,8 @@ describe("InstanceMissionsContent — mission list", () => {
     await render();
 
     const links = Array.from(document.querySelectorAll("a"));
-    const reviewLink = links.find((a) => a.href.includes("/missions/") && a.href.includes("/review"));
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.href).toContain("/projects/");
-    expect(reviewLink?.href).toContain("/missions/mission-1/review");
+    expect(links.some((a) => a.href.includes("/review"))).toBe(false);
+    expect(links.find((a) => a.href.endsWith("/missions/mission-1"))).toBeTruthy();
   });
 
   it("does not show review link for to_validate missions without external.id (unmigrated legacy shape)", async () => {
@@ -196,7 +194,7 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(col?.textContent).toContain("Create Article");
   });
 
-  it("shows review link for approved missions with artifact.external.id (strict contract)", async () => {
+  it("opens the mission page, not a /review page, from an approved card (publishing is on the page)", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.listActiveByInstance") return [makeMission({ status: "approved" })];
       if (key === "project_agents.listByInstance") return [];
@@ -206,10 +204,8 @@ describe("InstanceMissionsContent — mission list", () => {
     await render();
 
     const links = Array.from(document.querySelectorAll("a"));
-    const reviewLink = links.find((a) => a.href.includes("/missions/") && a.href.includes("/review"));
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.href).toContain("/projects/");
-    expect(reviewLink?.href).toContain("/missions/mission-1/review");
+    expect(links.some((a) => a.href.includes("/review"))).toBe(false);
+    expect(links.find((a) => a.href.endsWith("/missions/mission-1"))).toBeTruthy();
   });
 
   it("does not show review link for done missions even with artifact.external.id", async () => {

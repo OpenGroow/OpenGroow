@@ -8,11 +8,15 @@ import { MissionDetailContent } from "../src/components/mission-detail-page";
 import { useQueryWithTemplates } from "./fixtures/manifests";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom has no PointerEvent, which the menu primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
 
 const useQueryMock = vi.fn();
 const deleteMissionMock = vi.fn();
 const retryMissionMock = vi.fn();
 const cancelMissionMock = vi.fn();
+const getReviewMock = vi.fn();
+const loadReviewContentMock = vi.fn();
 const routerPushMock = vi.fn();
 const routerReplaceMock = vi.fn();
 
@@ -31,7 +35,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryWithTemplates(useQueryMock)(...args),
   useMutation: (key: string) => (key === "missions.retryMission" ? retryMissionMock : deleteMissionMock),
-  useAction: (key: string) => (key === "missions_node.cancelMission" ? cancelMissionMock : vi.fn()),
+  useAction: (key: string) =>
+    key === "missions_node.cancelMission"
+      ? cancelMissionMock
+      : key === "missions_node.getReview"
+        ? getReviewMock
+        : key === "missions_node.loadReviewContent"
+          ? loadReviewContentMock
+          : vi.fn(),
 }));
 
 vi.mock("@convex/_generated/api", () => ({
@@ -47,7 +58,12 @@ vi.mock("@convex/_generated/api", () => ({
     },
     missions_node: {
       cancelMission: "missions_node.cancelMission",
+      getReview: "missions_node.getReview",
+      loadReviewContent: "missions_node.loadReviewContent",
+      performReviewAction: "missions_node.performReviewAction",
     },
+    publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publications: { listForMission: "publications.listForMission" },
     runs: { listByMission: "runs.listByMission" },
     project_agents: { get: "project_agents.get" },
   },
@@ -103,6 +119,18 @@ describe("MissionDetailContent", () => {
 
   beforeEach(() => {
     useQueryMock.mockReset();
+    getReviewMock.mockReset();
+    // By default a Mission has nothing to review yet.
+    getReviewMock.mockResolvedValue({
+      status: "doing",
+      reviewable: false,
+      artifact: { available: false, metadata: {} },
+      content: null,
+      actions: [],
+      errors: [],
+    });
+    loadReviewContentMock.mockReset();
+    loadReviewContentMock.mockReturnValue(new Promise(() => {}));
     deleteMissionMock.mockReset();
     deleteMissionMock.mockResolvedValue(undefined);
     retryMissionMock.mockReset();
@@ -129,6 +157,18 @@ describe("MissionDetailContent", () => {
       root.render(<MissionDetailContent instanceId={instanceId} missionId={missionId} />);
     });
   }
+
+  const openMoreMenu = async () => {
+    await act(async () => {
+      (document.querySelector('[aria-label="More actions"]') as HTMLElement).click();
+    });
+  };
+
+  const openRunHistory = async () => {
+    await act(async () => {
+      (document.querySelector('[data-testid="mission-tab-runs"]') as HTMLElement).click();
+    });
+  };
 
   it("shows loading state while mission is undefined", async () => {
     useQueryMock.mockReturnValue(undefined);
@@ -193,71 +233,19 @@ describe("MissionDetailContent", () => {
     );
   });
 
-  it("shows a Review link for to_validate video missions with artifact.external.id (strict contract)", async () => {
+  it.each([
+    ["to_validate", "video"],
+    ["approved", "video"],
+    ["to_validate", "markdown"],
+  ] as const)("has no Review, Publish or View link on a %s %s mission: the review is on the page itself", async (status, kind) => {
     const mission = {
       ...BASE_MISSION,
-      type: "create_video",
-      status: "to_validate" as const,
+      status,
       lastResult: {
         status: "needs_human_review" as const,
-        summary: "Video ready",
-        reviewQuestions: ["Is the video ready to publish?"],
-        artifact: { kind: "video" as const, external: { service: "video-mcp", id: "video-run-1" }, metadata: { runId: "video-run-1" } },
-      },
-    };
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "missions.get") return mission;
-      if (key === "runs.listByMission") return [];
-      return undefined;
-    });
-    await render("proj-abc", "mission-video-1");
-    const reviewLink = Array.from(document.querySelectorAll("a")).find((a) =>
-      a.href.includes("/projects/proj-abc/missions/mission-video-1/review"),
-    );
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.textContent).toContain("Review");
-  });
-
-  it("shows Publish and View links for approved video missions with artifact.external.id (strict contract)", async () => {
-    const mission = {
-      ...BASE_MISSION,
-      type: "create_video",
-      status: "approved" as const,
-      lastResult: {
-        status: "needs_human_review" as const,
-        summary: "Video ready",
-        reviewQuestions: ["Is the video ready to publish?"],
-        artifact: { kind: "video" as const, external: { service: "video-mcp", id: "video-run-2" }, metadata: { runId: "video-run-2" } },
-      },
-    };
-    useQueryMock.mockImplementation((key: string) => {
-      if (key === "missions.get") return mission;
-      if (key === "runs.listByMission") return [];
-      return undefined;
-    });
-    await render("proj-abc", "mission-video-2");
-    const publishLink = Array.from(document.querySelectorAll("a")).find((a) =>
-      a.href.includes("/projects/proj-abc/missions/mission-video-2/review"),
-    );
-    expect(publishLink).toBeTruthy();
-    expect(publishLink?.textContent).toContain("Publish");
-
-    const viewLink = Array.from(document.querySelectorAll("a")).find((a) =>
-      a.href.includes("/projects/proj-abc/missions/mission-video-2/view"),
-    );
-    expect(viewLink).toBeTruthy();
-    expect(viewLink?.textContent).toContain("View");
-  });
-
-  it("shows a Review button for to_validate missions with artifact.external.id (strict contract)", async () => {
-    const mission = {
-      ...BASE_MISSION,
-      status: "to_validate" as const,
-      lastResult: {
-        status: "needs_human_review" as const,
-        summary: "Article ready",
+        summary: "Ready",
         reviewQuestions: [],
-        artifact: { kind: "markdown" as const, external: { service: "article-mcp", id: "art-1" }, metadata: {} },
+        artifact: { kind, external: { service: "mcp", id: "id-1" }, metadata: {} },
       },
     };
     useQueryMock.mockImplementation((key: string) => {
@@ -265,16 +253,26 @@ describe("MissionDetailContent", () => {
       if (key === "runs.listByMission") return [];
       return undefined;
     });
-    await render("proj-abc", "mission-ext-1");
-    const reviewLink = Array.from(document.querySelectorAll("a")).find((a) =>
-      a.href.includes("/projects/proj-abc/missions/mission-ext-1/review"),
-    );
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.textContent).toContain("Review");
-    const viewLink = Array.from(document.querySelectorAll("a")).find((a) =>
-      a.href.includes("/projects/proj-abc/missions/mission-ext-1/view"),
-    );
-    expect(viewLink).toBeTruthy();
+    await render("proj-abc", "mission-1");
+    const links = Array.from(document.querySelectorAll("a"));
+    expect(links.some((a) => a.href.includes("/review") || a.href.includes("/view"))).toBe(false);
+    expect(links.some((a) => ["Review", "Publish", "View"].includes(a.textContent ?? ""))).toBe(false);
+  });
+
+  it("shows the title, the agent and type, the status, and the Overview and Run History tabs", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "missions.get") return { ...BASE_MISSION, status: "to_validate" as const };
+      if (key === "runs.listByMission") return [];
+      return undefined;
+    });
+    await render();
+    expect(document.querySelector("h1")?.textContent).toBe("Create Article");
+    // The status sits next to the title; the agent and the number are underneath.
+    expect(document.querySelector("h1")?.nextElementSibling?.textContent).toBe("To validate");
+    expect(document.querySelector("h1")?.parentElement?.nextElementSibling?.textContent).toContain("· #3");
+    expect(document.querySelector('[data-testid="mission-tab-overview"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[data-testid="mission-tab-runs"]')?.getAttribute("aria-selected")).toBe("false");
+    expect(document.querySelector('[data-testid="mission-details"]')?.textContent).toContain("Created");
   });
 
   it("does NOT show Review link for missions with legacy metadata.runId and no external.id (unmigrated)", async () => {
@@ -419,6 +417,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     expect(document.body.textContent).toContain("No runs yet");
   });
 
@@ -429,10 +428,34 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
-    const history = document.body.textContent?.split("Run History")[1] ?? "";
-    expect(history).toContain(BASE_MISSION.type);
+    await openRunHistory();
+    const history = document.querySelector('[aria-label="Run History"]')?.textContent ?? "";
+    // No title of its own (the tab says it); the Mission type is a title, the number sits beside it.
+    expect(document.querySelector("h2")?.textContent).not.toBe("Run History");
+    expect(history).toContain("Create Article");
+    expect(history).toContain("#3");
+    expect(history).not.toContain("create_article");
     expect(history).not.toContain("seo-agent-v2");
     expect(history).toContain("Completed");
+  });
+
+  it("styles a run as a card: title and status, View logs / View prompt as outlined pills, dated rows, summary", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "missions.get") return BASE_MISSION;
+      if (key === "runs.listByMission") return [BASE_RUN];
+      if (key === "project_agents.get") return { workspaceKey: "ws-1" };
+      return undefined;
+    });
+    await render();
+    await openRunHistory();
+    const row = document.querySelector('[data-testid="run-row"]')!;
+    expect(row.textContent).toContain("Create Article #3");
+    const pills = Array.from(row.querySelectorAll("a")).map((a) => a.textContent);
+    expect(pills).toEqual(["View logs", "View prompt"]);
+    expect(row.querySelectorAll("svg").length).toBeGreaterThanOrEqual(4);
+    expect(row.textContent).toContain("Started");
+    expect(row.textContent).toContain("Completed");
+    expect(row.textContent).toContain("Article written successfully");
   });
 
   it("shows a View prompt link next to View logs when a workspaceKey is resolved", async () => {
@@ -443,6 +466,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     const links = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
     const viewPromptLink = links.find((a) => a.textContent === "View prompt");
     expect(viewPromptLink).toBeDefined();
@@ -458,6 +482,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     expect(document.body.textContent).toContain("Article written successfully");
   });
 
@@ -478,6 +503,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     expect(document.body.textContent).toContain("Additional details");
     expect(document.body.textContent).toContain("postsProcessed");
     expect(document.body.textContent).toContain("reportPath");
@@ -496,6 +522,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     expect(document.body.textContent).toContain("agent crashed");
   });
 
@@ -525,6 +552,7 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openRunHistory();
     const text = document.body.textContent ?? "";
     const oldIdx = text.indexOf("old-summary");
     const newIdx = text.indexOf("new-summary");
@@ -624,31 +652,31 @@ describe("MissionDetailContent", () => {
 
   // ── Delete control ──────────────────────────────────────────────────────────
 
-  it("shows a delete button on all non-doing statuses", async () => {
-    const nonDoingStatuses = ["todo", "to_validate", "approved", "done", "failed"] as const;
-    for (const status of nonDoingStatuses) {
+  it.each(["todo", "to_validate", "approved", "done", "failed"] as const)(
+    "has a More actions menu with Delete on a %s Mission, and no standalone Delete button",
+    async (status) => {
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return { ...BASE_MISSION, status };
         if (key === "runs.listByMission") return [];
         return undefined;
       });
       await render();
-      const btn = document.body.querySelector("[data-delete-mission]");
-      expect(btn, `expected delete button for status=${status}`).toBeTruthy();
-      // Reset DOM between iterations
-      await act(async () => { root.render(<MissionDetailContent instanceId="instance-1" missionId="mission-1" />); });
-    }
-  });
+      expect(document.querySelector('[aria-label="More actions"]')).toBeTruthy();
+      expect(document.querySelector('button[aria-label="Delete mission"]')).toBeNull();
+      await openMoreMenu();
+      expect(document.body.querySelector("[data-delete-mission]")).toBeTruthy();
+    },
+  );
 
-  it("does not show a delete button when status is doing", async () => {
+  it("has no More actions menu when status is doing (a Run is live)", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.get") return { ...BASE_MISSION, status: "doing" };
       if (key === "runs.listByMission") return [];
       return undefined;
     });
     await render();
-    const btn = document.body.querySelector("[data-delete-mission]");
-    expect(btn).toBeFalsy();
+    expect(document.querySelector('[aria-label="More actions"]')).toBeNull();
+    expect(document.body.querySelector("[data-delete-mission]")).toBeFalsy();
   });
 
   it("calls deleteMission mutation after confirm=true and redirects to board", async () => {
@@ -659,12 +687,13 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render("proj-abc", "mission-1");
+    await openMoreMenu();
 
-    const btn = document.body.querySelector("[data-delete-mission]") as HTMLButtonElement;
-    expect(btn).toBeTruthy();
+    const item = document.body.querySelector("[data-delete-mission]") as HTMLElement;
+    expect(item).toBeTruthy();
 
     await act(async () => {
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      item.click();
       await Promise.resolve();
     });
 
@@ -680,10 +709,11 @@ describe("MissionDetailContent", () => {
       return undefined;
     });
     await render();
+    await openMoreMenu();
 
-    const btn = document.body.querySelector("[data-delete-mission]") as HTMLButtonElement;
+    const item = document.body.querySelector("[data-delete-mission]") as HTMLElement;
     await act(async () => {
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      item.click();
       await Promise.resolve();
     });
 

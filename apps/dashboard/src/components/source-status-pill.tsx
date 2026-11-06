@@ -32,7 +32,8 @@ const PIPELINE_STAGE_BADGE: Record<SourcePipelineStage, SourceBadge> = {
   Ready: { label: "Ready", tone: "info" },
   Scored: { label: "Scored", tone: "info" },
   Routed: { label: "Routed", tone: "info" },
-  "In production": { label: "In production", tone: "info" },
+  // Work in flight reads as `progress` (cyan, pulsing), so it differs from Scored and Routed (blue).
+  "In production": { label: "In production", tone: "progress" },
   Produced: { label: "Produced", tone: "active" },
   Published: { label: "Published", tone: "active" },
 };

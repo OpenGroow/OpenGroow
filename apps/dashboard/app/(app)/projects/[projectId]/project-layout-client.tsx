@@ -16,6 +16,7 @@ import {
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
+  Send,
   Rocket,
   ScrollText,
   Settings,
@@ -53,6 +54,7 @@ const PROJECT_VIEWS: ProjectView[] = [
   { id: "jobs", label: "Jobs", icon: ListChecks },
   { id: "schedules", label: "Scheduler", icon: CalendarClock },
   { id: "brand", label: "Brand", icon: Palette },
+  { id: "publishers", label: "Publishers", icon: Send },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "developer", label: "Developer", icon: ScrollText },
 ];

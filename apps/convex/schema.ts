@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { publisherTables } from "./publisher_schema.js";
 import {
   commandStatusV,
   jobOutcomeV,
@@ -180,6 +181,10 @@ const runSharedFields = {
       // enriches, as the Agent reported it. Agent-supplied, so resolved and
       // ownership-checked at poll time rather than typed as an id here.
       sourceRef: v.optional(v.string()),
+      // The text part of the Publishable the Agent wrote in its `in_progress`
+      // RunResult (Mission types whose `publish` declares a `resource`). The
+      // media is fetched from the MCP when the job completes and merged into it.
+      publishableDraft: v.optional(v.any()),
     }),
   ),
   completedAt: v.optional(v.number()),
@@ -208,6 +213,7 @@ const runSharedFields = {
 };
 
 export default defineSchema({
+  ...publisherTables,
   commands: defineTable({
     instanceId: v.string(),
     type: v.string(),

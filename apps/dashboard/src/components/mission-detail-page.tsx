@@ -7,16 +7,21 @@ import { useRouter } from "next/navigation";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
-import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
+import { AutoPublishToggle, supportsAutoPublish, type AutoPublishControl } from "./auto-publish-toggle";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref, runPromptHref } from "@/src/lib/instance-path";
 import { blockedExternalResult } from "@/src/lib/mission-result";
 import { Button } from "@/components/ui/button";
-import { Badge, badgeVariants } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { missionStatus, runStatus } from "@/components/opengroow/mission-status";
 import { Card } from "@/components/ui/card";
+import { PublicationList } from "./publication-list";
+import { MissionReviewContent } from "./mission-review-page";
+import { titleCase } from "@/src/lib/mission-type";
+import { Bot, Calendar, Code, Ellipsis, FileText, Layers, RefreshCw, Trash2, type LucideIcon } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type Props = {
   params: Promise<{ projectId: string; missionId: string }>;
@@ -61,19 +66,14 @@ function formatLocalTimestamp(ms: number): string {
   });
 }
 
+const TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "runs", label: "Run History" },
+] as const;
+
 function MissionStatusBadge({ status }: { status: string }) {
   const { label, tone } = missionStatus(status);
-  return <StatusBadge tone={tone} label={label} />;
-}
-
-function hasReviewableArtifact(mission: Doc<"missions">): boolean {
-  const result = mission.lastResult;
-  // The `failed` run-result variant carries no artifact, so narrow before access.
-  if (!result || !("artifact" in result)) return false;
-  const artifact = result.artifact;
-  if (!artifact) return false;
-  // Strict contract (ADR-020 / #146): identity lives in artifact.external.id only.
-  return typeof artifact.external?.id === "string";
+  return <StatusBadge tone={tone} label={label} size="default" />;
 }
 
 /**
@@ -95,17 +95,39 @@ function intermediateResultSummary(intermediateResult: unknown): string | undefi
   return undefined;
 }
 
+/** One label / value line of the Mission details card, separated from the next by a rule. */
+function DetailRow({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border pb-2 last:border-0 last:pb-0">
+      <Icon aria-hidden="true" className="size-4 text-muted-foreground" />
+      <dt className="flex-1 text-muted-foreground">{label}</dt>
+      <dd className="m-0 text-foreground">{children}</dd>
+    </div>
+  );
+}
+
 function RunRow({
   run,
   instanceId,
   templateId,
   missionLabel,
+  missionNumber,
   hasWorkspace,
 }: {
   run: Doc<"runs">;
   instanceId: string;
   templateId: string;
+  /** The Mission type as a title (`Create Reel`). */
   missionLabel: string;
+  missionNumber?: number;
   hasWorkspace: boolean;
 }) {
   const summary = run.result?.summary ?? intermediateResultSummary(run.intermediateResult);
@@ -115,40 +137,55 @@ function RunRow({
       : undefined;
 
   return (
-    <div className="grid gap-1.5 rounded-xl border border-border bg-card p-3.5">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-semibold text-foreground">
+    <div className="grid gap-3 rounded-2xl border border-border bg-card p-5" data-testid="run-row">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xl font-semibold text-foreground">
           {missionLabel}
+          {missionNumber !== undefined && ` #${missionNumber}`}
         </span>
-        <StatusBadge tone={runStatus(run.status).tone} label={runStatus(run.status).label} />
+        <StatusBadge tone={runStatus(run.status).tone} label={runStatus(run.status).label} size="default" />
         {hasWorkspace && (
-          <Link
-            href={runLogsHref(instanceId, templateId, run._id)}
-            className="text-xs font-semibold text-primary underline underline-offset-2 hover:no-underline"
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            nativeButton={false}
+            render={<Link href={runLogsHref(instanceId, templateId, run._id)} />}
           >
+            <FileText />
             View logs
-          </Link>
+          </Button>
         )}
         {/* Every Run listed here is one of this Mission's, so `missionId` is
             always set; the check only narrows the optional/null field the `runs`
             table stores it in (a Run's other RunParent is a SourceJob). */}
         {hasWorkspace && run.missionId != null && (
-          <Link
-            href={runPromptHref(instanceId, templateId, run._id, run.missionId)}
-            className="text-xs font-semibold text-primary underline underline-offset-2 hover:no-underline"
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            nativeButton={false}
+            render={<Link href={runPromptHref(instanceId, templateId, run._id, run.missionId)} />}
           >
+            <Code />
             View prompt
-          </Link>
+          </Button>
         )}
       </div>
-      <div className="flex flex-wrap gap-x-6 gap-y-0.5 text-xs text-muted-foreground">
-        <span>Started {formatLocalTimestamp(run.createdAt)}</span>
+      <div className="flex flex-wrap gap-x-8 gap-y-1 text-sm text-muted-foreground">
+        <span className="flex items-center gap-2">
+          <Calendar aria-hidden="true" className="size-4" />
+          Started {formatLocalTimestamp(run.createdAt)}
+        </span>
         {run.completedAt !== undefined && (
-          <span>Completed {formatLocalTimestamp(run.completedAt)}</span>
+          <span className="flex items-center gap-2">
+            <Calendar aria-hidden="true" className="size-4" />
+            Completed {formatLocalTimestamp(run.completedAt)}
+          </span>
         )}
       </div>
       {summary && (
-        <p className="m-0 text-sm text-muted-foreground">{summary}</p>
+        <p className="m-0 text-base text-muted-foreground">{summary}</p>
       )}
       {run.errorMessage && !summary && (
         <p className="m-0 text-sm text-destructive">{run.errorMessage}</p>
@@ -190,6 +227,7 @@ export function MissionDetailContent({
   const cancelMission = useAction(api.missions_node.cancelMission);
   const [isRetrying, setIsRetrying] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [tab, setTab] = useState<"overview" | "runs">("overview");
 
   async function handleDelete(): Promise<void> {
     const confirmed = window.confirm("Permanently delete this mission and all its runs?");
@@ -254,10 +292,6 @@ export function MissionDetailContent({
           runsFailureMessage(sortedRuns) ??
           "Failed; no details recorded");
 
-  const showReview =
-    hasReviewableArtifact(mission) &&
-    (mission.status === "to_validate" || mission.status === "approved");
-  const showView = hasReviewableArtifact(mission);
   const showDelete = mission.status !== "doing";
   const showStop = mission.status === "doing";
   const showRetry = mission.status === "failed" || mission.status === "blocked";
@@ -282,33 +316,88 @@ export function MissionDetailContent({
     }
   }
 
+  const manifest = manifests.find((m) => m.id === mission.templateId);
+  const missionTypeEntry = manifest?.missionTypes?.find((t) => t.type === mission.type);
+  const typeLabel = missionTypeEntry?.label ?? mission.type;
+  const agentName = manifest?.name ?? mission.templateId;
+  const declaresPublish = Boolean(missionTypeEntry?.publish);
+  const title = titleCase(mission.type);
+
+  const autoPublish: AutoPublishControl | undefined = autoPublishAllowed
+    ? {
+        checked: mission.autoPublish === true,
+        editable: autoPublishEditable,
+        onChange: (next: boolean) => void handleAutoPublishToggle(next),
+        hint: autoPublishEditable
+          ? undefined
+          : "This Mission's Run has finished — auto-publish can no longer be changed.",
+      }
+    : undefined;
+
+  const detailsCard = (
+    <Card className="grid gap-4 p-6" data-testid="mission-details">
+      <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-foreground">
+        <Layers aria-hidden="true" className="size-5 text-muted-foreground" />
+        Mission details
+      </h2>
+      {(mission.name ?? mission.summary) ? (
+        <div className="grid gap-1">
+          {mission.name && <p className="m-0 text-sm font-semibold text-foreground">{mission.name}</p>}
+          {mission.summary && <p className="m-0 text-sm text-muted-foreground">{mission.summary}</p>}
+        </div>
+      ) : null}
+      <dl className="m-0 grid gap-2 text-sm">
+        <DetailRow icon={Layers} label="Type">{typeLabel}</DetailRow>
+        <DetailRow icon={Bot} label="Agent">{agentName}</DetailRow>
+        {mission.sourceObservationId !== undefined && (
+          <DetailRow icon={Layers} label="Source">
+            <Link
+              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(mission.sourceObservationId)}`}
+              className={cn(badgeVariants({ variant: "default" }), "hover:bg-primary/25")}
+              data-testid="from-observation-badge"
+            >
+              From Source
+            </Link>
+          </DetailRow>
+        )}
+        <DetailRow icon={Calendar} label="Created">{formatLocalTimestamp(mission.createdAt)}</DetailRow>
+        <DetailRow icon={RefreshCw} label="Updated">{formatLocalTimestamp(mission.updatedAt)}</DetailRow>
+      </dl>
+      {/* Without a Publishing card (no `publish` declared), Auto-publish stays here. */}
+      {autoPublish && !declaresPublish && (
+        <AutoPublishToggle
+          checked={autoPublish.checked}
+          disabled={!autoPublish.editable}
+          hint={autoPublish.hint}
+          onChange={autoPublish.onChange}
+        />
+      )}
+    </Card>
+  );
+
   return (
-    <div className="grid gap-8">
-      <header className="grid gap-1">
-        <div className="flex items-center justify-between gap-4">
-          <Link
-            href={`/projects/${encodeURIComponent(instanceId)}/missions`}
-            className="text-xs font-semibold text-muted-foreground hover:text-primary"
-          >
-            ← Missions
-          </Link>
-          <div className="flex items-center gap-2">
-            {showReview && (
-              <Link
-                href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}/review`}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-border bg-primary/15 px-3 py-1 text-xs font-semibold text-primary transition hover:border-input"
-              >
-                {mission.status === "approved" ? "Publish" : "Review"}
-              </Link>
-            )}
-            {showView && (
-              <Link
-                href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}/view`}
-                className="inline-flex min-h-8 items-center justify-center rounded-xl border border-border bg-card px-3 py-1 text-xs font-semibold text-foreground transition hover:border-input"
-              >
-                View
-              </Link>
-            )}
+    <div className="grid min-w-0 gap-6">
+      <header className="grid gap-4">
+        <Link
+          href={`/projects/${encodeURIComponent(instanceId)}/missions`}
+          className="text-xs font-semibold text-muted-foreground hover:text-primary"
+        >
+          ← Missions
+        </Link>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="grid gap-1">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
+                {title}
+              </h1>
+              <MissionStatusBadge status={mission.status} />
+            </div>
+            <p className="m-0 text-base text-muted-foreground">
+              {agentName}
+              {mission.number !== undefined ? ` · #${mission.number}` : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             {showRetry && (
               <Button
                 variant="secondary"
@@ -334,131 +423,110 @@ export function MissionDetailContent({
                 {isStopping ? "Stopping…" : "Stop"}
               </Button>
             )}
+            {/* The "more actions" menu: Delete today, room for other actions later. */}
             {showDelete && (
-              <Button
-                variant="destructive"
-                size="sm"
-                type="button"
-                aria-label="Delete mission"
-                data-delete-mission={missionId}
-                onClick={() => void handleDelete()}
-              >
-                Delete
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="icon" aria-label="More actions" data-action="more" />}
+                >
+                  <Ellipsis />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem
+                    className="text-status-error"
+                    data-delete-mission={missionId}
+                    onClick={() => void handleDelete()}
+                  >
+                    <Trash2 />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
-        <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
-          Mission Detail
-        </h1>
+        <div role="tablist" aria-label="Mission" className="flex gap-6 border-b border-border">
+          {TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              data-testid={`mission-tab-${key}`}
+              onClick={() => setTab(key)}
+              className={cn(
+                "-mb-px border-b-2 px-1 pb-3 text-base font-semibold transition-colors",
+                tab === key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {/* Mission Identity */}
-      <Card className="grid gap-4 p-6">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-base font-semibold text-foreground">
-            {mission.type}
-            {mission.number !== undefined ? ` #${mission.number}` : ""}
-          </span>
-          <MissionStatusBadge status={mission.status} />
-          {mission.sourceObservationId !== undefined && (
-            <Link
-              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(mission.sourceObservationId)}`}
-              className={cn(badgeVariants({ variant: "default" }), "hover:bg-primary/25")}
-              data-testid="from-observation-badge"
-            >
-              From Source
-            </Link>
-          )}
-        </div>
+      {/* Both panels stay mounted (the inactive one hidden): switching tabs must not reload the review. */}
+      <div hidden={tab !== "overview"} className="grid min-w-0 gap-6">
+        {/* What happened — only for failed missions */}
+        {failureError !== undefined && (
+          <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
+            <h2 className="m-0 text-sm font-semibold text-destructive">
+              What happened
+            </h2>
+            <p className="m-0 text-sm text-destructive">{failureError}</p>
+          </section>
+        )}
 
-        {(mission.name ?? mission.summary) ? (
-          <div className="grid gap-1">
-            {mission.name && (
-              <p className="m-0 text-sm font-semibold text-foreground">
-                {mission.name}
-              </p>
-            )}
-            {mission.summary && (
-              <p className="m-0 text-sm text-muted-foreground">
-                {mission.summary}
-              </p>
-            )}
-          </div>
-        ) : null}
+        {/* Blocked — a Template-declared human-action blocker (issue #323). */}
+        {blocked !== undefined && (
+          <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
+            <h2 className="m-0 text-sm font-semibold text-status-warning">
+              Blocked
+            </h2>
+            <p className="m-0 text-sm text-status-warning">
+              {blocked.message}{" "}
+              {blocked.resolution?.kind === "link" && (
+                <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+                  Open resolution link
+                </a>
+              )}
+              {blocked.resolution?.kind === "execution_device" && (
+                <span className="font-semibold">Resolve on the execution device.</span>
+              )}
+            </p>
+          </section>
+        )}
 
-        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-          <dt className="font-semibold text-muted-foreground">Created</dt>
-          <dd className="text-foreground">{formatLocalTimestamp(mission.createdAt)}</dd>
-          <dt className="font-semibold text-muted-foreground">Updated</dt>
-          <dd className="text-foreground">{formatLocalTimestamp(mission.updatedAt)}</dd>
-        </dl>
 
-        {autoPublishAllowed && (
-          <AutoPublishToggle
-            checked={mission.autoPublish === true}
-            disabled={!autoPublishEditable}
-            hint={
-              autoPublishEditable
-                ? undefined
-                : "This Mission's Run has finished — auto-publish can no longer be changed."
-            }
-            onChange={(next) => void handleAutoPublishToggle(next)}
+          {!declaresPublish && <PublicationList missionId={missionId} title="Publications" />}
+
+          <MissionReviewContent
+            instanceId={instanceId}
+            missionId={missionId}
+            aside={detailsCard}
+            autoPublish={declaresPublish ? autoPublish : undefined}
           />
-        )}
-      </Card>
-
-      {/* What happened — only for failed missions */}
-      {failureError !== undefined && (
-        <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
-          <h2 className="m-0 text-sm font-semibold text-destructive">
-            What happened
-          </h2>
-          <p className="m-0 text-sm text-destructive">{failureError}</p>
-        </section>
-      )}
-
-      {/* Blocked — a Template-declared human-action blocker (issue #323). */}
-      {blocked !== undefined && (
-        <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
-          <h2 className="m-0 text-sm font-semibold text-status-warning">
-            Blocked
-          </h2>
-          <p className="m-0 text-sm text-status-warning">
-            {blocked.message}{" "}
-            {blocked.resolution?.kind === "link" && (
-              <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
-                Open resolution link
-              </a>
-            )}
-            {blocked.resolution?.kind === "execution_device" && (
-              <span className="font-semibold">Resolve on the execution device.</span>
-            )}
-          </p>
-        </section>
-      )}
-
-      {/* Run History */}
-      <section className="grid gap-4">
-        <h2 className="m-0 text-lg font-semibold text-foreground">
-          Run History
-        </h2>
-        {sortedRuns.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No runs yet</p>
-        ) : (
-          <div className="grid gap-3">
-            {sortedRuns.map((run) => (
-              <RunRow
-                key={run._id}
-                run={run}
-                instanceId={instanceId}
-                templateId={mission.templateId}
-                missionLabel={`${mission.type}${mission.number !== undefined ? ` #${mission.number}` : ""}`}
-                hasWorkspace={projectAgent?.workspaceKey !== undefined}
-              />
-            ))}
-          </div>
-        )}
+      </div>
+      <section hidden={tab !== "runs"} className="grid gap-4" aria-label="Run History">
+          {sortedRuns.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No runs yet</p>
+          ) : (
+            <div className="grid gap-3">
+              {sortedRuns.map((run) => (
+                <RunRow
+                  key={run._id}
+                  run={run}
+                  instanceId={instanceId}
+                  templateId={mission.templateId}
+                  missionLabel={titleCase(mission.type)}
+                  missionNumber={mission.number}
+                  hasWorkspace={projectAgent?.workspaceKey !== undefined}
+                />
+              ))}
+            </div>
+          )}
       </section>
     </div>
   );

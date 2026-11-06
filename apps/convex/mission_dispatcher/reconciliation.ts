@@ -67,6 +67,8 @@ export type MissionRunJob = {
   // its position among the result's Sources.
   sourceRef?: string;
   sourcePosition?: number;
+  /** Text part of the Publishable (Mission types with `publish.resource`). */
+  publishableDraft?: unknown;
 };
 
 export type ReconcileDecision =
@@ -137,6 +139,56 @@ export function validateDeclaredBlockerCode(
 }
 
 /**
+ * Checks the Artifact's Publishable against the Mission type's `publish`
+ * declaration (ADR-069). `undefined` when the Mission type declares nothing
+ * (it behaves exactly as before) or the result is fine. The message is returned
+ * to the Agent, which corrects it in the same Mission.
+ */
+export function validateDeclaredPublishable(
+  result: RunResult,
+  ctx: { missionType: string; publish?: { kind: string; require?: readonly string[] } },
+): string | undefined {
+  if (!ctx.publish) return undefined;
+  const publishable = (result.status === "success" || result.status === "needs_human_review" || result.status === "failed")
+    ? result.artifact?.publishable
+    : undefined;
+  if (publishable === undefined) {
+    // A deliverable that reaches the review (success, or needs_human_review
+    // which moves the Mission to `to_validate`) has to be publishable: the
+    // review `publish` action sends it. A failed Run has no deliverable.
+    return result.status === "success" || result.status === "needs_human_review"
+      ? `artifact.publishable is required: Mission type "${ctx.missionType}" declares publish.kind "${ctx.publish.kind}"`
+      : undefined;
+  }
+  return validatePublishableKind(publishable, { ...ctx, publish: ctx.publish });
+}
+
+/**
+ * The kind and `publish.require` checks on a Publishable that exists, shared by
+ * a Run's own result and by the Publishable OpenGroow assembles from an
+ * External Job (`publish.resource`).
+ */
+export function validatePublishableKind(
+  publishable: { kind: string },
+  ctx: { missionType: string; publish: { kind: string; require?: readonly string[] } },
+): string | undefined {
+  if (publishable.kind !== ctx.publish.kind) {
+    return `artifact.publishable.kind is "${publishable.kind}" but this Mission type declares publish.kind "${ctx.publish.kind}"`;
+  }
+  // `publish.require` can only tighten: fields the Template guarantees.
+  const missing = (ctx.publish.require ?? []).filter((field) => {
+    const value = (publishable as Record<string, unknown>)[field];
+    return value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+  });
+  if (missing.length > 0) {
+    return missing
+      .map((field) => `artifact.publishable.${field} is required: Mission type "${ctx.missionType}" declares it in publish.require`)
+      .join("; ");
+  }
+  return undefined;
+}
+
+/**
  * Workspace path where a Run's Agent writes its RunResult. A Mission's Run
  * keeps the historical per-Mission layout; a Job's Run writes under its Job
  * folder (`jobs/<job>/outputs/`, deleted once the Job settles).
@@ -168,6 +220,8 @@ export function decideReconciliation(
     runId: Id<"runs">;
     missionType: string;
     blockerCodes?: readonly string[];
+    /** The Mission type's `publish` declaration, when it has one (ADR-069). */
+    publish?: { kind: string; require?: readonly string[]; targets?: readonly string[]; resource?: unknown };
     retryableFailureCount: number;
   },
 ): ReconcileDecision {
@@ -363,6 +417,24 @@ export function decideReconciliation(
         ctx,
       );
     }
+    // A Mission type that fetches its media from the MCP when the job ends
+    // (`publish.resource`) needs the Agent's text part now: nobody runs the
+    // Agent again once the job completes.
+    if (ctx.publish?.resource !== undefined) {
+      const draft = validation.data.publishable;
+      if (draft === undefined) {
+        return decideInvalidOutput(
+          `publishable is required: Mission type "${ctx.missionType}" declares publish.resource, so the in_progress RunResult must carry the text part of the publishable (kind "${ctx.publish.kind}", caption...) and no media URL`,
+          ctx,
+        );
+      }
+      if (draft.kind !== ctx.publish.kind) {
+        return decideInvalidOutput(
+          `publishable.kind is "${draft.kind}" but this Mission type declares publish.kind "${ctx.publish.kind}"`,
+          ctx,
+        );
+      }
+    }
     return {
       type: "markAwaitingJob",
       job: {
@@ -373,6 +445,7 @@ export function decideReconciliation(
         jobType: validation.data.job.jobType,
         missionType: ctx.missionType,
         ...(validation.data.job.sourceRef !== undefined ? { sourceRef: validation.data.job.sourceRef } : {}),
+        ...(validation.data.publishable !== undefined ? { publishableDraft: validation.data.publishable } : {}),
       },
     };
   }
@@ -380,6 +453,11 @@ export function decideReconciliation(
   const blockerError = validateDeclaredBlockerCode(validation.data, ctx);
   if (blockerError) {
     return decideInvalidOutput(blockerError, ctx);
+  }
+
+  const publishableError = validateDeclaredPublishable(validation.data, ctx);
+  if (publishableError) {
+    return decideInvalidOutput(publishableError, ctx);
   }
 
   return { type: "markCompleted", result: validation.data };

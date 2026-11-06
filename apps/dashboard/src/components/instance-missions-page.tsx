@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
 import { COLUMNS, columnForMission, MissionKanbanBoard } from "./mission-kanban-board";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { PublishChannelPicker } from "./publish-channel-picker";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
@@ -89,6 +90,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
   const setPayloadOpen = setPayloadOpenOverride;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
+  // A Mission type that declares `publish` groups channels, Auto-publish and the
+  // date in one "Publish" card; others keep the standalone toggle.
+  const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
+  const declaresPublish = publishDecl !== undefined;
 
   useEffect(() => {
     // When the agent changes, default to its first known mission type (and its
@@ -287,10 +292,20 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-              {autoPublishAllowed && (
+              {autoPublishAllowed && !declaresPublish && (
                 <AutoPublishToggle checked={autoPublish} onChange={setAutoPublish} />
               )}
             </div>
+
+            {declaresPublish ? (
+              <PublishChannelPicker
+                instanceId={instanceId}
+                payloadText={payloadText}
+                kind={publishDecl?.kind}
+                onChange={setPayloadText}
+                autoPublish={autoPublishAllowed ? { checked: autoPublish, onChange: setAutoPublish } : undefined}
+              />
+            ) : null}
 
             <div className="grid gap-3">
               <Button

@@ -20,6 +20,14 @@ export function supportsAutoPublish(
   return manifest ? templateSupportsAutoPublish(manifest, missionType) : false;
 }
 
+/** The Auto-publish of a Mission as the page holds it: its value, whether it can still change, and what changes it. */
+export type AutoPublishControl = {
+  checked: boolean;
+  editable: boolean;
+  onChange: (next: boolean) => void;
+  hint?: string;
+};
+
 export const AUTO_PUBLISH_HINT =
   "Automatically approve and publish once ready for review — no manual validation step.";
 

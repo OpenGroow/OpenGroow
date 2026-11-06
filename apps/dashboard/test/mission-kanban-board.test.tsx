@@ -9,24 +9,12 @@ import { MissionKanbanBoard } from "../src/components/mission-kanban-board";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const deleteMissionMock = vi.fn();
-
 vi.mock("next/link", () => ({
   default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) => (
     <a href={href} {...props}>
       {children}
     </a>
   ),
-}));
-
-vi.mock("convex/react", () => ({
-  useMutation: () => deleteMissionMock,
-}));
-
-vi.mock("@convex/_generated/api", () => ({
-  api: {
-    missions: { deleteMission: "missions.deleteMission" },
-  },
 }));
 
 type Mission = {
@@ -76,8 +64,6 @@ describe("MissionKanbanBoard", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    deleteMissionMock.mockReset();
-    deleteMissionMock.mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -112,11 +98,11 @@ describe("MissionKanbanBoard", () => {
     expect(text).toContain("Seo Article");
   });
 
-  it("shows a From Source badge for automatically-created production missions", async () => {
+  it("shows no From Source badge on a card (the Mission page shows the Source)", async () => {
     await render([makeMission({ sourceObservationId: "observation-1" as Id<"sources"> })]);
 
-    expect(document.body.textContent).toContain("From Source");
-    expect(document.querySelector("[data-testid='from-observation-badge']")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("From Source");
+    expect(document.querySelector("[data-testid='from-observation-badge']")).toBeNull();
   });
 
   it("places a doing mission in the 'In progress' column", async () => {
@@ -246,78 +232,27 @@ describe("MissionKanbanBoard", () => {
     expect(cols.length).toBe(6);
   });
 
-  it("shows a Review button for to_validate SEO missions with artifact.external.id (strict contract)", async () => {
+  it.each([
+    ["to_validate", "markdown", "article-mcp"],
+    ["to_validate", "video", "video-mcp"],
+    ["approved", "markdown", "article-mcp"],
+    ["approved", "video", "video-mcp"],
+  ] as const)("has no Review or Publish button on a %s %s mission: the card opens the one mission page", async (status, kind, service) => {
     const mission = makeMission({
-      _id: "m-validate",
-      status: "to_validate",
+      _id: `m-${status}-${kind}`,
+      status,
       lastResult: {
         status: "needs_human_review",
-        summary: "Article ready",
+        summary: "Ready",
         reviewQuestions: [],
-        artifact: { kind: "markdown", external: { service: "article-mcp", id: "art-1" }, metadata: { keyword: "octopus" } },
+        artifact: { kind, external: { service, id: "art-1" }, metadata: {} },
       },
     });
     await render([mission], "proj-abc");
     const links = Array.from(document.querySelectorAll("a"));
-    const reviewLink = links.find((a) => a.href.includes("/missions/m-validate/review"));
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.href).toContain("/projects/proj-abc/");
-  });
-
-  it("shows a Review button for to_validate video missions with artifact.external.id (strict contract)", async () => {
-    const mission = makeMission({
-      _id: "m-video-validate",
-      type: "create_video",
-      status: "to_validate",
-      lastResult: {
-        status: "needs_human_review",
-        summary: "Video ready",
-        reviewQuestions: [],
-        artifact: { kind: "video", external: { service: "video-mcp", id: "video-run-1" }, metadata: { runId: "video-run-1" } },
-      },
-    });
-    await render([mission], "proj-abc");
-    const links = Array.from(document.querySelectorAll("a"));
-    const reviewLink = links.find((a) => a.href.includes("/missions/m-video-validate/review"));
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.textContent).toContain("Review");
-  });
-
-  it("shows a Publish button for approved missions with artifact.external.id (strict contract)", async () => {
-    const mission = makeMission({
-      _id: "m-approved",
-      status: "approved",
-      lastResult: {
-        status: "needs_human_review",
-        summary: "Article ready",
-        reviewQuestions: [],
-        artifact: { kind: "markdown", external: { service: "article-mcp", id: "art-1" }, metadata: {} },
-      },
-    });
-    await render([mission], "proj-abc");
-    const links = Array.from(document.querySelectorAll("a"));
-    const publishLink = links.find((a) => a.href.includes("/missions/m-approved/review"));
-    expect(publishLink).toBeTruthy();
-    expect(publishLink?.textContent).toContain("Publish");
-  });
-
-  it("shows a Publish button for approved video missions with artifact.external.id (strict contract)", async () => {
-    const mission = makeMission({
-      _id: "m-video-approved",
-      type: "create_video",
-      status: "approved",
-      lastResult: {
-        status: "needs_human_review",
-        summary: "Video ready",
-        reviewQuestions: [],
-        artifact: { kind: "video", external: { service: "video-mcp", id: "video-run-2" }, metadata: { runId: "video-run-2" } },
-      },
-    });
-    await render([mission], "proj-abc");
-    const links = Array.from(document.querySelectorAll("a"));
-    const publishLink = links.find((a) => a.href.includes("/missions/m-video-approved/review"));
-    expect(publishLink).toBeTruthy();
-    expect(publishLink?.textContent).toContain("Publish");
+    expect(links.some((a) => a.href.includes("/review"))).toBe(false);
+    expect(links.some((a) => a.textContent === "Review" || a.textContent === "Publish")).toBe(false);
+    expect(links.find((a) => a.href.endsWith(`/projects/proj-abc/missions/m-${status}-${kind}`))).toBeTruthy();
   });
 
   it("does NOT show Review button for missions with legacy metadata.articleId and no external.id (unmigrated)", async () => {
@@ -419,108 +354,14 @@ describe("MissionKanbanBoard", () => {
     expect(detailLink).toBeTruthy();
   });
 
-  it("Review link still points to /review and not the detail page", async () => {
-    const mission = makeMission({
-      _id: "m-review",
-      status: "to_validate",
-      lastResult: {
-        status: "needs_human_review",
-        summary: "Ready",
-        reviewQuestions: [],
-        artifact: { kind: "markdown", external: { service: "article-mcp", id: "art-1" }, metadata: {} },
-      },
-    });
-    await render([mission], "proj-abc");
-    const links = Array.from(document.querySelectorAll("a"));
-    const reviewLink = links.find((a) => a.href.includes("/review"));
-    expect(reviewLink).toBeTruthy();
-    expect(reviewLink?.href).toContain("/missions/m-review/review");
-  });
+  // ── Delete lives on the mission page ────────────────────────────────────────
 
-  // ── Delete control ──────────────────────────────────────────────────────────
-
-  it("shows a delete button on non-doing missions", async () => {
-    const statuses: Mission["status"][] = ["todo", "to_validate", "approved", "done", "failed"];
-    for (const status of statuses) {
-      const mission = makeMission({ _id: `m-del-${status}`, status });
-      await render([mission]);
-      const btn = document.body.querySelector(`[data-delete-mission="m-del-${status}"]`);
-      expect(btn, `expected delete button for status=${status}`).toBeTruthy();
-      // Reset DOM between iterations
-      await act(async () => { root.render(<MissionKanbanBoard missions={[]} projectId="p" />); });
-    }
-  });
-
-  it("does not show a delete button on doing missions", async () => {
-    const mission = makeMission({ _id: "m-doing-del", status: "doing" });
-    await render([mission]);
-    const btn = document.body.querySelector("[data-delete-mission]");
-    expect(btn).toBeFalsy();
-  });
-
-  it("calls deleteMission mutation after confirm=true", async () => {
-    vi.spyOn(window, "confirm").mockReturnValueOnce(true);
-    const mission = makeMission({ _id: "m-del-confirm", status: "todo" });
-    await render([mission]);
-
-    const btn = document.body.querySelector(`[data-delete-mission="m-del-confirm"]`) as HTMLButtonElement;
-    expect(btn).toBeTruthy();
-
-    await act(async () => {
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      // Allow the async handler to settle
-      await Promise.resolve();
-    });
-
-    expect(deleteMissionMock).toHaveBeenCalledWith({ missionId: "m-del-confirm" });
-  });
-
-  it("does not call deleteMission mutation when confirm=false", async () => {
-    vi.spyOn(window, "confirm").mockReturnValueOnce(false);
-    const mission = makeMission({ _id: "m-del-cancel", status: "todo" });
-    await render([mission]);
-
-    const btn = document.body.querySelector(`[data-delete-mission="m-del-cancel"]`) as HTMLButtonElement;
-    await act(async () => {
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(deleteMissionMock).not.toHaveBeenCalled();
-  });
-
-  it("clicking delete does not navigate to the detail page (stopPropagation)", async () => {
-    vi.spyOn(window, "confirm").mockReturnValueOnce(false);
-    const mission = makeMission({ _id: "m-del-nav", status: "todo" });
-    await render([mission], "proj-nav");
-
-    const btn = document.body.querySelector(`[data-delete-mission="m-del-nav"]`) as HTMLButtonElement;
-
-    // Dispatch the click and capture whether the event was cancelled.
-    // handleDelete calls e.preventDefault() + e.stopPropagation(). If those
-    // calls are removed, defaultPrevented stays false and this assertion fails.
-    const clickEvent = new MouseEvent("click", { bubbles: true, cancelable: true });
-    await act(async () => {
-      btn.dispatchEvent(clickEvent);
-      await Promise.resolve();
-    });
-
-    expect(clickEvent.defaultPrevented).toBe(true);
-
-    // Belt-and-suspenders: the detail <a> must not receive a click.
-    const card = document.body.querySelector(`[data-mission="m-del-nav"]`) as HTMLElement;
-    const detailLink = card.querySelector("a") as HTMLAnchorElement;
-    let linkClicked = false;
-    detailLink?.addEventListener("click", () => { linkClicked = true; });
-
-    // Fire a second click (confirm=false again so no mutation call).
-    vi.spyOn(window, "confirm").mockReturnValueOnce(false);
-    const clickEvent2 = new MouseEvent("click", { bubbles: true, cancelable: true });
-    await act(async () => {
-      btn.dispatchEvent(clickEvent2);
-      await Promise.resolve();
-    });
-
-    expect(linkClicked).toBe(false);
-  });
+  it.each(["todo", "to_validate", "approved", "done", "failed", "doing"] as const)(
+    "has no delete control on a %s card (deleting is in the More actions menu of the mission page)",
+    async (status) => {
+      await render([makeMission({ _id: `m-no-del-${status}`, status })]);
+      expect(document.body.querySelector("[data-delete-mission]")).toBeNull();
+      expect(document.body.querySelector('[aria-label="Delete mission"]')).toBeNull();
+    },
+  );
 });

@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MissionReviewContent, MissionViewPage } from "../src/components/mission-review-page";
+import { MissionReviewContent } from "../src/components/mission-review-page";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -48,6 +48,13 @@ vi.mock("@convex/_generated/api", () => ({
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
     },
+    publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publishers: { get: "publishers.get" },
+    publications: {
+      setPublishAt: "publications.setPublishAt",
+      setTargets: "publications.setTargets",
+      listForMission: "publications.listForMission",
+    },
     instances: { list: "instances.list" },
     project_agents: { get: "project_agents.get" },
     runtime_commands_node: {
@@ -86,6 +93,24 @@ const MISSION_WITH_ARTIFACT = {
     },
   },
 };
+
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
+// The channel checkboxes are the Checkbox primitive: its state is in ARIA/data attributes, not in .checked/.disabled.
+const openChannelList = async () => {
+  await act(async () => {
+    (document.querySelector('[aria-label="Show channels"]') as HTMLElement).click();
+  });
+};
+const channelItem = (target: string) => document.querySelector(`[data-testid="publish-target-${target}"]`) as HTMLElement | null;
+const channelChip = (target: string) => document.querySelector(`[data-testid="publish-chip-${target}"]`) as HTMLElement | null;
+const removeChip = async (target: string) => {
+  await act(async () => {
+    (channelChip(target)!.querySelector('[data-slot="combobox-chip-remove"]') as HTMLElement).click();
+  });
+};
+const isDisabled = (el: Element) => el.hasAttribute("data-disabled") || el.getAttribute("aria-disabled") === "true";
 
 describe("MissionReviewContent", () => {
   let container: HTMLDivElement;
@@ -189,15 +214,404 @@ describe("MissionReviewContent", () => {
     });
   }
 
-  async function renderView() {
-    await act(async () => {
-      root.render(
-        <MissionViewPage
-          params={Promise.resolve({ instanceId: "instance-1", missionId: "mission-1" })}
-        />,
+
+  describe("Publishable preview (ADR-069)", () => {
+    function missionWithPublishable(publishable: Record<string, unknown>) {
+      return {
+        ...MISSION_WITH_ARTIFACT,
+        lastResult: {
+          ...MISSION_WITH_ARTIFACT.lastResult,
+          artifact: { ...MISSION_WITH_ARTIFACT.lastResult.artifact, publishable },
+        },
+        lastArtifact: { external: { service: "media", id: "42" }, publishable },
+      };
+    }
+
+    async function renderWith(publishable: Record<string, unknown>) {
+      useQueryMock.mockImplementation((key: string) =>
+        key === "missions.get" ? missionWithPublishable(publishable) : undefined,
       );
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+    }
+
+    it("previews a video from its URL, with cover and caption", async () => {
+      await renderWith({
+        kind: "video",
+        videoUrl: "https://cdn.example.com/v.mp4",
+        coverUrl: "https://cdn.example.com/c.png",
+        caption: "Watch this",
+      });
+      const preview = document.querySelector('[data-testid="publishable-preview"]');
+      expect(preview?.textContent).toContain("Watch this");
+      const video = preview?.querySelector("video") as HTMLVideoElement | null;
+      expect(video?.src).toBe("https://cdn.example.com/v.mp4");
+      expect(video?.poster).toBe("https://cdn.example.com/c.png");
     });
-  }
+
+    it("previews an image from its URL", async () => {
+      await renderWith({ kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Pic" });
+      const img = document.querySelector('[data-testid="publishable-preview"] img') as HTMLImageElement | null;
+      expect(img?.src).toBe("https://cdn.example.com/i.png");
+    });
+
+    it("previews every slide of a carousel in order", async () => {
+      await renderWith({
+        kind: "carousel",
+        slideUrls: ["https://cdn.example.com/1.png", "https://cdn.example.com/2.png"],
+        caption: "Swipe",
+      });
+      const imgs = [...document.querySelectorAll('[data-testid="publishable-preview"] img')] as HTMLImageElement[];
+      expect(imgs.map((img) => img.src)).toEqual([
+        "https://cdn.example.com/1.png",
+        "https://cdn.example.com/2.png",
+      ]);
+    });
+
+    it("reviews a Mission type that declares publish from its publishable only: no review.path content is loaded or shown", async () => {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        content: null,
+        publish: { targets: [], mapped: true, unmappedTargets: [], publisherReady: true, publications: [] },
+      }));
+      await renderWith({ kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Watch this" });
+      expect(document.querySelector('[data-testid="publishable-preview"] video')).not.toBeNull();
+      expect(loadReviewContentMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain("Loading article");
+      expect(document.body.textContent).not.toContain("SEO Metadata");
+    });
+
+    it("shows no preview for a Mission without a Publishable", async () => {
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      expect(document.querySelector('[data-testid="publishable-preview"]')).toBeNull();
+    });
+  });
+
+  describe("Embedded in the mission page", () => {
+    const withPublish = (publish: Record<string, unknown>) => {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({ ...(await base()), content: null, publish }));
+    };
+    const PUBLISH = {
+      targets: ["instagram:myinsta", "pinterest:pins"],
+      mapped: true,
+      unmappedTargets: [],
+      publisherReady: true,
+      publications: [],
+    };
+    const renderEmbedded = async (autoPublish?: { checked: boolean; editable: boolean; onChange: () => void }) => {
+      await act(async () => {
+        root.render(
+          <MissionReviewContent
+            instanceId="instance-1"
+            missionId="mission-1"
+            aside={<div data-testid="aside-card">Mission details</div>}
+            autoPublish={autoPublish}
+          />,
+        );
+      });
+      await act(async () => {});
+    };
+    const setStatus = (status: string) =>
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") {
+          return { ...MISSION_WITH_ARTIFACT, status, lastArtifact: { external: { service: "media", id: "42" }, publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Watch" } } };
+        }
+        if (key === "publishers.get") return { adapter: "postiz", ...PUBLISHER };
+        return undefined;
+      });
+
+    it("has no header of its own, and puts the aside and the Publishing card in the right column", async () => {
+      withPublish(PUBLISH);
+      setStatus("to_validate");
+      await renderEmbedded();
+      expect(document.querySelector("h1")).toBeNull();
+      const aside = document.querySelector("aside");
+      expect(aside?.querySelector('[data-testid="aside-card"]')).not.toBeNull();
+      expect(aside?.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="publishable-preview"]')?.textContent).toContain("Final video");
+    });
+
+    it("shows the Publishing card as the editor while validating: channels, date, and Auto-publish as a value", async () => {
+      withPublish(PUBLISH);
+      setStatus("to_validate");
+      await renderEmbedded({ checked: false, editable: false, onChange: vi.fn() });
+      const card = document.querySelector('[data-testid="publish-section"]')!;
+      expect(card.querySelector('[data-testid="publish-channel-select"]')).not.toBeNull();
+      expect(card.querySelector('[data-testid="publish-chip-instagram:myinsta"]')?.textContent).toContain("@myinsta");
+      expect(card.querySelector('[data-testid="publish-at"]')).not.toBeNull();
+      expect(card.querySelector('[data-testid="publish-auto"]')?.textContent).toBe("Off");
+      expect(card.querySelector('[data-testid="publish-readonly"]')).toBeNull();
+    });
+
+    it("keeps the Publishing card a read-only summary once the Mission is no longer reviewable", async () => {
+      withPublish(PUBLISH);
+      setStatus("done");
+      await renderEmbedded({ checked: false, editable: false, onChange: vi.fn() });
+      const card = document.querySelector('[data-testid="publish-section"]')!;
+      expect(card.querySelector('[data-testid="publish-row-instagram:myinsta"]')?.textContent).toContain("@myinsta");
+      expect(card.querySelector('[data-testid="publish-row-pinterest:pins"]')?.textContent).toContain("@pins");
+      expect(card.querySelector('[data-testid="publish-at-readonly"]')?.textContent).toBe("Immediately");
+      expect(card.querySelector('[data-testid="publish-channel-select"]')).toBeNull();
+      expect(card.querySelector('[data-testid="publish-at"]')).toBeNull();
+    });
+
+    it("is still the editor at the To publish step", async () => {
+      withPublish(PUBLISH);
+      setStatus("approved");
+      await renderEmbedded();
+      const card = document.querySelector('[data-testid="publish-section"]')!;
+      expect(card.querySelector('[data-testid="publish-channel-select"]')).not.toBeNull();
+      expect(card.querySelector('[data-testid="publish-at"]')).not.toBeNull();
+      expect(card.querySelector('[data-testid="publish-readonly"]')).toBeNull();
+    });
+
+    it.each(["done", "failed", "doing"])("only shows the deliverable and the summary on a %s Mission: no review bar, no editor (what /view was for)", async (status) => {
+      withPublish({ ...PUBLISH, publications: [] });
+      setStatus(status);
+      await renderEmbedded({ checked: true, editable: false, onChange: vi.fn() });
+      expect(document.querySelector('[data-testid="publishable-preview"] video')).not.toBeNull();
+      expect(document.querySelector('[data-testid="review-bar"]')).toBeNull();
+      expect(document.querySelector('[data-testid="review-action-approve"]')).toBeNull();
+      expect(document.querySelector('[data-testid="reject-button"]')).toBeNull();
+      expect(document.querySelector('[data-testid="publish-channel-select"]')).toBeNull();
+      expect(document.querySelector('[data-testid="publish-auto"]')?.textContent).toBe("On");
+    });
+
+    it("shows the review bar with Approve / Reject while validating, and the publish bar at To publish", async () => {
+      withPublish(PUBLISH);
+      setStatus("to_validate");
+      await renderEmbedded();
+      expect(document.querySelector('[data-testid="review-bar"]')?.textContent).toContain("Ready for review");
+      expect(document.querySelector('[data-testid="review-action-approve"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="reject-button"]')).not.toBeNull();
+      setStatus("approved");
+      await renderEmbedded();
+      expect(document.querySelector('[data-testid="review-bar"]')?.textContent).toContain("Ready to publish");
+    });
+  });
+
+  const PUBLISHER = {
+    url: "https://postiz.example.com",
+    hasApiKey: true,
+    targets: [
+      { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
+      { target: "pinterest:pins", mapped: true, channelId: "c2", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" },
+    ],
+  };
+
+  describe("Publish target (ADR-069)", () => {
+    // The channels and the date can be changed while the Mission is reviewable (To validate and To publish).
+    const TO_PUBLISH = { ...MISSION_WITH_ARTIFACT, status: "approved" };
+
+    function withPublish(mapped: boolean) {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        publish: {
+          targets: ["instagram:myinsta"],
+          mapped,
+          unmappedTargets: mapped ? [] : ["instagram:myinsta"],
+          publisherReady: true,
+          publications: [{ target: "instagram:myinsta", status: "failed", error: "Postiz responded 500" }],
+        },
+      }));
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return TO_PUBLISH;
+        if (key === "publishers.get") return PUBLISHER;
+        if (key === "publications.listForMission") {
+          return [{ id: "p1", target: "instagram:myinsta", status: "failed", error: "Postiz responded 500" }];
+        }
+        return undefined;
+      });
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+    }
+
+    it("links to the Publishers page when the target is not mapped, and lists Publications", async () => {
+      withPublish(false);
+      await render();
+      await act(async () => {});
+      const unmapped = document.querySelector('[data-testid="publish-unmapped"] a') as HTMLAnchorElement | null;
+      expect(unmapped?.getAttribute("href")).toBe("/projects/instance-1/publishers");
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("Failed");
+    });
+
+    it("disables a channel that cannot carry the Publishable kind and warns on an uncertain one", async () => {
+      withPublish(true);
+      const withKind = { ...TO_PUBLISH, lastArtifact: { external: { service: "media", id: "42" }, publishable: { kind: "image" } } };
+      const publisher = {
+        ...PUBLISHER,
+        adapter: "postiz",
+        targets: [
+          ...PUBLISHER.targets,
+          { target: "youtube:yt", mapped: true, channelId: "c3", channelName: "YT", channelService: "youtube", channelProfile: "yt" },
+          { target: "mastodon:m", mapped: true, channelId: "c4", channelName: "M", channelService: "mastodon", channelProfile: "m" },
+        ],
+      };
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return withKind;
+        if (key === "publishers.get") return publisher;
+        return undefined;
+      });
+      await render();
+      await act(async () => {});
+      await openChannelList();
+      expect(isDisabled(channelItem("youtube:yt")!)).toBe(true);
+      expect(document.querySelector('[data-testid="publish-target-reason-youtube:yt"]')?.textContent).toContain("YouTube cannot publish an image");
+      expect(isDisabled(channelItem("mastodon:m")!)).toBe(false);
+      expect(document.querySelector('[data-testid="publish-target-warning-mastodon:m"]')).not.toBeNull();
+    });
+
+    it("shows the publication section, editable, while the Mission is being validated", async () => {
+      withPublish(true);
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return MISSION_WITH_ARTIFACT;
+        if (key === "publishers.get") return PUBLISHER;
+        return undefined;
+      });
+      await render();
+      await act(async () => {});
+      expect(MISSION_WITH_ARTIFACT.status).toBe("to_validate");
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="publish-channel-select"]')).not.toBeNull();
+    });
+
+    it("shows no unmapped warning once the target is mapped", async () => {
+      withPublish(true);
+      await render();
+      await act(async () => {});
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="publish-unmapped"]')).toBeNull();
+    });
+
+    it("shows the Mission's channels as chips and lists every channel of the Publisher with logo and handle", async () => {
+      withPublish(true);
+      await render();
+      await act(async () => {});
+      expect(channelChip("instagram:myinsta")?.textContent).toContain("@myinsta");
+      expect(channelChip("pinterest:pins")).toBeNull();
+      expect(document.querySelector('[data-testid="publish-section"] img')?.getAttribute("src")).toBe(
+        "https://postiz.example.com/icons/platforms/instagram.png",
+      );
+      await openChannelList();
+      expect(channelItem("pinterest:pins")?.textContent).toContain("@pins");
+      expect(document.querySelector('[role="checkbox"]')).toBeNull();
+    });
+
+    it("lets the reviewer pick several channels, and refuses to empty the list", async () => {
+      withPublish(true);
+      const setTargets = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation((key: string) => (key === "publications.setTargets" ? setTargets : vi.fn()));
+      await render();
+      await act(async () => {});
+      await openChannelList();
+      await act(async () => { channelItem("pinterest:pins")!.click(); });
+      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["instagram:myinsta", "pinterest:pins"] });
+      expect(document.querySelector('[data-testid="publish-summary"]')?.textContent).toContain("instagram:myinsta, pinterest:pins");
+
+      setTargets.mockClear();
+      await removeChip("instagram:myinsta");
+      expect(setTargets).toHaveBeenCalledWith({ missionId: "mission-1", targets: ["pinterest:pins"] });
+      setTargets.mockClear();
+      await removeChip("pinterest:pins");
+      expect(setTargets).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Choose at least one channel");
+    });
+
+    it("names the unmapped target in the warning", async () => {
+      withPublish(false);
+      await render();
+      await act(async () => {});
+      expect(document.querySelector('[data-testid="publish-unmapped"]')?.textContent).toContain("instagram");
+    });
+
+    describe("date picker", () => {
+      afterEach(() => { vi.useRealTimers(); });
+
+      const openDatePicker = async () => {
+        await act(async () => {
+          (document.querySelector('[data-testid="publish-at"]') as HTMLElement).click();
+        });
+      };
+      const dayButton = (date: Date) =>
+        Array.from(document.querySelectorAll<HTMLButtonElement>("button[data-day]")).find(
+          (b) => b.getAttribute("data-day") === date.toLocaleDateString(undefined),
+        )!;
+
+      it("lets the reviewer schedule the publication from the calendar, and clear it to publish immediately", async () => {
+        withPublish(true);
+        const setter = vi.fn().mockResolvedValue(undefined);
+        useMutationMock.mockImplementation(() => setter);
+        await render();
+        await act(async () => {});
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(2030, 0, 1, 8, 0));
+        expect(document.querySelector('[data-testid="publish-at"]')?.textContent).toContain("Publish immediately");
+        await openDatePicker();
+        await act(async () => { dayButton(new Date(2030, 0, 15)).click(); });
+        expect(setter).toHaveBeenCalledWith({ missionId: "mission-1", publishAt: new Date(2030, 0, 15, 9, 0).getTime() });
+        const clear = Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes("Clear"))!;
+        await act(async () => { clear.click(); });
+        expect(setter).toHaveBeenLastCalledWith({ missionId: "mission-1", publishAt: null });
+      });
+
+      it("refuses a moment in the past before submitting and shows the message", async () => {
+        withPublish(true);
+        const setter = vi.fn().mockResolvedValue(undefined);
+        useMutationMock.mockImplementation(() => setter);
+        await render();
+        await act(async () => {});
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date(2030, 0, 1, 23, 30));
+        await openDatePicker();
+        // Today at the default time (the next full hour, past midnight) is already behind.
+        await act(async () => { dayButton(new Date(2030, 0, 1)).click(); });
+        expect(setter).not.toHaveBeenCalled();
+        expect(document.body.textContent).toContain("publishAt must be in the future");
+      });
+    });
+
+    it("shows the scheduled date of a scheduled Publication", async () => {
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        publish: {
+          mapped: true,
+          targets: ["instagram:myinsta"],
+          unmappedTargets: [],
+          publisherReady: true,
+          publishAt: new Date("2030-01-02T09:30").getTime(),
+          publications: [{ target: "instagram:myinsta", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }],
+        },
+      }));
+      useQueryMock.mockImplementation((key: string) => {
+        if (key === "missions.get") return TO_PUBLISH;
+        if (key === "publishers.get") return PUBLISHER;
+        if (key === "publications.listForMission") {
+          return [{ id: "p1", target: "instagram:myinsta", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }];
+        }
+        return undefined;
+      });
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect(document.querySelector('[data-testid="publish-at"]')?.textContent).toContain(
+        new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date("2030-01-02T09:30")),
+      );
+      expect(document.querySelector('[data-testid="publication-instagram:myinsta"]')?.textContent).toContain("Scheduled");
+    });
+
+    it("has no publish section for a Mission type without publish", async () => {
+      setupDefaultQuery();
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      expect(document.querySelector('[data-testid="publish-section"]')).toBeNull();
+    });
+  });
 
   it("shows keyword and articleId from artifact metadata", async () => {
     setupDefaultQuery();
@@ -301,7 +715,7 @@ describe("MissionReviewContent", () => {
       metadata: {},
     });
 
-    await renderView();
+    await render();
     await act(async () => {});
 
     expect(document.body.textContent).toContain("Posts (1)");
@@ -348,7 +762,7 @@ describe("MissionReviewContent", () => {
       metadata: {},
     });
 
-    await renderView();
+    await render();
     await act(async () => {});
 
     const text = document.body.textContent ?? "";
@@ -395,7 +809,7 @@ describe("MissionReviewContent", () => {
       metadata: {},
     });
 
-    await renderView();
+    await render();
     await act(async () => {});
 
     const text = document.body.textContent ?? "";
@@ -446,7 +860,7 @@ describe("MissionReviewContent", () => {
       metadata: {},
     });
 
-    await renderView();
+    await render();
     await act(async () => {});
 
     const text = document.body.textContent ?? "";
@@ -484,10 +898,10 @@ describe("MissionReviewContent", () => {
     expect(markdownEl!.textContent).toContain("# My Article");
   });
 
-  it("renders the view page without review or publish actions", async () => {
-    setupDefaultQuery();
+  it("shows the deliverable without review or publish actions once the Mission is done", async () => {
+    useQueryMock.mockImplementation((key: string) => (key === "missions.get" ? { ...MISSION_WITH_ARTIFACT, status: "done" } : undefined));
     loadReviewContentMock.mockResolvedValue({ kind: "markdown", content: "# My Article", metadata: {} });
-    await renderView();
+    await render();
     await act(async () => {});
 
     expect(document.querySelector('[data-testid="markdown"]')?.textContent).toContain("# My Article");
@@ -778,7 +1192,7 @@ describe("MissionReviewContent", () => {
     expect(routerPushMock).not.toHaveBeenCalled();
   });
 
-  it("shows no-artifact state when lastResult has no artifact", async () => {
+  it("renders no deliverable when lastResult has no artifact", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.get") {
         return {
@@ -794,8 +1208,11 @@ describe("MissionReviewContent", () => {
     });
 
     await render();
+    await act(async () => {});
 
-    expect(document.body.textContent).toMatch(/no artifact/i);
+    expect(document.querySelector('[data-testid="markdown"]')).toBeNull();
+    expect(document.querySelector('[data-testid="publishable-preview"]')).toBeNull();
+    expect(loadReviewContentMock).not.toHaveBeenCalled();
   });
 
   const CAROUSEL_MISSION_TO_VALIDATE = {
