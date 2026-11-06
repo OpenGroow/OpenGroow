@@ -410,6 +410,38 @@ describe("Source routing Job", () => {
     expect(accepted[0]).toMatchObject({ type: "create_reel", payload: { publish, observationId: sourceId } });
   });
 
+  it("drops a router-authored prompt or shots from a create_reel route and keeps the Source as observationId", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstance(t);
+    await activateAgent(t, "@opengroow/source");
+    await activateAgent(t, "@opengroow/openmontage-agent");
+    await t.run((ctx) => ctx.db.insert("brandCores", { instanceId: INSTANCE, audience: "Audience", offer: "Offer", updatedAt: NOW }));
+    const sourceId = await source(t);
+    const job = await routingJob(t);
+    await t.mutation(internal.source_routing.reserveWinner, { jobId: job._id, sourceId });
+    const run = await t.run((ctx) => ctx.db.query("runs").unique());
+    await t.run((ctx) => ctx.db.patch(run!._id, { status: "running" }));
+    const publish = { platforms: ["instagram"], title: "Title", description: "Description" };
+
+    await t.mutation(internal.runs.markCompleted, {
+      runId: run!._id,
+      result: {
+        status: "success",
+        summary: "Reel",
+        additionalDetails: {
+          route: {
+            templateId: "@opengroow/openmontage-agent",
+            missionType: "create_reel",
+            payload: { publish, prompt: "copy of the source", shots: [{ durationSeconds: 4, prompt: "x", beat: "y" }], observationId: "forged" },
+          },
+        },
+      },
+    });
+    const missions = await t.run((ctx) => ctx.db.query("missions").collect());
+    expect(missions).toHaveLength(1);
+    expect(missions[0].payload).toEqual({ publish, observationId: sourceId });
+  });
+
   it("retries invalid output without releasing the reserved Source", async () => {
     const t = convexTest(schema, modules);
     await seedInstance(t);

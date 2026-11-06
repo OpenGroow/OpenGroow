@@ -53,6 +53,10 @@ jobs:
       - name: Update npm
         run: npm install -g npm@^11.5.1
 
+      # dist/ must exist before npm reads package.json, or it drops the `bin` entry.
+      - name: Build
+        run: pnpm --filter @opengroow/template-validator build
+
       - name: Publish
         working-directory: packages/template-validator
         run: npm publish --access public

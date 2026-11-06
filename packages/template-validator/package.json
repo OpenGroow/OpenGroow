@@ -1,8 +1,13 @@
 {
   "name": "@opengroow/template-validator",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Validate OpenGroow Template packages and hub indexes with the reader the product uses at installation",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenGroow/OpenGroow.git",
+    "directory": "packages/template-validator"
+  },
   "type": "module",
   "bin": {
     "opengroow-template-validate": "./dist/cli.js"
