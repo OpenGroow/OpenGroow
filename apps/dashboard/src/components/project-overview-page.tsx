@@ -28,6 +28,7 @@ import { AGENT_TONE_CLASSES, type AgentTone } from "@/components/opengroow/agent
 import { FilterChips } from "@/components/opengroow/filter-bar";
 import { AreaChart, DonutChart, Sparkline } from "@/components/opengroow/overview-charts";
 import { PageHeader } from "@/components/opengroow/page-header";
+import { titleCase } from "@/src/lib/mission-type";
 
 type Days = 7 | 30 | 90;
 type Group = "done" | "progress" | "review" | "failed" | "stopped";
@@ -77,14 +78,6 @@ function formatDuration(ms: number | null): string {
 
 function percent(part: number, whole: number): number {
   return whole === 0 ? 0 : Math.round((part / whole) * 100);
-}
-
-function titleCase(type: string): string {
-  return type
-    .split("_")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
 }
 
 function slugOf(templateId: string): string {

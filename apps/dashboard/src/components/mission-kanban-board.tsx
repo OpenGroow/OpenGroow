@@ -11,16 +11,14 @@ import {
   Upload,
   type LucideIcon,
 } from "lucide-react";
-import { useMutation } from "convex/react";
-import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
-import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import type { Doc } from "@convex/_generated/dataModel";
 import { blockedExternalResult } from "@/src/lib/mission-result";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { titleCase } from "@/src/lib/mission-type";
 
 // Drift-prone fields (the status union, the run-result shape, names, etc.) are
 // derived from the schema so they stay in sync and callers can pass query
@@ -127,14 +125,6 @@ export function columnForMission(status: Mission["status"]): ColumnId {
   return status;
 }
 
-function titleCase(type: string): string {
-  return type
-    .split("_")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 // Default mission names are generated as `${type} #${number}` (see
 // missions.ts). The card title already shows the type (in Title Case), so
 // strip a trailing "#N" suffix and drop the line entirely when what's left
@@ -145,16 +135,6 @@ function summaryLine(mission: Mission): string | undefined {
   const suffix = mission.number !== undefined ? ` #${mission.number}` : "";
   const withoutNumber = suffix && text.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
   return withoutNumber === mission.type ? undefined : withoutNumber;
-}
-
-function hasReviewableArtifact(mission: Mission): boolean {
-  const result = mission.lastResult;
-  // The `failed` run-result variant carries no artifact, so narrow before access.
-  if (!result || !("artifact" in result)) return false;
-  const artifact = result.artifact;
-  if (!artifact) return false;
-  // Strict contract (ADR-020 / #146): identity lives in artifact.external.id only.
-  return typeof artifact.external?.id === "string";
 }
 
 // Active columns reveal their Missions by batches of this size; Done pages on
@@ -271,30 +251,8 @@ export function MissionKanbanBoard({
 }
 
 function MissionCard({ mission, projectId }: { mission: Mission; projectId: string }) {
-  const deleteMission = useMutation(api.missions.deleteMission);
-  const showAction =
-    (mission.status === "to_validate" || mission.status === "approved") &&
-    hasReviewableArtifact(mission);
   const blocked = blockedExternalResult(mission);
-  // Hide delete only on `doing` (a Run is running on the Instance). A `todo`
-  // mission stays deletable — its Run is usually still `pending` (queued, not
-  // yet on the Instance), which covers clearing a stuck mission. The server
-  // guard is the real boundary: it refuses only when a Run is actually live
-  // (`dispatching`/`running`).
-  const showDelete = mission.status !== "doing";
   const detailHref = `/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}`;
-
-  async function handleDelete(e: React.MouseEvent): Promise<void> {
-    e.preventDefault();
-    e.stopPropagation();
-    const confirmed = window.confirm("Permanently delete this mission and all its runs?");
-    if (!confirmed) return;
-    try {
-      await deleteMission({ missionId: mission._id as Id<"missions"> });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Failed to delete mission"));
-    }
-  }
 
   return (
     <Card
@@ -308,9 +266,6 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
       >
         <div className="flex flex-col gap-1.5">
           <span className="flex items-start gap-2 break-words text-sm font-semibold text-foreground">
-            {mission.status === "done" && (
-              <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-tone-green" />
-            )}
             {titleCase(mission.type)}
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -326,12 +281,6 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
                 UI term (GLOSSARY.md, Mission statuses). */}
             {mission.status === "cancelled" && (
               <StatusBadge tone="neutral" label="Stopped" className="shrink-0" />
-            )}
-            {mission.sourceObservationId !== undefined && (
-              <Badge variant="default" className="shrink-0"
-                data-testid="from-observation-badge">
-                From Source
-              </Badge>
             )}
           </div>
         </div>
@@ -366,36 +315,6 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
           )}
         </p>
       )}
-
-      <div className="flex items-center gap-2">
-        {showAction && (
-          <Button
-            variant="accent"
-            size="sm"
-            nativeButton={false}
-            render={
-              <Link
-                href={`/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}/review`}
-              />
-            }
-          >
-            {mission.status === "approved" ? "Publish" : "Review"}
-          </Button>
-        )}
-        {showDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
-            type="button"
-            aria-label="Delete mission"
-            data-delete-mission={mission._id}
-            onClick={(e) => void handleDelete(e)}
-            className="ml-auto"
-          >
-            Delete
-          </Button>
-        )}
-      </div>
     </Card>
   );
 }

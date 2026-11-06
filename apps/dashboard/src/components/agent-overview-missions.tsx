@@ -11,14 +11,7 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { missionStatus } from "@/components/opengroow/mission-status";
 import { relativeTime } from "@/src/lib/relative-time";
-
-function titleCase(type: string): string {
-  return type
-    .split("_")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
-}
+import { titleCase } from "@/src/lib/mission-type";
 
 /**
  * The Agent's Overview body: counts of its Missions by outcome, then its most
