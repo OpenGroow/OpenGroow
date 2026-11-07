@@ -1,0 +1,6 @@
+{
+  "id": "postiz",
+  "name": "Postiz",
+  "contractVersion": 1,
+  "postUrl": "{url}/p/{id}"
+}

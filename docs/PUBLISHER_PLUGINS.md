@@ -8,6 +8,7 @@ A Publisher plugin connects OpenGroow to one external publishing service (ADR-07
 packages/publisher-<service>/
   package.json            # name @opengroow/publisher-<service>, depends on @opengroow/publisher-sdk
   tsconfig.json
+  manifest.json           # id, name, contractVersion, postUrl template
   data/capabilities.json      # data file 1
   data/channel-options.json   # data file 2
   src/index.ts            # exports the plugin object
@@ -21,13 +22,13 @@ The plugin must not import from `apps/*`. It receives everything through argumen
 
 | Member | Role |
 | --- | --- |
-| `id`, `name` | `id` is stored as the Publisher's `adapter`; `name` is used in user-facing messages. |
+| `id`, `name`, `contractVersion` | `id` is stored as the Publisher's `adapter`; `name` is used in user-facing messages; `contractVersion` is the SDK contract the plugin implements (`PUBLISHER_CONTRACT_VERSION`). All three come from `manifest.json`. |
 | `testConnection(conn)` | Checks the URL and key. |
 | `listChannels(conn)` | The service's destinations as `{ id, name, service, picture?, profile?, disabled? }`; `service` is the platform identifier used by the two data files. |
 | `publish(conn, request)` | Uploads media, builds the platform settings (defaults overridden by `request.settings`), creates the post. Returns `{ externalId, status: "scheduled" \| "published" \| "pending" }`. |
 | `findPost(conn, query)` | Reconciliation before a re-send: the post on `channelId` with that caption and date window, or `null`. Never match a post the service itself marked failed. |
 | `getStatus(conn, externalId, around?)` | Where a post stands (`pending`, `scheduled`, `published`, `failed`). A post the service no longer knows is `failed`. |
-| `postUrl?(conn, externalId)` | Optional. A URL that opens the post in the service's own UI (Postiz: its public preview page `/p/<id>`), shown as "open in <name>" next to the post's network URL. |
+| `postUrl?` | Optional template (data, not a function), from `manifest.json`: `{url}` is the connection URL, `{id}` the post's external id. A URL that opens the post in the service's own UI (Postiz: `{url}/p/{id}`, its public preview page), shown as "open in <name>" next to the post's network URL. Rendered with the SDK's `renderPostUrl`. |
 
 Every function returns `PublisherResult`: `{ ok: true, ... }` or `{ ok: false, error, uncertain? }`.
 
@@ -41,6 +42,10 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
 - `request.beforePost(uploadedMedia)`: call it right before the call that creates the post, with the media uploaded so far. If it returns `false`, stop with an error: another caller owns this Publication. The core uses it to record the uploads and move the Publication to `submitting`.
 - `request.publishAt`: absent means publish now. The core validates the date (never in the past); the plugin only maps it.
 - `request.channelService`: the channel's platform when known from the mapping; fall back to `listChannels` if absent.
+
+## The manifest
+
+`manifest.json` is `{ id, name, contractVersion, postUrl? }`, read by the SDK's `parsePublisherManifest`, which refuses a package built for another contract version with a message naming both versions. It is the single source of the plugin's identity: `postiz.ts` builds `id`, `name`, `contractVersion` and `postUrl` from it, so a malformed manifest fails at load. It is also the data the core will store when packages are installed from the hub (ADR-072, proposed).
 
 ## The two data files
 
