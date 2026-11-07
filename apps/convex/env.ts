@@ -75,6 +75,8 @@ export const env = {
   // Hub of installable Agent Templates (#668): a GitHub repository holding an index.json at `OPENGROOW_HUB_REF`.
   get OPENGROOW_HUB_REPOSITORY() { return optional("OPENGROOW_HUB_REPOSITORY", "OpenGroow/groowhub"); },
   get OPENGROOW_HUB_REF() { return optional("OPENGROOW_HUB_REF", "main"); },
+  // Dev only: a hub served from this machine (`pnpm hub:serve`) for Publisher packages, instead of the GitHub repository above. Loopback hosts only.
+  get OPENGROOW_HUB_URL() { return optional("OPENGROOW_HUB_URL", ""); },
 
   get OPENGROOW_ENABLE_DEMO_AGENTS() { return optional("OPENGROOW_ENABLE_DEMO_AGENTS", "") === "1"; },
 

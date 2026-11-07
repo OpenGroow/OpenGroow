@@ -5,11 +5,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "publisher:pack": "tsx scripts/pack-publisher.ts"
   },
   "exports": {
     ".": "./src/index.ts",
     "./capabilities": "./src/capabilities.ts",
     "./channel-options": "./src/channel-options.ts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "tsx": "^4.22.4"
   }
 }

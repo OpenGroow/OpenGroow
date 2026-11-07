@@ -4,7 +4,7 @@ import { action } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import { v } from "convex/values";
 import { assetField, fetchGitPackage } from "@opengroow/agent-templates/git-archive";
-import { fetchHubPackageIndex, HUB_PACKAGE_KINDS, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
+import { fetchHubPackageIndex, HUB_PACKAGE_KINDS, parseLocalHubUrl, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
 import { env } from "./env.js";
 import { messageOf } from "./error_message.js";
 import { requireAuthenticatedUser } from "./project_agents/auth.js";
@@ -27,8 +27,17 @@ export type HubPackageCatalogueEntry = {
 
 const kindV = v.union(...HUB_PACKAGE_KINDS.map((k) => v.literal(k)));
 
+/** The local hub of a development setup (`OPENGROOW_HUB_URL`), if one is configured; loopback hosts only. */
+const localHub = () => (env.OPENGROOW_HUB_URL ? parseLocalHubUrl(env.OPENGROOW_HUB_URL) : undefined);
+
 const loadIndex = (kind: HubPackageKind) =>
-  fetchHubPackageIndex({ repository: env.OPENGROOW_HUB_REPOSITORY, ref: env.OPENGROOW_HUB_REF, kind, fetch: (url) => fetch(url) });
+  fetchHubPackageIndex({
+    repository: env.OPENGROOW_HUB_REPOSITORY,
+    ref: env.OPENGROOW_HUB_REF,
+    kind,
+    fetch: (url) => fetch(url),
+    ...(localHub() ? { baseUrl: localHub() } : {}),
+  });
 
 const toCatalogueEntry = (entry: HubPackageEntry): HubPackageCatalogueEntry => ({
   packageId: entry.id,
@@ -75,6 +84,7 @@ export const install = action({
         ...assetField(entry.asset),
         digest: entry.digest,
         fetch: (url) => fetch(url),
+        ...(localHub() ? { baseUrl: localHub() } : {}),
       });
       const problem = problemWith(kind, entry, files);
       if (problem) throw new Error(`${entry.name} cannot be installed: ${problem}`);

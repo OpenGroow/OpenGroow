@@ -1,6 +1,6 @@
 {
   "name": "@opengroow/publisher-postiz",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
@@ -12,5 +12,6 @@
   },
   "dependencies": {
     "@opengroow/publisher-sdk": "workspace:*"
-  }
+  },
+  "description": "Publish through a Postiz instance"
 }

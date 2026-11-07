@@ -30,6 +30,29 @@ export const HUB_PACKAGE_KINDS = ["publisher"] as const;
 export type HubPackageKind = (typeof HUB_PACKAGE_KINDS)[number];
 export const hubPackageIndexPath = (kind: HubPackageKind) => `${kind}s.json`;
 
+const LOCAL_HUB_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "host.docker.internal"]);
+
+/**
+ * The base URL of a hub served from the developer's machine (`pnpm hub:serve`),
+ * used instead of GitHub to try a package before it is released: `<base>/publishers.json`
+ * and `<base>/releases/<tag>/<asset>`. Only a loopback host (or Docker's
+ * `host.docker.internal`) is accepted, so the setting can never point a
+ * deployment at a remote server; the digest check still applies. Returns the
+ * URL without a trailing slash; throws on anything else.
+ */
+export function parseLocalHubUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`OPENGROOW_HUB_URL "${raw}" is not a URL`);
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || !LOCAL_HUB_HOSTS.has(url.hostname)) {
+    throw new Error(`OPENGROOW_HUB_URL must be an http(s) URL on localhost, 127.0.0.1 or host.docker.internal, not "${raw}"`);
+  }
+  return url.toString().replace(/\/+$/, "");
+}
+
 export const HUB_VERIFICATIONS = ["official", "verified", "community"] as const;
 export type HubVerification = (typeof HUB_VERIFICATIONS)[number];
 
@@ -157,8 +180,8 @@ export function hubIndexUrl(repository: string, ref: string, path: string = HUB_
   return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`;
 }
 
-async function fetchIndexJson(args: { repository: string; ref: string; fetch: FetchLike }, path: string) {
-  const url = hubIndexUrl(args.repository, args.ref, path);
+async function fetchIndexJson(args: { repository: string; ref: string; fetch: FetchLike }, path: string, urlOverride?: string) {
+  const url = urlOverride ?? hubIndexUrl(args.repository, args.ref, path);
   const response = await args.fetch(url);
   if (!response.ok) throw new Error(`Failed to download the hub index ${url}: HTTP ${response.status}`);
   let json: unknown;
@@ -179,8 +202,16 @@ export async function fetchHubIndex(args: { repository: string; ref: string; fet
 }
 
 /** Downloads and validates the index of one non-Template kind of the hub; throws with the reason when it cannot. */
-export async function fetchHubPackageIndex(args: { repository: string; ref: string; kind: HubPackageKind; fetch: FetchLike }): Promise<HubPackageIndex> {
-  const { url, json } = await fetchIndexJson(args, hubPackageIndexPath(args.kind));
+export async function fetchHubPackageIndex(args: {
+  repository: string;
+  ref: string;
+  kind: HubPackageKind;
+  fetch: FetchLike;
+  /** A local hub (`parseLocalHubUrl`): read `<baseUrl>/publishers.json` instead of the GitHub repository. */
+  baseUrl?: string;
+}): Promise<HubPackageIndex> {
+  const path = hubPackageIndexPath(args.kind);
+  const { url, json } = await fetchIndexJson(args, path, args.baseUrl === undefined ? undefined : `${args.baseUrl}/${path}`);
   const parsed = parseHubPackageIndex(json);
   if (!parsed.ok) throw new Error(`Invalid hub index ${url}: ${parsed.reason}`);
   return parsed.index;

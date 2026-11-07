@@ -187,3 +187,32 @@ describe("hub_packages_node.install", () => {
     await expect(t.action(api.hub_packages_node.install, { kind: "publisher", packageId: "@opengroow/publisher-postiz" })).rejects.toThrow(/Authentication required/);
   });
 });
+
+describe("a local hub (OPENGROOW_HUB_URL, dev)", () => {
+  it("lists and installs from the local server, with the same digest check", async () => {
+    vi.stubEnv("OPENGROOW_HUB_URL", "http://127.0.0.1:8787");
+    const archive = tgz(publisherFiles());
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "http://127.0.0.1:8787/publishers.json") return new Response(JSON.stringify({ schemaVersion: 1, packages: [entry(archive)] }));
+      if (url === `http://127.0.0.1:8787/releases/${TAG}/${ASSET}`) return new Response(new Uint8Array(archive));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const t = convexTest(schema, modules);
+
+    expect((await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" })).entries).toHaveLength(1);
+    expect(await t.withIdentity(USER).action(api.hub_packages_node.install, { kind: "publisher", packageId: "@opengroow/publisher-postiz" })).toMatchObject({ status: "installed" });
+    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:8787/"))).toBe(true);
+  });
+
+  it("refuses a remote hub URL: the catalogue reports it and nothing is fetched", async () => {
+    vi.stubEnv("OPENGROOW_HUB_URL", "https://evil.example.com");
+    const fetchMock = vi.fn(async () => new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    const t = convexTest(schema, modules);
+    const result = await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" });
+    expect(result.entries).toEqual([]);
+    expect(result.error).toMatch(/OPENGROOW_HUB_URL must be/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

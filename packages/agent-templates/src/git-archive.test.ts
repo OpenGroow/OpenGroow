@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { tarGz } from "./__fixtures__/tar-gz.js";
-import { fetchGitPackage, githubArchiveUrl, githubAssetUrl, isValidGitAsset, isValidGitTag } from "./git-archive.js";
+import { fetchGitPackage, githubArchiveUrl, githubAssetUrl, isValidGitAsset, isValidGitTag, localAssetUrl } from "./git-archive.js";
 
 const sha = (b: Buffer) => `sha256:${createHash("sha256").update(b).digest("hex")}`;
 const fetchOf = (body: Buffer, status = 200) =>
@@ -151,5 +151,40 @@ describe("release asset packages (#672)", () => {
       fetchGitPackage({ repository: "a/b", tag: "x@1", asset: "../evil.tgz", digest: sha(assetArchive), fetch }),
     ).rejects.toThrow(/asset/i);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("local hub assets (dev)", () => {
+  const archive = tarGz([{ name: "package/manifest.json", content: "{}" }]);
+
+  it("downloads the asset from the local hub, still verified against the digest", async () => {
+    const fetch = fetchOf(archive);
+    const result = await fetchGitPackage({
+      repository: "OpenGroow/groowhub",
+      tag: "publisher-postiz@1.0.0",
+      asset: "opengroow-publisher-postiz-1.0.0.tgz",
+      digest: sha(archive),
+      fetch,
+      baseUrl: "http://127.0.0.1:8787",
+    });
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8787/releases/publisher-postiz@1.0.0/opengroow-publisher-postiz-1.0.0.tgz");
+    expect(result.files).toEqual([{ path: "manifest.json", content: "{}" }]);
+
+    await expect(
+      fetchGitPackage({
+        repository: "OpenGroow/groowhub",
+        tag: "publisher-postiz@1.0.0",
+        asset: "opengroow-publisher-postiz-1.0.0.tgz",
+        digest: `sha256:${"0".repeat(64)}`,
+        fetch: fetchOf(archive),
+        baseUrl: "http://127.0.0.1:8787",
+      }),
+    ).rejects.toThrow(/Digest mismatch/);
+  });
+
+  it("validates the tag and the asset name like GitHub's URL does", () => {
+    expect(localAssetUrl("http://127.0.0.1:8787", "a@1.0.0", "a-1.0.0.tgz")).toBe("http://127.0.0.1:8787/releases/a@1.0.0/a-1.0.0.tgz");
+    expect(() => localAssetUrl("http://127.0.0.1:8787", "a@..", "a.tgz")).toThrow(/Invalid tag/);
+    expect(() => localAssetUrl("http://127.0.0.1:8787", "a@1", "../a.tgz")).toThrow(/Invalid release asset/);
   });
 });
