@@ -4,13 +4,15 @@ The public hub of official OpenGroow Templates (`@opengroow/*`). It is a plain
 GitHub repository:
 
 ```
-index.json                 one entry per package: what installs, and its digest
+index.json                 one entry per Template: what installs, and its digest
+publishers.json            same for Publisher packages (code, not Templates)
 packages/<name>/           one folder per Template (package.json, CLAW.md, workspace/, profiles/, plugins/)
-tools/update-index.mjs     used by the release workflow
+packages/publisher/<id>/   one folder per Publisher package (manifest.json, data/, src/)
+tools/update-index.mjs     used by the release workflow (validation and Publisher builds use @opengroow/groowhub-cli)
 .github/                   validation, release and secret-scan workflows, CODEOWNERS
 ```
 
-OpenGroow reads `index.json` from this repository (`OPENGROOW_HUB_REPOSITORY`,
+OpenGroow reads `index.json` (Templates) and `publishers.json` (Publisher packages) from this repository (`OPENGROOW_HUB_REPOSITORY`,
 default `OpenGroow/groowhub`) and installs an entry by downloading the release
 asset it names and checking its sha256 against the index before extracting
 anything.
@@ -19,6 +21,9 @@ anything.
 > code (`hub-template/` in the OpenGroow repository) so that the workflows stay
 > in step with the installer. Copy its contents (not a `.git`) into the hub
 > repository.
+
+Publisher packages are released with a tag `publisher-<id>@<version>`; see
+`docs/PUBLISHING.md` in the hub repository.
 
 ## Releasing a package
 

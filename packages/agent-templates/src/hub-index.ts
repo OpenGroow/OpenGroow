@@ -30,6 +30,32 @@ export const HUB_PACKAGE_KINDS = ["publisher"] as const;
 export type HubPackageKind = (typeof HUB_PACKAGE_KINDS)[number];
 export const hubPackageIndexPath = (kind: HubPackageKind) => `${kind}s.json`;
 
+const LOCAL_HUB_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "host.docker.internal"]);
+
+/**
+ * The base URL of a hub served from the developer's machine (`pnpm hub:serve`),
+ * used instead of GitHub to try a package before it is released: `<base>/publishers.json`
+ * and `<base>/releases/<tag>/<asset>`. Only a loopback host (or Docker's
+ * `host.docker.internal`) is accepted, so the setting can never point a
+ * deployment at a remote server; the digest check still applies. Returns the
+ * URL without a trailing slash; throws on anything else.
+ */
+export function parseLocalHubUrl(raw: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`OPENGROOW_HUB_URL "${raw}" is not a URL`);
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || !LOCAL_HUB_HOSTS.has(url.hostname)) {
+    throw new Error(`OPENGROOW_HUB_URL must be an http(s) URL on localhost, 127.0.0.1 or host.docker.internal, not "${raw}"`);
+  }
+  if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) {
+    throw new Error(`OPENGROOW_HUB_URL must be a bare origin (no path, query or fragment), not "${raw}"`);
+  }
+  return url.origin;
+}
+
 export const HUB_VERIFICATIONS = ["official", "verified", "community"] as const;
 export type HubVerification = (typeof HUB_VERIFICATIONS)[number];
 
@@ -52,7 +78,10 @@ export type HubIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; package
 export type ParsedHubIndex = { ok: true; index: HubIndex } | { ok: false; reason: string };
 
 /** An entry of a non-Template index: a Template entry without `category`. */
-export type HubPackageEntry = Omit<HubEntry, "category">;
+export type HubPackageEntry = Omit<HubEntry, "category"> & {
+  /** The package's logo as an image data URI, shown before it is installed (kinds that have one, such as Publishers). */
+  icon?: string;
+};
 export type HubPackageIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; packages: HubPackageEntry[] };
 export type ParsedHubPackageIndex = { ok: true; index: HubPackageIndex } | { ok: false; reason: string };
 
@@ -60,6 +89,10 @@ const SCOPED_ID = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const PACKAGE_ENTRY_KEYS = ["id", "name", "description", "repository", "tag", "asset", "digest", "verification"] as const;
 const ENTRY_KEYS = [...PACKAGE_ENTRY_KEYS, "category"] as const;
+const ICON_ENTRY_KEYS = [...PACKAGE_ENTRY_KEYS, "icon"] as const;
+// Same rule as the Publisher manifest's icon (`isValidIcon` in @opengroow/publisher-sdk): an image data URI of bounded size, base64 only.
+const ICON = /^data:image\/(?:png|webp|jpeg|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/;
+const MAX_ICON_LENGTH = 64 * 1024;
 
 class IndexError extends Error {}
 
@@ -112,7 +145,16 @@ function parsePackageEntry(raw: unknown, position: number, allowedKeys: readonly
     ...assetField(asset),
     digest,
     verification: verification as HubVerification,
+    ...(allowedKeys.includes("icon") && raw["icon"] !== undefined ? { icon: iconOf(raw, where) } : {}),
   };
+}
+
+function iconOf(record: Record<string, unknown>, where: string): string {
+  const value = record["icon"];
+  if (typeof value !== "string" || value.length > MAX_ICON_LENGTH || !ICON.test(value)) {
+    throw new IndexError(`${where}: "icon" must be a png, webp, jpeg or svg data URI of at most ${MAX_ICON_LENGTH} characters`);
+  }
+  return value;
 }
 
 function parseEntry(raw: unknown, position: number): HubEntry {
@@ -148,7 +190,7 @@ export function parseHubIndex(input: unknown): ParsedHubIndex {
 
 /** The index of a non-Template kind (`publishers.json`): the same strict reader, entries without `category`. */
 export function parseHubPackageIndex(input: unknown): ParsedHubPackageIndex {
-  return parseIndex(input, (raw, position) => parsePackageEntry(raw, position, PACKAGE_ENTRY_KEYS));
+  return parseIndex(input, (raw, position) => parsePackageEntry(raw, position, ICON_ENTRY_KEYS));
 }
 
 export function hubIndexUrl(repository: string, ref: string, path: string = HUB_INDEX_PATH): string {
@@ -157,8 +199,8 @@ export function hubIndexUrl(repository: string, ref: string, path: string = HUB_
   return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`;
 }
 
-async function fetchIndexJson(args: { repository: string; ref: string; fetch: FetchLike }, path: string) {
-  const url = hubIndexUrl(args.repository, args.ref, path);
+async function fetchIndexJson(args: { repository: string; ref: string; fetch: FetchLike }, path: string, urlOverride?: string) {
+  const url = urlOverride ?? hubIndexUrl(args.repository, args.ref, path);
   const response = await args.fetch(url);
   if (!response.ok) throw new Error(`Failed to download the hub index ${url}: HTTP ${response.status}`);
   let json: unknown;
@@ -179,8 +221,16 @@ export async function fetchHubIndex(args: { repository: string; ref: string; fet
 }
 
 /** Downloads and validates the index of one non-Template kind of the hub; throws with the reason when it cannot. */
-export async function fetchHubPackageIndex(args: { repository: string; ref: string; kind: HubPackageKind; fetch: FetchLike }): Promise<HubPackageIndex> {
-  const { url, json } = await fetchIndexJson(args, hubPackageIndexPath(args.kind));
+export async function fetchHubPackageIndex(args: {
+  repository: string;
+  ref: string;
+  kind: HubPackageKind;
+  fetch: FetchLike;
+  /** A local hub (`parseLocalHubUrl`): read `<baseUrl>/publishers.json` instead of the GitHub repository. */
+  baseUrl?: string;
+}): Promise<HubPackageIndex> {
+  const path = hubPackageIndexPath(args.kind);
+  const { url, json } = await fetchIndexJson(args, path, args.baseUrl === undefined ? undefined : `${args.baseUrl}/${path}`);
   const parsed = parseHubPackageIndex(json);
   if (!parsed.ok) throw new Error(`Invalid hub index ${url}: ${parsed.reason}`);
   return parsed.index;

@@ -19,9 +19,22 @@ export type PublisherPackageManifest = {
    * (URL-encoded). Absent when the service has no such page.
    */
   postUrl?: string;
+  /**
+   * The service's logo as an image data URI (`data:image/png;base64,...`, png,
+   * webp, jpeg or svg, at most `MAX_ICON_LENGTH` characters). A package is text
+   * only (the installer refuses binary files), and the dashboard shows the
+   * logo as-is, so it travels inside the manifest.
+   */
+  icon?: string;
 };
 
 export type ManifestResult = { ok: true; manifest: PublisherPackageManifest } | { ok: false; error: string };
+
+export const MAX_ICON_LENGTH = 64 * 1024;
+const ICON_PATTERN = /^data:image\/(?:png|webp|jpeg|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/** Whether `value` is an icon the dashboard may show: an image data URI of bounded size. */
+export const isValidIcon = (value: unknown): value is string => typeof value === "string" && value.length <= MAX_ICON_LENGTH && ICON_PATTERN.test(value);
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const POST_URL_PLACEHOLDERS = new Set(["{url}", "{id}"]);
@@ -54,7 +67,13 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
     if (m.postUrl.indexOf("{url}", 1) !== -1) return { ok: false, error: "The manifest `postUrl` can only use {url} at its start" };
     postUrl = m.postUrl;
   }
-  return { ok: true, manifest: { id: m.id, name: m.name, contractVersion: m.contractVersion, ...(postUrl ? { postUrl } : {}) } };
+  if (m.icon !== undefined && !isValidIcon(m.icon)) {
+    return { ok: false, error: `The manifest \`icon\` must be a png, webp, jpeg or svg data URI of at most ${MAX_ICON_LENGTH} characters` };
+  }
+  return {
+    ok: true,
+    manifest: { id: m.id, name: m.name, contractVersion: m.contractVersion, ...(postUrl ? { postUrl } : {}), ...(m.icon ? { icon: m.icon } : {}) },
+  };
 }
 
 /** Fills a `postUrl` template for a connection and a post. */

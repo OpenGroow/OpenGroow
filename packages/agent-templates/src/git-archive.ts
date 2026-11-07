@@ -55,6 +55,13 @@ export function githubAssetUrl(repository: string, tag: string, asset: string): 
   return `${canonicalRepository(repository, tag)}/releases/download/${tag}/${asset}`;
 }
 
+/** URL of a release asset on a local hub (`pnpm hub:serve`); tag and asset are validated like GitHub's. */
+export function localAssetUrl(baseUrl: string, tag: string, asset: string): string {
+  if (!isValidGitTag(tag)) throw new Error(`Invalid tag "${tag}"`);
+  if (!isValidGitAsset(asset)) throw new Error(`Invalid release asset "${asset}": expected a plain *.tgz file name`);
+  return `${baseUrl}/releases/${tag}/${asset}`;
+}
+
 export function githubArchiveUrl(repository: string, tag: string): string {
   return archiveUrl(canonicalRepository(repository, tag), tag);
 }
@@ -144,6 +151,8 @@ export async function fetchGitPackage(args: {
   /** Expected `sha256:<hex>` of the release archive. */
   digest: string;
   fetch: FetchLike;
+  /** A local hub (`parseLocalHubUrl`): download the asset from `<baseUrl>/releases/<tag>/<asset>` instead of GitHub. */
+  baseUrl?: string;
   /** Refuse a download larger than this many bytes (checked before the digest, which needs the whole body). */
   maxArchiveBytes?: number;
   /** Refuse an archive that unpacks to more than this many bytes (a decompression bomb). */
@@ -151,7 +160,15 @@ export async function fetchGitPackage(args: {
 }): Promise<{ files: PackageFile[]; gitOrigin: GitOrigin }> {
   if (!DIGEST.test(args.digest)) throw new Error("The expected digest must look like sha256:<64 hex characters>");
   const repository = canonicalRepository(args.repository, args.tag);
-  const url = args.asset === undefined ? archiveUrl(repository, args.tag) : githubAssetUrl(repository, args.tag, args.asset);
+  if (args.baseUrl !== undefined && args.asset === undefined) {
+    throw new Error("A local hub serves release assets only: this entry has no asset, so it would be downloaded from GitHub instead");
+  }
+  const url =
+    args.asset === undefined
+      ? archiveUrl(repository, args.tag)
+      : args.baseUrl === undefined
+        ? githubAssetUrl(repository, args.tag, args.asset)
+        : localAssetUrl(args.baseUrl, args.tag, args.asset);
 
   const response = await args.fetch(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: HTTP ${response.status}`);

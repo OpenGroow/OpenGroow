@@ -1,13 +1,12 @@
 # Writing a Publisher plugin
 
-A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher-postiz`. Contract: `packages/publisher-sdk`.
+A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher/postiz` in the hub (groowhub). Contract: `packages/publisher-sdk`. The core's tests use a copy of it, `apps/convex/test/postiz-reference`, which is never shipped.
 
 ## Package layout
 
 ```
-packages/publisher-<service>/
-  package.json            # name @opengroow/publisher-<service>, depends on @opengroow/publisher-sdk
-  tsconfig.json
+groowhub/packages/publisher/<service>/
+  package.json            # name @opengroow/publisher-<service>; the SDK is only imported as types
   manifest.json           # id, name, contractVersion, postUrl template
   data/capabilities.json      # data file 1
   data/channel-options.json   # data file 2
@@ -62,6 +61,22 @@ So a function of the plugin can only be called from a `"use node"` action (`publ
 
 A package is an `npm pack` tarball: `manifest.json`, `data/*.json`, `package.json` and the built `dist/plugin.mjs`. Its name must be `publisher-<manifest id>`. Only `official` hub entries can be installed: the code runs with the core's rights.
 
+## Trying a package locally, before any release
+
+The product reads the hub on GitHub. To try a package from a local checkout of the hub (`../groowhub`), without publishing anything:
+
+```bash
+pnpm publisher:pack ../groowhub/packages/publisher/postiz --out ../groowhub/dist --index ../groowhub/publishers.json        # bundle + npm pack into ../groowhub/dist, entry written to ../groowhub/publishers.json
+pnpm hub:serve                                       # serves ../groowhub on http://127.0.0.1:8787
+npx convex env set OPENGROOW_HUB_URL http://127.0.0.1:8787   # host Convex (pnpm dev)
+```
+
+With Convex in Docker (`pnpm dev:docker`), start `pnpm hub:serve -- --host 0.0.0.0` (it listens on 127.0.0.1 only by default) and set `OPENGROOW_HUB_URL=http://host.docker.internal:8787` on the `convex-backend` service instead. Then Publishers, Add publisher lists the local hub; choosing the package installs it, with the same digest check as from GitHub.
+
+`OPENGROOW_HUB_URL` is accepted only for `localhost`, `127.0.0.1` or `host.docker.internal`, so it can never point a deployment at a remote server. Unset it to read the real hub again. Change the `--out` and `--index` paths for a hub that is not at `../groowhub`. `publisher:pack` is the hub CLI's `pack publisher` (`@opengroow/groowhub-cli`, the command the hub's release workflow runs); with `--index` it writes the index entry itself because nothing is released; in a real release a maintainer adds the entry in a reviewed PR and the workflow only moves `tag`, `asset` and `digest`.
+
+`apps/convex/test/publisher_hub_chain.test.ts` runs this whole circuit automatically (pack, serve, catalogue, install, load, call) against a stubbed Postiz.
+
 ## Testing with a stubbed fetch
 
 Plugins talk to the network through `fetch` only. Stub it and assert on the requests:
@@ -72,7 +87,7 @@ const res = await myPlugin.publish({ url: "https://svc.example.com", apiKey: "k"
 expect(res.ok).toBe(true);
 ```
 
-See `packages/publisher-postiz/src/postiz.test.ts`. The core flows (retry, scheduling, polling) are covered with the same stub in `apps/convex/test/publication*.test.ts`; a new plugin should pass equivalent scenarios.
+See `packages/publisher/postiz/src/postiz.test.ts` in the hub. The core flows (retry, scheduling, polling) are covered with the same stub in `apps/convex/test/publication*.test.ts`; a new plugin should pass equivalent scenarios.
 
 ## Trust
 

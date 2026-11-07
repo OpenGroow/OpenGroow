@@ -48,12 +48,12 @@ function publisherProblem(entry: { id: string; tag: string }, files: readonly Pa
     return `The hub lists ${entry.id} but the manifest declares the Publisher "${manifest.manifest.id}": expected the package name publisher-${manifest.manifest.id}`;
   }
 
+  const adapter = manifest.manifest.id;
   const bundle = files.find((f) => f.path === "dist/plugin.mjs");
   if (!bundle || bundle.content.trim() === "") return "dist/plugin.mjs is missing or empty";
 
   const capabilities = readJson(files, "data/capabilities.json");
   if (!capabilities.ok) return capabilities.error;
-  const adapter = manifest.manifest.id;
   try {
     if (parseCapabilities(capabilities.value).adapter !== adapter) {
       return `data/capabilities.json is for another Publisher than "${adapter}"`;
@@ -81,6 +81,8 @@ export type PublisherMeta = {
   adapter: string;
   name: string;
   postUrl?: string;
+  /** The logo, an image data URI (manifest `icon`). */
+  icon?: string;
   capabilities: CapabilitiesData;
   channelOptions: ChannelOptionsData;
 };
@@ -96,6 +98,7 @@ export function describe(kind: HubPackageKind, files: readonly PackageFile[]): P
         adapter: manifest.manifest.id,
         name: manifest.manifest.name,
         ...(manifest.manifest.postUrl ? { postUrl: manifest.manifest.postUrl } : {}),
+        ...(manifest.manifest.icon ? { icon: manifest.manifest.icon } : {}),
         capabilities: parseCapabilities(json("data/capabilities.json")),
         channelOptions: json("data/channel-options.json") as ChannelOptionsData,
       };

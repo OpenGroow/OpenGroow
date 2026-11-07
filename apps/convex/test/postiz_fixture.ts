@@ -7,7 +7,7 @@
 // In a test file: vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
 
 import type { convexTest } from "convex-test";
-import { postizManifest, postizPlugin } from "../../../packages/publisher-postiz/src/index";
+import { postizManifest, postizPlugin } from "./postiz-reference/src/index";
 
 export const POSTIZ_META = {
   adapter: postizManifest.id,

@@ -43,7 +43,7 @@ Code in a package is an exception to the principle of docs/domain/templates.md t
 
 ### 5. Migration path
 
-1. **Now:** the plugin is a workspace package of this monorepo (`packages/publisher-postiz`), registered statically in the core. Its code is part of the product build.
+1. **Now:** the plugin is a workspace package of this monorepo (`packages/publisher/postiz` (hub)), registered statically in the core. Its code is part of the product build.
 2. **Later, separate step:** the same package is distributed through the hub as a Publisher package (versioned, digest, verification level) and installed per instance. Convex cannot load external code dynamically today, so this needs its own design (bundling at deploy, or a runtime outside Convex). It is deliberately **not built** here; the contract and the two data files are chosen so that moving the package is a file move.
 
 ### Options rejected

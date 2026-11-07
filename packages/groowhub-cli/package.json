@@ -1,0 +1,36 @@
+{
+  "name": "@opengroow/groowhub-cli",
+  "version": "0.1.0",
+  "description": "Validate and build the packages of the OpenGroow hub (groowhub) with the code the product runs at installation",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenGroow/OpenGroow.git",
+    "directory": "packages/groowhub-cli"
+  },
+  "type": "module",
+  "bin": {
+    "groowhub": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --external:esbuild --target=node20 --outfile=dist/cli.js \"--banner:js=#!/usr/bin/env node\nimport { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && chmod +x dist/cli.js",
+    "prepack": "pnpm build",
+    "publisher:pack": "tsx src/cli.ts pack publisher"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.1",
+    "tsx": "^4.22.4"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -4,7 +4,7 @@ import { action, type ActionCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import { v } from "convex/values";
 import { assetField, fetchGitPackage } from "@opengroow/agent-templates/git-archive";
-import { fetchHubPackageIndex, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
+import { fetchHubPackageIndex, parseLocalHubUrl, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
 import { env } from "./env.js";
 import { messageOf } from "./error_message.js";
 import { requireAuthenticatedUser } from "./project_agents/auth.js";
@@ -24,6 +24,7 @@ export type HubPackageCatalogueEntry = {
   description: string;
   tag: string;
   verification: HubVerification;
+  icon?: string;
 };
 
 /**
@@ -40,8 +41,17 @@ async function requireHubAdmin(ctx: ActionCtx) {
   return user;
 }
 
-const loadIndex = (kind: HubPackageKind) =>
-  fetchHubPackageIndex({ repository: env.OPENGROOW_HUB_REPOSITORY, ref: env.OPENGROOW_HUB_REF, kind, fetch: (url) => fetch(url) });
+/** The local hub of a development setup (`OPENGROOW_HUB_URL`), if one is configured; loopback hosts only. */
+const localHub = () => (env.OPENGROOW_HUB_URL ? parseLocalHubUrl(env.OPENGROOW_HUB_URL) : undefined);
+
+const loadIndex = (kind: HubPackageKind, baseUrl: string | undefined) =>
+  fetchHubPackageIndex({
+    repository: env.OPENGROOW_HUB_REPOSITORY,
+    ref: env.OPENGROOW_HUB_REF,
+    kind,
+    fetch: (url) => fetch(url),
+    ...(baseUrl ? { baseUrl } : {}),
+  });
 
 const toCatalogueEntry = (entry: HubPackageEntry): HubPackageCatalogueEntry => ({
   packageId: entry.id,
@@ -49,6 +59,7 @@ const toCatalogueEntry = (entry: HubPackageEntry): HubPackageCatalogueEntry => (
   description: entry.description,
   tag: entry.tag,
   verification: entry.verification,
+  ...(entry.icon ? { icon: entry.icon } : {}),
 });
 
 /** The hub's packages of a kind. A hub that cannot be read is reported rather than thrown. */
@@ -57,7 +68,7 @@ export const catalogue = action({
   handler: async (ctx, { kind }): Promise<{ entries: HubPackageCatalogueEntry[]; error?: string }> => {
     await requireAuthenticatedUser(ctx);
     try {
-      return { entries: (await loadIndex(kind)).packages.map(toCatalogueEntry) };
+      return { entries: (await loadIndex(kind, localHub())).packages.map(toCatalogueEntry) };
     } catch (error) {
       return { entries: [], error: messageOf(error) };
     }
@@ -74,7 +85,8 @@ export const install = action({
   handler: async (ctx, { kind, packageId }): Promise<{ status: "installed"; packageId: string; version: string } | { status: "error"; errorMessage: string }> => {
     await requireHubAdmin(ctx);
     try {
-      const entry = (await loadIndex(kind)).packages.find((candidate) => candidate.id === packageId);
+      const baseUrl = localHub();
+      const entry = (await loadIndex(kind, baseUrl)).packages.find((candidate) => candidate.id === packageId);
       if (!entry) throw new Error(`${packageId} is not listed in the hub`);
       if (entry.verification !== "official") {
         throw new Error(`${entry.name} is ${entry.verification}: only official packages can be installed, because their code runs inside OpenGroow`);
@@ -87,6 +99,7 @@ export const install = action({
         fetch: (url) => fetch(url),
         maxArchiveBytes: MAX_ARCHIVE_BYTES,
         maxUnpackedBytes: MAX_UNPACKED_BYTES,
+        ...(baseUrl ? { baseUrl } : {}),
       });
       const problem = problemWith(kind, entry, files);
       if (problem) throw new Error(`${entry.name} cannot be installed: ${problem}`);

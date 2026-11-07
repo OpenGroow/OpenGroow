@@ -258,28 +258,26 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
 
+  packages/groowhub-cli:
+    dependencies:
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+
   packages/hmac: {}
 
   packages/protocol: {}
 
-  packages/publisher-postiz:
-    dependencies:
-      '@opengroow/publisher-sdk':
-        specifier: workspace:*
-        version: link:../publisher-sdk
-
   packages/publisher-sdk: {}
 
   packages/reliability: {}
-
-  packages/template-validator:
-    devDependencies:
-      esbuild:
-        specifier: ^0.25.0
-        version: 0.25.12
-      yaml:
-        specifier: ^2.9.1
-        version: 2.9.1
 
   plugins/openclaw-hooks:
     devDependencies:
