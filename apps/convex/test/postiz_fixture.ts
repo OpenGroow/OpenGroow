@@ -17,6 +17,13 @@ export const POSTIZ_META = {
   channelOptions: postizPlugin.channelOptions,
 };
 
+/** The data files of the Postiz package, as the hub release ships them (no bundle). */
+export const POSTIZ_DATA_FILES = [
+  { path: "manifest.json", content: JSON.stringify(postizManifest) },
+  { path: "data/capabilities.json", content: JSON.stringify(postizPlugin.capabilities) },
+  { path: "data/channel-options.json", content: JSON.stringify(postizPlugin.channelOptions) },
+];
+
 /** Installs the Postiz package's data, as `hub_packages_node.install` stores it. */
 export async function installPostiz(t: ReturnType<typeof convexTest>) {
   await t.run(async (ctx) => {
