@@ -5,6 +5,7 @@ import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, eff
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
+import { renderPostUrl } from "@opengroow/publisher-sdk";
 import { pluginFor } from "./publisher/registry.js";
 import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 
@@ -59,7 +60,7 @@ export const listForMission = query({
       externalUrl: row.externalUrl,
       // Where to open the post in the Publisher's own UI (e.g. Postiz).
       ...(plugin?.postUrl && publisher && row.externalId
-        ? { managerUrl: plugin.postUrl({ url: publisher.url }, row.externalId), managerName: plugin.name }
+        ? { managerUrl: renderPostUrl(plugin.postUrl, { url: publisher.url }, row.externalId), managerName: plugin.name }
         : {}),
       scheduledAt: row.scheduledAt,
       error: row.error,

@@ -76,6 +76,8 @@ export interface PublisherPlugin {
   readonly id: string;
   /** Service name shown in user-facing messages ("Postiz may have received this post"). */
   readonly name: string;
+  /** The contract version this plugin implements (`PUBLISHER_CONTRACT_VERSION` of the SDK it was built with). */
+  readonly contractVersion: number;
   /** Data file: which Publishable kinds each platform can carry. */
   readonly capabilities: CapabilitiesData;
   /** Data file: per-platform options the dashboard offers on a channel. */
@@ -100,9 +102,10 @@ export interface PublisherPlugin {
    */
   getStatus(conn: PublisherConnection, externalId: string, around?: number): Promise<PublisherResult<{ post: PostStatus }>>;
   /**
-   * A URL that opens the post in the service itself (its own UI), distinct from
-   * the post's public URL on the network. Optional: no entry when the service
-   * has no such page.
+   * Template of a URL that opens the post in the service itself (its own UI),
+   * distinct from the post's public URL on the network; see `renderPostUrl`.
+   * Data, not a function: it is read by queries, where plugin code cannot run
+   * (ADR-072). Optional: absent when the service has no such page.
    */
-  postUrl?(conn: Pick<PublisherConnection, "url">, externalId: string): string;
+  readonly postUrl?: string;
 }

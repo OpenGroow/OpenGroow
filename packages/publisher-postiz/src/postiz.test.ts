@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { postizPlugin as postizAdapter } from "./postiz";
+import { renderPostUrl } from "@opengroow/publisher-sdk";
+import { postizManifest, postizPlugin as postizAdapter } from "./postiz";
 
 // Optional Publishable fields forwarded to Postiz (ADR-069 amendment): Postiz is
 // stubbed at fetch; we observe the body of the `posts` call.
@@ -163,6 +164,14 @@ describe("Postiz adapter: media Postiz cannot fetch itself", () => {
 
 describe("Postiz adapter: postUrl", () => {
   it("links to the Postiz preview page of the post", () => {
-    expect(postizAdapter.postUrl?.({ url: "https://postiz.example.com/" }, "cmw57")).toBe("https://postiz.example.com/p/cmw57");
+    expect(renderPostUrl(postizAdapter.postUrl!, { url: "https://postiz.example.com/" }, "cmw57")).toBe("https://postiz.example.com/p/cmw57");
+  });
+});
+
+describe("Postiz manifest", () => {
+  it("is the plugin's identity", () => {
+    expect(postizManifest).toMatchObject({ id: "postiz", name: "Postiz", contractVersion: 1 });
+    expect(postizAdapter.id).toBe(postizManifest.id);
+    expect(postizAdapter.contractVersion).toBe(postizManifest.contractVersion);
   });
 });
