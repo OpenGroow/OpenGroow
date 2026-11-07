@@ -95,6 +95,15 @@ describe("hub package indexes (ADR-072)", () => {
     expect(parsed).toEqual({ ok: true, index: { schemaVersion: 1, packages: [publisher] } });
   });
 
+  it("accepts an optional icon, only as a bounded image data URI, and never on a Template entry", () => {
+    const icon = "data:image/png;base64,iVBORw0KGgo=";
+    expect(parseHubPackageIndex(index([{ ...publisher, icon }]))).toEqual({ ok: true, index: { schemaVersion: 1, packages: [{ ...publisher, icon }] } });
+    for (const bad of ["https://example.com/i.png", "data:text/html;base64,AAAA", 'data:image/png;base64,AA"x', `data:image/png;base64,${"A".repeat(70_000)}`, 3]) {
+      expect(parseHubPackageIndex(index([{ ...publisher, icon: bad }])).ok).toBe(false);
+    }
+    expect(parseHubIndex(index([{ ...entry, icon }])).ok).toBe(false);
+  });
+
   it("applies the same strictness: unknown keys, digest, duplicates, reserved scope", () => {
     expect(parseHubPackageIndex(index([{ ...publisher, category: "x" }]))).toEqual({ ok: false, reason: 'packages[0]: unknown key "category"' });
     expect(parseHubPackageIndex(index([{ ...publisher, digest: "sha256:zz" }])).ok).toBe(false);

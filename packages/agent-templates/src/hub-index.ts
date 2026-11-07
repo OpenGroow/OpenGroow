@@ -75,7 +75,10 @@ export type HubIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; package
 export type ParsedHubIndex = { ok: true; index: HubIndex } | { ok: false; reason: string };
 
 /** An entry of a non-Template index: a Template entry without `category`. */
-export type HubPackageEntry = Omit<HubEntry, "category">;
+export type HubPackageEntry = Omit<HubEntry, "category"> & {
+  /** The package's logo as an image data URI, shown before it is installed (kinds that have one, such as Publishers). */
+  icon?: string;
+};
 export type HubPackageIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; packages: HubPackageEntry[] };
 export type ParsedHubPackageIndex = { ok: true; index: HubPackageIndex } | { ok: false; reason: string };
 
@@ -83,6 +86,10 @@ const SCOPED_ID = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const PACKAGE_ENTRY_KEYS = ["id", "name", "description", "repository", "tag", "asset", "digest", "verification"] as const;
 const ENTRY_KEYS = [...PACKAGE_ENTRY_KEYS, "category"] as const;
+const ICON_ENTRY_KEYS = [...PACKAGE_ENTRY_KEYS, "icon"] as const;
+// Same rule as the Publisher manifest's icon (`isValidIcon` in @opengroow/publisher-sdk): an image data URI of bounded size, base64 only.
+const ICON = /^data:image\/(?:png|webp|jpeg|svg\+xml);base64,[A-Za-z0-9+/]+={0,2}$/;
+const MAX_ICON_LENGTH = 64 * 1024;
 
 class IndexError extends Error {}
 
@@ -135,7 +142,16 @@ function parsePackageEntry(raw: unknown, position: number, allowedKeys: readonly
     ...assetField(asset),
     digest,
     verification: verification as HubVerification,
+    ...(allowedKeys.includes("icon") && raw["icon"] !== undefined ? { icon: iconOf(raw, where) } : {}),
   };
+}
+
+function iconOf(record: Record<string, unknown>, where: string): string {
+  const value = record["icon"];
+  if (typeof value !== "string" || value.length > MAX_ICON_LENGTH || !ICON.test(value)) {
+    throw new IndexError(`${where}: "icon" must be a png, webp, jpeg or svg data URI of at most ${MAX_ICON_LENGTH} characters`);
+  }
+  return value;
 }
 
 function parseEntry(raw: unknown, position: number): HubEntry {
@@ -171,7 +187,7 @@ export function parseHubIndex(input: unknown): ParsedHubIndex {
 
 /** The index of a non-Template kind (`publishers.json`): the same strict reader, entries without `category`. */
 export function parseHubPackageIndex(input: unknown): ParsedHubPackageIndex {
-  return parseIndex(input, (raw, position) => parsePackageEntry(raw, position, PACKAGE_ENTRY_KEYS));
+  return parseIndex(input, (raw, position) => parsePackageEntry(raw, position, ICON_ENTRY_KEYS));
 }
 
 export function hubIndexUrl(repository: string, ref: string, path: string = HUB_INDEX_PATH): string {

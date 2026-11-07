@@ -26,7 +26,7 @@ import { parsePublisherManifest } from "../src/manifest";
 
 const REPOSITORY = "OpenGroow/groowhub";
 
-type IndexEntry = { id: string; name: string; description: string; repository: string; tag: string; asset: string; digest: string; verification: string };
+type IndexEntry = { id: string; name: string; description: string; repository: string; tag: string; asset: string; digest: string; verification: string; icon?: string };
 type PackageJson = { name?: string; version?: string; description?: string };
 
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf-8")) as T;
@@ -97,6 +97,8 @@ export function packPublisher(packageDir: string, hubDir: string): { tag: string
       asset,
       digest,
       verification: previous?.verification ?? "official",
+      // Shown in Add publisher before the package is installed: the same icon as the manifest's.
+      ...(manifest.manifest.icon ? { icon: manifest.manifest.icon } : {}),
     };
     index.packages = previous ? index.packages.map((p) => (p.id === pkg.name ? entry : p)) : [...index.packages, entry];
     writeFileSync(indexFile, `${JSON.stringify(index, null, 2)}\n`);

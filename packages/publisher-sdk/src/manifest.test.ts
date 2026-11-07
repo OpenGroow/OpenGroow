@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PUBLISHER_CONTRACT_VERSION, checkPublisherPlugin, parsePublisherManifest, renderPostUrl } from "./manifest";
+import { MAX_ICON_LENGTH, PUBLISHER_CONTRACT_VERSION, checkPublisherPlugin, isValidIcon, parsePublisherManifest, renderPostUrl } from "./manifest";
 
 const valid = { id: "postiz", name: "Postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, postUrl: "{url}/p/{id}" };
 
@@ -30,6 +30,26 @@ describe("parsePublisherManifest", () => {
     [{ ...valid, postUrl: 3 }],
   ])("refuses a malformed manifest %#", (raw) => {
     expect(parsePublisherManifest(raw).ok).toBe(false);
+  });
+});
+
+describe("manifest icon", () => {
+  const PNG = "data:image/png;base64,iVBORw0KGgo=";
+
+  it("accepts an image data URI and keeps it", () => {
+    expect(parsePublisherManifest({ ...valid, icon: PNG })).toEqual({ ok: true, manifest: { ...valid, icon: PNG } });
+    expect(isValidIcon("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=")).toBe(true);
+  });
+
+  it.each([
+    ["a remote URL", "https://example.com/logo.png"],
+    ["a script", "data:text/html;base64,PHNjcmlwdD4="],
+    ["an svg that is not base64 (could carry markup)", "data:image/svg+xml,<svg onload=alert(1)>"],
+    ["a quote that could close an attribute", 'data:image/png;base64,AAAA"onerror="x'],
+    ["a data URI too long", `data:image/png;base64,${"A".repeat(MAX_ICON_LENGTH)}`],
+    ["a non-string", 3],
+  ])("refuses %s", (_name, icon) => {
+    expect(parsePublisherManifest({ ...valid, icon }).ok).toBe(false);
   });
 });
 

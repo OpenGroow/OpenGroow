@@ -23,6 +23,7 @@ export type HubPackageCatalogueEntry = {
   description: string;
   tag: string;
   verification: HubVerification;
+  icon?: string;
 };
 
 const kindV = v.union(...HUB_PACKAGE_KINDS.map((k) => v.literal(k)));
@@ -45,6 +46,7 @@ const toCatalogueEntry = (entry: HubPackageEntry): HubPackageCatalogueEntry => (
   description: entry.description,
   tag: entry.tag,
   verification: entry.verification,
+  ...(entry.icon ? { icon: entry.icon } : {}),
 });
 
 /** The hub's packages of a kind. A hub that cannot be read is reported rather than thrown. */
