@@ -1,0 +1,13 @@
+{
+  "name": "groowhub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "validate:publishers": "node tools/validate-publishers.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "vitest": "^1.6.0"
+  }
+}

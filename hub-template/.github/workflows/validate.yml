@@ -1,7 +1,7 @@
 name: Validate
 
-# The whole repository is scanned for secrets. Packages are validated by hand
-# from a OpenGroow checkout before tagging (see README).
+# The whole repository is scanned for secrets, and every package and the index are
+# checked with the published `@opengroow/template-validator`.
 
 on:
   pull_request:
@@ -30,3 +30,46 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 \
             detect --source /repo --redact --no-banner --verbose
+
+  packages:
+    name: Validate packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The validator is a published bundle of the product's manifest reader
+      # (https://www.npmjs.com/package/@opengroow/template-validator). Bump the pinned
+      # version when the manifest format changes.
+      - name: Validate every package and the index
+        env:
+          VALIDATOR: "@opengroow/template-validator@0.1.0"
+        run: |
+          status=0
+          for dir in packages/*/; do
+            # packages/publisher/ holds Publisher packages, checked in their own job
+            [ "$(basename "$dir")" = "publisher" ] && continue
+            npx --yes "$VALIDATOR" package "${dir%/}" || status=1
+          done
+          npx --yes "$VALIDATOR" index index.json || status=1
+          exit $status
+
+  publishers:
+    name: Validate and test Publisher packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run validate:publishers
+      - run: pnpm test

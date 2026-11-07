@@ -3,6 +3,9 @@ name: Release
 # Pushing a tag `<name>@<version>` (e.g. seo@1.2.0) releases packages/<name>:
 # `pnpm pack` it, attach the .tgz to a GitHub Release, and open a
 # PR that points the package's entry in index.json at the new asset and digest.
+# A tag `publisher-<id>@<version>` (e.g. publisher-postiz@1.0.0) releases the
+# Publisher package packages/publisher/<id> the same way: it is built with
+# tools/build-publisher.mjs and listed in publishers.json instead of index.json.
 # The PR is the human gate: the index decides what installs on users'
 # deployments. No secret is used; only the workflow's own GITHUB_TOKEN.
 
@@ -31,15 +34,33 @@ jobs:
             echo "::error::Tag \"$TAG\" is not <name>@<semver>"
             exit 1
           fi
-          echo "name=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          name="${BASH_REMATCH[1]}"
+          if [[ "$name" == publisher-* ]]; then
+            echo "dir=packages/publisher/${name#publisher-}" >> "$GITHUB_OUTPUT"
+            echo "index=publishers.json" >> "$GITHUB_OUTPUT"
+            echo "publisher=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=packages/$name" >> "$GITHUB_OUTPUT"
+            echo "index=index.json" >> "$GITHUB_OUTPUT"
+            echo "publisher=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
         with:
           persist-credentials: true # needed to push the index branch below
+      - uses: actions/setup-node@v4
+        if: steps.tag.outputs.publisher == 'true'
+        with:
+          node-version: 22
       - name: Pack
         id: pack
         run: |
           mkdir -p "$RUNNER_TEMP/dist"
-          npm pack "./packages/${{ steps.tag.outputs.name }}" --pack-destination "$RUNNER_TEMP/dist"
+          if [ "${{ steps.tag.outputs.publisher }}" = "true" ]; then
+            npm install --no-save --no-package-lock esbuild@0.25.12
+            node tools/build-publisher.mjs "${{ steps.tag.outputs.dir }}" "$RUNNER_TEMP/dist"
+          else
+            npm pack "./${{ steps.tag.outputs.dir }}" --pack-destination "$RUNNER_TEMP/dist"
+          fi
           file=$(ls "$RUNNER_TEMP"/dist/*.tgz)
           echo "file=$file" >> "$GITHUB_OUTPUT"
           echo "sha256:$(sha256sum "$file" | cut -d' ' -f1)"
@@ -51,8 +72,8 @@ jobs:
         run: |
           git fetch origin main
           git switch -c "release/$TAG" origin/main
-          node tools/update-index.mjs --index index.json \
-            --package "packages/${{ steps.tag.outputs.name }}" \
+          node tools/update-index.mjs --index "${{ steps.tag.outputs.index }}" \
+            --package "${{ steps.tag.outputs.dir }}" \
             --repository "$GITHUB_REPOSITORY" --tag "$TAG" \
             --file "${{ steps.pack.outputs.file }}"
           git config user.name "github-actions[bot]"
