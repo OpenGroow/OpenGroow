@@ -9,7 +9,6 @@ on:
       - "packages/protocol/**"
       - "packages/agent-templates/**"
       - "packages/publisher-sdk/**"
-      - "packages/publisher-postiz/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/convex-bootstrap-image.yml"

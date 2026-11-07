@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublishTargetsCard } from "../src/components/publish-targets-card";
+import { INSTALLED_PUBLISHERS } from "./postiz-installed";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -14,6 +15,8 @@ const listChannels = vi.fn();
 vi.mock("convex/react", () => ({
   useMutation: (name: string) => (mutations[name] ??= vi.fn(async () => "key")),
   useAction: () => listChannels,
+  // The only query the card makes: the installed Publisher packages, whose channel options it renders.
+  useQuery: () => INSTALLED_PUBLISHERS,
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
@@ -23,8 +26,9 @@ vi.mock("@convex/_generated/api", () => ({
       updateSettings: "publishers.updateSettings",
       removeTarget: "publishers.removeTarget",
       setChannelProfiles: "publishers.setChannelProfiles",
-      listChannels: "publishers.listChannels",
     },
+    publishers_node: { listChannels: "publishers_node.listChannels" },
+    publisher_packages: { list: "publisher_packages.list" },
   },
 }));
 

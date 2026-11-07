@@ -15,6 +15,8 @@ export const replace = internalMutation({
     tag: v.string(),
     digest: v.string(),
     verification: v.string(),
+    meta: v.optional(v.any()),
+    provides: v.optional(v.string()),
     files: filesV,
   },
   handler: async (ctx, { files, ...meta }) => {

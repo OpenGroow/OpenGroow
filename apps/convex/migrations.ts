@@ -9,6 +9,7 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { enqueueCommand } from "./commands";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import schema from "./schema";
+import { describe as describeHubPackage } from "./hub_package_kinds";
 
 export const migrations = new Migrations(components.migrations, { schema });
 
@@ -320,6 +321,28 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
   },
 });
 
+/**
+ * ADR-072: a Publisher package is looked up by `provides` (its adapter id),
+ * from its `meta`. Packages installed before either field existed have
+ * neither, and would read as not installed: both are derived again from the
+ * package's stored files, as the install derives them. A package whose files
+ * cannot be described is left as it is (reinstalling it fixes it). Idempotent.
+ */
+export const describeHubPackages = migrations.define({
+  table: "hubPackages",
+  migrateOne: async (ctx, row) => {
+    if (row.kind !== "publisher" || (row.meta && row.provides)) return;
+    const files = await ctx.db.query("hubPackageFiles").withIndex("by_package", (q) => q.eq("hubPackageId", row._id)).collect();
+    let meta;
+    try {
+      meta = describeHubPackage("publisher", files.map(({ path, content }) => ({ path, content })));
+    } catch {
+      return;
+    }
+    await ctx.db.patch(row._id, { meta, provides: meta.adapter });
+  },
+});
+
 const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.deleteEnrichObservationsMissions,
   internal.migrations.cleanEnrichObservationsSchedules,
@@ -337,6 +360,7 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInSchedules,
   internal.migrations.renameCarouselTemplateIdInSources,
   internal.migrations.renameCarouselTemplateIdInRuns,
+  internal.migrations.describeHubPackages,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

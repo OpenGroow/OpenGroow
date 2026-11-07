@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PUBLISHER_CONTRACT_VERSION, parsePublisherManifest, renderPostUrl } from "./manifest";
+import { PUBLISHER_CONTRACT_VERSION, checkPublisherPlugin, parsePublisherManifest, renderPostUrl } from "./manifest";
 
 const valid = { id: "postiz", name: "Postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, postUrl: "{url}/p/{id}" };
 
@@ -48,5 +48,25 @@ describe("renderPostUrl", () => {
 
   it("accepts an absolute template that does not use the connection URL", () => {
     expect(renderPostUrl("https://app.example.com/p/{id}", { url: "https://ignored" }, "42")).toBe("https://app.example.com/p/42");
+  });
+});
+
+describe("checkPublisherPlugin", () => {
+  const fn = async () => ({ ok: true });
+  const plugin = { id: "postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, testConnection: fn, listChannels: fn, publish: fn, findPost: fn, getStatus: fn };
+
+  it("accepts a plugin that matches its manifest", () => {
+    expect(checkPublisherPlugin(plugin, valid)).toEqual({ ok: true });
+  });
+
+  it.each([
+    ["no default export", undefined, /no default export/],
+    ["another Publisher", { ...plugin, id: "other" }, /plugin "other", the manifest declares "postiz"/],
+    ["another contract version", { ...plugin, contractVersion: 7 }, /contract 7/],
+    ["a missing function", { ...plugin, publish: undefined, getStatus: "no" }, /lacks publish, getStatus/],
+  ])("refuses %s", (_name, bad, message) => {
+    const res = checkPublisherPlugin(bad, valid);
+    expect(res.ok).toBe(false);
+    expect((res as { error: string }).error).toMatch(message);
   });
 });

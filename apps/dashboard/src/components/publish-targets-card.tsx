@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { channelOptionsOf } from "@convex/publisher/registry";
+import { optionsOfPlatform } from "@opengroow/publisher-sdk";
+import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
@@ -33,7 +34,8 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const addChannel = useMutation(api.publishers.addChannel);
   const updateSettings = useMutation(api.publishers.updateSettings);
   const removeTarget = useMutation(api.publishers.removeTarget);
-  const listChannels = useAction(api.publishers.listChannels);
+  const listChannels = useAction(api.publishers_node.listChannels);
+  const channelOptions = useInstalledPublisher(publisher.adapter)?.channelOptions;
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -165,7 +167,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
       ) : (
         <ul className="m-0 grid list-none gap-3 p-0">
           {publisher.targets.map((t) => {
-            const options = t.mapped ? channelOptionsOf(publisher.adapter, t.channelService) : [];
+            const options = t.mapped && channelOptions ? optionsOfPlatform(channelOptions, t.channelService) : [];
             const expandable = options.length > 0;
             const expanded = expandable && open === t.target;
             const header = (

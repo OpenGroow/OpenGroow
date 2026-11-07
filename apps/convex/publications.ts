@@ -6,7 +6,7 @@ import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
 import { renderPostUrl } from "@opengroow/publisher-sdk";
-import { pluginFor } from "./publisher/registry.js";
+import { publisherMetaOf } from "./publisher_packages.js";
 import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 
 // Publications (ADR-069, docs/domain/publishing.md): the tracked outcome of
@@ -27,14 +27,6 @@ function channelInfo(
   };
 }
 
-function tryPlugin(adapter: string) {
-  try {
-    return pluginFor(adapter);
-  } catch {
-    return undefined;
-  }
-}
-
 export const listForMission = query({
   args: { missionId: v.id("missions") },
   handler: async (ctx, args) => {
@@ -48,7 +40,7 @@ export const listForMission = query({
       .query("publishers")
       .withIndex("by_instance", (q) => q.eq("instanceId", mission.instanceId))
       .unique();
-    const plugin = publisher ? tryPlugin(publisher.adapter) : undefined;
+    const plugin = publisher ? await publisherMetaOf(ctx, publisher.adapter) : null;
     return rows.map((row) => ({
       id: row._id,
       target: row.target,
@@ -219,7 +211,7 @@ export const beginAll = internalMutation({
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
-    if (typeof publishable.kind === "string") assertChannelsSupportKind(publisher, targets, publishable.kind);
+    if (typeof publishable.kind === "string") await assertChannelsSupportKind(ctx, publisher, targets, publishable.kind);
 
     const now = Date.now();
     const toSend = [];

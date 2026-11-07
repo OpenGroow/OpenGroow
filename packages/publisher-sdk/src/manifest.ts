@@ -63,3 +63,24 @@ export function renderPostUrl(template: string, conn: { url: string }, externalI
   const base = conn.url.replace(/\/+$/, "");
   return template.replace(/\{(url|id)\}/g, (_, key: string) => (key === "url" ? base : encodeURIComponent(externalId)));
 }
+
+/**
+ * Checks a plugin loaded from a package's bundle (its default export) against
+ * the package's manifest, before the core calls it: the right functions are
+ * there and the identity matches. The bundle is code the hub verified, but a
+ * mismatch (a bundle built for another contract or another Publisher) must
+ * fail with a clear message instead of at the first call.
+ */
+const PLUGIN_FUNCTIONS = ["testConnection", "listChannels", "publish", "findPost", "getStatus"] as const;
+
+export function checkPublisherPlugin(plugin: unknown, manifest: PublisherPackageManifest): { ok: true } | { ok: false; error: string } {
+  if (typeof plugin !== "object" || plugin === null) return { ok: false, error: `${manifest.name}: the bundle has no default export` };
+  const p = plugin as Record<string, unknown>;
+  if (p.id !== manifest.id) return { ok: false, error: `${manifest.name}: the bundle is the plugin "${String(p.id)}", the manifest declares "${manifest.id}"` };
+  if (p.contractVersion !== manifest.contractVersion) {
+    return { ok: false, error: `${manifest.name}: the bundle implements contract ${String(p.contractVersion)}, the manifest declares ${manifest.contractVersion}` };
+  }
+  const missing = PLUGIN_FUNCTIONS.filter((name) => typeof p[name] !== "function");
+  if (missing.length > 0) return { ok: false, error: `${manifest.name}: the bundle lacks ${missing.join(", ")}` };
+  return { ok: true };
+}

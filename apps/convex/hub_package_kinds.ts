@@ -1,4 +1,4 @@
-import { parseCapabilities, parsePublisherManifest } from "@opengroow/publisher-sdk";
+import { parseCapabilities, parsePublisherManifest, type CapabilitiesData, type ChannelOptionsData } from "@opengroow/publisher-sdk";
 import { HUB_PACKAGE_KINDS, type HubPackageKind } from "@opengroow/agent-templates/hub-index";
 import { v } from "convex/values";
 import type { PackageFile } from "./template_registry_store.js";
@@ -69,6 +69,38 @@ function publisherProblem(entry: { id: string; tag: string }, files: readonly Pa
   }
   if (o.adapter !== adapter) return `data/channel-options.json is for another Publisher than "${adapter}"`;
   return undefined;
+}
+
+/**
+ * What a Publisher package exposes to queries and the dashboard (stored as the
+ * package's `meta`): the plugin's functions can only run in Node actions, so
+ * everything else it carries is data (ADR-072).
+ */
+export type PublisherMeta = {
+  /** The value stored as a Publisher's `adapter`. */
+  adapter: string;
+  name: string;
+  postUrl?: string;
+  capabilities: CapabilitiesData;
+  channelOptions: ChannelOptionsData;
+};
+
+/** The package's `meta`, from files that `problemWith` accepted. */
+export function describe(kind: HubPackageKind, files: readonly PackageFile[]): PublisherMeta {
+  switch (kind) {
+    case "publisher": {
+      const json = (path: string) => JSON.parse(files.find((f) => f.path === path)!.content);
+      const manifest = parsePublisherManifest(json("manifest.json"));
+      if (!manifest.ok) throw new Error(manifest.error);
+      return {
+        adapter: manifest.manifest.id,
+        name: manifest.manifest.name,
+        ...(manifest.manifest.postUrl ? { postUrl: manifest.manifest.postUrl } : {}),
+        capabilities: parseCapabilities(json("data/capabilities.json")),
+        channelOptions: json("data/channel-options.json") as ChannelOptionsData,
+      };
+    }
+  }
 }
 
 /** Why a downloaded package must not be installed as `kind`, or undefined when it is acceptable. */

@@ -11,7 +11,8 @@
   },
   "devDependencies": {
     "convex": "^1.32.0",
-    "convex-test": "^0.0.51"
+    "convex-test": "^0.0.51",
+    "esbuild": "^0.25.12"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.11.2",
@@ -19,7 +20,6 @@
     "@opengroow/agent-templates": "workspace:*",
     "@opengroow/hmac": "workspace:*",
     "@opengroow/protocol": "workspace:*",
-    "@opengroow/publisher-postiz": "workspace:*",
     "@opengroow/publisher-sdk": "workspace:*",
     "@opengroow/reliability": "workspace:*",
     "better-auth": "1.5.3",
