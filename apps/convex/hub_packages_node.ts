@@ -1,14 +1,15 @@
 "use node";
 
-import { action } from "./_generated/server.js";
+import { action, type ActionCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import { v } from "convex/values";
 import { assetField, fetchGitPackage } from "@opengroow/agent-templates/git-archive";
-import { fetchHubPackageIndex, HUB_PACKAGE_KINDS, parseLocalHubUrl, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
+import { fetchHubPackageIndex, parseLocalHubUrl, type HubPackageEntry, type HubPackageKind, type HubVerification } from "@opengroow/agent-templates/hub-index";
 import { env } from "./env.js";
 import { messageOf } from "./error_message.js";
 import { requireAuthenticatedUser } from "./project_agents/auth.js";
-import { describe, problemWith } from "./hub_package_kinds.js";
+import { describe, kindV, MAX_ARCHIVE_BYTES, MAX_UNPACKED_BYTES, parseTag, problemWith } from "./hub_package_kinds.js";
+import { resolveRegistrationPolicy } from "./auth_registration_policy.js";
 
 /**
  * Installing hub packages that are not Templates (ADR-072). The caller names a
@@ -26,7 +27,19 @@ export type HubPackageCatalogueEntry = {
   icon?: string;
 };
 
-const kindV = v.union(...HUB_PACKAGE_KINDS.map((k) => v.literal(k)));
+/**
+ * Installing replaces code that runs with the core's rights for the whole
+ * deployment, so it is an admin act. The only admin there is: the sole account
+ * of a self-hosted deployment. A multi-account deployment has no admin role
+ * yet, so it cannot install from the app (ADR-072, trust model).
+ */
+async function requireHubAdmin(ctx: ActionCtx) {
+  const user = await requireAuthenticatedUser(ctx);
+  if (resolveRegistrationPolicy(env.OPENGROOW_ACCOUNT_MODE) !== "single-account") {
+    throw new Error("Forbidden: installing hub packages is reserved to the administrator of the deployment");
+  }
+  return user;
+}
 
 /** The local hub of a development setup (`OPENGROOW_HUB_URL`), if one is configured; loopback hosts only. */
 const localHub = () => (env.OPENGROOW_HUB_URL ? parseLocalHubUrl(env.OPENGROOW_HUB_URL) : undefined);
@@ -62,9 +75,6 @@ export const catalogue = action({
   },
 });
 
-/** `publisher-postiz@1.2.0` -> `1.2.0`; a tag without `@` is its own version. */
-const versionOfTag = (tag: string) => tag.slice(tag.lastIndexOf("@") + 1);
-
 /**
  * Downloads, verifies and stores a package; installing again replaces the
  * installed version (an upgrade). Only `official` entries are installable: the
@@ -73,7 +83,7 @@ const versionOfTag = (tag: string) => tag.slice(tag.lastIndexOf("@") + 1);
 export const install = action({
   args: { kind: kindV, packageId: v.string() },
   handler: async (ctx, { kind, packageId }): Promise<{ status: "installed"; packageId: string; version: string } | { status: "error"; errorMessage: string }> => {
-    await requireAuthenticatedUser(ctx);
+    await requireHubAdmin(ctx);
     try {
       const baseUrl = localHub();
       const entry = (await loadIndex(kind, baseUrl)).packages.find((candidate) => candidate.id === packageId);
@@ -87,11 +97,14 @@ export const install = action({
         ...assetField(entry.asset),
         digest: entry.digest,
         fetch: (url) => fetch(url),
+        maxArchiveBytes: MAX_ARCHIVE_BYTES,
+        maxUnpackedBytes: MAX_UNPACKED_BYTES,
         ...(baseUrl ? { baseUrl } : {}),
       });
       const problem = problemWith(kind, entry, files);
       if (problem) throw new Error(`${entry.name} cannot be installed: ${problem}`);
-      const version = versionOfTag(entry.tag);
+      const version = parseTag(entry.tag)!.version; // `problemWith` accepted the tag
+      const meta = describe(kind, files);
       await ctx.runMutation(internal.hub_packages.replace, {
         packageId: entry.id,
         kind,
@@ -99,7 +112,8 @@ export const install = action({
         tag: entry.tag,
         digest: gitOrigin.archiveDigest,
         verification: entry.verification,
-        meta: describe(kind, files),
+        meta,
+        provides: meta.adapter,
         files,
       });
       return { status: "installed", packageId: entry.id, version };

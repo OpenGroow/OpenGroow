@@ -115,7 +115,7 @@ function parsePackageEntry(raw: unknown, position: number, allowedKeys: readonly
   if (!isRecord(raw)) throw new IndexError(`${where} must be an object`);
   rejectUnknownKeys(raw, allowedKeys, where);
   const id = text(raw, "id", where);
-  if (!SCOPED_ID.test(id)) throw new IndexError(`${where}: "id" must be a scoped Template id like @scope/name`);
+  if (!SCOPED_ID.test(id)) throw new IndexError(`${where}: "id" must be a scoped id like @scope/name`);
   const repository = text(raw, "repository", where);
   try {
     parseGitHubRepository(repository);

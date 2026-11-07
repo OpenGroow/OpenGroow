@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server.js";
+import { kindV } from "./hub_package_kinds.js";
 
 // Storage of the packages installed from the hub (ADR-072). Kind-agnostic.
 
@@ -15,6 +16,7 @@ export const replace = internalMutation({
     digest: v.string(),
     verification: v.string(),
     meta: v.optional(v.any()),
+    provides: v.optional(v.string()),
     files: filesV,
   },
   handler: async (ctx, { files, ...meta }) => {
@@ -44,7 +46,7 @@ export const get = internalQuery({
 
 /** What is installed for a kind (no files), for the install UI. */
 export const installed = query({
-  args: { kind: v.string() },
+  args: { kind: kindV },
   handler: async (ctx, { kind }) => {
     if (!(await ctx.auth.getUserIdentity())) throw new Error("Authentication required");
     const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", kind)).collect();

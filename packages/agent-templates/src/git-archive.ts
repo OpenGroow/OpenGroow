@@ -153,6 +153,10 @@ export async function fetchGitPackage(args: {
   fetch: FetchLike;
   /** A local hub (`parseLocalHubUrl`): download the asset from `<baseUrl>/releases/<tag>/<asset>` instead of GitHub. */
   baseUrl?: string;
+  /** Refuse a download larger than this many bytes (checked before the digest, which needs the whole body). */
+  maxArchiveBytes?: number;
+  /** Refuse an archive that unpacks to more than this many bytes (a decompression bomb). */
+  maxUnpackedBytes?: number;
 }): Promise<{ files: PackageFile[]; gitOrigin: GitOrigin }> {
   if (!DIGEST.test(args.digest)) throw new Error("The expected digest must look like sha256:<64 hex characters>");
   const repository = canonicalRepository(args.repository, args.tag);
@@ -168,13 +172,29 @@ export async function fetchGitPackage(args: {
 
   const response = await args.fetch(url);
   if (!response.ok) throw new Error(`Failed to download ${url}: HTTP ${response.status}`);
+  const declared = Number(response.headers.get("content-length"));
+  if (args.maxArchiveBytes !== undefined && declared > args.maxArchiveBytes) {
+    throw new Error(`The archive is ${declared} bytes, the limit is ${args.maxArchiveBytes}`);
+  }
   const archive = Buffer.from(await response.arrayBuffer());
+  if (args.maxArchiveBytes !== undefined && archive.length > args.maxArchiveBytes) {
+    throw new Error(`The archive is ${archive.length} bytes, the limit is ${args.maxArchiveBytes}`);
+  }
 
   const actual = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
   if (actual !== args.digest) {
     throw new Error(`Digest mismatch for ${args.repository}@${args.tag}: expected ${args.digest}, got ${actual}. Installation refused`);
   }
 
-  const files = stripTopLevel(readTar(gunzipSync(archive)));
+  let tar: Buffer;
+  try {
+    tar = gunzipSync(archive, args.maxUnpackedBytes === undefined ? {} : { maxOutputLength: args.maxUnpackedBytes });
+  } catch (error) {
+    if (args.maxUnpackedBytes !== undefined && (error as { code?: string }).code === "ERR_BUFFER_TOO_LARGE") {
+      throw new Error(`The archive unpacks to more than ${args.maxUnpackedBytes} bytes`);
+    }
+    throw error;
+  }
+  const files = stripTopLevel(readTar(tar));
   return { files, gitOrigin: { repository, tag: args.tag, ...assetField(args.asset), archiveDigest: actual } };
 }
