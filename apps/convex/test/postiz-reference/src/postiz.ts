@@ -108,29 +108,124 @@ export function postizCanFetch(rawUrl: string): boolean {
   return FETCHABLE_EXTENSIONS.some((ext) => path.endsWith(ext));
 }
 
+/** The largest media `uploadBytes` holds in memory (a Convex action has little room). */
+export const MAX_MEDIA_BYTES = 200 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
+
+/**
+ * Hosts the core never downloads from, not even in local development:
+ * link-local addresses and cloud metadata endpoints (169.254.169.254...).
+ * Loopback, private ranges and single-label names stay allowed: they are how a
+ * local MCP serves its media (`http://localhost:4600`, a Docker service).
+ */
+function forbiddenMediaHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    /^169\.254\./.test(host) ||
+    /^0\./.test(host) ||
+    /^fe[89ab][0-9a-f]:/.test(host) || // IPv6 link-local
+    /^::ffff:a9fe:/.test(host) || // IPv4-mapped 169.254.x.x, as the URL parser writes it
+    host === "fd00:ec2::254" || // AWS metadata over IPv6
+    host === "metadata" ||
+    host === "metadata.google.internal"
+  );
+}
+
+function decodeName(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment; // a stray '%': keep the raw segment
+  }
+}
+
+/**
+ * Downloads a media for `uploadBytes`: redirects followed by hand (each hop is
+ * checked against `forbiddenMediaHost`), only image or video content, at most
+ * `MAX_MEDIA_BYTES`. Never throws.
+ */
+async function downloadMedia(rawUrl: string): Promise<PublisherResult<{ bytes: Uint8Array; type: string }>> {
+  const fail = (reason: string) => ({ ok: false as const, error: `Could not download the media ${rawUrl}: ${reason}` });
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return fail("invalid URL");
+  }
+  let response: Response;
+  for (let hop = 0; ; hop++) {
+    if (url.protocol !== "http:" && url.protocol !== "https:") return fail(`unsupported protocol ${url.protocol}`);
+    if (forbiddenMediaHost(url.hostname)) return fail(`the host ${url.hostname} is not allowed`);
+    try {
+      response = await fetch(url, { redirect: "manual" });
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error));
+    }
+    const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+    if (!location) break;
+    if (hop >= MAX_REDIRECTS) return fail("too many redirects");
+    try {
+      url = new URL(location, url);
+    } catch {
+      return fail("invalid redirect");
+    }
+  }
+  if (!response.ok) return fail(`it responded ${response.status}`);
+  const type = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  // Only media: a generic type passes when the file name says it is a media.
+  const generic = type === "" || type === "application/octet-stream";
+  const knownName = FETCHABLE_EXTENSIONS.some((ext) => url.pathname.toLowerCase().endsWith(ext));
+  if (!(type.startsWith("image/") || type.startsWith("video/") || (generic && knownName))) {
+    return fail(`unsupported type "${type || "unknown"}"`);
+  }
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_MEDIA_BYTES) return fail("the file is too large");
+  try {
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const reader = response.body?.getReader();
+    if (reader) {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_MEDIA_BYTES) {
+          await reader.cancel().catch(() => {});
+          return fail("the file is too large");
+        }
+        chunks.push(value);
+      }
+    }
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { ok: true, bytes, type };
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
+  }
+}
+
 /**
  * Downloads a media Postiz cannot fetch itself and sends its bytes to Postiz
  * (`upload`, multipart). Local development mostly: a production MCP serves
  * public HTTPS URLs, which Postiz fetches (ADR-010). The file lives in memory
- * for the duration of the call.
+ * for the duration of the call (bounded by `MAX_MEDIA_BYTES`).
  */
 async function uploadBytes(conn: PublisherConnection, url: string): Promise<PublisherResult<{ body: unknown }>> {
-  let source: Response;
-  try {
-    source = await fetch(url);
-  } catch (error) {
-    return { ok: false, error: `Could not download the media ${url}: ${error instanceof Error ? error.message : String(error)}` };
-  }
-  if (!source.ok) return { ok: false, error: `Could not download the media ${url}: it responded ${source.status}` };
-  const type = (source.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
-  let name = decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "media");
+  const source = await downloadMedia(url);
+  if (!source.ok) return source;
+  const { type } = source;
+  let name = decodeName(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "media");
   if (!FETCHABLE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext))) {
     const ext = EXTENSION_BY_TYPE[type];
     if (!ext) return { ok: false, error: `Could not send the media ${url} to Postiz: unsupported type "${type || "unknown"}"` };
     name = `${name}${ext}`;
   }
   const form = new FormData();
-  form.append("file", new Blob([await source.arrayBuffer()], { type: type || undefined }), name);
+  form.append("file", new Blob([source.bytes], { type: type || undefined }), name);
   return call(conn, "upload", undefined, form);
 }
 
@@ -139,8 +234,10 @@ function mediaReferences(publishable: Record<string, unknown>): PublisherResult<
   const { kind } = publishable;
   if (kind === "image" && typeof publishable.imageUrl === "string") return { ok: true, urls: [publishable.imageUrl] };
   if (kind === "video" && typeof publishable.videoUrl === "string") return { ok: true, urls: [publishable.videoUrl] };
-  if (kind === "carousel" && Array.isArray(publishable.slideUrls) && publishable.slideUrls.length > 0) {
-    return { ok: true, urls: publishable.slideUrls.filter((u): u is string => typeof u === "string") };
+  if (kind === "carousel" && Array.isArray(publishable.slideUrls)) {
+    const urls = publishable.slideUrls;
+    // Every slide or nothing: a dropped slide would silently change the post.
+    if (urls.length > 0 && urls.every((u): u is string => typeof u === "string" && u !== "")) return { ok: true, urls };
   }
   return { ok: false, error: `Publishing a "${String(kind)}" is not supported (missing media reference)` };
 }
@@ -204,6 +301,9 @@ export const postizPlugin: PublisherPlugin = {
       if (!channel) return { ok: false, error: `Postiz channel ${request.channelId} no longer exists` };
       service = channel.service;
     }
+    // Settings that cannot work (no Pinterest board...) fail before any upload.
+    const precheck = postizSettings(service, request.publishable, request.settings);
+    if (!precheck.ok) return precheck;
 
     // Sequential: the order of the uploads is the order of the slides. An upload
     // an earlier attempt already made (same source URL) is reused.
@@ -277,7 +377,7 @@ export const postizPlugin: PublisherPlugin = {
     const now = Date.now();
     const res = await listPosts(conn, Math.min(query.attemptStartedAt, query.attemptDate), Math.max(query.attemptDate, now));
     if (!res.ok) return res;
-    const wanted = normalizeContent(query.caption);
+    const wanted = collapseSpaces(typeof query.caption === "string" ? query.caption : "");
     const inWindow = (value: unknown) => {
       const at = typeof value === "string" ? Date.parse(value) : NaN;
       return Number.isFinite(at) && at >= query.attemptStartedAt - MARGIN && at <= now + MARGIN;
@@ -290,7 +390,7 @@ export const postizPlugin: PublisherPlugin = {
       if (typeof post.id !== "string") continue;
       const integration = (post.integration as { id?: unknown } | null | undefined)?.id;
       if (integration !== query.channelId) continue;
-      if (normalizeContent(post.content) !== wanted) continue;
+      if (!sameCaption(post.content, wanted)) continue;
       if (!(inWindow(post.createdAt) || inWindow(post.publishDate) || asked(post.publishDate))) continue;
       const status = postStatusOf(post);
       if (status.status === "failed") continue; // Postiz itself errored on it: it never went out.
@@ -301,13 +401,22 @@ export const postizPlugin: PublisherPlugin = {
 
   // Postiz's public API has no per-post read: list the posts around the
   // scheduled date and find ours. QUEUE = still scheduled.
+  // Before declaring the post gone, a wide listing: a post rescheduled in
+  // Postiz, or an imprecise `around`, falls outside the first window.
   async getStatus(conn, externalId, around = Date.now()) {
     const DAY = 86_400_000;
-    const res = await listPosts(conn, around - DAY, Math.max(around, Date.now()) + DAY);
-    if (!res.ok) return res;
-    const post = res.posts.find((p) => p?.id === externalId);
-    if (!post) return { ok: true, post: { status: "failed", error: "The post no longer exists in Postiz" } };
-    return { ok: true, post: postStatusOf(post) };
+    const now = Date.now();
+    const windows: Array<[number, number]> = [
+      [around - DAY, Math.max(around, now) + DAY],
+      [Math.min(around, now) - 90 * DAY, Math.max(around, now) + 366 * DAY],
+    ];
+    for (const [from, to] of windows) {
+      const res = await listPosts(conn, from, to);
+      if (!res.ok) return res;
+      const post = res.posts.find((p) => p?.id === externalId);
+      if (post) return { ok: true, post: postStatusOf(post) };
+    }
+    return { ok: true, post: { status: "failed", error: "The post no longer exists in Postiz" } };
   },
 };
 
@@ -343,17 +452,22 @@ function postStatusOf(post: Record<string, unknown>): PostStatus {
   }
 }
 
-/** Postiz stores the caption as HTML: compare text only, whitespace-insensitive. */
-function normalizeContent(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+const ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'", "#x27": "'" };
+
+function collapseSpaces(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Whether the caption Postiz stored is the plain-text caption we sent
+ * (whitespace-insensitive). Postiz may store it as HTML: tags removed, then
+ * entities decoded in one pass (so `&amp;lt;` stays `&lt;`). Only the stored
+ * side is HTML; the caption we sent is compared as text, so a literal `<...>`
+ * in it is kept.
+ */
+export function sameCaption(stored: unknown, wanted: string): boolean {
+  const raw = typeof stored === "string" ? stored : "";
+  if (collapseSpaces(raw) === wanted) return true;
+  const text = raw.replace(/<[^>]*>/g, " ").replace(/&(nbsp|amp|lt|gt|quot|#39|#x27);/g, (_, e: string) => ENTITIES[e]!);
+  return collapseSpaces(text) === wanted;
 }

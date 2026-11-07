@@ -4,7 +4,8 @@ import type { PublisherResult } from "@opengroow/publisher-sdk";
 // (https://docs.postiz.com/public-api/providers/<provider>). OpenGroow supplies
 // working defaults so a channel needs no manual setup; settings stored on the
 // channel (Publishers page) override them. Only Pinterest needs real input from
-// the owner: the board to pin to.
+// the owner: the board to pin to. YouTube needs a title: the Publishable's, or
+// the first line of its caption.
 
 type Settings = Record<string, unknown>;
 
@@ -50,18 +51,35 @@ export function postizSettings(
     case "pinterest":
       defaults = { ...(title ? { title } : {}), ...(link ? { link } : {}) };
       break;
-    case "youtube":
+    case "youtube": {
+      const caption = typeof publishable.caption === "string" ? publishable.caption : "";
+      const fallback = text(caption.split("\n").find((line) => line.trim() !== ""), 100);
       defaults = {
-        ...(title ? { title } : {}),
+        // Visibility is required by Postiz's YouTube provider.
+        type: "public",
+        ...(title ?? fallback ? { title: title ?? fallback } : {}),
         ...(tags.length > 0 ? { tags: tags.map((value) => ({ value, label: value })) } : {}),
         ...(thumbnail ? { thumbnail } : {}),
       };
       break;
+    }
   }
 
-  const settings: Settings = { __type: service, ...defaults, ...(stored ?? {}) };
+  // `__type` last: a stored value (copied from another channel) never changes the provider.
+  const settings: Settings = { ...defaults, ...(stored ?? {}), __type: service };
+  if (service === "tiktok") {
+    // The channel stores every TikTok option; send only those of this kind of post.
+    if (kind === "video") delete settings.autoAddMusic;
+    else {
+      delete settings.duet;
+      delete settings.stitch;
+    }
+  }
   if (service === "pinterest" && !settings.board) {
     return { ok: false, error: "Pinterest needs a board: set the Board ID of this channel on the Publishers page" };
+  }
+  if (service === "youtube" && (typeof settings.title !== "string" || settings.title.trim() === "")) {
+    return { ok: false, error: "YouTube needs a title: give the video a title or a caption" };
   }
   return { ok: true, settings };
 }

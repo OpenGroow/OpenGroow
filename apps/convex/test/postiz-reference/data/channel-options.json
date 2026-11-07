@@ -80,6 +80,24 @@
         ]
       }
     ],
+    "instagram-standalone": [
+      {
+        "key": "post_type",
+        "label": "Post type",
+        "type": "select",
+        "default": "post",
+        "options": [
+          {
+            "value": "post",
+            "label": "Feed post or Reel"
+          },
+          {
+            "value": "story",
+            "label": "Story"
+          }
+        ]
+      }
+    ],
     "pinterest": [
       {
         "key": "board",
