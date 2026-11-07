@@ -225,7 +225,7 @@ async function uploadBytes(conn: PublisherConnection, url: string): Promise<Publ
     name = `${name}${ext}`;
   }
   const form = new FormData();
-  form.append("file", new Blob([source.bytes], { type: type || undefined }), name);
+  form.append("file", new Blob([source.bytes.buffer as ArrayBuffer], { type: type || undefined }), name);
   return call(conn, "upload", undefined, form);
 }
 
