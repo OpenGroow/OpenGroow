@@ -79,6 +79,7 @@ export const install = action({
       const problem = problemWith(kind, entry, files);
       if (problem) throw new Error(`${entry.name} cannot be installed: ${problem}`);
       const version = versionOfTag(entry.tag);
+      const meta = describe(kind, files);
       await ctx.runMutation(internal.hub_packages.replace, {
         packageId: entry.id,
         kind,
@@ -86,7 +87,8 @@ export const install = action({
         tag: entry.tag,
         digest: gitOrigin.archiveDigest,
         verification: entry.verification,
-        meta: describe(kind, files),
+        meta,
+        provides: meta.adapter,
         files,
       });
       return { status: "installed", packageId: entry.id, version };

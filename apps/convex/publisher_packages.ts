@@ -14,12 +14,13 @@ export async function installedPublishers(ctx: Pick<QueryCtx, "db">): Promise<Ar
 }
 
 /** The data of the installed Publisher whose adapter id is `adapter`, or null when none is installed. */
-export async function publisherMetaOf(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<PublisherMeta | null> {
-  return (await installedPublishers(ctx)).find((p) => p.adapter === adapter) ?? null;
+export async function publisherMetaOf(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<(PublisherMeta & { packageId: string; version: string }) | null> {
+  const row = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "publisher").eq("provides", adapter)).unique();
+  return row?.meta ? { ...(row.meta as PublisherMeta), packageId: row.packageId, version: row.version } : null;
 }
 
 /** Throws when no installed package provides `adapter`: a Publisher cannot be saved or used without its package. */
-export async function requirePublisherMeta(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<PublisherMeta> {
+export async function requirePublisherMeta(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<PublisherMeta & { packageId: string; version: string }> {
   const meta = await publisherMetaOf(ctx, adapter);
   if (!meta) throw new Error(`The Publisher "${adapter}" is not installed`);
   return meta;
@@ -38,8 +39,7 @@ export const list = query({
 export const bundleOf = internalQuery({
   args: { adapter: v.string() },
   handler: async (ctx, { adapter }) => {
-    const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "publisher")).collect();
-    const row = rows.find((r) => (r.meta as PublisherMeta | undefined)?.adapter === adapter);
+    const row = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "publisher").eq("provides", adapter)).unique();
     if (!row) return null;
     const files = await ctx.db.query("hubPackageFiles").withIndex("by_package", (q) => q.eq("hubPackageId", row._id)).collect();
     const bundle = files.find((f) => f.path === "dist/plugin.mjs");

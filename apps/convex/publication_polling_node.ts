@@ -22,12 +22,20 @@ export const pollScheduled = internalAction({
       linkOnly: boolean;
       connection: { adapter: string; url: string; apiKey: string };
     }> = await ctx.runQuery(internal.publication_polling.dueScheduled, { now: Date.now() });
+    // One load per adapter and tick, not one per Publication.
+    const plugins = new Map<string, ReturnType<typeof loadPlugin>>();
     for (const item of due) {
       // One Publication whose package is gone or whose plugin throws must not stop the others.
       let result;
       try {
-        result = await (await loadPlugin(ctx, item.connection.adapter)).getStatus(item.connection, item.externalId, item.scheduledAt);
-      } catch {
+        let plugin = plugins.get(item.connection.adapter);
+        if (!plugin) {
+          plugin = loadPlugin(ctx, item.connection.adapter);
+          plugins.set(item.connection.adapter, plugin);
+        }
+        result = await (await plugin).getStatus(item.connection, item.externalId, item.scheduledAt);
+      } catch (error) {
+        console.error(`Polling Publication ${item.publicationId} (${item.connection.adapter}) failed: ${error instanceof Error ? error.message : String(error)}`);
         continue;
       }
       if (!result.ok) continue;

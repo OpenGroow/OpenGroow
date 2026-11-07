@@ -32,7 +32,21 @@ export async function publishThroughPublisher(
   // One Publication per target, independent: a failing target does not stop
   // the others, and the action fails at the end so the human can retry it.
   const failures: string[] = [];
-  const adapter = await loadPlugin(ctx, prepared.connection.adapter);
+  // The Publications already exist: when the package cannot be loaded, record
+  // the error on each of them instead of leaving them without a trace.
+  let adapter;
+  try {
+    adapter = await loadPlugin(ctx, prepared.connection.adapter);
+  } catch (error) {
+    for (const item of prepared.publications) {
+      await ctx.runMutation(internal.publications.finish, {
+        publicationId: item.publicationId,
+        status: "failed",
+        error: errorMessage(error),
+      });
+    }
+    throw error;
+  }
   const caption = typeof prepared.publishable.caption === "string" ? prepared.publishable.caption : "";
   const emitPublished = async (publicationId: Id<"publications">) => {
     await ctx.runMutation(internal.events.store, {

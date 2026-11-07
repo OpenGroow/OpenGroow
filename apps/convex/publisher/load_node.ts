@@ -14,7 +14,7 @@ const cache = new Map<string, PublisherPlugin>();
 /**
  * The plugin of the installed Publisher `adapter`. Cached per package digest:
  * an upgrade changes the digest, so a new version is loaded on its first use
- * and the old one is simply no longer asked for.
+ * and replaces the old one in the cache.
  */
 export async function loadPlugin(ctx: ActionCtx, adapter: string): Promise<PublisherPlugin> {
   const bundle = await ctx.runQuery(internal.publisher_packages.bundleOf, { adapter });
@@ -41,6 +41,8 @@ export async function loadPlugin(ctx: ActionCtx, adapter: string): Promise<Publi
   const checked = checkPublisherPlugin(module.default, manifest.manifest);
   if (!checked.ok) throw new Error(checked.error);
   const plugin = module.default as PublisherPlugin;
+  // An upgrade replaces the package's earlier digests: drop them.
+  for (const k of cache.keys()) if (k.startsWith(`${bundle.packageId}#`)) cache.delete(k);
   cache.set(key, plugin);
   return plugin;
 }

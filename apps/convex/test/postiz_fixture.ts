@@ -28,6 +28,7 @@ export async function installPostiz(t: ReturnType<typeof convexTest>) {
       digest: `sha256:${"0".repeat(64)}`,
       verification: "official",
       meta: POSTIZ_META,
+      provides: POSTIZ_META.adapter,
       installedAt: Date.now(),
     });
   });

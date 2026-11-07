@@ -21,10 +21,13 @@ export const hubPackageTables = {
      * files, derived at install by the kind (hub_package_kinds.ts `describe`).
      */
     meta: v.optional(v.any()),
+    /** The id the kind looks the package up by (a Publisher: its adapter id), indexed so a lookup reads one row. */
+    provides: v.optional(v.string()),
     installedAt: v.number(),
   })
     .index("by_package_id", ["packageId"])
-    .index("by_kind", ["kind"]),
+    .index("by_kind", ["kind"])
+    .index("by_kind_provides", ["kind", "provides"]),
 
   // One row per file, like `templateFiles`: bounded by the package, each well under the document limit.
   hubPackageFiles: defineTable({
