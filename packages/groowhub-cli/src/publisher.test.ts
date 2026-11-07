@@ -33,6 +33,12 @@ describe("checkPublisherFolder", () => {
     expect(() => checkPublisherFolder(dir)).toThrow(/contract/i);
   });
 
+  it("refuses a malformed channel-options.json", () => {
+    const dir = copyOfPostiz();
+    writeFileSync(join(dir, "data/channel-options.json"), JSON.stringify({ platforms: {} }));
+    expect(() => checkPublisherFolder(dir)).toThrow("data/channel-options.json must be");
+  });
+
   it("names a missing file", () => {
     const dir = copyOfPostiz();
     execFileSync("rm", [join(dir, "data/channel-options.json")]);

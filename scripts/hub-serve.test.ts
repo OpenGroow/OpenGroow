@@ -25,6 +25,7 @@ describe("hub-serve routes", () => {
     "/releases/x@1/..%2fa.tgz",
     "/releases/x@1",
     "/dist/a.tgz",
+    "/releases/%E0%A4%A/x.tgz",
   ])("refuses %s", (path) => {
     expect(fileFor(hub, path)).toBeUndefined();
   });

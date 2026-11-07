@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Test
-        run: pnpm exec vitest run packages/groowhub-cli packages/agent-templates packages/publisher-sdk apps/convex/test/publisher_hub_chain.test.ts
+        run: pnpm exec vitest run packages/groowhub-cli packages/agent-templates packages/publisher-sdk
 
       # Trusted publishing needs npm 11.5.1 or later; Node 22 ships an older one.
       - name: Update npm

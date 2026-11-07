@@ -50,7 +50,10 @@ export function parseLocalHubUrl(raw: string): string {
   if ((url.protocol !== "http:" && url.protocol !== "https:") || !LOCAL_HUB_HOSTS.has(url.hostname)) {
     throw new Error(`OPENGROOW_HUB_URL must be an http(s) URL on localhost, 127.0.0.1 or host.docker.internal, not "${raw}"`);
   }
-  return url.toString().replace(/\/+$/, "");
+  if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) {
+    throw new Error(`OPENGROOW_HUB_URL must be a bare origin (no path, query or fragment), not "${raw}"`);
+  }
+  return url.origin;
 }
 
 export const HUB_VERIFICATIONS = ["official", "verified", "community"] as const;

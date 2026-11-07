@@ -12,6 +12,7 @@ node_modules
 
 *.turbo
 apps/broker/dist/
+packages/groowhub-cli/dist/
 
 .pnpm-store
 .DS_STORE

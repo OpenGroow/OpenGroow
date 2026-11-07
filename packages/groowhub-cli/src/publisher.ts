@@ -31,6 +31,10 @@ export function checkPublisherFolder(dir: string): { pkg: Required<Pick<PackageJ
     throw new Error(`The package is named ${pkg.name} but its manifest declares the Publisher "${manifest.manifest.id}": expected the name publisher-${manifest.manifest.id}`);
   }
   parseCapabilities(readJson(join(dir, "data/capabilities.json")));
+  const options = readJson<{ schemaVersion?: unknown; platforms?: unknown } | null>(join(dir, "data/channel-options.json"));
+  if (!options || options.schemaVersion !== 1 || typeof options.platforms !== "object" || options.platforms === null) {
+    throw new Error("data/channel-options.json must be { schemaVersion: 1, platforms: {...} }");
+  }
   return { pkg: { ...pkg, name: pkg.name, version: pkg.version }, manifest: manifest.manifest };
 }
 

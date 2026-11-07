@@ -71,7 +71,7 @@ pnpm hub:serve                                       # serves ../groowhub on htt
 npx convex env set OPENGROOW_HUB_URL http://127.0.0.1:8787   # host Convex (pnpm dev)
 ```
 
-With Convex in Docker (`pnpm dev:docker`), set `OPENGROOW_HUB_URL=http://host.docker.internal:8787` on the `convex-backend` service instead. Then Publishers, Add publisher lists the local hub; choosing the package installs it, with the same digest check as from GitHub.
+With Convex in Docker (`pnpm dev:docker`), start `pnpm hub:serve -- --host 0.0.0.0` (it listens on 127.0.0.1 only by default) and set `OPENGROOW_HUB_URL=http://host.docker.internal:8787` on the `convex-backend` service instead. Then Publishers, Add publisher lists the local hub; choosing the package installs it, with the same digest check as from GitHub.
 
 `OPENGROOW_HUB_URL` is accepted only for `localhost`, `127.0.0.1` or `host.docker.internal`, so it can never point a deployment at a remote server. Unset it to read the real hub again. Change the `--out` and `--index` paths for a hub that is not at `../groowhub`. `publisher:pack` is the hub CLI's `pack publisher` (`@opengroow/groowhub-cli`, the command the hub's release workflow runs); with `--index` it writes the index entry itself because nothing is released; in a real release a maintainer adds the entry in a reviewed PR and the workflow only moves `tag`, `asset` and `digest`.
 

@@ -182,6 +182,14 @@ describe("local hub assets (dev)", () => {
     ).rejects.toThrow(/Digest mismatch/);
   });
 
+  it("refuses an entry without an asset rather than falling back to GitHub", async () => {
+    const fetch = fetchOf(archive);
+    await expect(
+      fetchGitPackage({ repository: "OpenGroow/groowhub", tag: "publisher-postiz@1.0.0", digest: sha(archive), fetch, baseUrl: "http://127.0.0.1:8787" }),
+    ).rejects.toThrow(/no asset/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("validates the tag and the asset name like GitHub's URL does", () => {
     expect(localAssetUrl("http://127.0.0.1:8787", "a@1.0.0", "a-1.0.0.tgz")).toBe("http://127.0.0.1:8787/releases/a@1.0.0/a-1.0.0.tgz");
     expect(() => localAssetUrl("http://127.0.0.1:8787", "a@..", "a.tgz")).toThrow(/Invalid tag/);

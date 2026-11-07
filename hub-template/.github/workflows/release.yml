@@ -37,6 +37,7 @@ jobs:
             exit 1
           fi
           name="${BASH_REMATCH[1]}"
+          echo "version=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
           if [[ "$name" == publisher-* ]]; then
             echo "dir=packages/publisher/${name#publisher-}" >> "$GITHUB_OUTPUT"
             echo "index=publishers.json" >> "$GITHUB_OUTPUT"
@@ -52,6 +53,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: The tag matches the package version
+        run: |
+          version=$(node -p "require('./${{ steps.tag.outputs.dir }}/package.json').version")
+          if [ "$version" != "${{ steps.tag.outputs.version }}" ]; then
+            echo "::error::Tag $TAG says ${{ steps.tag.outputs.version }} but ${{ steps.tag.outputs.dir }}/package.json says $version"
+            exit 1
+          fi
       - name: Pack
         id: pack
         run: |

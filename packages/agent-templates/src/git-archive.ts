@@ -156,6 +156,9 @@ export async function fetchGitPackage(args: {
 }): Promise<{ files: PackageFile[]; gitOrigin: GitOrigin }> {
   if (!DIGEST.test(args.digest)) throw new Error("The expected digest must look like sha256:<64 hex characters>");
   const repository = canonicalRepository(args.repository, args.tag);
+  if (args.baseUrl !== undefined && args.asset === undefined) {
+    throw new Error("A local hub serves release assets only: this entry has no asset, so it would be downloaded from GitHub instead");
+  }
   const url =
     args.asset === undefined
       ? archiveUrl(repository, args.tag)

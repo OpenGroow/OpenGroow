@@ -129,6 +129,10 @@ describe("local hub (dev)", () => {
     expect(parseLocalHubUrl("http://host.docker.internal:8787")).toBe("http://host.docker.internal:8787");
   });
 
+  it.each(["http://localhost:8787/?x=1", "http://localhost:8787/hub", "http://localhost:8787/#frag"])("refuses %s: only a bare origin is a hub", (raw) => {
+    expect(() => parseLocalHubUrl(raw)).toThrow(/bare origin/);
+  });
+
   it.each(["https://evil.example.com", "http://192.168.1.10:8787", "http://127.0.0.1.evil.com", "ftp://localhost", "not a url", "file:///etc"])(
     "refuses %s: the setting can never point a deployment at a remote server",
     (raw) => {

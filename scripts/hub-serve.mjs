@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * `pnpm hub:serve [hub folder] [--port 8787]`
+ * `pnpm hub:serve [hub folder] [--port 8787] [--host 127.0.0.1]`
  *
  * Serves a local checkout of the hub so a deployment on this machine can read
  * Publisher packages from it instead of GitHub (set OPENGROOW_HUB_URL):
  *
  *   GET /publishers.json, /index.json       -> <hub>/publishers.json, <hub>/index.json
  *   GET /releases/<tag>/<asset>.tgz         -> <hub>/dist/<asset>.tgz
+ *
+ * It listens on 127.0.0.1 only. A Convex running in Docker reaches the host
+ * through host.docker.internal: start it with `--host 0.0.0.0` for that case.
  *
  * The product still verifies every download against the digest of the index,
  * and refuses any OPENGROOW_HUB_URL that is not a loopback host. Read-only,
@@ -27,7 +30,12 @@ export function fileFor(hubDir, pathname) {
   if (INDEXES.has(index)) return join(hubDir, index);
   const match = /^\/releases\/([^/]+)\/([^/]+)$/.exec(pathname);
   if (!match) return undefined;
-  const [, tag, asset] = match.map((part) => (part ? decodeURIComponent(part) : part));
+  let tag, asset;
+  try {
+    [tag, asset] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+  } catch {
+    return undefined; // a malformed percent-escape is just an unknown route
+  }
   if (!TAG.test(tag) || tag.includes("..") || !ASSET.test(asset) || asset.includes("..")) return undefined;
   return join(hubDir, "dist", asset);
 }
@@ -51,15 +59,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const base = process.env.INIT_CWD ?? process.cwd();
   const portAt = args.indexOf("--port");
   const port = portAt >= 0 ? Number(args[portAt + 1]) : 8787;
-  const dir = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--port");
+  const hostAt = args.indexOf("--host");
+  const host = hostAt >= 0 ? args[hostAt + 1] : "127.0.0.1";
+  const dir = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--port" && args[i - 1] !== "--host");
   const hubDir = resolve(base, dir ?? "../groowhub");
   if (!existsSync(hubDir)) {
     console.error(`ERROR no hub folder at ${hubDir}`);
     process.exit(1);
   }
-  createHubServer(hubDir).listen(port, "0.0.0.0", () => {
-    console.log(`Serving ${hubDir} on http://127.0.0.1:${port}`);
+  createHubServer(hubDir).listen(port, host, () => {
+    console.log(`Serving ${hubDir} on http://${host}:${port}`);
     console.log(`  host Convex (npx convex dev):  npx convex env set OPENGROOW_HUB_URL http://127.0.0.1:${port}`);
-    console.log(`  Convex in Docker:              OPENGROOW_HUB_URL=http://host.docker.internal:${port}`);
+    console.log(`  Convex in Docker:              OPENGROOW_HUB_URL=http://host.docker.internal:${port}  (restart with --host 0.0.0.0)`);
   });
 }
