@@ -221,4 +221,56 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     expect(text()).toContain("The hub could not be read: HTTP 500");
     expect(byText("Postiz")).toBeDefined();
   });
+
+  describe("a Publisher whose package is not installed (set up before installable packages)", () => {
+    beforeEach(() => {
+      useQueryMock.mockReturnValue(PUBLISHER);
+      installedPublishers = [];
+    });
+
+    it("offers to install the package the hub lists for it, keeping the connection and the channels", async () => {
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+      actions["hub_packages_node.install"] = vi.fn(async () => {
+        installedPublishers = INSTALLED_PUBLISHERS;
+        return { status: "installed", packageId: HUB_ENTRY.packageId, version: "1.0.0" };
+      });
+      await render();
+      expect(document.querySelector('[data-testid="package-missing"]')?.textContent).toContain("Postiz is not installed");
+      expect(byText("Channels")?.textContent).toBe("Channels (2)");
+      await click(byText("Install Postiz"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: HUB_ENTRY.packageId });
+      expect(document.querySelector('[data-testid="package-missing"]')).toBeNull();
+    });
+
+    it("does not test the connection before the package is installed, then does", async () => {
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+      actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+      actions["hub_packages_node.install"] = vi.fn(async () => {
+        installedPublishers = INSTALLED_PUBLISHERS;
+        return { status: "installed" };
+      });
+      await render();
+      expect(actions["publishers_node.testConnection"]).not.toHaveBeenCalled();
+      expect(text()).not.toContain("Not connected");
+      await click(byText("Install Postiz"));
+      expect(actions["publishers_node.testConnection"]).toHaveBeenCalled();
+      expect(text()).toContain("Connected");
+    });
+
+    it("says so when the hub has no package for it, and cannot install", async () => {
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [] }));
+      await render();
+      expect(text()).toContain('The hub has no package for "postiz"');
+      expect((byText("Install") as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("shows why the install was refused", async () => {
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+      actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "error", errorMessage: "Digest mismatch" }));
+      await render();
+      await click(byText("Install Postiz"));
+      expect(text()).toContain("Digest mismatch");
+      expect(document.querySelector('[data-testid="package-missing"]')).not.toBeNull();
+    });
+  });
 });
