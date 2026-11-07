@@ -16,7 +16,7 @@ There is one code kind today. The mechanism must not be designed from a single e
 
 ### 1. Two layers, kept apart
 
-**Hub layer (no knowledge of Publishers).** In the hub repository, a package is a folder under `packages/` and an entry in `index.json` with a `kind`. In the product (`apps/convex`), a generic installer lists the catalogue by `kind`, downloads the release asset, verifies its sha256 against the index and stores it. It is the path Templates already use (`project_templates_node.ts`); it learns about `kind` and nothing else.
+**Hub layer (no knowledge of Publishers).** In the hub repository, a package is a folder under `packages/` and an entry in an **index of its kind** (`publishers.json` for Publishers). In the product (`apps/convex`), a generic installer lists the catalogue of a kind, downloads the release asset, verifies its sha256 against the index and stores it. It is the path Templates already use (`project_templates_node.ts`); it learns about `kind` and nothing else.
 
 **Publisher layer (no knowledge of the hub).** The Publisher contract (`@opengroow/publisher-sdk`), the loader that turns a stored bundle into a plugin and calls its functions in a Node action, and the readers of its data. It knows what a Publisher does, not how the package arrived.
 
@@ -35,7 +35,7 @@ The server refusal of unsupported channel/kind pairs and the dashboard read the 
 
 ### 3. Trust model: unchanged, and no isolation
 
-Only `verification: "official"` entries can be installed (ADR-056/057/060). The bundle runs **in the core's Node process with the core's rights**: it can read `process.env` and call any host. This is acceptable only because the code is official and its digest verified. **This ADR provides no isolation.** An unverified third-party package must not be installable; allowing them needs a sandboxed runtime (a separate service with no secrets and an egress allow-list), which is a separate decision and would replace the loader of §2, not the hub layer.
+Only `verification: "official"` entries can be installed (ADR-056/057/060); the install action refuses the others, and a Publisher package whose name is not `publisher-<manifest id>` (it could claim another's adapter id). The bundle runs **in the core's Node process with the core's rights**: it can read `process.env` and call any host. This is acceptable only because the code is official and its digest verified. **This ADR provides no isolation.** An unverified third-party package must not be installable; allowing them needs a sandboxed runtime (a separate service with no secrets and an egress allow-list), which is a separate decision and would replace the loader of §2, not the hub layer.
 
 ### 4. Contract version
 
@@ -51,29 +51,35 @@ Hub repository:
 
 ```
 groowhub/
-  index.json
+  index.json               # Templates, unchanged
+  publishers.json          # Publisher packages
   packages/
     source/                  # kind: template (as today, flat)
     publisher/               # one folder per code kind
       postiz/
-        package.json         # name, version, "opengroow": { "kind": "publisher", "contractVersion": 1 }
+        package.json         # name @opengroow/publisher-postiz, version
         manifest.json        # id, name, logo, postUrl: "{url}/p/{id}"
         data/capabilities.json
         data/channel-options.json
         src/index.ts         # exports the plugin; tests next to it
 ```
 
-The tag is the package's path plus the version: `source@1.0.0` releases `packages/source`, `publisher/postiz@1.0.0` releases `packages/publisher/postiz` (git tags allow `/`). The release workflow only widens its tag pattern to accept one `/` and flattens it in the asset file name (`opengroow-publisher-postiz-1.0.0.js`). The `kind` of an index entry is the first folder when there is one (`publisher`), `template` otherwise.
+The tag is `<kind>-<name>@<version>` for a code package (`publisher-postiz@1.0.0`) and `<name>@<version>` for a Template (`source@1.0.0`); the release workflow finds the folder by trying `packages/<name>`, then `packages/<kind>/<rest>` for each known kind. A `/` in the tag was considered and dropped: the product's tag validator refuses it, and the behaviour of GitHub's download URLs with slash tags was not verified.
 
-`index.json` entry (written by a maintainer in a reviewed PR; the release workflow only moves `tag`, `asset`, `digest`):
+**Why a separate index.** The Template reader (`index.json`) is strict and refuses any key it does not know, so a `kind` field or a new entry shape there would make every deployed OpenGroow refuse the whole index, Templates included. Each kind therefore has its own index file at the hub root (`publishers.json`), read by the same strict reader minus `category`. `index.json` is untouched.
+
+The release asset is an `npm pack` tarball of the package built for release: `manifest.json`, `data/*.json`, `package.json` and `dist/plugin.mjs` (the bundle, SDK inlined). It goes through the same download and digest check as a Template (`fetchGitPackage`).
+
+`publishers.json` entry (written by a maintainer in a reviewed PR; the release workflow only moves `tag`, `asset`, `digest`):
 
 ```json
 {
   "id": "@opengroow/publisher-postiz",
-  "kind": "publisher",
   "name": "Postiz",
-  "tag": "publisher/postiz@1.0.0",
-  "asset": "opengroow-publisher-postiz-1.0.0.js",
+  "description": "Publish through a Postiz instance",
+  "repository": "OpenGroow/groowhub",
+  "tag": "publisher-postiz@1.0.0",
+  "asset": "opengroow-publisher-postiz-1.0.0.tgz",
   "digest": "sha256:…",
   "verification": "official"
 }
@@ -83,9 +89,9 @@ Product, hub layer (generic):
 
 ```ts
 // hub_packages.ts — knows `kind`, nothing about Publishers
-hubPackages: defineTable({ id: v.string(), kind: v.string(), version: v.string(), digest: v.string(),
-  bundle: v.id("_storage"), manifest: v.any() }).index("by_id", ["id"])
-export const installFromHub = action({ args: { id: v.string() }, … }) // list → download → verify digest → store
+hubPackages: defineTable({ packageId, kind, version, tag, digest, verification, installedAt })
+hubPackageFiles: defineTable({ hubPackageId, path, content })   // one row per file, like templateFiles
+export const install = action({ args: { kind, packageId }, … })  // index of the kind → download → verify digest → validate → store
 ```
 
 Product, Publisher layer:
@@ -93,10 +99,10 @@ Product, Publisher layer:
 ```ts
 // publisher/load_node.ts ("use node") — knows the contract, not the hub
 export async function loadPlugin(ctx, adapter): Promise<PublisherPlugin> {
-  const pkg = await ctx.runQuery(internal.hubPackages.get, { id: adapter });
-  const source = await (await ctx.storage.get(pkg.bundle))!.text();
+  const pkg = await ctx.runQuery(internal.hub_packages.get, { packageId: packageOf(adapter) });
+  const source = pkg.files.find((f) => f.path === "dist/plugin.mjs")!.content;
   const mod = await import("data:text/javascript;base64," + Buffer.from(source).toString("base64"));
-  return parsePlugin(mod.default, pkg.manifest); // checks contractVersion and shape
+  return parsePlugin(mod.postizPlugin, manifestOf(pkg)); // checks contractVersion and shape
 }
 // publisher_node.ts: const plugin = await loadPlugin(ctx, prepared.connection.adapter);
 ```
@@ -120,9 +126,9 @@ Dashboard: Add a publisher lists `hubPackages` of `kind: "publisher"` available 
 ## PR breakdown
 
 1. **Verify**: run the spike on the self-hosted Docker stack with the real bundle and a faithful Postiz stub, including `publish` and `findPost`. Gate for the rest.
-2. **SDK**: `contractVersion`, the manifest type and parser, `postUrl` as a template; Postiz switched to it (still static).
-3. **Hub layer**: `hubPackages` table and `installFromHub`, reusing the Template download and digest code.
+2. **SDK** (#31): `contractVersion`, the manifest type and parser, `postUrl` as a template; Postiz switched to it (still static).
+3. **Hub layer** (#32): `publishers.json` reader, `hubPackages`/`hubPackageFiles` tables and the `install` action, reusing the Template download and digest code.
 4. **Publisher layer**: `loadPlugin`, queries serving capabilities and options; `pluginFor` and the static registry removed from queries, mutations and the dashboard.
-5. **Hub repository**: `kind` in `index.json`, the release workflow building the bundle, `publisher-postiz` moved to `groowhub/packages/publisher/postiz`, the release workflow and `update-index.mjs` accepting a path in the tag, validation of Publisher packages (validator bump).
+5. **Hub repository**: `publishers.json`, the release workflow packing the built package (`dist/plugin.mjs`) and finding a folder under `packages/<kind>/`, `publisher-postiz` moved to `groowhub/packages/publisher/postiz`, `update-index.mjs` and the validator reading `publishers.json` (validator bump).
 6. **UI and migration**: the generic Add a publisher dialog and the migration of existing Postiz Publishers.
 7. **Docs**: `docs/PUBLISHER_PLUGINS.md`, glossary, ADR-070 index annotation.
