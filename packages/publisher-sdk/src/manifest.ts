@@ -48,6 +48,10 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
     }
     const unknown = (m.postUrl.match(/\{[^}]*\}/g) ?? []).find((p) => !POST_URL_PLACEHOLDERS.has(p));
     if (unknown) return { ok: false, error: `The manifest \`postUrl\` uses an unknown placeholder ${unknown} (only {url} and {id})` };
+    if (/[{}]/.test(m.postUrl.replace(/\{(?:url|id)\}/g, ""))) return { ok: false, error: "The manifest `postUrl` has an unbalanced brace" };
+    if (!m.postUrl.includes("{id}")) return { ok: false, error: "The manifest `postUrl` must contain {id}: each post needs its own link" };
+    // {url} is the connection's base URL: it can only begin the link, never sit inside another one.
+    if (m.postUrl.indexOf("{url}", 1) !== -1) return { ok: false, error: "The manifest `postUrl` can only use {url} at its start" };
     postUrl = m.postUrl;
   }
   return { ok: true, manifest: { id: m.id, name: m.name, contractVersion: m.contractVersion, ...(postUrl ? { postUrl } : {}) } };
@@ -55,5 +59,7 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
 
 /** Fills a `postUrl` template for a connection and a post. */
 export function renderPostUrl(template: string, conn: { url: string }, externalId: string): string {
-  return template.replaceAll("{url}", conn.url.replace(/\/+$/, "")).replaceAll("{id}", encodeURIComponent(externalId));
+  // One pass, with a function: neither the connection URL nor the id is read as a template (`{id}`, `$&`).
+  const base = conn.url.replace(/\/+$/, "");
+  return template.replace(/\{(url|id)\}/g, (_, key: string) => (key === "url" ? base : encodeURIComponent(externalId)));
 }
