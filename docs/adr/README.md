@@ -73,3 +73,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 069 | A generic Publisher owns publication; Agent Templates return a Publishable in a unified format | Accepted | yes | [069-generic-publisher-owns-publication.md](069-generic-publisher-owns-publication.md) |
 | 070 | Publisher plugins are isolated code modules; the core keeps the Publication lifecycle | Accepted | no | [070-publisher-plugins-are-code-modules.md](070-publisher-plugins-are-code-modules.md) |
 | 071 | `routing` never authors the brief of a Source reel; the producing Agent reads the Source through `observationId` | Accepted | yes | [071-routing-never-authors-the-brief-of-a-source-reel.md](071-routing-never-authors-the-brief-of-a-source-reel.md) |
+| 072 | Hub packages have a `kind`; Publishers are the first code kind, run in Node actions | Proposed | no | [072-publisher-packages-installed-from-the-hub.md](072-publisher-packages-installed-from-the-hub.md) |
