@@ -68,6 +68,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const [installError, setInstallError] = useState<string | null>(null);
   // A package just installed: the dialog continues once its data has arrived through the reactive query.
   const [awaiting, setAwaiting] = useState<string | null>(null);
+  // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
+  const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string }; error?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -112,10 +114,34 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   }, [awaiting, installed]);
 
   const hasApiKey = publisher?.hasApiKey ?? false;
+  // Without its package the Publisher cannot be called: nothing to check until it is installed.
+  const packageInstalled = installed?.some((p) => p.adapter === publisher?.adapter) ?? false;
+  const packageMissing = Boolean(publisher) && installed !== undefined && !packageInstalled;
   useEffect(() => {
-    if (hasApiKey) void checkConnection();
+    if (hasApiKey && packageInstalled) void checkConnection();
     else setConnected(null);
-  }, [hasApiKey, checkConnection]);
+  }, [hasApiKey, packageInstalled, checkConnection]);
+
+  const missingAdapter = packageMissing ? publisher?.adapter : undefined;
+  useEffect(() => {
+    if (!missingAdapter) {
+      setMissing(null);
+      return;
+    }
+    let cancelled = false;
+    hubCatalogue({ kind: "publisher" })
+      .then((result) => {
+        if (cancelled) return;
+        const entry = result.entries.find((e) => adapterOf(e.packageId) === missingAdapter);
+        setMissing(entry ? { entry } : { error: result.error ?? `The hub has no package for "${missingAdapter}"` });
+      })
+      .catch((error) => {
+        if (!cancelled) setMissing({ error: errorMessage(error, "The hub could not be read") });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [missingAdapter, hubCatalogue]);
 
   if (!instance || !instanceId) return null;
   const id = instanceId;
@@ -124,6 +150,19 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const adapterId = publisher?.adapter ?? adding;
   const current = installed?.find((p) => p.adapter === adapterId);
   const serviceName = current?.name ?? adapterId ?? "";
+
+  async function installMissing(packageId: string) {
+    setInstallError(null);
+    setInstalling(packageId);
+    try {
+      const result = await installPackage({ kind: "publisher", packageId });
+      if (result.status === "error") setInstallError(result.errorMessage);
+    } catch (error) {
+      setInstallError(errorMessage(error, "The publisher could not be installed"));
+    } finally {
+      setInstalling(null);
+    }
+  }
 
   async function choose(packageId: string) {
     setInstallError(null);
@@ -281,6 +320,29 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           </button>
         </div>
       </header>
+
+      {packageMissing ? (
+        <Card className="gap-3 border-amber-500/40 p-5" data-testid="package-missing">
+          <h2 className="m-0 text-base font-semibold">{missing?.entry?.name ?? serviceName} is not installed</h2>
+          <p className="m-0 text-sm text-muted-foreground">
+            This Publisher was set up before publishers became installable packages. Install its package to use it again; the connection and the channels below are kept.
+          </p>
+          {missing === null ? (
+            <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Reading the hub
+            </p>
+          ) : null}
+          {missing?.error ? <p className="m-0 text-sm text-destructive">{missing.error}</p> : null}
+          {installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
+          <div>
+            <Button type="button" disabled={!missing?.entry || installing !== null} onClick={() => void installMissing(missing!.entry!.packageId)}>
+              {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
+              Install {missing?.entry?.name ?? serviceName}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       {tab === "configuration" ? (
         <Card className="gap-4 p-5">
