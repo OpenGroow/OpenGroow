@@ -1,13 +1,12 @@
 # Writing a Publisher plugin
 
-A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher-postiz`. Contract: `packages/publisher-sdk`.
+A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher/postiz` in the hub (groowhub). Contract: `packages/publisher-sdk`. The core's tests use a copy of it, `apps/convex/test/postiz-reference`, which is never shipped.
 
 ## Package layout
 
 ```
-packages/publisher-<service>/
-  package.json            # name @opengroow/publisher-<service>, depends on @opengroow/publisher-sdk
-  tsconfig.json
+groowhub/packages/publisher/<service>/
+  package.json            # name @opengroow/publisher-<service>; the SDK is only imported as types
   manifest.json           # id, name, contractVersion, postUrl template
   data/capabilities.json      # data file 1
   data/channel-options.json   # data file 2
@@ -67,7 +66,7 @@ A package is an `npm pack` tarball: `manifest.json`, `data/*.json`, `package.jso
 The product reads the hub on GitHub. To try a package from a local checkout of the hub (`../groowhub`), without publishing anything:
 
 ```bash
-pnpm publisher:pack packages/publisher-postiz        # bundle + npm pack into ../groowhub/dist, entry written to ../groowhub/publishers.json
+pnpm publisher:pack ../groowhub/packages/publisher/postiz        # bundle + npm pack into ../groowhub/dist, entry written to ../groowhub/publishers.json
 pnpm hub:serve                                       # serves ../groowhub on http://127.0.0.1:8787
 npx convex env set OPENGROOW_HUB_URL http://127.0.0.1:8787   # host Convex (pnpm dev)
 ```
@@ -88,7 +87,7 @@ const res = await myPlugin.publish({ url: "https://svc.example.com", apiKey: "k"
 expect(res.ok).toBe(true);
 ```
 
-See `packages/publisher-postiz/src/postiz.test.ts`. The core flows (retry, scheduling, polling) are covered with the same stub in `apps/convex/test/publication*.test.ts`; a new plugin should pass equivalent scenarios.
+See `packages/publisher/postiz/src/postiz.test.ts` in the hub. The core flows (retry, scheduling, polling) are covered with the same stub in `apps/convex/test/publication*.test.ts`; a new plugin should pass equivalent scenarios.
 
 ## Trust
 

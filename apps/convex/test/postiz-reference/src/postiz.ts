@@ -149,7 +149,7 @@ function mediaReferences(publishable: Record<string, unknown>): PublisherResult<
 // reads it: the core validates the manifest and the two data files when the
 // package is installed, and checks the plugin against them when it loads it
 // (ADR-072), so the plugin needs nothing from the SDK at run time, only types.
-export const postizManifest = manifestData as { id: string; name: string; contractVersion: number; postUrl?: string };
+export const postizManifest = manifestData as { id: string; name: string; contractVersion: number; postUrl?: string; icon?: string };
 
 export const postizPlugin: PublisherPlugin = {
   id: postizManifest.id,

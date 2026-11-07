@@ -262,12 +262,6 @@ importers:
 
   packages/protocol: {}
 
-  packages/publisher-postiz:
-    dependencies:
-      '@opengroow/publisher-sdk':
-        specifier: workspace:*
-        version: link:../publisher-sdk
-
   packages/publisher-sdk:
     devDependencies:
       esbuild:

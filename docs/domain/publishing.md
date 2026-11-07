@@ -11,7 +11,7 @@ A Project-level integration that turns an approved deliverable into a post on an
 - The Publisher publishes **only** on the human `publish` action of the review, or automatically with `autoPublish`. An Agent never publishes.
 - _Avoid_: "Postiz config" (an adapter detail), "publishing MCP".
 
-- **Publisher plugins (ADR-070)**: the service-specific part of the Publisher is a **Publisher plugin**, an isolated code module with a function contract (`testConnection`, `listChannels`, `publish`, `findPost`, `getStatus`) plus two data files (capabilities, channel options). Postiz is `packages/publisher-postiz`, the contract is `packages/publisher-sdk`, the registry is `apps/convex/publisher/registry.ts`. The core keeps the Publication lifecycle described below. How to write one: `docs/PUBLISHER_PLUGINS.md`. Not an OpenClaw Plugin.
+- **Publisher plugins (ADR-070)**: the service-specific part of the Publisher is a **Publisher plugin**, an isolated code module with a function contract (`testConnection`, `listChannels`, `publish`, `findPost`, `getStatus`) plus two data files (capabilities, channel options). Postiz is `packages/publisher/postiz` (hub), the contract is `packages/publisher-sdk`, the registry is `apps/convex/publisher/registry.ts`. The core keeps the Publication lifecycle described below. How to write one: `docs/PUBLISHER_PLUGINS.md`. Not an OpenClaw Plugin.
 
 ### Publish target
 
