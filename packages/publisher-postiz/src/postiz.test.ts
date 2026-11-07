@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderPostUrl } from "@opengroow/publisher-sdk";
 import { postizManifest, postizPlugin as postizAdapter } from "./postiz";
 
 // Optional Publishable fields forwarded to Postiz (ADR-069 amendment): Postiz is
@@ -163,8 +162,8 @@ describe("Postiz adapter: media Postiz cannot fetch itself", () => {
 });
 
 describe("Postiz adapter: postUrl", () => {
-  it("links to the Postiz preview page of the post", () => {
-    expect(renderPostUrl(postizAdapter.postUrl!, { url: "https://postiz.example.com/" }, "cmw57")).toBe("https://postiz.example.com/p/cmw57");
+  it("is the template of the Postiz preview page of a post", () => {
+    expect(postizAdapter.postUrl).toBe("{url}/p/{id}");
   });
 });
 

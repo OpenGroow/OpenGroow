@@ -2,16 +2,15 @@ import capabilitiesData from "../data/capabilities.json";
 import channelOptionsData from "../data/channel-options.json";
 import manifestData from "../manifest.json";
 import { postizSettings } from "./settings";
-import {
-  parseCapabilities,
-  parsePublisherManifest,
-  type ChannelOptionsData,
-  type PublisherPlugin,
-  type PostStatus,
-  type UploadedMedia,
-  type PublisherChannel,
-  type PublisherConnection,
-  type PublisherResult,
+import type {
+  CapabilitiesData,
+  ChannelOptionsData,
+  PublisherPlugin,
+  PostStatus,
+  UploadedMedia,
+  PublisherChannel,
+  PublisherConnection,
+  PublisherResult,
 } from "@opengroow/publisher-sdk";
 
 function endpoint(conn: PublisherConnection, path: string): string {
@@ -146,18 +145,18 @@ function mediaReferences(publishable: Record<string, unknown>): PublisherResult<
   return { ok: false, error: `Publishing a "${String(kind)}" is not supported (missing media reference)` };
 }
 
-// The manifest is the single source of the plugin's identity and of the data the
-// core stores for it (ADR-072); a malformed one fails at load, not at first use.
-const parsed = parsePublisherManifest(manifestData);
-if (!parsed.ok) throw new Error(`Postiz manifest: ${parsed.error}`);
-export const postizManifest = parsed.manifest;
+// manifest.json is the single source of the plugin's identity. This file only
+// reads it: the core validates the manifest and the two data files when the
+// package is installed, and checks the plugin against them when it loads it
+// (ADR-072), so the plugin needs nothing from the SDK at run time, only types.
+export const postizManifest = manifestData as { id: string; name: string; contractVersion: number; postUrl?: string };
 
 export const postizPlugin: PublisherPlugin = {
   id: postizManifest.id,
   name: postizManifest.name,
   contractVersion: postizManifest.contractVersion,
   postUrl: postizManifest.postUrl,
-  capabilities: parseCapabilities(capabilitiesData),
+  capabilities: capabilitiesData as CapabilitiesData,
   channelOptions: channelOptionsData as ChannelOptionsData,
 
   async testConnection(conn) {
