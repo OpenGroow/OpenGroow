@@ -8,7 +8,7 @@ import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { loadPlugin } from "../publisher/load_node";
-import { packPublisher } from "../../../packages/publisher-sdk/scripts/pack-publisher";
+import { packPublisher } from "../../../packages/groowhub-cli/src/publisher";
 import { createHubServer } from "../../../scripts/hub-serve.mjs";
 
 // The whole local circuit of ADR-072, with nothing stubbed but Postiz itself:
@@ -31,7 +31,7 @@ let hubUrl: string;
 
 beforeAll(async () => {
   hubDir = mkdtempSync(join(tmpdir(), "hub-chain-"));
-  packPublisher(join(__dirname, "postiz-reference"), hubDir);
+  packPublisher(join(__dirname, "postiz-reference"), join(hubDir, "dist"), { indexFile: join(hubDir, "publishers.json") });
   server = createHubServer(hubDir);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   hubUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

@@ -12,24 +12,32 @@ function runCli(argv: string[], cwd = process.cwd()) {
 }
 
 describe("parseArgs", () => {
-  it("parses package with a tag", () => {
-    expect(parseArgs(["package", "packages/seo", "--tag", "seo@1.0.0"])).toEqual({
-      command: "package",
+  it("parses validate template with a tag", () => {
+    expect(parseArgs(["validate", "template", "packages/seo", "--tag", "seo@1.0.0"])).toEqual({
+      command: "validate-template",
       folder: "packages/seo",
       tag: "seo@1.0.0",
     });
   });
 
-  it("parses index", () => {
-    expect(parseArgs(["index", "index.json"])).toEqual({ command: "index", file: "index.json" });
+  it("parses validate index, for Templates by default", () => {
+    expect(parseArgs(["validate", "index", "index.json"])).toEqual({ command: "validate-index", file: "index.json", kind: "template" });
+    expect(parseArgs(["validate", "index", "publishers.json", "--kind", "publisher"])).toEqual({ command: "validate-index", file: "publishers.json", kind: "publisher" });
+  });
+
+  it("parses validate publisher and pack publisher", () => {
+    expect(parseArgs(["validate", "publisher", "packages/publisher/postiz"])).toEqual({ command: "validate-publisher", folder: "packages/publisher/postiz" });
+    expect(parseArgs(["pack", "publisher", "p", "--out", "dist", "--index", "publishers.json"])).toEqual({ command: "pack-publisher", folder: "p", out: "dist", index: "publishers.json" });
   });
 
   it("rejects an unknown command, a missing folder and a dangling --tag", () => {
     expect(() => parseArgs([])).toThrow("Usage");
     expect(() => parseArgs(["validate"])).toThrow("Usage");
-    expect(() => parseArgs(["package"])).toThrow("missing <folder>");
-    expect(() => parseArgs(["package", "dir", "--tag"])).toThrow("--tag needs a value");
-    expect(() => parseArgs(["index"])).toThrow("missing <index.json>");
+    expect(() => parseArgs(["validate", "template"])).toThrow("missing <folder>");
+    expect(() => parseArgs(["validate", "template", "dir", "--tag"])).toThrow("--tag needs a value");
+    expect(() => parseArgs(["validate", "index"])).toThrow("missing <index.json>");
+    expect(() => parseArgs(["validate", "index", "i.json", "--kind", "x"])).toThrow("unknown kind");
+    expect(() => parseArgs(["pack", "publisher", "dir"])).toThrow("missing --out");
   });
 });
 
@@ -37,16 +45,16 @@ describe("run", () => {
   it("fails on a folder that is not a package", () => {
     const dir = mkdtempSync(join(tmpdir(), "validator-"));
     mkdirSync(join(dir, "empty"));
-    const { code, err } = runCli(["package", "empty"], dir);
+    const { code, err } = runCli(["validate", "template", "empty"], dir);
     expect(code).toBe(1);
     expect(err[0]).toMatch(/^ERROR empty: /);
   });
 
   it("fails on an unreadable or invalid index", () => {
     const dir = mkdtempSync(join(tmpdir(), "validator-"));
-    expect(runCli(["index", "missing.json"], dir).code).toBe(1);
+    expect(runCli(["validate", "index", "missing.json"], dir).code).toBe(1);
     writeFileSync(join(dir, "index.json"), JSON.stringify({ nope: true }));
-    const { code, err } = runCli(["index", "index.json"], dir);
+    const { code, err } = runCli(["validate", "index", "index.json"], dir);
     expect(code).toBe(1);
     expect(err[0]).toMatch(/^ERROR index.json: /);
   });
@@ -54,7 +62,7 @@ describe("run", () => {
   it("accepts an empty-but-valid index", () => {
     const dir = mkdtempSync(join(tmpdir(), "validator-"));
     writeFileSync(join(dir, "index.json"), JSON.stringify({ schemaVersion: 1, packages: [] }));
-    const { code, out, err } = runCli(["index", "index.json"], dir);
+    const { code, out, err } = runCli(["validate", "index", "index.json"], dir);
     expect({ code, err }).toEqual({ code: 0, err: [] });
     expect(out).toEqual(["OK 0 package(s)"]);
   });

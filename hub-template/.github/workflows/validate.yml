@@ -1,7 +1,7 @@
 name: Validate
 
 # The whole repository is scanned for secrets, and every package and the index are
-# checked with the published `@opengroow/template-validator`.
+# checked with the published `@opengroow/groowhub-cli`.
 
 on:
   pull_request:
@@ -41,24 +41,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # The validator is a published bundle of the product's manifest reader
-      # (https://www.npmjs.com/package/@opengroow/template-validator). Bump the pinned
-      # version when the manifest format changes.
+      # The CLI is a published bundle of the product's manifest readers
+      # (https://www.npmjs.com/package/@opengroow/groowhub-cli). Bump the pinned
+      # version when a manifest format changes.
       - name: Validate every package and the index
         env:
-          VALIDATOR: "@opengroow/template-validator@0.1.0"
+          VALIDATOR: "@opengroow/groowhub-cli@0.1.0"
         run: |
           status=0
           for dir in packages/*/; do
             # packages/publisher/ holds Publisher packages, checked in their own job
             [ "$(basename "$dir")" = "publisher" ] && continue
-            npx --yes "$VALIDATOR" package "${dir%/}" || status=1
+            npx --yes "$VALIDATOR" validate template "${dir%/}" || status=1
           done
-          npx --yes "$VALIDATOR" index index.json || status=1
+          npx --yes "$VALIDATOR" validate index index.json || status=1
+          for dir in packages/publisher/*/; do
+            [ -d "$dir" ] && { npx --yes "$VALIDATOR" validate publisher "${dir%/}" || status=1; }
+          done
+          npx --yes "$VALIDATOR" validate index publishers.json --kind publisher || status=1
           exit $status
 
   publishers:
-    name: Validate and test Publisher packages
+    name: Test Publisher packages
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,5 +75,4 @@ jobs:
         with:
           version: 11
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run validate:publishers
       - run: pnpm test

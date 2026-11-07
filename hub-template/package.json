@@ -3,11 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --passWithNoTests",
-    "validate:publishers": "node tools/validate-publishers.mjs"
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12",
     "vitest": "^1.6.0"
   }
 }

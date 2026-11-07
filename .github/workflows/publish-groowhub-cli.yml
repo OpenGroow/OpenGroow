@@ -1,0 +1,63 @@
+name: Publish groowhub CLI
+
+# Publishes @opengroow/groowhub-cli, the hub's tooling (validate and pack), a bundle of
+# the manifest readers in packages/agent-templates and packages/publisher-sdk, so the
+# hub repository checks and builds its packages with the product's own code.
+#
+# To release: bump "version" in packages/groowhub-cli/package.json, merge, then
+#   git tag groowhub-cli@<version> && git push origin groowhub-cli@<version>
+#
+# No npm token: this uses npm trusted publishing (OIDC). On npmjs.com, package
+# @opengroow/groowhub-cli, Settings, Trusted Publisher, GitHub Actions: set the
+# organization/user and repository that hold this workflow, and the workflow file name
+# `publish-groowhub-cli.yml`. Renaming the repository or this file means updating that setting.
+# Only a tag push triggers it, so only people who can push tags can publish.
+
+on:
+  push:
+    tags:
+      - "groowhub-cli@*"
+
+permissions:
+  contents: read
+  id-token: write # npm trusted publishing (OIDC), no stored secret
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @opengroow/groowhub-cli... --filter @opengroow/agent-templates... --filter @opengroow/publisher-sdk...
+
+      - name: The tag matches the package version
+        run: |
+          version=$(node -p "require('./packages/groowhub-cli/package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "groowhub-cli@${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: pnpm exec vitest run packages/groowhub-cli packages/agent-templates packages/publisher-sdk apps/convex/test/publisher_hub_chain.test.ts
+
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 ships an older one.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1
+
+      # dist/ must exist before npm reads package.json, or it drops the `bin` entry.
+      - name: Build
+        run: pnpm --filter @opengroow/groowhub-cli build
+
+      - name: Publish
+        working-directory: packages/groowhub-cli
+        run: npm publish --access public

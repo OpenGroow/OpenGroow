@@ -5,7 +5,7 @@ name: Release
 # PR that points the package's entry in index.json at the new asset and digest.
 # A tag `publisher-<id>@<version>` (e.g. publisher-postiz@1.0.0) releases the
 # Publisher package packages/publisher/<id> the same way: it is built with
-# tools/build-publisher.mjs and listed in publishers.json instead of index.json.
+# `groowhub pack publisher` (@opengroow/groowhub-cli) and listed in publishers.json instead of index.json.
 # The PR is the human gate: the index decides what installs on users'
 # deployments. No secret is used; only the workflow's own GITHUB_TOKEN.
 
@@ -26,6 +26,8 @@ jobs:
     env:
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
+      # The hub's tooling, published from the OpenGroow repository. Bump when a manifest format changes.
+      GROOWHUB_CLI: "@opengroow/groowhub-cli@0.1.0"
     steps:
       - name: Read the tag
         id: tag
@@ -48,7 +50,6 @@ jobs:
         with:
           persist-credentials: true # needed to push the index branch below
       - uses: actions/setup-node@v4
-        if: steps.tag.outputs.publisher == 'true'
         with:
           node-version: 22
       - name: Pack
@@ -56,8 +57,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/dist"
           if [ "${{ steps.tag.outputs.publisher }}" = "true" ]; then
-            npm install --no-save --no-package-lock esbuild@0.25.12
-            node tools/build-publisher.mjs "${{ steps.tag.outputs.dir }}" "$RUNNER_TEMP/dist"
+            npx --yes "$GROOWHUB_CLI" pack publisher "${{ steps.tag.outputs.dir }}" --out "$RUNNER_TEMP/dist"
           else
             npm pack "./${{ steps.tag.outputs.dir }}" --pack-destination "$RUNNER_TEMP/dist"
           fi

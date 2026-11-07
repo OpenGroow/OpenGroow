@@ -8,7 +8,7 @@ index.json                 one entry per Template: what installs, and its digest
 publishers.json            same for Publisher packages (code, not Templates)
 packages/<name>/           one folder per Template (package.json, CLAW.md, workspace/, profiles/, plugins/)
 packages/publisher/<id>/   one folder per Publisher package (manifest.json, data/, src/)
-tools/                     update-index, build-publisher, validate-publishers (release and validation workflows)
+tools/update-index.mjs     used by the release workflow (validation and Publisher builds use @opengroow/groowhub-cli)
 .github/                   validation, release and secret-scan workflows, CODEOWNERS
 ```
 
