@@ -1,8 +1,10 @@
 import capabilitiesData from "../data/capabilities.json";
 import channelOptionsData from "../data/channel-options.json";
+import manifestData from "../manifest.json";
 import { postizSettings } from "./settings";
 import {
   parseCapabilities,
+  parsePublisherManifest,
   type ChannelOptionsData,
   type PublisherPlugin,
   type PostStatus,
@@ -144,9 +146,17 @@ function mediaReferences(publishable: Record<string, unknown>): PublisherResult<
   return { ok: false, error: `Publishing a "${String(kind)}" is not supported (missing media reference)` };
 }
 
+// The manifest is the single source of the plugin's identity and of the data the
+// core stores for it (ADR-072); a malformed one fails at load, not at first use.
+const parsed = parsePublisherManifest(manifestData);
+if (!parsed.ok) throw new Error(`Postiz manifest: ${parsed.error}`);
+export const postizManifest = parsed.manifest;
+
 export const postizPlugin: PublisherPlugin = {
-  id: "postiz",
-  name: "Postiz",
+  id: postizManifest.id,
+  name: postizManifest.name,
+  contractVersion: postizManifest.contractVersion,
+  postUrl: postizManifest.postUrl,
   capabilities: parseCapabilities(capabilitiesData),
   channelOptions: channelOptionsData as ChannelOptionsData,
 
@@ -262,10 +272,6 @@ export const postizPlugin: PublisherPlugin = {
       return { ok: false, uncertain: true, error: "Postiz returned an unexpected response when creating the post" };
     }
     return { ok: true, outcome: { externalId: first.postId, status: scheduled ? "scheduled" : "published" } };
-  },
-  // Postiz's public preview page of a post (no sign-in needed).
-  postUrl(conn, externalId) {
-    return `${conn.url.replace(/\/+$/, "")}/p/${encodeURIComponent(externalId)}`;
   },
   async findPost(conn, query) {
     const MARGIN = 120_000;
