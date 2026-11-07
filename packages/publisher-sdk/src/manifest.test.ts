@@ -28,6 +28,10 @@ describe("parsePublisherManifest", () => {
     [{ ...valid, postUrl: "/p/{id}" }],
     [{ ...valid, postUrl: "{url}/p/{slug}" }],
     [{ ...valid, postUrl: 3 }],
+    [{ ...valid, postUrl: "{url}/posts" }],
+    [{ ...valid, postUrl: "{url}/p/{id" }],
+    [{ ...valid, postUrl: "{url}/p/}{id}" }],
+    [{ ...valid, postUrl: "https://app.example.com/{url}/{id}" }],
   ])("refuses a malformed manifest %#", (raw) => {
     expect(parsePublisherManifest(raw).ok).toBe(false);
   });
@@ -36,6 +40,14 @@ describe("parsePublisherManifest", () => {
 describe("renderPostUrl", () => {
   it("strips trailing slashes from the connection URL and encodes the id", () => {
     expect(renderPostUrl("{url}/p/{id}", { url: "https://postiz.example.com//" }, "a b/c")).toBe("https://postiz.example.com/p/a%20b%2Fc");
+  });
+
+  it("inserts the connection URL verbatim: no placeholder or replacement pattern inside it is expanded", () => {
+    expect(renderPostUrl("{url}/p/{id}", { url: "https://host/{id}/a$&b$$" }, "42")).toBe("https://host/{id}/a$&b$$/p/42");
+  });
+
+  it("accepts an absolute template that does not use the connection URL", () => {
+    expect(renderPostUrl("https://app.example.com/p/{id}", { url: "https://ignored" }, "42")).toBe("https://app.example.com/p/42");
   });
 });
 
