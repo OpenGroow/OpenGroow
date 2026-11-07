@@ -152,6 +152,10 @@ describe("hub_packages_node.install", () => {
     ["no capabilities", { "data/capabilities.json": null }, /capabilities\.json is missing/],
     ["invalid capabilities", { "data/capabilities.json": JSON.stringify({ schemaVersion: 9 }) }, /capabilities\.json/],
     ["malformed channel options", { "data/channel-options.json": "{}" }, /channel-options\.json must be/],
+    ["channel options whose platforms is an array", { "data/channel-options.json": JSON.stringify({ ...OPTIONS, platforms: [] }) }, /channel-options\.json must be/],
+    ["channel options for another Publisher", { "data/channel-options.json": JSON.stringify({ ...OPTIONS, adapter: "other" }) }, /channel-options\.json is for another Publisher/],
+    ["capabilities for another Publisher", { "data/capabilities.json": JSON.stringify({ ...CAPABILITIES, adapter: "other" }) }, /capabilities\.json is for another Publisher/],
+    ["a package.json version that is not the tag's", { "package.json": JSON.stringify({ version: "0.9.0" }) }, /package\.json declares version 0\.9\.0/],
   ])("refuses a package with %s, storing nothing", async (_name, over, message) => {
     const archive = tgz(publisherFiles(over as Record<string, string | null>));
     stubNetwork([entry(archive)], { [assetUrl()]: archive });
@@ -162,7 +166,7 @@ describe("hub_packages_node.install", () => {
 
   it("replaces the installed version and its files when installed again (an upgrade)", async () => {
     const v1 = tgz(publisherFiles());
-    const files2 = publisherFiles({ "dist/plugin.mjs": "export const postizPlugin = { v: 2 };", "data/extra.json": "{}" });
+    const files2 = publisherFiles({ "package.json": JSON.stringify({ name: "@opengroow/publisher-postiz", version: "1.1.0" }), "dist/plugin.mjs": "export const postizPlugin = { v: 2 };", "data/extra.json": "{}" });
     const v2 = tgz(files2);
     const tag2 = "publisher-postiz@1.1.0";
     const asset2 = "opengroow-publisher-postiz-1.1.0.tgz";
@@ -179,6 +183,27 @@ describe("hub_packages_node.install", () => {
     expect(stored!.files).toHaveLength(6);
     expect(await t.run(async (ctx) => (await ctx.db.query("hubPackages").collect()).length)).toBe(1);
     expect(await t.run(async (ctx) => (await ctx.db.query("hubPackageFiles").collect()).length)).toBe(6);
+  });
+
+  it("refuses a tag that is not <package>@<version>", async () => {
+    const archive = tgz(publisherFiles());
+    stubNetwork([entry(archive, { tag: "v1", asset: "opengroow-publisher-postiz-1.0.0.tgz" })], { [assetUrl("v1")]: archive });
+    const t = convexTest(schema, modules);
+    expect(await install(t)).toMatchObject({ status: "error", errorMessage: expect.stringMatching(/must look like <package>@<version>/) });
+  });
+
+  it("refuses an archive that unpacks to more than the limit, before reading any file", async () => {
+    const archive = tgz(publisherFiles({ "dist/plugin.mjs": "x".repeat(9 * 1024 * 1024) }));
+    stubNetwork([entry(archive)], { [assetUrl()]: archive });
+    const t = convexTest(schema, modules);
+    expect(await install(t)).toMatchObject({ status: "error", errorMessage: expect.stringMatching(/unpacks to more than/) });
+  });
+
+  it("is reserved to the administrator: refused on a multi-account deployment", async () => {
+    vi.stubEnv("OPENGROOW_ACCOUNT_MODE", "multi-account");
+    stubNetwork([]);
+    const t = convexTest(schema, modules);
+    await expect(install(t)).rejects.toThrow(/Forbidden/);
   });
 
   it("requires a signed-in user", async () => {
