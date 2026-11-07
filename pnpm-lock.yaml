@@ -77,9 +77,6 @@ importers:
       '@opengroow/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@opengroow/publisher-postiz':
-        specifier: workspace:*
-        version: link:../../packages/publisher-postiz
       '@opengroow/publisher-sdk':
         specifier: workspace:*
         version: link:../../packages/publisher-sdk
@@ -102,6 +99,9 @@ importers:
       convex-test:
         specifier: ^0.0.51
         version: 0.0.51(convex@1.41.0(react@19.2.7))
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
 
   apps/dashboard:
     dependencies:
@@ -114,9 +114,6 @@ importers:
       '@opengroow/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@opengroow/publisher-postiz':
-        specifier: workspace:*
-        version: link:../../packages/publisher-postiz
       '@opengroow/publisher-sdk':
         specifier: workspace:*
         version: link:../../packages/publisher-sdk

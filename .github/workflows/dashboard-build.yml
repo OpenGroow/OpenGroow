@@ -4,7 +4,7 @@ name: Dashboard Build
 # only builds the Docker image after a push to main, so nothing checked a PR's build.
 # Typecheck (tsc) and vitest do not catch module-resolution errors that only Turbopack
 # raises, e.g. `.js` relative imports inside the workspace packages
-# (packages/publisher-sdk, packages/publisher-postiz).
+# (packages/publisher-sdk).
 
 on:
   pull_request:

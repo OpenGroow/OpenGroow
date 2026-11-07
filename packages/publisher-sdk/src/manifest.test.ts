@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PUBLISHER_CONTRACT_VERSION, parsePublisherManifest, renderPostUrl } from "./manifest";
+import { PUBLISHER_CONTRACT_VERSION, checkPublisherPlugin, parsePublisherManifest, renderPostUrl } from "./manifest";
 
 const valid = { id: "postiz", name: "Postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, postUrl: "{url}/p/{id}" };
 
@@ -36,5 +36,25 @@ describe("parsePublisherManifest", () => {
 describe("renderPostUrl", () => {
   it("strips trailing slashes from the connection URL and encodes the id", () => {
     expect(renderPostUrl("{url}/p/{id}", { url: "https://postiz.example.com//" }, "a b/c")).toBe("https://postiz.example.com/p/a%20b%2Fc");
+  });
+});
+
+describe("checkPublisherPlugin", () => {
+  const fn = async () => ({ ok: true });
+  const plugin = { id: "postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, testConnection: fn, listChannels: fn, publish: fn, findPost: fn, getStatus: fn };
+
+  it("accepts a plugin that matches its manifest", () => {
+    expect(checkPublisherPlugin(plugin, valid)).toEqual({ ok: true });
+  });
+
+  it.each([
+    ["no default export", undefined, /no default export/],
+    ["another Publisher", { ...plugin, id: "other" }, /plugin "other", the manifest declares "postiz"/],
+    ["another contract version", { ...plugin, contractVersion: 7 }, /contract 7/],
+    ["a missing function", { ...plugin, publish: undefined, getStatus: "no" }, /lacks publish, getStatus/],
+  ])("refuses %s", (_name, bad, message) => {
+    const res = checkPublisherPlugin(bad, valid);
+    expect(res.ok).toBe(false);
+    expect((res as { error: string }).error).toMatch(message);
   });
 });

@@ -20,7 +20,7 @@ export type PublicationStatus = Infer<typeof publicationStatusV>;
 export const publisherTables = {
   publishers: defineTable({
     instanceId: v.string(),
-    /** Id of a registered Publisher plugin (apps/convex/publisher/registry.ts). */
+    /** Id of a registered Publisher plugin (the installed Publisher package, ADR-072). */
     adapter: v.string(),
     url: v.string(),
     // Never returned to the dashboard in clear: queries expose `hasApiKey` only.

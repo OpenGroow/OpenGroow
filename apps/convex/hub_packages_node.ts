@@ -8,7 +8,7 @@ import { fetchHubPackageIndex, HUB_PACKAGE_KINDS, type HubPackageEntry, type Hub
 import { env } from "./env.js";
 import { messageOf } from "./error_message.js";
 import { requireAuthenticatedUser } from "./project_agents/auth.js";
-import { problemWith } from "./hub_package_kinds.js";
+import { describe, problemWith } from "./hub_package_kinds.js";
 
 /**
  * Installing hub packages that are not Templates (ADR-072). The caller names a
@@ -86,6 +86,7 @@ export const install = action({
         tag: entry.tag,
         digest: gitOrigin.archiveDigest,
         verification: entry.verification,
+        meta: describe(kind, files),
         files,
       });
       return { status: "installed", packageId: entry.id, version };

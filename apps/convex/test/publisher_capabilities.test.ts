@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { capabilityOf, parseCapabilities } from "../publisher/capabilities";
+import { capabilityIn, parseCapabilities } from "@opengroow/publisher-sdk";
+import { postizPlugin } from "../../../packages/publisher-postiz/src/index";
 
-describe("capabilityOf (postiz)", () => {
+// The capabilities are the installed package's data (ADR-072); the core reads them with `capabilityIn`.
+const capabilityOf = (service: string | undefined, kind: string) => capabilityIn(postizPlugin.capabilities, service, kind);
+
+describe("capabilities of the Postiz package", () => {
   it("reads confirmed support", () => {
-    expect(capabilityOf("postiz", "instagram", "carousel")).toEqual({ level: "supported" });
+    expect(capabilityOf("instagram", "carousel")).toEqual({ level: "supported" });
   });
   it("refuses with a clear reason", () => {
-    expect(capabilityOf("postiz", "youtube", "image").level).toBe("unsupported");
-    expect(capabilityOf("postiz", "youtube", "image").reason).toMatch(/^YouTube cannot publish an image/);
+    expect(capabilityOf("youtube", "image").level).toBe("unsupported");
+    expect(capabilityOf("youtube", "image").reason).toMatch(/^YouTube cannot publish an image/);
   });
-  it("is uncertain for unconfirmed entries and for unknown platforms or adapters", () => {
-    expect(capabilityOf("postiz", "pinterest", "video").level).toBe("uncertain");
-    expect(capabilityOf("postiz", "mastodon", "video").level).toBe("uncertain");
-    expect(capabilityOf("other", "instagram", "video").level).toBe("uncertain");
-    expect(capabilityOf("postiz", undefined, "video").level).toBe("uncertain");
+  it("is uncertain for unconfirmed entries, unknown platforms and a Publisher with no installed package", () => {
+    expect(capabilityOf("pinterest", "video").level).toBe("uncertain");
+    expect(capabilityOf("mastodon", "video").level).toBe("uncertain");
+    expect(capabilityOf(undefined, "video").level).toBe("uncertain");
+    expect(capabilityIn(undefined, "instagram", "video").level).toBe("uncertain");
   });
 });
 

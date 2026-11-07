@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+
+vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
 
 // ADR-069 amendment: retry without duplicate posts. A POST /posts that may have
 // reached Postiz leaves the Publication `uncertain`; a retry reconciles with
@@ -64,6 +67,7 @@ const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", 
 
 async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; templateId?: string; type?: string } = {}) {
   const t = convexTest(schema, modules);
+  await installPostiz(t);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, {

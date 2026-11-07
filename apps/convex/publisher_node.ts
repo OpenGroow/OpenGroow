@@ -5,7 +5,7 @@ import { publishDeclarationFor } from "@opengroow/agent-templates";
 import { internal } from "./_generated/api.js";
 import { action, type ActionCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { pluginFor } from "./publisher/registry.js";
+import { loadPlugin } from "./publisher/load_node.js";
 import { errorMessage } from "./mission_dispatcher_node.js";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 
@@ -32,7 +32,7 @@ export async function publishThroughPublisher(
   // One Publication per target, independent: a failing target does not stop
   // the others, and the action fails at the end so the human can retry it.
   const failures: string[] = [];
-  const adapter = pluginFor(prepared.connection.adapter);
+  const adapter = await loadPlugin(ctx, prepared.connection.adapter);
   const caption = typeof prepared.publishable.caption === "string" ? prepared.publishable.caption : "";
   const emitPublished = async (publicationId: Id<"publications">) => {
     await ctx.runMutation(internal.events.store, {

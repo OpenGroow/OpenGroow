@@ -16,6 +16,11 @@ export const hubPackageTables = {
     /** `sha256:` of the release asset, as verified at install. */
     digest: v.string(),
     verification: v.string(),
+    /**
+     * What queries and the dashboard need from the package without reading its
+     * files, derived at install by the kind (hub_package_kinds.ts `describe`).
+     */
+    meta: v.optional(v.any()),
     installedAt: v.number(),
   })
     .index("by_package_id", ["packageId"])

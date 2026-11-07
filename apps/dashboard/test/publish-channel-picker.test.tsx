@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PublishChannelPicker } from "../src/components/publish-channel-picker";
+import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installed";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom has no PointerEvent, which the Switch primitive dispatches on click.
@@ -23,12 +24,12 @@ vi.mock("next/link", () => ({
 const listChannelsMock = vi.fn();
 const setChannelProfileMock = vi.fn();
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : useQueryMock(...args)),
   useAction: () => listChannelsMock,
   useMutation: () => setChannelProfileMock,
 }));
 vi.mock("@convex/_generated/api", () => ({
-  api: { publishers: { get: "publishers.get", listChannels: "publishers.listChannels", setChannelProfiles: "publishers.setChannelProfiles" } },
+  api: { publishers: { get: "publishers.get", setChannelProfiles: "publishers.setChannelProfiles" }, publishers_node: { listChannels: "publishers_node.listChannels" }, publisher_packages: { list: "publisher_packages.list" } },
 }));
 
 const PUBLISHER = {

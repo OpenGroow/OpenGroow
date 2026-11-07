@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import {
-  action,
   internalQuery,
   mutation,
   query,
@@ -8,13 +7,12 @@ import {
 } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { pluginFor } from "./publisher/registry.js";
-import type { PublisherChannel } from "@opengroow/publisher-sdk";
+import { requirePublisherMeta } from "./publisher_packages.js";
 
 // Project-level Publisher (ADR-069): one configuration per Project, backed by a
 // Publisher plugin (ADR-070). The API key is write-only from the dashboard's point of view.
 
-const NO_PUBLISHER = "No Publisher configured";
+export const NO_PUBLISHER = "No Publisher configured";
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -83,7 +81,7 @@ export const save = mutation({
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    pluginFor(args.adapter); // refuses an unregistered plugin
+    await requirePublisherMeta(ctx, args.adapter); // refuses a Publisher whose package is not installed
     const url = args.url.trim().replace(/\/+$/, "");
     if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid Publisher URL");
     const apiKey = args.apiKey?.trim() || undefined;
@@ -200,28 +198,5 @@ export const loadConnection = internalQuery({
       .unique();
     if (!publisher) return null;
     return { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey ?? "" };
-  },
-});
-
-export const testConnection = action({
-  args: { instanceId: v.string() },
-  handler: async (ctx, args): Promise<{ ok: true } | { ok: false; error: string }> => {
-    const conn = await ctx.runQuery(internal.publishers.loadConnection, args);
-    if (!conn) return { ok: false, error: NO_PUBLISHER };
-    if (!conn.apiKey) return { ok: false, error: "No API key configured" };
-    return await pluginFor(conn.adapter).testConnection(conn);
-  },
-});
-
-export const listChannels = action({
-  args: { instanceId: v.string() },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ ok: true; channels: PublisherChannel[] } | { ok: false; error: string }> => {
-    const conn = await ctx.runQuery(internal.publishers.loadConnection, args);
-    if (!conn) return { ok: false, error: NO_PUBLISHER };
-    if (!conn.apiKey) return { ok: false, error: "No API key configured" };
-    return await pluginFor(conn.adapter).listChannels(conn);
   },
 });

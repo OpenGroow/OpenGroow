@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MissionReviewContent } from "../src/components/mission-review-page";
+import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installed";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -35,7 +36,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : useQueryMock(...args)),
   useAction: (...args: unknown[]) => useActionMock(...args),
   useMutation: (...args: unknown[]) => useMutationMock(...args),
 }));
@@ -50,6 +51,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publishers: { get: "publishers.get" },
+    publisher_packages: { list: "publisher_packages.list" },
     publications: {
       setPublishAt: "publications.setPublishAt",
       setTargets: "publications.setTargets",

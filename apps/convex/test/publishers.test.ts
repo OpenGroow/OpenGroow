@@ -2,11 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
+
+vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
   "../publishers.ts": () => import("../publishers.js"),
+  "../publishers_node.ts": () => import("../publishers_node.js"),
 };
 
 const INSTANCE_ID = "openclaw-publishers";
@@ -15,6 +19,7 @@ const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|pub
 
 async function seed() {
   const t = convexTest(schema, modules);
+  await installPostiz(t);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, {
@@ -49,6 +54,13 @@ afterEach(() => {
 });
 
 describe("publishers", () => {
+  it("refuses a Publisher whose package is not installed", async () => {
+    const t = await seed();
+    await expect(
+      t.withIdentity(OWNER).mutation(api.publishers.save, { instanceId: INSTANCE_ID, adapter: "unknown", url: "https://p.example.com", apiKey: "k" }),
+    ).rejects.toThrow('The Publisher "unknown" is not installed');
+  });
+
   it("has no Publisher until configured, and never returns the API key", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
@@ -75,7 +87,7 @@ describe("publishers", () => {
       url: "https://other.example.com",
     });
     const fetchMock = stubFetch(() => json({ connected: true }));
-    await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
+    await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
     expect(fetchMock.mock.calls).toHaveLength(1);
     expect(fetchMock.mock.calls[0][0]).toBe("https://other.example.com/api/public/v1/is-connected");
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: "secret-key" });
@@ -86,32 +98,32 @@ describe("publishers", () => {
     await t.withIdentity(OWNER).mutation(api.publishers.save, CONNECTION);
     await expect(t.withIdentity(STRANGER).mutation(api.publishers.save, CONNECTION)).rejects.toThrow("Forbidden");
     await expect(
-      t.withIdentity(STRANGER).action(api.publishers.listChannels, { instanceId: INSTANCE_ID }),
+      t.withIdentity(STRANGER).action(api.publishers_node.listChannels, { instanceId: INSTANCE_ID }),
     ).rejects.toThrow("Forbidden");
   });
 
   it("test connection reports success or a clear error", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
-    await expect(owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: false,
       error: "No Publisher configured",
     });
     await owner.mutation(api.publishers.save, CONNECTION);
 
     stubFetch(() => json({ connected: true }));
-    await expect(owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: true,
     });
 
     stubFetch(() => new Response("nope", { status: 401 }));
-    const bad = await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
+    const bad = await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
     expect(bad).toMatchObject({ ok: false, error: expect.stringContaining("401") });
 
     stubFetch(() => {
       throw new Error("getaddrinfo ENOTFOUND");
     });
-    const down = await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
+    const down = await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
     expect(down).toMatchObject({ ok: false, error: expect.stringContaining("ENOTFOUND") });
   });
 
@@ -120,7 +132,7 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, { ...CONNECTION, url: "https://postiz.example.com///" });
     const fetchMock = stubFetch(() => json({ connected: true }));
-    await owner.action(api.publishers.testConnection, { instanceId: INSTANCE_ID });
+    await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(["https://postiz.example.com/api/public/v1/is-connected"]);
   });
 
@@ -134,7 +146,7 @@ describe("publishers", () => {
         { id: "c2", name: "Pins", identifier: "pinterest", disabled: true },
       ]),
     );
-    await expect(owner.action(api.publishers.listChannels, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.listChannels, { instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: true,
       channels: [
         { id: "c1", name: "My Insta", service: "instagram", picture: "https://img/1.png", disabled: false },
