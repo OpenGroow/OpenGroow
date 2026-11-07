@@ -1,6 +1,6 @@
 # ADR-072: Hub packages have a `kind`; Publishers are the first code kind, run in Node actions
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
@@ -43,7 +43,9 @@ The SDK gains a `contractVersion`. The package manifest declares the one it was 
 
 ### 5. Migration
 
-Postiz moves to the hub as the first Publisher package. `registry.ts`, the workspace dependency, the Dockerfile COPY lines and the CI path filters for `publisher-postiz` go away. Existing Postiz Publishers get the package installed by a migration (same release, digest checked).
+Postiz moves to the hub as the first Publisher package. `registry.ts`, the workspace dependency, the Dockerfile COPY lines and the CI path filters for `publisher-postiz` go away. No migration of existing data is needed. A Publisher whose package is not installed shows an "X is not installed" card on its page with an **Install** button, so a deployment that already had Postiz installs the package once, with the same digest check.
+
+The product keeps a copy of the Postiz plugin only as a test fixture (`apps/convex/test/postiz-reference`): the core's tests run the Publication flows (retry, scheduling, reconciliation) through a real plugin against a faked Postiz API. It is not a workspace package and is never shipped. The plugin imports only types from the SDK, so it builds and is tested in the hub without it.
 
 ## What it looks like
 
@@ -68,7 +70,7 @@ The tag is `<kind>-<name>@<version>` for a code package (`publisher-postiz@1.0.0
 
 **Why a separate index.** The Template reader (`index.json`) is strict and refuses any key it does not know, so a `kind` field or a new entry shape there would make every deployed OpenGroow refuse the whole index, Templates included. Each kind therefore has its own index file at the hub root (`publishers.json`), read by the same strict reader minus `category`. `index.json` is untouched.
 
-The release asset is an `npm pack` tarball of the package built for release: `manifest.json`, `data/*.json`, `package.json` and `dist/plugin.mjs` (the bundle, SDK inlined). It goes through the same download and digest check as a Template (`fetchGitPackage`).
+The release asset is an `npm pack` tarball of the package built for release: `manifest.json`, `data/*.json`, `package.json` and `dist/plugin.mjs` (the bundle; the plugin imports only SDK types, so nothing is inlined from the SDK). It goes through the same download and digest check as a Template (`fetchGitPackage`).
 
 `publishers.json` entry (written by a maintainer in a reviewed PR; the release workflow only moves `tag`, `asset`, `digest`):
 
@@ -123,12 +125,18 @@ Dashboard: Add a publisher lists `hubPackages` of `kind: "publisher"` available 
 - Each Publisher call pays a bundle load on a cold isolate; a per-version cache bounds it, to be measured.
 - Open risks, to settle before building: Convex cloud and self-hosted Docker behaviour, the size limit of file storage reads, the cost of a data-URL import on cold start.
 
+### 6. One CLI for the hub's tooling
+
+The hub validates and builds its packages with `@opengroow/groowhub-cli`, a single npm package bundled from the product's own readers (it replaces `@opengroow/template-validator`): `validate template|index|publisher` and `pack publisher`. The hub keeps no copy of these scripts, and the product's `pnpm publisher:pack` runs the same code. A Publisher can therefore be released without a checkout of the product, and a new kind of package adds a subcommand, not a package.
+
+For local trials before any release, `OPENGROOW_HUB_URL` points the product at a local hub served by `pnpm hub:serve` (loopback hosts only, so it cannot redirect a deployment to a remote server).
+
 ## PR breakdown
 
 1. **Verify**: run the spike on the self-hosted Docker stack with the real bundle and a faithful Postiz stub, including `publish` and `findPost`. Gate for the rest.
 2. **SDK** (#31): `contractVersion`, the manifest type and parser, `postUrl` as a template; Postiz switched to it (still static).
 3. **Hub layer** (#32): `publishers.json` reader, `hubPackages`/`hubPackageFiles` tables and the `install` action, reusing the Template download and digest code.
 4. **Publisher layer**: `loadPlugin`, queries serving capabilities and options; `pluginFor` and the static registry removed from queries, mutations and the dashboard.
-5. **Hub repository**: `publishers.json`, the release workflow packing the built package (`dist/plugin.mjs`) and finding a folder under `packages/<kind>/`, `publisher-postiz` moved to `groowhub/packages/publisher/postiz`, `update-index.mjs` and the validator reading `publishers.json` (validator bump).
-6. **UI and migration**: the generic Add a publisher dialog and the migration of existing Postiz Publishers.
+5. **Hub repository** (groowhub#4): `publishers.json`, `publisher-postiz` in `groowhub/packages/publisher/postiz`, the release workflow building a Publisher package and finding a folder under `packages/<kind>/`.
+6. **Loader, UI and local hub** (#33, #34): `loadPlugin`, the generic Add a publisher dialog with the hub's icon and label, the card for a package that is not installed, `OPENGROOW_HUB_URL`, and `@opengroow/groowhub-cli` replacing `template-validator`.
 7. **Docs**: `docs/PUBLISHER_PLUGINS.md`, glossary, ADR-070 index annotation.
