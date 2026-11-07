@@ -32,14 +32,17 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * A Publisher package's logo: `/<adapter>.png` in the dashboard's public
- * folder, hidden when there is none (the package carries no logo yet).
+ * A Publisher package's logo: the image data URI the hub gives it (index entry
+ * before the install, manifest after), or the initial of its name when it has
+ * none or the image does not load.
  */
-function PublisherLogo({ adapter, className }: { adapter: string; className: string }) {
-  const [missing, setMissing] = useState(false);
-  if (!adapter || missing) return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{adapter.slice(0, 1)}</span>;
+function PublisherLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!icon || broken) {
+    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
+  }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={`/${adapter}.png`} alt="" className={className} onError={() => setMissing(true)} />;
+  return <img src={icon} alt="" className={className} onError={() => setBroken(true)} />;
 }
 
 /** `@opengroow/publisher-postiz` -> `postiz`: the adapter id a package is conventionally installed under (ADR-072). */
@@ -63,13 +66,13 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   // The adapter of the Publisher being added (its package is installed), before its first save.
   const [adding, setAdding] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  const [catalogue, setCatalogue] = useState<{ entries: Array<{ packageId: string; name: string; description: string }>; error?: string } | null>(null);
+  const [catalogue, setCatalogue] = useState<{ entries: Array<{ packageId: string; name: string; description: string; icon?: string }>; error?: string } | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   // A package just installed: the dialog continues once its data has arrived through the reactive query.
   const [awaiting, setAwaiting] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
-  const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string }; error?: string } | null>(null);
+  const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -260,7 +263,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                 // Installed packages the hub does not list (hub unreachable, or removed from it) stay usable.
                 ...(installed ?? [])
                   .filter((p) => !catalogue.entries.some((e) => e.packageId === p.packageId))
-                  .map((p) => ({ packageId: p.packageId, name: p.name, description: "" })),
+                  .map((p) => ({ packageId: p.packageId, name: p.name, description: "", icon: p.icon })),
               ].map((entry) => {
                 const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
                 return (
@@ -271,7 +274,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                     className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                     onClick={() => void choose(entry.packageId)}
                   >
-                    <PublisherLogo adapter={adapterOf(entry.packageId)} className="size-10 rounded-lg object-contain" />
+                    <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                     <span className="grid flex-1">
                       <span className="text-base font-medium">{entry.name}</span>
                       {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
@@ -299,7 +302,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       <div className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5">
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
-          <PublisherLogo adapter={adapterId ?? ""} className="size-14 rounded-xl object-contain" />
+          <PublisherLogo icon={current?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
           <div className="grid gap-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="m-0 text-2xl font-semibold">{serviceName}</h1>

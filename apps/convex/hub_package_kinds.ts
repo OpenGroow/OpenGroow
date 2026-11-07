@@ -60,6 +60,8 @@ export type PublisherMeta = {
   adapter: string;
   name: string;
   postUrl?: string;
+  /** The logo, an image data URI (manifest `icon`). */
+  icon?: string;
   capabilities: CapabilitiesData;
   channelOptions: ChannelOptionsData;
 };
@@ -75,6 +77,7 @@ export function describe(kind: HubPackageKind, files: readonly PackageFile[]): P
         adapter: manifest.manifest.id,
         name: manifest.manifest.name,
         ...(manifest.manifest.postUrl ? { postUrl: manifest.manifest.postUrl } : {}),
+        ...(manifest.manifest.icon ? { icon: manifest.manifest.icon } : {}),
         capabilities: parseCapabilities(json("data/capabilities.json")),
         channelOptions: json("data/channel-options.json") as ChannelOptionsData,
       };

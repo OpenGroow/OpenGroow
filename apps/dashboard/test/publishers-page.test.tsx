@@ -128,7 +128,7 @@ describe("Publishers page", () => {
 
   it("offers the hub's Publisher in the Add publisher modal when there is no Publisher", async () => {
     useQueryMock.mockReturnValue(null);
-    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", icon: "data:image/png;base64,iVBORw0KGgo=" }] }));
     await render();
     expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
     await click(byText("Add publisher"));
@@ -155,7 +155,8 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     container.remove();
   });
 
-  const HUB_ENTRY = { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "Publish through a Postiz instance" };
+  const ICON = "data:image/png;base64,iVBORw0KGgo=";
+  const HUB_ENTRY = { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "Publish through a Postiz instance", icon: ICON };
   const render = async () => {
     await act(async () => {
       root.render(<PublishersPage params={Promise.resolve({ projectId: "inst-1" })} />);
@@ -173,6 +174,16 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     await render();
     await click(byText("Add publisher"));
   };
+
+  it("shows the logo and label the hub gives each package, before installing it", async () => {
+    const icon = ICON;
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY, { packageId: "@opengroow/publisher-noicon", name: "Noicon", description: "" }] }));
+    await openDialog();
+    const imgs = Array.from(document.body.querySelectorAll("img"));
+    expect(imgs.map((i) => i.getAttribute("src"))).toEqual([icon]);
+    expect(text()).toContain("Noicon");
+    expect(document.body.innerHTML).not.toContain("/postiz.png");
+  });
 
   it("lists what the hub offers", async () => {
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));

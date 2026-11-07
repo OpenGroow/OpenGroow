@@ -19,6 +19,8 @@
     "template:machine-tool": "pnpm --filter @opengroow/agent-templates template:machine-tool",
     "template:validate": "pnpm --filter @opengroow/agent-templates template:validate",
     "template:validate-index": "pnpm --filter @opengroow/agent-templates template:validate-index",
+    "publisher:pack": "pnpm --filter @opengroow/publisher-sdk publisher:pack",
+    "hub:serve": "node scripts/hub-serve.mjs",
     "setup": "node scripts/setup.mjs",
     "convex:codegen": "npx convex codegen",
     "convex:dashboard": "./scripts/selfhost-convex-dashboard.sh",

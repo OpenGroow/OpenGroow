@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchHubIndex, fetchHubPackageIndex, hubIndexUrl, hubPackageIndexPath, parseHubIndex, parseHubPackageIndex } from "./hub-index.js";
+import { fetchHubIndex, fetchHubPackageIndex, hubIndexUrl, hubPackageIndexPath, parseHubIndex, parseHubPackageIndex, parseLocalHubUrl } from "./hub-index.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 const entry = {
@@ -95,6 +95,15 @@ describe("hub package indexes (ADR-072)", () => {
     expect(parsed).toEqual({ ok: true, index: { schemaVersion: 1, packages: [publisher] } });
   });
 
+  it("accepts an optional icon, only as a bounded image data URI, and never on a Template entry", () => {
+    const icon = "data:image/png;base64,iVBORw0KGgo=";
+    expect(parseHubPackageIndex(index([{ ...publisher, icon }]))).toEqual({ ok: true, index: { schemaVersion: 1, packages: [{ ...publisher, icon }] } });
+    for (const bad of ["https://example.com/i.png", "data:text/html;base64,AAAA", 'data:image/png;base64,AA"x', `data:image/png;base64,${"A".repeat(70_000)}`, 3]) {
+      expect(parseHubPackageIndex(index([{ ...publisher, icon: bad }])).ok).toBe(false);
+    }
+    expect(parseHubIndex(index([{ ...entry, icon }])).ok).toBe(false);
+  });
+
   it("applies the same strictness: unknown keys, digest, duplicates, reserved scope", () => {
     expect(parseHubPackageIndex(index([{ ...publisher, category: "x" }]))).toEqual({ ok: false, reason: 'packages[0]: unknown key "category"' });
     expect(parseHubPackageIndex(index([{ ...publisher, digest: "sha256:zz" }])).ok).toBe(false);
@@ -110,5 +119,26 @@ describe("hub package indexes (ADR-072)", () => {
     await expect(
       fetchHubPackageIndex({ repository: "acme/hub", ref: "main", kind: "publisher", fetch: async () => new Response(null, { status: 404 }) }),
     ).rejects.toThrow(/HTTP 404/);
+  });
+});
+
+describe("local hub (dev)", () => {
+  it("accepts a loopback or Docker-host base URL, without a trailing slash", () => {
+    expect(parseLocalHubUrl("http://127.0.0.1:8787")).toBe("http://127.0.0.1:8787");
+    expect(parseLocalHubUrl("http://localhost:8787/")).toBe("http://localhost:8787");
+    expect(parseLocalHubUrl("http://host.docker.internal:8787")).toBe("http://host.docker.internal:8787");
+  });
+
+  it.each(["https://evil.example.com", "http://192.168.1.10:8787", "http://127.0.0.1.evil.com", "ftp://localhost", "not a url", "file:///etc"])(
+    "refuses %s: the setting can never point a deployment at a remote server",
+    (raw) => {
+      expect(() => parseLocalHubUrl(raw)).toThrow(/OPENGROOW_HUB_URL/);
+    },
+  );
+
+  it("reads publishers.json from the local hub instead of GitHub", async () => {
+    const fetch = vi.fn(async (_url: string) => new Response(JSON.stringify(index([]))));
+    await fetchHubPackageIndex({ repository: "acme/hub", ref: "main", kind: "publisher", baseUrl: "http://127.0.0.1:8787", fetch });
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:8787/publishers.json");
   });
 });

@@ -7,6 +7,7 @@ export const INSTALLED_PUBLISHERS = [
     adapter: postizManifest.id,
     name: postizManifest.name,
     postUrl: postizManifest.postUrl,
+    icon: postizManifest.icon,
     capabilities: postizPlugin.capabilities,
     channelOptions: postizPlugin.channelOptions,
     packageId: "@opengroow/publisher-postiz",

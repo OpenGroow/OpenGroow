@@ -15,7 +15,8 @@ const modules = {
 const USER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|hp", subject: "owner-hp" };
 const sha = (b: Buffer) => `sha256:${createHash("sha256").update(b).digest("hex")}`;
 
-const MANIFEST = { id: "postiz", name: "Postiz", contractVersion: 1, postUrl: "{url}/p/{id}" };
+const ICON = "data:image/png;base64,iVBORw0KGgo=";
+const MANIFEST = { id: "postiz", name: "Postiz", contractVersion: 1, postUrl: "{url}/p/{id}", icon: ICON };
 const CAPABILITIES = { schemaVersion: 1, adapter: "postiz", platforms: { instagram: { name: "Instagram", video: "supported", image: "supported", carousel: "supported" } } };
 const OPTIONS = { schemaVersion: 1, adapter: "postiz", platforms: {} };
 
@@ -82,6 +83,14 @@ describe("hub_packages_node.catalogue", () => {
     });
   });
 
+  it("returns the icon of the index entry, to show it before the package is installed", async () => {
+    const archive = tgz(publisherFiles());
+    stubNetwork([entry(archive, { icon: ICON })]);
+    const t = convexTest(schema, modules);
+    const result = await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" });
+    expect(result.entries[0]).toMatchObject({ name: "Postiz", icon: ICON });
+  });
+
   it("reports an unreachable hub instead of throwing", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
     const t = convexTest(schema, modules);
@@ -114,6 +123,8 @@ describe("hub_packages_node.install", () => {
       ["data/capabilities.json", "data/channel-options.json", "dist/plugin.mjs", "manifest.json", "package.json"],
     );
     expect(stored!.files.find((f) => f.path === "dist/plugin.mjs")!.content).toBe("export const postizPlugin = {};");
+    // The label and icon the dashboard shows come from the package's manifest.
+    expect(stored!.meta).toMatchObject({ adapter: "postiz", name: "Postiz", icon: ICON });
     expect(await t.withIdentity(USER).query(api.hub_packages.installed, { kind: "publisher" })).toEqual([
       expect.objectContaining({ packageId: "@opengroow/publisher-postiz", version: "1.0.0" }),
     ]);
@@ -185,5 +196,34 @@ describe("hub_packages_node.install", () => {
     stubNetwork([]);
     const t = convexTest(schema, modules);
     await expect(t.action(api.hub_packages_node.install, { kind: "publisher", packageId: "@opengroow/publisher-postiz" })).rejects.toThrow(/Authentication required/);
+  });
+});
+
+describe("a local hub (OPENGROOW_HUB_URL, dev)", () => {
+  it("lists and installs from the local server, with the same digest check", async () => {
+    vi.stubEnv("OPENGROOW_HUB_URL", "http://127.0.0.1:8787");
+    const archive = tgz(publisherFiles());
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "http://127.0.0.1:8787/publishers.json") return new Response(JSON.stringify({ schemaVersion: 1, packages: [entry(archive)] }));
+      if (url === `http://127.0.0.1:8787/releases/${TAG}/${ASSET}`) return new Response(new Uint8Array(archive));
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const t = convexTest(schema, modules);
+
+    expect((await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" })).entries).toHaveLength(1);
+    expect(await t.withIdentity(USER).action(api.hub_packages_node.install, { kind: "publisher", packageId: "@opengroow/publisher-postiz" })).toMatchObject({ status: "installed" });
+    expect(fetchMock.mock.calls.every(([url]) => String(url).startsWith("http://127.0.0.1:8787/"))).toBe(true);
+  });
+
+  it("refuses a remote hub URL: the catalogue reports it and nothing is fetched", async () => {
+    vi.stubEnv("OPENGROOW_HUB_URL", "https://evil.example.com");
+    const fetchMock = vi.fn(async () => new Response("{}"));
+    vi.stubGlobal("fetch", fetchMock);
+    const t = convexTest(schema, modules);
+    const result = await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" });
+    expect(result.entries).toEqual([]);
+    expect(result.error).toMatch(/OPENGROOW_HUB_URL must be/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

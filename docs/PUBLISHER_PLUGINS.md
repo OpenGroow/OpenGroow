@@ -62,6 +62,22 @@ So a function of the plugin can only be called from a `"use node"` action (`publ
 
 A package is an `npm pack` tarball: `manifest.json`, `data/*.json`, `package.json` and the built `dist/plugin.mjs`. Its name must be `publisher-<manifest id>`. Only `official` hub entries can be installed: the code runs with the core's rights.
 
+## Trying a package locally, before any release
+
+The product reads the hub on GitHub. To try a package from a local checkout of the hub (`../groowhub`), without publishing anything:
+
+```bash
+pnpm publisher:pack packages/publisher-postiz        # bundle + npm pack into ../groowhub/dist, entry written to ../groowhub/publishers.json
+pnpm hub:serve                                       # serves ../groowhub on http://127.0.0.1:8787
+npx convex env set OPENGROOW_HUB_URL http://127.0.0.1:8787   # host Convex (pnpm dev)
+```
+
+With Convex in Docker (`pnpm dev:docker`), set `OPENGROOW_HUB_URL=http://host.docker.internal:8787` on the `convex-backend` service instead. Then Publishers, Add publisher lists the local hub; choosing the package installs it, with the same digest check as from GitHub.
+
+`OPENGROOW_HUB_URL` is accepted only for `localhost`, `127.0.0.1` or `host.docker.internal`, so it can never point a deployment at a remote server. Unset it to read the real hub again. Pass `--hub <folder>` to either script for a hub that is not at `../groowhub`. `pack-publisher` writes the index entry itself because nothing is released; in a real release a maintainer adds the entry in a reviewed PR and the workflow only moves `tag`, `asset` and `digest`.
+
+`apps/convex/test/publisher_hub_chain.test.ts` runs this whole circuit automatically (pack, serve, catalogue, install, load, call) against a stubbed Postiz.
+
 ## Testing with a stubbed fetch
 
 Plugins talk to the network through `fetch` only. Stub it and assert on the requests:
