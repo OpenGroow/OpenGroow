@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+
+vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
 
 // Issue #19, ADR-069: an optional `publishAt` on a Mission schedules the post in
 // Postiz (Publication `scheduled`); Convex polls the adapter and moves it to
@@ -20,6 +23,7 @@ const modules = {
   "../publication_polling.ts": () => import("../publication_polling.js"),
   "../publisher_node.ts": () => import("../publisher_node.js"),
   "../publishers.ts": () => import("../publishers.js"),
+  "../publication_polling_node.ts": () => import("../publication_polling_node.js"),
   "../runs.ts": () => import("../runs.js"),
   "../schedules.ts": () => import("../schedules.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
@@ -64,6 +68,7 @@ const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", 
 
 async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; templateId?: string; type?: string } = {}) {
   const t = convexTest(schema, modules);
+  await installPostiz(t);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, {
@@ -307,7 +312,7 @@ describe("polling a scheduled Publication", () => {
     await makeDue(t);
     stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
 
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
 
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p).toMatchObject({ status: "published", externalUrl: "https://instagram.com/p/abc" });
@@ -318,7 +323,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing("QUEUE");
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("scheduled");
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("approved");
@@ -327,7 +332,7 @@ describe("polling a scheduled Publication", () => {
   it("does not call Postiz before the scheduled date", async () => {
     const { t } = await scheduled();
     const listing = stubPostizListing("PUBLISHED");
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     expect(listing).not.toHaveBeenCalled();
   });
 
@@ -335,7 +340,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing(() => json({}, 503));
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("scheduled");
   });
@@ -344,7 +349,7 @@ describe("polling a scheduled Publication", () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
     stubPostizListing("ERROR");
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p.status).toBe("failed");
     expect(p.error).toBeTruthy();
@@ -362,7 +367,7 @@ describe("the link of an immediate Publication", () => {
   it("is filled in by the poll once Postiz knows the release URL", async () => {
     const { t, owner, missionId } = await published();
     stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     const [p] = await owner.query(api.publications.listForMission, { missionId });
     expect(p).toMatchObject({ status: "published", externalUrl: "https://instagram.com/p/abc" });
   });
@@ -370,13 +375,13 @@ describe("the link of an immediate Publication", () => {
   it("stays without a link while Postiz has not published it, and is not asked again once it has one", async () => {
     const { t, owner, missionId } = await published();
     stubPostizListing("QUEUE");
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     expect((await owner.query(api.publications.listForMission, { missionId }))[0]!.externalUrl).toBeUndefined();
 
     stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/abc" });
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     const listing = stubPostizListing("PUBLISHED", { releaseURL: "https://instagram.com/p/other" });
-    await t.action(internal.publication_polling.pollScheduled, {});
+    await t.action(internal.publication_polling_node.pollScheduled, {});
     expect(listing).not.toHaveBeenCalled();
     expect((await owner.query(api.publications.listForMission, { missionId }))[0]!.externalUrl).toBe("https://instagram.com/p/abc");
   });

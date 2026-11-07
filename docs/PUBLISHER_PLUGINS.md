@@ -56,7 +56,11 @@ Expose both on the plugin object (`capabilities`, `channelOptions`); the SDK pro
 
 ## How the core calls the plugin
 
-`apps/convex/publisher/registry.ts` lists the plugins (`pluginFor(adapterId)`, `channelOptionsOf`). To register a new one, add the package as a dependency of `apps/convex` and `apps/dashboard` and one entry to `PLUGINS`; also add it to the COPY lines of the Dockerfiles (`apps/dashboard/Dockerfile`, `apps/convex/docker/bootstrap/Dockerfile`). `apps/convex/publisher/capabilities.ts` reads the plugin's capabilities. The core owns the Publication state machine, polling and retry reconciliation; the plugin never sets a Publication status.
+A plugin is not imported by the core: it is an **installed Publisher package** (ADR-072). Add publisher lists the hub's `publishers.json`, downloads the chosen package, verifies its digest and stores it (`hub_packages_node.install`). Installing derives the package's data once (`hub_package_kinds.describe`): the manifest, the capabilities and the channel options, which queries, mutations and the dashboard read (`publisher_packages.ts`, `api.publisher_packages.list`). The code (`dist/plugin.mjs`, whose default export is the plugin) is evaluated only in Node actions (`publisher/load_node.ts`, `loadPlugin(ctx, adapter)`), cached per digest.
+
+So a function of the plugin can only be called from a `"use node"` action (`publisher_node.ts`, `publishers_node.ts`, `publication_polling_node.ts`); anything a query needs must be data in the manifest or the two data files. The core owns the Publication state machine, polling and retry reconciliation; the plugin never sets a Publication status.
+
+A package is an `npm pack` tarball: `manifest.json`, `data/*.json`, `package.json` and the built `dist/plugin.mjs`. Its name must be `publisher-<manifest id>`. Only `official` hub entries can be installed: the code runs with the core's rights.
 
 ## Testing with a stubbed fetch
 
@@ -72,4 +76,4 @@ See `packages/publisher-postiz/src/postiz.test.ts`. The core flows (retry, sched
 
 ## Trust
 
-Only official Publisher packages verified by the hub may contain code (ADR-070). Loading plugins from the hub at runtime is not built yet; plugins are workspace packages for now.
+Only official Publisher packages verified by the hub may contain code (ADR-070, ADR-072). They run in the core's process with its rights: there is no isolation, so an unverified third-party package must never be installable.

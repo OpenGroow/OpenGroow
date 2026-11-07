@@ -10,6 +10,7 @@ import { Calendar, Send, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AutoPublishToggle, type AutoPublishControl } from "@/src/components/auto-publish-toggle";
+import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { CapabilityWarning, ChannelSelect, accountLabel, channelCapability } from "@/src/components/publish-channel-picker";
 import { DateTimePicker, formatDateTime } from "@/src/components/date-time-picker";
 
@@ -62,6 +63,7 @@ export function PublishSection({
 }) {
   const setPublishTargets = useMutation(api.publications.setTargets);
   const publisher = useQuery(api.publishers.get, { instanceId });
+  const capabilities = useInstalledPublisher(publisher?.adapter)?.capabilities;
   const setPublishAt = useMutation(api.publications.setPublishAt);
   const [error, setError] = useState<string | null>(null);
 
@@ -135,7 +137,7 @@ export function PublishSection({
         <dl data-testid="publish-readonly" className="m-0 grid gap-2 text-sm">
           {targets.map((target) => {
             const channel = publisher?.targets.find((c) => c.target === target);
-            const capability = channel && publisher ? channelCapability(publisher.adapter, channel, kind) : undefined;
+            const capability = channel && publisher ? channelCapability(capabilities, channel, kind) : undefined;
             return (
               <div key={target} data-testid={`publish-row-${target}`} className="flex items-center gap-3 border-b border-border pb-2 last:border-0">
                 <PlatformLogo

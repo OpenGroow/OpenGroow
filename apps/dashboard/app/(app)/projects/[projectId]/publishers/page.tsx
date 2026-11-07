@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, Save, Settings } from "lucide-react";
+import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, Save, Settings } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
+import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +31,20 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+/**
+ * A Publisher package's logo: `/<adapter>.png` in the dashboard's public
+ * folder, hidden when there is none (the package carries no logo yet).
+ */
+function PublisherLogo({ adapter, className }: { adapter: string; className: string }) {
+  const [missing, setMissing] = useState(false);
+  if (!adapter || missing) return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{adapter.slice(0, 1)}</span>;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={`/${adapter}.png`} alt="" className={className} onError={() => setMissing(true)} />;
+}
+
+/** `@opengroow/publisher-postiz` -> `postiz`: the adapter id a package is conventionally installed under (ADR-072). */
+const adapterOf = (packageId: string) => packageId.slice(packageId.indexOf("/") + 1).replace(/^publisher-/, "");
+
 export default function PublishersPage({ params }: PublishersPageProps) {
   const resolvedInstanceId = useResolvedProjectId(params);
   const instances = useAuthenticatedInstances<InstanceRecord>();
@@ -38,12 +53,21 @@ export default function PublishersPage({ params }: PublishersPageProps) {
 
   const publisher = useQuery(api.publishers.get, instanceId ? { instanceId } : "skip");
   const save = useMutation(api.publishers.save);
-  const testConnection = useAction(api.publishers.testConnection);
+  const testConnection = useAction(api.publishers_node.testConnection);
+  const hubCatalogue = useAction(api.hub_packages_node.catalogue);
+  const installPackage = useAction(api.hub_packages_node.install);
+  const installed = useInstalledPublishers();
 
   const [url, setUrl] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
-  const [adding, setAdding] = useState(false);
+  // The adapter of the Publisher being added (its package is installed), before its first save.
+  const [adding, setAdding] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [catalogue, setCatalogue] = useState<{ entries: Array<{ packageId: string; name: string; description: string }>; error?: string } | null>(null);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  // A package just installed: the dialog continues once its data has arrived through the reactive query.
+  const [awaiting, setAwaiting] = useState<string | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -60,6 +84,33 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     }
   }, [instanceId, testConnection]);
 
+  useEffect(() => {
+    if (!picking) return;
+    setInstallError(null);
+    setCatalogue(null);
+    let cancelled = false;
+    hubCatalogue({ kind: "publisher" })
+      .then((result) => {
+        if (!cancelled) setCatalogue(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setCatalogue({ entries: [], error: errorMessage(error, "The hub could not be read") });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [picking, hubCatalogue]);
+
+  useEffect(() => {
+    if (!awaiting) return;
+    const ready = installed?.find((p) => p.packageId === awaiting);
+    if (!ready) return;
+    setAwaiting(null);
+    setInstalling(null);
+    setPicking(false);
+    setAdding(ready.adapter);
+  }, [awaiting, installed]);
+
   const hasApiKey = publisher?.hasApiKey ?? false;
   useEffect(() => {
     if (hasApiKey) void checkConnection();
@@ -70,12 +121,38 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const id = instanceId;
 
   const urlValue = url ?? publisher?.url ?? "";
+  const adapterId = publisher?.adapter ?? adding;
+  const current = installed?.find((p) => p.adapter === adapterId);
+  const serviceName = current?.name ?? adapterId ?? "";
+
+  async function choose(packageId: string) {
+    setInstallError(null);
+    const already = installed?.find((p) => p.packageId === packageId);
+    if (already) {
+      setPicking(false);
+      setAdding(already.adapter);
+      return;
+    }
+    setInstalling(packageId);
+    try {
+      const result = await installPackage({ kind: "publisher", packageId });
+      if (result.status === "error") {
+        setInstallError(result.errorMessage);
+        setInstalling(null);
+        return;
+      }
+      setAwaiting(packageId);
+    } catch (error) {
+      setInstallError(errorMessage(error, "The publisher could not be installed"));
+      setInstalling(null);
+    }
+  }
 
   async function handleSave() {
     setBusy("save");
     setMessage(null);
     try {
-      await save({ instanceId: id, adapter: "postiz", url: urlValue, apiKey: apiKey || undefined });
+      await save({ instanceId: id, adapter: adapterId!, url: urlValue, apiKey: apiKey || undefined });
       setApiKey("");
       setUrl(null);
       setMessage({ tone: "active", text: "Connection saved" });
@@ -110,7 +187,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
     }`;
 
-  const showPostiz = Boolean(publisher) || adding;
+  const showPublisher = Boolean(publisher) || adding !== null;
 
   return (
     <div className="grid gap-8">
@@ -118,7 +195,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         title="Publishers"
         description="Connect the services that will publish your content."
         action={
-          <Button type="button" size="lg" disabled={showPostiz} onClick={() => setPicking(true)}>
+          <Button type="button" size="lg" disabled={showPublisher} onClick={() => setPicking(true)}>
             <Plus aria-hidden="true" />
             Add publisher
           </Button>
@@ -131,34 +208,62 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             <DialogTitle>Add a publisher</DialogTitle>
             <DialogDescription>Choose the service that will publish your content.</DialogDescription>
           </DialogHeader>
-          <button
-            type="button"
-            className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted"
-            onClick={() => {
-              setPicking(false);
-              setAdding(true);
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/postiz.png" alt="" className="size-10 rounded-lg object-contain" />
-            <span className="grid">
-              <span className="text-base font-medium">Postiz</span>
-            </span>
-          </button>
+          {catalogue === null ? (
+            <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Reading the hub
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {catalogue.error ? <p className="m-0 text-sm text-destructive">The hub could not be read: {catalogue.error}</p> : null}
+              {[
+                ...catalogue.entries,
+                // Installed packages the hub does not list (hub unreachable, or removed from it) stay usable.
+                ...(installed ?? [])
+                  .filter((p) => !catalogue.entries.some((e) => e.packageId === p.packageId))
+                  .map((p) => ({ packageId: p.packageId, name: p.name, description: "" })),
+              ].map((entry) => {
+                const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
+                return (
+                  <button
+                    key={entry.packageId}
+                    type="button"
+                    disabled={installing !== null}
+                    className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
+                    onClick={() => void choose(entry.packageId)}
+                  >
+                    <PublisherLogo adapter={adapterOf(entry.packageId)} className="size-10 rounded-lg object-contain" />
+                    <span className="grid flex-1">
+                      <span className="text-base font-medium">{entry.name}</span>
+                      {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
+                    </span>
+                    {installing === entry.packageId ? (
+                      <Loader2 className="size-4 animate-spin" aria-label="Installing" />
+                    ) : isInstalled ? null : (
+                      <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
+                    )}
+                  </button>
+                );
+              })}
+              {catalogue.entries.length === 0 && !catalogue.error && (installed ?? []).length === 0 ? (
+                <p className="m-0 text-sm text-muted-foreground">The hub lists no publisher.</p>
+              ) : null}
+            </div>
+          )}
+          {installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
         </DialogContent>
       </Dialog>
 
-      {!showPostiz ? (
+      {!showPublisher ? (
         <Card className="p-5 text-sm text-muted-foreground">No publisher yet. Add one to publish your Agents&apos; content.</Card>
       ) : (
       <div className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5">
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/postiz.png" alt="" className="size-14 rounded-xl object-contain" />
+          <PublisherLogo adapter={adapterId ?? ""} className="size-14 rounded-xl object-contain" />
           <div className="grid gap-1">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="m-0 text-2xl font-semibold">Postiz</h1>
+              <h1 className="m-0 text-2xl font-semibold">{serviceName}</h1>
               {connected === true ? <StatusBadge tone="active" label="Connected" /> : null}
               {connected === false ? <StatusBadge tone="error" label="Not connected" /> : null}
               {publisher && !publisher.hasApiKey ? <StatusBadge tone="warning" label="API key missing" /> : null}
@@ -182,7 +287,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="publisher-url">Postiz URL</Label>
+              <Label htmlFor="publisher-url">{serviceName} URL</Label>
               <div className={FIELD_CLASS}>
                 <Link2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <input
@@ -190,7 +295,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                   name="url"
                   className={BARE_INPUT_CLASS}
                   autoComplete="off"
-                  placeholder="https://postiz.example.com"
+                  placeholder="https://"
                   value={urlValue}
                   onChange={(event) => setUrl(event.target.value)}
                 />
@@ -206,7 +311,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                   className={BARE_INPUT_CLASS}
                   type={showKey ? "text" : "password"}
                   autoComplete="off"
-                  placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : "Postiz API key"}
+                  placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : `${serviceName} API key`}
                   value={apiKey}
                   onChange={(event) => setApiKey(event.target.value)}
                 />

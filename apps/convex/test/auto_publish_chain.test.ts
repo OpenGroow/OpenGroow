@@ -3,9 +3,12 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 import type { Id } from "../_generated/dataModel";
 import type { RunResult } from "../run_result";
 import { fixtureTemplate, installTemplateRegistry, loadFixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+
+vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
 
 // The auto-publish chain is triggered from `internal.runs.markCompleted` via
 // `ctx.scheduler.runAfter(0, ...)`. convex-test only runs scheduled functions
@@ -186,6 +189,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("autoPublish:true + supported template + needs_human_review → mission done, approve then publish called in order", async () => {
     mockFetchOkSequence({}, { indexing: { status: "submitted", provider: "speedyindex", taskId: "t1" } });
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: true });
@@ -204,6 +208,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("approve effect fails → mission failed with message, publish never called", async () => {
     mockFetchFail(500, "Internal Server Error");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: true });
@@ -222,6 +227,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("publish effect fails after approve succeeded → mission failed, approve was not lost", async () => {
     mockFetchApproveOkPublishFail(500, "Internal Server Error");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: true });
@@ -242,6 +248,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("autoPublish:false → unchanged behavior, no fetch call", async () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: false });
@@ -261,6 +268,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("autoPublish absent → unchanged behavior, no fetch call", async () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, {});
@@ -284,6 +292,7 @@ describe("auto-publish chain (issue #329)", () => {
     // human like the autoPublish:false case does.
     const fetchSpy = vi.spyOn(global, "fetch");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: true });
@@ -309,6 +318,7 @@ describe("auto-publish chain (issue #329)", () => {
     try {
       mockFetchOkSequence({}, {});
       const t = convexTest(schema, modules);
+      await installPostiz(t);
       await seedInstance(t);
       await seedProjectAgent(t, REJECT_FIRST_TEMPLATE_ID);
       const { missionId, runId } = await seedMissionAndRun(t, {
@@ -333,6 +343,7 @@ describe("auto-publish chain (issue #329)", () => {
   it("run ends success with autoPublish:true → unchanged, no fetch call", async () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     await seedProjectAgent(t);
     const { missionId, runId } = await seedMissionAndRun(t, { autoPublish: true });
@@ -375,6 +386,7 @@ describe("auto-publish chain (issue #329)", () => {
     }
     async function setup(opts: { map: boolean; payload?: Record<string, unknown> }) {
       const t = convexTest(schema, modules);
+      await installPostiz(t);
       await seedInstance(t);
       await seedProjectAgent(t, IMAGE_TEMPLATE_ID);
       const owner = t.withIdentity(OWNER);

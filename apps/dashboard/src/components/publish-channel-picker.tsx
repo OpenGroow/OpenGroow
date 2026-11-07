@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
-import { capabilityOf, type Capability } from "@convex/publisher/capabilities";
+import { capabilityIn, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
+import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -31,10 +32,14 @@ import { AutoPublishToggle } from "@/src/components/auto-publish-toggle";
 type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
 export type PublisherChannel = Publisher["targets"][number];
 
-/** What the adapter says about a channel carrying a Publishable `kind`; `supported` when no kind is known. */
-export function channelCapability(adapter: string, channel: PublisherChannel, kind: string | undefined): Capability {
+/**
+ * What the installed Publisher package says about a channel carrying a
+ * Publishable `kind`; `supported` when no kind is known, `uncertain` when the
+ * package is not installed (`capabilities` undefined).
+ */
+export function channelCapability(capabilities: CapabilitiesData | undefined, channel: PublisherChannel, kind: string | undefined): Capability {
   if (!kind || !channel.mapped) return { level: "supported" };
-  return capabilityOf(adapter, channel.channelService, kind);
+  return capabilityIn(capabilities, channel.channelService, kind);
 }
 
 /**
@@ -93,6 +98,7 @@ export function ChannelSelect({
   onChange: (targets: string[]) => void;
 }) {
   const anchor = useComboboxAnchor();
+  const capabilities = useInstalledPublisher(publisher.adapter)?.capabilities;
   const [open, setOpen] = useState(false);
   // Stable between renders: the Combobox filters on the identity of `items`.
   const { byTarget, items } = useMemo(
@@ -150,7 +156,7 @@ export function ChannelSelect({
           {(target: string) => {
             const channel = byTarget.get(target);
             if (!channel) return null;
-            const capability = channelCapability(publisher.adapter, channel, kind);
+            const capability = channelCapability(capabilities, channel, kind);
             const unsupported = capability.level === "unsupported";
             const isSelected = selected.includes(target);
             return (

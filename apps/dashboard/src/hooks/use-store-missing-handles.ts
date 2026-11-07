@@ -22,7 +22,7 @@ export function useStoreMissingHandles(
   publisher: Publisher | undefined,
   channels?: LiveChannel[] | null,
 ) {
-  const listChannels = useAction(api.publishers.listChannels);
+  const listChannels = useAction(api.publishers_node.listChannels);
   const setChannelProfiles = useMutation(api.publishers.setChannelProfiles);
   const needed = Boolean(publisher?.hasApiKey && publisher.targets.some((t) => t.mapped && !t.channelProfile));
   const listed = useRef(false);

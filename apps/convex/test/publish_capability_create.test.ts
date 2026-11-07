@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
@@ -28,6 +29,7 @@ useTemplateRegistry([INSTANCE_ID], [
 
 async function seed() {
   const t = convexTest(schema, modules);
+  await installPostiz(t);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: "job-cap", status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.subject });

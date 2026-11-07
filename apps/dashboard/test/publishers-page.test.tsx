@@ -5,15 +5,18 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PublishersPage from "../app/(app)/projects/[projectId]/publishers/page";
+import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installed";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
+// What `publisher_packages.list` returns: reassigned by a test to simulate an install.
+let installedPublishers: typeof INSTALLED_PUBLISHERS = INSTALLED_PUBLISHERS;
 const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : useQueryMock(...args)),
   useMutation: (name: string) => (mutations[name] ??= vi.fn(async () => "key")),
   useAction: (name: string) => (actions[name] ??= vi.fn(async () => ({ ok: true, channels: [] }))),
 }));
@@ -22,7 +25,10 @@ vi.mock("@convex/_generated/api", () => {
     Object.fromEntries(fns.map((f) => [f, `${group}.${f}`]));
   return {
     api: {
-      publishers: names("publishers", ["get", "save", "testConnection", "listChannels", "addChannel", "updateSettings", "removeTarget"]),
+      publishers: names("publishers", ["get", "save", "addChannel", "updateSettings", "removeTarget"]),
+      publishers_node: names("publishers_node", ["testConnection", "listChannels"]),
+      hub_packages_node: names("hub_packages_node", ["catalogue", "install"]),
+      publisher_packages: names("publisher_packages", ["list"]),
     },
   };
 });
@@ -49,6 +55,7 @@ describe("Publishers page", () => {
   let root: Root;
   beforeEach(() => {
     useQueryMock.mockReset();
+    installedPublishers = INSTALLED_PUBLISHERS;
     for (const k of Object.keys(mutations)) delete mutations[k];
     for (const k of Object.keys(actions)) delete actions[k];
     container = document.createElement("div");
@@ -76,7 +83,7 @@ describe("Publishers page", () => {
 
   it("switches between the Configuration and Channels tabs, the latter showing the channel count", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
-    actions["publishers.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
     await render();
     expect(text()).toContain("Postiz URL");
     expect(byText("Channels")?.textContent).toBe("Channels (2)");
@@ -90,14 +97,14 @@ describe("Publishers page", () => {
 
   it("shows Connected or Not connected following the connection test", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
-    actions["publishers.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
     await render();
     expect(text()).toContain("Connected");
     expect(text()).not.toContain("Not connected");
     await act(async () => root.unmount());
     root = createRoot(container);
     for (const k of Object.keys(actions)) delete actions[k];
-    actions["publishers.testConnection"] = vi.fn(async () => ({ ok: false, error: "401" }));
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: false, error: "401" }));
     await render();
     expect(text()).toContain("Not connected");
   });
@@ -119,13 +126,99 @@ describe("Publishers page", () => {
     expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("offers Postiz in the Add publisher modal when there is no Publisher", async () => {
+  it("offers the hub's Publisher in the Add publisher modal when there is no Publisher", async () => {
     useQueryMock.mockReturnValue(null);
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
     await render();
     expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
     await click(byText("Add publisher"));
     expect(text()).toContain("Add a publisher");
     await click(byText("Postiz"));
     expect(text()).toContain("Postiz URL");
+  });
+});
+
+describe("Publishers page: Add publisher (ADR-072)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    useQueryMock.mockReset();
+    useQueryMock.mockReturnValue(null); // no Publisher yet
+    installedPublishers = [];
+    for (const k of Object.keys(actions)) delete actions[k];
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  const HUB_ENTRY = { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "Publish through a Postiz instance" };
+  const render = async () => {
+    await act(async () => {
+      root.render(<PublishersPage params={Promise.resolve({ projectId: "inst-1" })} />);
+    });
+  };
+  const text = () => document.body.textContent ?? "";
+  const buttons = () => Array.from(document.body.querySelectorAll<HTMLElement>("button"));
+  const byText = (label: string) => buttons().find((b) => b.textContent?.trim().startsWith(label));
+  const click = async (el: Element | undefined) => {
+    await act(async () => {
+      (el as HTMLElement).click();
+    });
+  };
+  const openDialog = async () => {
+    await render();
+    await click(byText("Add publisher"));
+  };
+
+  it("lists what the hub offers", async () => {
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+    await openDialog();
+    expect(actions["hub_packages_node.catalogue"]).toHaveBeenCalledWith({ kind: "publisher" });
+    expect(text()).toContain("Postiz");
+    expect(text()).toContain("Publish through a Postiz instance");
+  });
+
+  it("installs the chosen package, then shows its connection form under the package's name", async () => {
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+    actions["hub_packages_node.install"] = vi.fn(async () => {
+      installedPublishers = INSTALLED_PUBLISHERS; // the reactive query now serves the installed package
+      return { status: "installed", packageId: HUB_ENTRY.packageId, version: "1.0.0" };
+    });
+    await openDialog();
+    await click(byText("Postiz"));
+    expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: HUB_ENTRY.packageId });
+    expect(text()).toContain("Postiz URL");
+    expect(document.getElementById("publisher-url")).not.toBeNull();
+  });
+
+  it("does not install again a package that is already installed", async () => {
+    installedPublishers = INSTALLED_PUBLISHERS;
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed" }));
+    await openDialog();
+    await click(byText("Postiz"));
+    expect(actions["hub_packages_node.install"]).not.toHaveBeenCalled();
+    expect(text()).toContain("Postiz URL");
+  });
+
+  it("shows why an install was refused and stays on the choice", async () => {
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "error", errorMessage: "Digest mismatch for OpenGroow/groowhub" }));
+    await openDialog();
+    await click(byText("Postiz"));
+    expect(text()).toContain("Digest mismatch");
+    expect(document.getElementById("publisher-url")).toBeNull();
+  });
+
+  it("says when the hub cannot be read, and still offers what is installed", async () => {
+    installedPublishers = INSTALLED_PUBLISHERS;
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [], error: "HTTP 500" }));
+    await openDialog();
+    expect(text()).toContain("The hub could not be read: HTTP 500");
+    expect(byText("Postiz")).toBeDefined();
   });
 });

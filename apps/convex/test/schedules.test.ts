@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { installPostiz } from "./postiz_fixture";
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
@@ -50,6 +51,7 @@ const DAILY = { unit: "daily" as const, hour: 9, minute: 0 };
 describe("schedules.create", () => {
   it("rejects when caller is not the instance owner", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t, OWNER.subject);
 
     await expect(
@@ -66,6 +68,7 @@ describe("schedules.create", () => {
 
   it("creates an active schedule with a strictly-future nextRunAt", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
 
     const before = Date.now();
@@ -93,6 +96,7 @@ describe("schedules.create", () => {
 
   it("persists autoPublish:true when passed", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
 
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
@@ -113,6 +117,7 @@ describe("schedules.create", () => {
 
   it("leaves autoPublish undefined when not passed", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
 
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
@@ -132,6 +137,7 @@ describe("schedules.create", () => {
 
   it("persists the day field and a future nextRunAt for weekly and monthly", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
 
     const before = Date.now();
@@ -171,6 +177,7 @@ describe("schedules.create", () => {
 describe("schedules.pause", () => {
   it("rejects a non-owner caller", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID,
@@ -188,6 +195,7 @@ describe("schedules.pause", () => {
 
   it("sets the schedule status to paused", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID,
@@ -210,6 +218,7 @@ describe("schedules.pause", () => {
 describe("schedules.resume", () => {
   it("rejects a non-owner caller", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article",
@@ -224,6 +233,7 @@ describe("schedules.resume", () => {
 
   it("sets status to active and recalculates nextRunAt strictly in the future", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const before = Date.now();
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
@@ -245,6 +255,7 @@ describe("schedules.resume", () => {
 describe("schedules.remove", () => {
   it("rejects a non-owner caller", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article",
@@ -258,6 +269,7 @@ describe("schedules.remove", () => {
 
   it("deletes the schedule document", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article",
@@ -273,6 +285,7 @@ describe("schedules.remove", () => {
 
   it("does not delete existing missions when the schedule is removed", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t);
     const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
       instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article",
@@ -305,6 +318,7 @@ describe("schedules.remove", () => {
 describe("schedules.listByInstance", () => {
   it("returns only the calling owner's schedules on the instance", async () => {
     const t = convexTest(schema, modules);
+    await installPostiz(t);
     await seedInstance(t, OWNER.subject);
 
     await t.withIdentity(OWNER).mutation(api.schedules.create, {

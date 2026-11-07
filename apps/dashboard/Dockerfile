@@ -13,7 +13,6 @@ COPY packages/hmac/package.json packages/hmac/package.json
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/agent-templates/package.json packages/agent-templates/package.json
 COPY packages/publisher-sdk/package.json packages/publisher-sdk/package.json
-COPY packages/publisher-postiz/package.json packages/publisher-postiz/package.json
 COPY packages/reliability/package.json packages/reliability/package.json
 COPY apps/dashboard/package.json apps/dashboard/package.json
 COPY apps/convex/package.json apps/convex/package.json
@@ -33,7 +32,6 @@ COPY packages/hmac packages/hmac
 COPY packages/protocol packages/protocol
 COPY packages/agent-templates packages/agent-templates
 COPY packages/publisher-sdk packages/publisher-sdk
-COPY packages/publisher-postiz packages/publisher-postiz
 COPY packages/reliability packages/reliability
 COPY apps/dashboard apps/dashboard
 COPY apps/convex apps/convex
