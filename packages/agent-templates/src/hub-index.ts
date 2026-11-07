@@ -20,6 +20,16 @@ import { OFFICIAL_SCOPE } from "./official-scope";
 export const HUB_INDEX_SCHEMA_VERSION = 1;
 export const HUB_INDEX_PATH = "index.json";
 
+/**
+ * Hub packages that are not Templates (ADR-072) are listed in an index of their
+ * own, never in `index.json`: that reader refuses any key it does not know, so
+ * a new kind of entry there would make every deployed OpenGroow refuse the
+ * whole catalogue, Templates included.
+ */
+export const HUB_PACKAGE_KINDS = ["publisher"] as const;
+export type HubPackageKind = (typeof HUB_PACKAGE_KINDS)[number];
+export const hubPackageIndexPath = (kind: HubPackageKind) => `${kind}s.json`;
+
 export const HUB_VERIFICATIONS = ["official", "verified", "community"] as const;
 export type HubVerification = (typeof HUB_VERIFICATIONS)[number];
 
@@ -41,9 +51,15 @@ export type HubEntry = {
 export type HubIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; packages: HubEntry[] };
 export type ParsedHubIndex = { ok: true; index: HubIndex } | { ok: false; reason: string };
 
+/** An entry of a non-Template index: a Template entry without `category`. */
+export type HubPackageEntry = Omit<HubEntry, "category">;
+export type HubPackageIndex = { schemaVersion: typeof HUB_INDEX_SCHEMA_VERSION; packages: HubPackageEntry[] };
+export type ParsedHubPackageIndex = { ok: true; index: HubPackageIndex } | { ok: false; reason: string };
+
 const SCOPED_ID = /^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const ENTRY_KEYS = ["id", "name", "description", "repository", "tag", "asset", "digest", "category", "verification"] as const;
+const PACKAGE_ENTRY_KEYS = ["id", "name", "description", "repository", "tag", "asset", "digest", "verification"] as const;
+const ENTRY_KEYS = [...PACKAGE_ENTRY_KEYS, "category"] as const;
 
 class IndexError extends Error {}
 
@@ -61,10 +77,10 @@ function text(record: Record<string, unknown>, key: string, where: string): stri
   return value;
 }
 
-function parseEntry(raw: unknown, position: number): HubEntry {
+function parsePackageEntry(raw: unknown, position: number, allowedKeys: readonly string[]): HubPackageEntry {
   const where = `packages[${position}]`;
   if (!isRecord(raw)) throw new IndexError(`${where} must be an object`);
-  rejectUnknownKeys(raw, ENTRY_KEYS, where);
+  rejectUnknownKeys(raw, allowedKeys, where);
   const id = text(raw, "id", where);
   if (!SCOPED_ID.test(id)) throw new IndexError(`${where}: "id" must be a scoped Template id like @scope/name`);
   const repository = text(raw, "repository", where);
@@ -95,12 +111,16 @@ function parseEntry(raw: unknown, position: number): HubEntry {
     tag,
     ...assetField(asset),
     digest,
-    category: text(raw, "category", where),
     verification: verification as HubVerification,
   };
 }
 
-export function parseHubIndex(input: unknown): ParsedHubIndex {
+function parseEntry(raw: unknown, position: number): HubEntry {
+  const entry = parsePackageEntry(raw, position, ENTRY_KEYS);
+  return { ...entry, category: text(raw as Record<string, unknown>, "category", `packages[${position}]`) };
+}
+
+function parseIndex<E extends { id: string }>(input: unknown, parseOne: (raw: unknown, position: number) => E) {
   try {
     if (!isRecord(input)) throw new IndexError("The hub index must be an object");
     rejectUnknownKeys(input, ["schemaVersion", "packages"], "hub index");
@@ -109,28 +129,36 @@ export function parseHubIndex(input: unknown): ParsedHubIndex {
     }
     const packages = input["packages"];
     if (!Array.isArray(packages)) throw new IndexError('hub index: "packages" must be an array');
-    const entries = packages.map(parseEntry);
+    const entries = packages.map(parseOne);
     const seen = new Set<string>();
     for (const { id } of entries) {
       if (seen.has(id)) throw new IndexError(`Duplicate entry for ${id}`);
       seen.add(id);
     }
-    return { ok: true, index: { schemaVersion: HUB_INDEX_SCHEMA_VERSION, packages: entries } };
+    return { ok: true as const, index: { schemaVersion: HUB_INDEX_SCHEMA_VERSION as typeof HUB_INDEX_SCHEMA_VERSION, packages: entries } };
   } catch (error) {
-    if (error instanceof IndexError) return { ok: false, reason: error.message };
+    if (error instanceof IndexError) return { ok: false as const, reason: error.message };
     throw error;
   }
 }
 
-export function hubIndexUrl(repository: string, ref: string): string {
-  const { owner, repo } = parseGitHubRepository(repository);
-  if (!isValidGitTag(ref)) throw new Error(`Invalid hub ref "${ref}"`);
-  return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${HUB_INDEX_PATH}`;
+export function parseHubIndex(input: unknown): ParsedHubIndex {
+  return parseIndex(input, parseEntry);
 }
 
-/** Downloads and validates the index of a hub repository; throws with the reason when it cannot. */
-export async function fetchHubIndex(args: { repository: string; ref: string; fetch: FetchLike }): Promise<HubIndex> {
-  const url = hubIndexUrl(args.repository, args.ref);
+/** The index of a non-Template kind (`publishers.json`): the same strict reader, entries without `category`. */
+export function parseHubPackageIndex(input: unknown): ParsedHubPackageIndex {
+  return parseIndex(input, (raw, position) => parsePackageEntry(raw, position, PACKAGE_ENTRY_KEYS));
+}
+
+export function hubIndexUrl(repository: string, ref: string, path: string = HUB_INDEX_PATH): string {
+  const { owner, repo } = parseGitHubRepository(repository);
+  if (!isValidGitTag(ref)) throw new Error(`Invalid hub ref "${ref}"`);
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`;
+}
+
+async function fetchIndexJson(args: { repository: string; ref: string; fetch: FetchLike }, path: string) {
+  const url = hubIndexUrl(args.repository, args.ref, path);
   const response = await args.fetch(url);
   if (!response.ok) throw new Error(`Failed to download the hub index ${url}: HTTP ${response.status}`);
   let json: unknown;
@@ -139,7 +167,21 @@ export async function fetchHubIndex(args: { repository: string; ref: string; fet
   } catch {
     throw new Error(`The hub index ${url} is not valid JSON`);
   }
+  return { url, json };
+}
+
+/** Downloads and validates the index of a hub repository; throws with the reason when it cannot. */
+export async function fetchHubIndex(args: { repository: string; ref: string; fetch: FetchLike }): Promise<HubIndex> {
+  const { url, json } = await fetchIndexJson(args, HUB_INDEX_PATH);
   const parsed = parseHubIndex(json);
+  if (!parsed.ok) throw new Error(`Invalid hub index ${url}: ${parsed.reason}`);
+  return parsed.index;
+}
+
+/** Downloads and validates the index of one non-Template kind of the hub; throws with the reason when it cannot. */
+export async function fetchHubPackageIndex(args: { repository: string; ref: string; kind: HubPackageKind; fetch: FetchLike }): Promise<HubPackageIndex> {
+  const { url, json } = await fetchIndexJson(args, hubPackageIndexPath(args.kind));
+  const parsed = parseHubPackageIndex(json);
   if (!parsed.ok) throw new Error(`Invalid hub index ${url}: ${parsed.reason}`);
   return parsed.index;
 }
