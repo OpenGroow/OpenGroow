@@ -101,10 +101,10 @@ Product, Publisher layer:
 ```ts
 // publisher/load_node.ts ("use node") — knows the contract, not the hub
 export async function loadPlugin(ctx, adapter): Promise<PublisherPlugin> {
-  const pkg = await ctx.runQuery(internal.hub_packages.get, { packageId: packageOf(adapter) });
-  const source = pkg.files.find((f) => f.path === "dist/plugin.mjs")!.content;
-  const mod = await import("data:text/javascript;base64," + Buffer.from(source).toString("base64"));
-  return parsePlugin(mod.postizPlugin, manifestOf(pkg)); // checks contractVersion and shape
+  const pkg = await ctx.runQuery(internal.publisher_packages.bundleOf, { adapter }); // indexed by the adapter id
+  const manifest = parsePublisherManifest(JSON.parse(pkg.manifest)); // the core's SDK: refuses another contract version
+  const mod = await import("data:text/javascript;base64," + Buffer.from(pkg.source).toString("base64"));
+  return checkPublisherPlugin(mod.default, manifest); // every bundle's plugin is its default export; checks shape and identity
 }
 // publisher_node.ts: const plugin = await loadPlugin(ctx, prepared.connection.adapter);
 ```
@@ -123,7 +123,7 @@ Dashboard: Add a publisher lists `hubPackages` of `kind: "publisher"` available 
 - Adding an official service is a hub PR and a release; no change and no deploy of the product.
 - The dashboard reads capabilities and channel options through Convex queries instead of static imports, so they exist only for installed packages.
 - Each Publisher call pays a bundle load on a cold isolate; a per-version cache bounds it, to be measured.
-- Open risks, to settle before building: Convex cloud and self-hosted Docker behaviour, the size limit of file storage reads, the cost of a data-URL import on cold start.
+- Open risks, still to measure: Convex cloud (the self-hosted image is verified, see Context), the size limit of file storage reads, the cost of a data-URL import on cold start. A failure there amends this ADR's loading step; the two layers and the trust model do not depend on it.
 
 ### 6. One CLI for the hub's tooling
 
@@ -133,10 +133,10 @@ For local trials before any release, `OPENGROOW_HUB_URL` points the product at a
 
 ## PR breakdown
 
-1. **Verify**: run the spike on the self-hosted Docker stack with the real bundle and a faithful Postiz stub, including `publish` and `findPost`. Gate for the rest.
+1. **Verify** (done, see Context): run the spike on the self-hosted Docker stack with the real bundle and a faithful Postiz stub, including `publish` and `findPost`.
 2. **SDK** (#31): `contractVersion`, the manifest type and parser, `postUrl` as a template; Postiz switched to it (still static).
 3. **Hub layer** (#32): `publishers.json` reader, `hubPackages`/`hubPackageFiles` tables and the `install` action, reusing the Template download and digest code.
-4. **Publisher layer**: `loadPlugin`, queries serving capabilities and options; `pluginFor` and the static registry removed from queries, mutations and the dashboard.
+4. **Publisher layer** (#33): `loadPlugin`, queries serving capabilities and options from the installed package's data; `pluginFor` and the static registry removed from queries, mutations and the dashboard.
 5. **Hub repository** (groowhub#4): `publishers.json`, `publisher-postiz` in `groowhub/packages/publisher/postiz`, the release workflow building a Publisher package and finding a folder under `packages/<kind>/`.
-6. **Loader, UI and local hub** (#33, #34): `loadPlugin`, the generic Add a publisher dialog with the hub's icon and label, the card for a package that is not installed, `OPENGROOW_HUB_URL`, and `@opengroow/groowhub-cli` replacing `template-validator`.
+6. **UI and local hub** (#33, #34): the generic Add a publisher dialog with the hub's icon and label, the card for a package that is not installed, `OPENGROOW_HUB_URL`, and `@opengroow/groowhub-cli` replacing `template-validator`.
 7. **Docs**: `docs/PUBLISHER_PLUGINS.md`, glossary, ADR-070 index annotation.
