@@ -37,12 +37,12 @@ function errorMessage(error: unknown, fallback: string): string {
  * none or the image does not load.
  */
 function PublisherLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
-  const [broken, setBroken] = useState(false);
-  if (!icon || broken) {
+  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
+  if (!icon || brokenIcon === icon) {
     return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
   }
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={icon} alt="" className={className} onError={() => setBroken(true)} />;
+  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
 }
 
 /** `@opengroow/publisher-postiz` -> `postiz`: the adapter id a package is conventionally installed under (ADR-072). */
