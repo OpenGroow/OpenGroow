@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { hubPackageTables } from "./hub_packages_schema.js";
 import { publisherTables } from "./publisher_schema.js";
 import {
   commandStatusV,
@@ -214,6 +215,7 @@ const runSharedFields = {
 
 export default defineSchema({
   ...publisherTables,
+  ...hubPackageTables,
   commands: defineTable({
     instanceId: v.string(),
     type: v.string(),

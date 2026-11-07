@@ -1,0 +1,30 @@
+import { defineTable } from "convex/server";
+import { v } from "convex/values";
+
+// Hub packages that are not Templates (ADR-072), installed deployment-wide from
+// the hub. This layer knows a package's `kind` and its files, nothing about
+// what a kind does with them: each kind reads its own files back (a Publisher
+// package: publisher/package_store.ts) and validates them at install
+// (hub_package_kinds.ts).
+export const hubPackageTables = {
+  hubPackages: defineTable({
+    /** Scoped id of the hub entry (`@opengroow/publisher-postiz`). */
+    packageId: v.string(),
+    kind: v.string(),
+    version: v.string(),
+    tag: v.string(),
+    /** `sha256:` of the release asset, as verified at install. */
+    digest: v.string(),
+    verification: v.string(),
+    installedAt: v.number(),
+  })
+    .index("by_package_id", ["packageId"])
+    .index("by_kind", ["kind"]),
+
+  // One row per file, like `templateFiles`: bounded by the package, each well under the document limit.
+  hubPackageFiles: defineTable({
+    hubPackageId: v.id("hubPackages"),
+    path: v.string(),
+    content: v.string(),
+  }).index("by_package", ["hubPackageId"]),
+};

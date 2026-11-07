@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchHubIndex, hubIndexUrl, parseHubIndex } from "./hub-index.js";
+import { fetchHubIndex, fetchHubPackageIndex, hubIndexUrl, hubPackageIndexPath, parseHubIndex, parseHubPackageIndex } from "./hub-index.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}`;
 const entry = {
@@ -72,5 +72,43 @@ describe("fetchHubIndex", () => {
     await expect(hub(async () => new Response(null, { status: 404 }))).rejects.toThrow(/HTTP 404/);
     await expect(hub(async () => new Response("{not json"))).rejects.toThrow(/not valid JSON/);
     await expect(hub(async () => new Response(JSON.stringify({ schemaVersion: 1 })))).rejects.toThrow(/packages/);
+  });
+});
+
+describe("hub package indexes (ADR-072)", () => {
+  const { category: _category, ...publisher } = {
+    ...entry,
+    id: "@opengroow/publisher-postiz",
+    name: "Postiz",
+    tag: "publisher-postiz@1.0.0",
+    asset: "opengroow-publisher-postiz-1.0.0.tgz",
+  };
+
+  it("lives in its own file, so the Template index never carries a new kind of entry", () => {
+    expect(hubPackageIndexPath("publisher")).toBe("publishers.json");
+    // The Template reader refuses any key it does not know: this is what would break every deployed OpenGroow.
+    expect(parseHubIndex(index([{ ...publisher, kind: "publisher" }])).ok).toBe(false);
+  });
+
+  it("accepts entries without a category and keeps their trust level", () => {
+    const parsed = parseHubPackageIndex(index([publisher]));
+    expect(parsed).toEqual({ ok: true, index: { schemaVersion: 1, packages: [publisher] } });
+  });
+
+  it("applies the same strictness: unknown keys, digest, duplicates, reserved scope", () => {
+    expect(parseHubPackageIndex(index([{ ...publisher, category: "x" }]))).toEqual({ ok: false, reason: 'packages[0]: unknown key "category"' });
+    expect(parseHubPackageIndex(index([{ ...publisher, digest: "sha256:zz" }])).ok).toBe(false);
+    expect(parseHubPackageIndex(index([publisher, publisher]))).toEqual({ ok: false, reason: "Duplicate entry for @opengroow/publisher-postiz" });
+    expect(parseHubPackageIndex(index([{ ...publisher, verification: "community" }])).ok).toBe(false);
+  });
+
+  it("reads publishers.json of the configured hub repository", async () => {
+    const fetch = vi.fn(async (_url: string) => new Response(JSON.stringify(index([publisher]))));
+    const result = await fetchHubPackageIndex({ repository: "acme/hub", ref: "main", kind: "publisher", fetch });
+    expect(fetch).toHaveBeenCalledWith("https://raw.githubusercontent.com/acme/hub/main/publishers.json");
+    expect(result.packages[0]?.id).toBe("@opengroow/publisher-postiz");
+    await expect(
+      fetchHubPackageIndex({ repository: "acme/hub", ref: "main", kind: "publisher", fetch: async () => new Response(null, { status: 404 }) }),
+    ).rejects.toThrow(/HTTP 404/);
   });
 });
