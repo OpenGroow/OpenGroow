@@ -11,7 +11,7 @@ import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instanc
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { ActivationDialog } from "@/src/components/activation-dialog";
 import { AddAgentDialog } from "@/src/components/add-agent-dialog";
-import { TemplateUpdatesPanel } from "@/src/components/template-updates-panel";
+import { CheckTemplateUpdatesButton, TemplateUpdatesPanel } from "@/src/components/template-updates-panel";
 import { devActivationDefaults } from "@/src/utils/dev-activation-defaults";
 import { flatConfig } from "@/src/utils/agent-requirements";
 import { AgentsGallery } from "@/components/opengroow/agents-gallery";
@@ -162,6 +162,7 @@ export function InstanceAgentsContent({
         runtimeErrors={runtimeErrors}
         onAddAgent={() => setAddAgentOpen(true)}
         onActivate={(card) => (card.status === "error" ? handleRetryClick(card) : handleActivateClick(card))}
+        headerActions={<CheckTemplateUpdatesButton projectId={decodedInstanceId} />}
       />
 
       <TemplateUpdatesPanel projectId={decodedInstanceId} />

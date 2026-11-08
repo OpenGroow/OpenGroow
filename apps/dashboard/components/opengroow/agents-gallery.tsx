@@ -19,6 +19,8 @@ type AgentsGalleryProps = {
   runtimeErrors: Record<string, string>;
   onAddAgent: () => void;
   onActivate: (card: AgentCardState) => void;
+  /** Shown before Add Agent in the header (e.g. Check for updates). */
+  headerActions?: React.ReactNode;
 };
 
 /** Presentation of the Agents page: header, aggregates, filters and the card grid. */
@@ -29,6 +31,7 @@ export function AgentsGallery({
   runtimeErrors,
   onAddAgent,
   onActivate,
+  headerActions,
 }: AgentsGalleryProps) {
   // UI-only filtering of the cards already on the page.
   const [filter, setFilter] = React.useState<string>("all");
@@ -63,10 +66,13 @@ export function AgentsGallery({
         title="Agents"
         description="Your AI growth team, organized by role and ready to work."
         action={
-          <Button variant="glow" size="lg" type="button" onClick={onAddAgent}>
-            <Plus />
-            Add Agent
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {headerActions}
+            <Button variant="glow" size="lg" type="button" onClick={onAddAgent}>
+              <Plus />
+              Add Agent
+            </Button>
+          </div>
         }
       />
 

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -53,23 +54,9 @@ export function planSections(offer: UpdateOffer): Section[] {
 export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
   const offers = useQuery(api.project_templates.updates, { projectId });
   const applyUpdate = useMutation(api.project_templates.applyUpdate);
-  const checkHubUpdates = useAction(api.project_templates_node.checkHubUpdates);
   const [reviewing, setReviewing] = React.useState<UpdateOffer | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
-
-  // Asks the hub for newer versions of the Project's hub Templates: a newer one
-  // is offered (not applied) and appears below through `updates`. Best effort:
-  // a hub that cannot be read, or a viewer who is not the owner, offers nothing.
-  React.useEffect(() => {
-    void (async () => {
-      try {
-        await checkHubUpdates({ instanceId: projectId });
-      } catch {
-        // Nothing offered: the installed versions keep working.
-      }
-    })();
-  }, [projectId, checkHubUpdates]);
 
   if (!offers || offers.length === 0) return null;
 
@@ -161,6 +148,46 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+/**
+ * Asks the hub, on demand, for newer versions of the Project's hub Templates
+ * (`checkHubUpdates`): a newer one is offered (not applied) and appears in
+ * `TemplateUpdatesPanel`. The hub is read only when the button is clicked.
+ */
+export function CheckTemplateUpdatesButton({ projectId }: { projectId: string }) {
+  const offers = useQuery(api.project_templates.updates, { projectId });
+  const checkHubUpdates = useAction(api.project_templates_node.checkHubUpdates);
+  const [state, setState] = React.useState<{ status: "checking" | "done" | "error"; message?: string } | null>(null);
+
+  async function check() {
+    setState({ status: "checking" });
+    try {
+      const result = await checkHubUpdates({ instanceId: projectId });
+      if (result.error) {
+        setState({ status: "error", message: result.error });
+        return;
+      }
+      // An update offered earlier and not applied yet is still available.
+      const available = result.offered.length > 0 || (offers?.length ?? 0) > 0;
+      setState({ status: "done", message: available ? "Updates available below" : "Up to date" });
+    } catch (error) {
+      setState({ status: "error", message: error instanceof Error ? error.message : "The hub could not be read" });
+    }
+  }
+
+  const checking = state?.status === "checking";
+  return (
+    <>
+      {state && !checking ? (
+        <span className={`text-sm ${state.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>{state.message}</span>
+      ) : null}
+      <Button type="button" variant="outline" size="lg" disabled={checking} onClick={() => void check()}>
+        {checking ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+        Check for updates
+      </Button>
     </>
   );
 }

@@ -506,7 +506,8 @@ describe("InstanceAgentsContent", () => {
     expect(card?.textContent).not.toContain("Open");
     // The card itself carries no button: the buttons are page-level.
     expect(document.querySelectorAll('[data-slot="agent-card"] button')).toHaveLength(0);
-    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim()).slice(0, 3)).toEqual([
+    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim()).slice(0, 4)).toEqual([
+      "Check for updates",
       "Add Agent",
       "All",
       "Active",

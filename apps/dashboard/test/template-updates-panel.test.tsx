@@ -4,13 +4,13 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TemplateUpdatesPanel } from "../src/components/template-updates-panel";
+import { CheckTemplateUpdatesButton, TemplateUpdatesPanel } from "../src/components/template-updates-panel";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
 const applyUpdateMock = vi.fn();
-const checkHubUpdatesMock = vi.fn(async () => ({ offered: [] }));
+const checkHubUpdatesMock = vi.fn(async (): Promise<{ offered: Array<{ templateId: string; version: string }>; error?: string }> => ({ offered: [] }));
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
@@ -74,13 +74,29 @@ describe("TemplateUpdatesPanel", () => {
   const button = (text: string) =>
     Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes(text));
 
-  it("asks the hub for newer versions of the Project's Templates when shown, and survives a failure", async () => {
+  it("does not read the hub when shown: only Check for updates does, saying Up to date or why it failed", async () => {
     useQueryMock.mockReturnValue([]);
     checkHubUpdatesMock.mockClear();
-    checkHubUpdatesMock.mockRejectedValueOnce(new Error("offline"));
     await render();
+    expect(checkHubUpdatesMock).not.toHaveBeenCalled();
+
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [] });
+    await act(async () => root.render(<CheckTemplateUpdatesButton projectId="proj" />));
+    await click(button("Check for updates"));
     expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "proj" });
-    expect(container.textContent).toBe("");
+    expect(container.textContent).toContain("Up to date");
+
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [], error: "offline" });
+    await click(button("Check for updates"));
+    expect(container.textContent).toContain("offline");
+  });
+
+  it("says updates are available when the check offers one, or one was offered before", async () => {
+    useQueryMock.mockReturnValue([offer()]);
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [] });
+    await act(async () => root.render(<CheckTemplateUpdatesButton projectId="proj" />));
+    await click(button("Check for updates"));
+    expect(container.textContent).toContain("Updates available below");
   });
 
   it("renders nothing when no update is available", async () => {
