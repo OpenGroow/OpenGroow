@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as agent_deletion from "../agent_deletion.js";
 import type * as agent_hmac from "../agent_hmac.js";
 import type * as auth from "../auth.js";
 import type * as auth_config from "../auth_config.js";
@@ -154,6 +155,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agent_deletion: typeof agent_deletion;
   agent_hmac: typeof agent_hmac;
   auth: typeof auth;
   auth_config: typeof auth_config;

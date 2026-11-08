@@ -4,7 +4,7 @@ import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Ellipsis, Pencil, Power } from "lucide-react";
+import { Pencil, Power, Trash2 } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
@@ -16,11 +16,13 @@ import { AvailableMissionTypes } from "@/src/components/available-mission-types"
 import { McpUrlOverrides } from "@/src/components/mcp-url-overrides";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/opengroow/agent-avatar";
 import { AGENT_STATUS } from "@/components/opengroow/agent-presentation";
 import { StatusBadge } from "@/components/opengroow/status-badge";
@@ -40,11 +42,12 @@ function useAgentCard(instanceId: string, manifest: AgentManifest) {
   return { runtimeInstanceId, card };
 }
 
-type Busy = "deactivate" | "hidden";
+type Busy = "deactivate" | "delete" | "hidden";
 
 function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHref: string) {
   const router = useRouter();
   const deactivateAction = useAction(api.project_agents_node.deactivateProjectAgent);
+  const deleteAction = useAction(api.project_agents_node.deleteProjectAgent);
   const reconfigureAction = useAction(api.project_agents_node.reconfigureProjectAgent);
   const applyHiddenMissionTypesAction = useAction(api.project_agents_node.applyHiddenMissionTypes);
   const [busy, setBusy] = React.useState<Busy | null>(null);
@@ -80,6 +83,10 @@ function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHr
     // An inactive Agent has no workspace-backed tabs, so leave its page for the list.
     deactivate: async () => {
       if (await run("deactivate", "Deactivation failed", () => deactivateAction(target))) router.push(agentsHref);
+    },
+    // Deletes the Agent and its whole history: the page no longer exists afterwards.
+    remove: async () => {
+      if (await run("delete", "Deletion failed", () => deleteAction(target))) router.push(agentsHref);
     },
     // Presentation only (ADR-053): the action stores the choice and syncs the
     // workspace so it carries only the instruction files of the types left visible.
@@ -147,8 +154,7 @@ function AgentPageFrame({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { runtimeInstanceId, card } = useAgentCard(instanceId, manifest);
-  const actions = useAgentActions(runtimeInstanceId, manifest.id, `/projects/${encodeURIComponent(instanceId)}/agents`);
+  const { card } = useAgentCard(instanceId, manifest);
   const base = `/projects/${encodeURIComponent(instanceId)}/agents/${encodeURIComponent(manifest.id)}`;
   // Files and Logs read the Agent's workspace, which only an active Agent has.
   const hasWorkspace = card?.status === "active" && card.workspaceKey !== undefined;
@@ -175,28 +181,7 @@ function AgentPageFrame({
               <p className="m-0 max-w-2xl text-base leading-7 text-muted-foreground">{manifest.description}</p>
             </div>
           </div>
-          {card?.status === "active" ? (
-            <div className="flex gap-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<Button variant="outline" size="icon-lg" aria-label="More actions" />}
-                >
-                  <Ellipsis />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    disabled={actions.busy === "deactivate"}
-                    onClick={() => void actions.deactivate()}
-                  >
-                    <Power />
-                    {actions.busy === "deactivate" ? "Deactivating…" : "Deactivate"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
         </div>
-        {actions.error ? <ErrorMessage message={actions.error} /> : null}
         <TabNav items={tabs} current={pathname} label="Agent sections" />
       </header>
       {children}
@@ -232,7 +217,7 @@ function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; ma
   const { runtimeInstanceId, card } = useAgentCard(instanceId, manifest);
   if (!card) return null;
 
-  // Deactivate lives in the page header, which shows its errors.
+  // Deactivate and Delete live in Settings, which shows their errors.
   // The MCP's dashboardUrl only goes with the persisted error (issue #320).
   const persistedError = card.status === "error" ? card.errorMessage : undefined;
   return (
@@ -312,6 +297,14 @@ function AgentSettingsContent({
       {overridableMcpUrls ? (
         <McpUrlOverrides instanceId={instanceId} manifest={manifest} />
       ) : null}
+      <AgentDangerZone
+        name={manifest.name}
+        active={active}
+        busy={actions.busy}
+        error={actions.error}
+        onDeactivate={() => void actions.deactivate()}
+        onDelete={() => void actions.remove()}
+      />
       {editing ? (
         <ActivationDialog
           manifest={manifest}
@@ -327,5 +320,83 @@ function AgentSettingsContent({
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Deactivate (reversible: the Agent leaves OpenClaw, its configuration and
+ * history stay) and Delete (irreversible: the Agent, its Template, Schedules
+ * and every Mission with its history), apart from the everyday settings.
+ */
+function AgentDangerZone({
+  name,
+  active,
+  busy,
+  error,
+  onDeactivate,
+  onDelete,
+}: {
+  name: string;
+  active: boolean;
+  busy: Busy | null;
+  error?: string;
+  onDeactivate: () => void;
+  onDelete: () => void;
+}) {
+  const [confirming, setConfirming] = React.useState(false);
+  return (
+    <section className="grid gap-4 rounded-2xl border border-destructive/40 p-5" aria-label="Danger zone">
+      <h2 className="m-0 text-base font-semibold text-foreground">Danger zone</h2>
+      {active ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="grid gap-1">
+            <span className="text-sm font-medium text-foreground">Deactivate this Agent</span>
+            <span className="text-sm text-muted-foreground">
+              It stops and leaves OpenClaw. Its configuration and its Missions are kept: activate it again from the Agents list.
+            </span>
+          </div>
+          <Button variant="outline" type="button" loading={busy === "deactivate"} disabled={busy !== null} onClick={onDeactivate}>
+            {busy === "deactivate" ? null : <Power />}
+            {busy === "deactivate" ? "Deactivating…" : "Deactivate"}
+          </Button>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid gap-1">
+          <span className="text-sm font-medium text-foreground">Delete this Agent</span>
+          <span className="text-sm text-muted-foreground">
+            Removes the Agent, its Template, its Schedules and all its Missions with their history. This cannot be undone.
+          </span>
+        </div>
+        <Button variant="destructive" type="button" disabled={busy !== null} onClick={() => setConfirming(true)}>
+          <Trash2 />
+          Delete
+        </Button>
+      </div>
+      <Dialog open={confirming} onOpenChange={(open) => busy !== "delete" && setConfirming(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {name}?</DialogTitle>
+            <DialogDescription>
+              The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are
+              deleted. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {error && busy === null ? (
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" type="button" disabled={busy === "delete"} onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" type="button" loading={busy === "delete"} onClick={onDelete}>
+              {busy === "delete" ? "Deleting…" : `Delete ${name}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }

@@ -24,6 +24,7 @@ const useMutationMock = vi.fn();
 const deactivateMock = vi.fn();
 const reconfigureMock = vi.fn();
 const applyHiddenMissionTypesMock = vi.fn();
+const deleteMock = vi.fn();
 let pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
 
 const pushMock = vi.fn();
@@ -62,6 +63,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_agents_node: {
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
+      deleteProjectAgent: "project_agents_node.deleteProjectAgent",
       applyHiddenMissionTypes: "project_agents_node.applyHiddenMissionTypes",
       reconfigureProjectAgent: "project_agents_node.reconfigureProjectAgent",
     },
@@ -119,7 +121,7 @@ describe("Agent page", () => {
 
   beforeEach(() => {
     overview = NO_MISSIONS;
-    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock]) {
+    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, deleteMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock]) {
       m.mockReset();
     }
     pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
@@ -128,6 +130,7 @@ describe("Agent page", () => {
     useActionMock.mockImplementation((action: string) => {
       if (action === "project_agents_node.applyHiddenMissionTypes") return applyHiddenMissionTypesMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
+      if (action === "project_agents_node.deleteProjectAgent") return deleteMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return reconfigureMock;
       throw new Error(`Unexpected action: ${action}`);
     });
@@ -192,20 +195,13 @@ describe("Agent page", () => {
       </AgentPageLayout>
     );
 
-    it("has no Refresh (changes sync automatically) and deactivates an active Agent from the more-actions menu", async () => {
+    it("has no actions in the header: no Refresh (changes sync on their own), no more-actions menu", async () => {
       agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
-      deactivateMock.mockResolvedValue({ status: "ok" });
       await render(layout("@opengroow/hello"));
 
       expect(button("Refresh")).toBeUndefined();
       expect(button("Deactivate")).toBeUndefined();
-      await act(async () => (document.querySelector('[aria-label="More actions"]') as HTMLElement).click());
-      const deactivate = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) =>
-        el.textContent?.includes("Deactivate"),
-      ) as HTMLElement;
-      await act(async () => deactivate.click());
-      expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
-      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+      expect(document.querySelector('[aria-label="More actions"]')).toBeNull();
     });
 
     it("shows the stored error of a failed Agent, without Refresh or the menu", async () => {
@@ -263,6 +259,36 @@ describe("Agent page", () => {
   });
 
   describe("Settings", () => {
+    it("deactivates an active Agent from the danger zone and goes back to the list", async () => {
+      agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+      deactivateMock.mockResolvedValue({ status: "inactive" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      await act(async () => button("Deactivate")!.click());
+      expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+    });
+
+    it("deletes the Agent only once confirmed, and keeps the dialog open with the error when refused", async () => {
+      agents({ templateId: "@opengroow/hello", status: "inactive" });
+      deleteMock.mockResolvedValueOnce({ status: "error", errorMessage: "Cannot delete the Agent while one of its Runs is in flight" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      expect(button("Deactivate")).toBeUndefined();
+      await act(async () => button("Delete")!.click());
+      expect(deleteMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("This cannot be undone");
+
+      await act(async () => button("Delete Hello")!.click());
+      expect(deleteMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(pushMock).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain("in flight");
+
+      deleteMock.mockResolvedValueOnce({ status: "deleted" });
+      await act(async () => button("Delete Hello")!.click());
+      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+    });
+
     it("offers Edit config only when the Template has editable fields", async () => {
       agents({ templateId: "@opengroow/engagement", status: "active", workspaceKey: "ws-se" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/engagement" />);
