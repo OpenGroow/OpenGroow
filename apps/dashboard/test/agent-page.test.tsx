@@ -21,10 +21,9 @@ const notFoundMock = vi.fn(() => {
 const useQueryMock = vi.fn();
 const useActionMock = vi.fn();
 const useMutationMock = vi.fn();
-const refreshMock = vi.fn();
 const deactivateMock = vi.fn();
 const reconfigureMock = vi.fn();
-const setHiddenMissionTypesMock = vi.fn();
+const applyHiddenMissionTypesMock = vi.fn();
 let pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
 
 const pushMock = vi.fn();
@@ -63,7 +62,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_agents_node: {
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
-      refreshProjectAgent: "project_agents_node.refreshProjectAgent",
+      applyHiddenMissionTypes: "project_agents_node.applyHiddenMissionTypes",
       reconfigureProjectAgent: "project_agents_node.reconfigureProjectAgent",
     },
   },
@@ -120,20 +119,19 @@ describe("Agent page", () => {
 
   beforeEach(() => {
     overview = NO_MISSIONS;
-    for (const m of [useQueryMock, useActionMock, useMutationMock, refreshMock, deactivateMock, reconfigureMock, setHiddenMissionTypesMock, pushMock]) {
+    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock]) {
       m.mockReset();
     }
     pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
     serveProjectManifests(["video-demo", "hello", "engagement", "seo", "visual-social"].map(manifestOf));
     agents();
     useActionMock.mockImplementation((action: string) => {
-      if (action === "project_agents_node.refreshProjectAgent") return refreshMock;
+      if (action === "project_agents_node.applyHiddenMissionTypes") return applyHiddenMissionTypesMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return reconfigureMock;
       throw new Error(`Unexpected action: ${action}`);
     });
     useMutationMock.mockImplementation((mutation: string) => {
-      if (mutation === "project_agents.setHiddenMissionTypes") return setHiddenMissionTypesMock;
       throw new Error(`Unexpected mutation: ${mutation}`);
     });
     container = document.createElement("div");
@@ -194,14 +192,12 @@ describe("Agent page", () => {
       </AgentPageLayout>
     );
 
-    it("lets an active Agent be refreshed, and deactivated from the more-actions menu", async () => {
+    it("has no Refresh (changes sync automatically) and deactivates an active Agent from the more-actions menu", async () => {
       agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
-      refreshMock.mockResolvedValue({ status: "refreshed" });
       deactivateMock.mockResolvedValue({ status: "ok" });
       await render(layout("@opengroow/hello"));
 
-      await act(async () => button("Refresh")!.click());
-      expect(refreshMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(button("Refresh")).toBeUndefined();
       expect(button("Deactivate")).toBeUndefined();
       await act(async () => (document.querySelector('[aria-label="More actions"]') as HTMLElement).click());
       const deactivate = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) =>
@@ -266,26 +262,6 @@ describe("Agent page", () => {
     });
   });
 
-  describe("Header refresh", () => {
-    it("shows a spinner while refreshing and the refresh error afterwards", async () => {
-      agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
-      let resolve!: (v: { status: "error"; errorMessage: string }) => void;
-      refreshMock.mockReturnValue(new Promise((r) => (resolve = r)));
-      await render(
-        <AgentPageLayout instanceId="instance-1" templateId="@opengroow/hello">
-          <p>content</p>
-        </AgentPageLayout>,
-      );
-
-      await act(async () => button("Refresh")!.click());
-      expect(button("Refreshing…")!.disabled).toBe(true);
-
-      await act(async () => resolve({ status: "error", errorMessage: "Workspace write failed" }));
-      expect(button("Refresh")!.disabled).toBe(false);
-      expect(document.body.textContent).toContain("Workspace write failed");
-    });
-  });
-
   describe("Settings", () => {
     it("offers Edit config only when the Template has editable fields", async () => {
       agents({ templateId: "@opengroow/engagement", status: "active", workspaceKey: "ws-se" });
@@ -344,8 +320,8 @@ describe("Agent page", () => {
           serverName: "article-mcp",
           url: "https://my-seo.internal/mcp",
         });
-        // Convex pushes the new URL to the running Agent itself: no refresh.
-        expect(refreshMock).not.toHaveBeenCalled();
+        // Convex pushes the new URL to the running Agent itself: no workspace sync from the page.
+        expect(applyHiddenMissionTypesMock).not.toHaveBeenCalled();
       });
     });
 
@@ -390,15 +366,14 @@ describe("Agent page", () => {
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 
-    it("lists Available Mission types inverted against the deny-list, stores the unchecked ones, then refreshes", async () => {
+    it("lists Available Mission types inverted against the deny-list and applies the unchecked ones", async () => {
       agents({
         templateId: "@opengroow/video-demo",
         status: "active",
         workspaceKey: "ws-video",
         hiddenMissionTypes: ["create_chat_mock_video"],
       });
-      setHiddenMissionTypesMock.mockResolvedValue(undefined);
-      refreshMock.mockResolvedValue({ status: "refreshed" });
+      applyHiddenMissionTypesMock.mockResolvedValue({ status: "refreshed" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
 
       const checkbox = (label: string) =>
@@ -412,12 +387,11 @@ describe("Agent page", () => {
 
       await act(async () => checkbox("Create letter video").click());
       await act(async () => button("Save changes")!.click());
-      expect(setHiddenMissionTypesMock).toHaveBeenCalledWith({
+      expect(applyHiddenMissionTypesMock).toHaveBeenCalledWith({
         instanceId: "instance-1",
         templateId: "@opengroow/video-demo",
         hiddenMissionTypes: ["lym_create_letter_video", "create_chat_mock_video"],
       });
-      expect(refreshMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/video-demo" });
     });
 
     it("explains that there is nothing to configure when an active Agent has no editable requirement and a single Mission type", async () => {

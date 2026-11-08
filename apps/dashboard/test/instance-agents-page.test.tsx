@@ -14,7 +14,6 @@ import { InstanceAgentsContent } from "../src/components/instance-agents-page";
 const activateMock = vi.fn();
 const addAgentMock = vi.fn();
 const deactivateMock = vi.fn();
-const refreshMock = vi.fn();
 const setHiddenMissionTypesMock = vi.fn();
 const updateConfigMock = vi.fn();
 const retryStatusCheckMock = vi.fn();
@@ -62,7 +61,7 @@ vi.mock("@convex/_generated/api", () => ({
       activateProjectAgent: "project_agents_node.activateProjectAgent",
       addProjectAgent: "project_agents_node.addProjectAgent",
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
-      refreshProjectAgent: "project_agents_node.refreshProjectAgent",
+      applyHiddenMissionTypes: "project_agents_node.applyHiddenMissionTypes",
       reconfigureProjectAgent: "project_agents_node.reconfigureProjectAgent",
       retryProjectAgentStatusCheck: "project_agents_node.retryProjectAgentStatusCheck",
     },
@@ -419,7 +418,6 @@ describe("InstanceAgentsContent", () => {
     addAgentMock.mockReset();
     serveCatalogue([]);
     deactivateMock.mockReset();
-    refreshMock.mockReset();
     setHiddenMissionTypesMock.mockReset();
     useMutationMock.mockReset();
     updateConfigMock.mockReset();
@@ -446,7 +444,6 @@ describe("InstanceAgentsContent", () => {
       if (action === "project_agents_node.activateProjectAgent") return activateMock;
       if (action === "project_agents_node.addProjectAgent") return addAgentMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
-      if (action === "project_agents_node.refreshProjectAgent") return refreshMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return updateConfigMock;
       if (action === "project_agents_node.retryProjectAgentStatusCheck") return retryStatusCheckMock;
       if (action.startsWith("project_templates_node.")) return vi.fn();

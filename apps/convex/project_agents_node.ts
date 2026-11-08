@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
+import { api } from "./_generated/api.js";
 import { v, type ObjectType } from "convex/values";
 import {
   flattenRequirementFields,
@@ -426,19 +427,42 @@ async function refreshFromRegistry(
   }
 }
 
-export const refreshProjectAgent = action({
+/**
+ * Stores the Mission types hidden from an Agent (ADR-053, presentation only)
+ * and brings its workspace in line at once: the instruction files of hidden
+ * types are removed, those of visible types written. Returns the sync outcome
+ * so the dashboard can show a failure.
+ */
+export const applyHiddenMissionTypes = action({
+  args: { instanceId: v.string(), templateId: v.string(), hiddenMissionTypes: v.array(v.string()) },
+  handler: async (ctx, args): Promise<RefreshResult> => {
+    const user = await requireAuthenticatedUser(ctx);
+    const ownership = await requireInstanceOwner(ctx, args.instanceId, user);
+    if (!ownership.ok) return { status: "error", errorMessage: ownership.errorMessage };
+    await ctx.runMutation(api.project_agents.setHiddenMissionTypes, args);
+    const { pluginsChanged, ...result } = await refreshFromRegistry(ctx, args.instanceId, args.templateId, {
+      ensureWorkspace: false,
+    });
+    if (pluginsChanged) await restartGatewayForPlugins(ctx, args.instanceId);
+    return result;
+  },
+});
+
+/**
+ * Re-pushes one active Agent's workspace files, skills and plugins from the
+ * registry. Not in the dashboard: every change to a Template (install, linked
+ * folder save, applied update, relinked Instance) already reconciles the
+ * Agent, and deactivating then activating it provisions it again. Kept as an
+ * operator escape hatch:
+ *   npx convex run project_agents_node:refreshProjectAgent '{"instanceId":"…","templateId":"…"}'
+ */
+export const refreshProjectAgent = internalAction({
   args: {
     instanceId: v.string(),
     templateId: v.string(),
   },
   handler: async (ctx, args): Promise<RefreshResult> => {
     const { instanceId, templateId } = args;
-
-    const user = await requireAuthenticatedUser(ctx);
-    const ownership = await requireInstanceOwner(ctx, instanceId, user);
-    if (!ownership.ok) {
-      return { status: "error", errorMessage: ownership.errorMessage };
-    }
 
     const { pluginsChanged, ...result } = await refreshFromRegistry(ctx, instanceId, templateId, {
       ensureWorkspace: false,

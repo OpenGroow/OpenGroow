@@ -2,9 +2,9 @@
 
 import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Ellipsis, Pencil, Power, RefreshCw } from "lucide-react";
+import { Ellipsis, Pencil, Power } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
@@ -40,14 +40,13 @@ function useAgentCard(instanceId: string, manifest: AgentManifest) {
   return { runtimeInstanceId, card };
 }
 
-type Busy = "refresh" | "deactivate" | "hidden";
+type Busy = "deactivate" | "hidden";
 
 function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHref: string) {
   const router = useRouter();
-  const refreshAction = useAction(api.project_agents_node.refreshProjectAgent);
   const deactivateAction = useAction(api.project_agents_node.deactivateProjectAgent);
   const reconfigureAction = useAction(api.project_agents_node.reconfigureProjectAgent);
-  const setHiddenMissionTypes = useMutation(api.project_agents.setHiddenMissionTypes);
+  const applyHiddenMissionTypesAction = useAction(api.project_agents_node.applyHiddenMissionTypes);
   const [busy, setBusy] = React.useState<Busy | null>(null);
   const [error, setError] = React.useState<string | undefined>();
 
@@ -78,18 +77,16 @@ function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHr
   return {
     busy,
     error,
-    refresh: () => run("refresh", "Refresh failed", () => refreshAction(target)),
     // An inactive Agent has no workspace-backed tabs, so leave its page for the list.
     deactivate: async () => {
       if (await run("deactivate", "Deactivation failed", () => deactivateAction(target))) router.push(agentsHref);
     },
-    // Presentation only (ADR-053): store the choice, then refresh so the
-    // workspace carries only the instruction files of the types left visible.
+    // Presentation only (ADR-053): the action stores the choice and syncs the
+    // workspace so it carries only the instruction files of the types left visible.
     applyHiddenMissionTypes: (hiddenMissionTypes: string[]) =>
-      run("hidden", "Saving hidden Mission types failed", async () => {
-        await setHiddenMissionTypes({ ...target, hiddenMissionTypes });
-        return refreshAction(target);
-      }),
+      run("hidden", "Saving hidden Mission types failed", () =>
+        applyHiddenMissionTypesAction({ ...target, hiddenMissionTypes }),
+      ),
     reconfigure: async (userConfig: Record<string, string>) => {
       const result = await reconfigureAction({ ...target, userConfig });
       if (result.status === "error") throw new Error(result.errorMessage);
@@ -180,16 +177,6 @@ function AgentPageFrame({
           </div>
           {card?.status === "active" ? (
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                size="lg"
-                type="button"
-                loading={actions.busy === "refresh"}
-                onClick={() => void actions.refresh()}
-              >
-                {actions.busy === "refresh" ? null : <RefreshCw />}
-                {actions.busy === "refresh" ? "Refreshing…" : "Refresh"}
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={<Button variant="outline" size="icon-lg" aria-label="More actions" />}
@@ -245,7 +232,7 @@ function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; ma
   const { runtimeInstanceId, card } = useAgentCard(instanceId, manifest);
   if (!card) return null;
 
-  // Refresh and Deactivate live in the page header, which shows their errors.
+  // Deactivate lives in the page header, which shows its errors.
   // The MCP's dashboardUrl only goes with the persisted error (issue #320).
   const persistedError = card.status === "error" ? card.errorMessage : undefined;
   return (
