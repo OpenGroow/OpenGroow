@@ -449,10 +449,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         </Card>
         {installedVersion ? (
           <Card className="gap-4 p-5" data-testid="package-updates">
-            <div className="grid gap-1">
-              <h2 className="m-0 text-base font-semibold">Updates</h2>
-              <p className="m-0 text-sm text-muted-foreground">Check whether a newer version of this publisher is available.</p>
-            </div>
+            <h2 className="m-0 text-base font-semibold">Updates</h2>
             <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center">
               <div className="grid flex-1 gap-1">
                 <span className="text-sm text-muted-foreground">Current version</span>
