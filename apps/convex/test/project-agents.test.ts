@@ -1783,7 +1783,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-refresh", "create_article.md"))
       .mockResolvedValueOnce(fileWriteResult("ws-refresh", "internal_linking.md"));
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
@@ -1842,11 +1842,48 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-hidden", "AGENTS.md"))
       .mockResolvedValueOnce(fileWriteResult("ws-hidden", "create_article.md"));
 
-    await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
 
+    const commands = await t.run(async (ctx) => ctx.db.query("commands").collect());
+    const written = commands
+      .filter((command) => command.type === "runtime.workspace.file.write")
+      .map((command) => (command.payload as { filePath: string }).filePath);
+    expect(written).toEqual(["AGENTS.md", "create_article.md"]);
+  });
+
+  it("applyHiddenMissionTypes stores the hidden types and syncs the workspace without their instruction files (ADR-053)", async () => {
+    const t = convexTest(schema, modules);
+    const waitForRuntimeEvent = await getWaitForRuntimeEvent();
+    await seedInstance(t);
+    await seedProjectAgent(t, {
+      workspaceKey: "ws-apply-hidden",
+      mcpServerKeys: SEO_MCP_KEYS,
+      config: { seoProjectId: "proj-existing", apiKey: "stored-key" },
+    });
+
+    waitForRuntimeEvent
+      .mockResolvedValueOnce(workspaceListResult("ws-apply-hidden"))
+      .mockResolvedValueOnce({
+        status: 200, found: true, type: RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT,
+        payload: { ok: true, commandId: "cmd-register", instanceId: INSTANCE_ID, data: { agentId: TEMPLATE_ID, alreadyRegistered: true, registered: true, configured: false, workspace: "/home/node/.openclaw/workspace-ws-apply-hidden" } },
+      });
+    addFileDeleteMocks(waitForRuntimeEvent, "ws-apply-hidden");
+    waitForRuntimeEvent
+      .mockResolvedValueOnce(fileWriteResult("ws-apply-hidden", "AGENTS.md"))
+      .mockResolvedValueOnce(fileWriteResult("ws-apply-hidden", "create_article.md"));
+
+    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.applyHiddenMissionTypes, {
+      instanceId: INSTANCE_ID,
+      templateId: TEMPLATE_ID,
+      hiddenMissionTypes: ["internal_linking"],
+    });
+
+    expect(result).toEqual({ status: "refreshed", workspaceKey: "ws-apply-hidden" });
+    const record = await t.withIdentity(TEST_USER).query(api.project_agents.get, { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID });
+    expect(record?.hiddenMissionTypes).toEqual(["internal_linking"]);
     const commands = await t.run(async (ctx) => ctx.db.query("commands").collect());
     const written = commands
       .filter((command) => command.type === "runtime.workspace.file.write")
@@ -1876,7 +1913,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-hidden-delete", "AGENTS.md"))
       .mockResolvedValueOnce(fileWriteResult("ws-hidden-delete", "create_article.md"));
 
-    await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
@@ -1918,7 +1955,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-preserve-refresh", "AGENTS.md"));
     addSeoMissionInstructionWriteMocks(waitForRuntimeEvent, "ws-preserve-refresh");
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
@@ -1954,7 +1991,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-missing-native", "AGENTS.md"));
     addSeoMissionInstructionWriteMocks(waitForRuntimeEvent, "ws-missing-native");
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
@@ -1981,7 +2018,7 @@ describe("refreshProjectAgent", () => {
     const missing = convexTest(schema, modules);
     await seedInstance(missing);
     await expect(
-      missing.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+      missing.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
         instanceId: INSTANCE_ID,
         templateId: TEMPLATE_ID,
       }),
@@ -1991,7 +2028,7 @@ describe("refreshProjectAgent", () => {
     await seedInstance(inactive);
     await seedProjectAgent(inactive, { status: "inactive", workspaceKey: "ws-inactive" });
     await expect(
-      inactive.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+      inactive.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
         instanceId: INSTANCE_ID,
         templateId: TEMPLATE_ID,
       }),
@@ -2001,7 +2038,7 @@ describe("refreshProjectAgent", () => {
     await seedInstance(noWorkspace);
     await seedProjectAgent(noWorkspace);
     await expect(
-      noWorkspace.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+      noWorkspace.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
         instanceId: INSTANCE_ID,
         templateId: TEMPLATE_ID,
       }),
@@ -2027,7 +2064,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-agents-failure", "AGENTS.md", false, "AGENTS denied"));
 
     await expect(
-      agentsFailure.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+      agentsFailure.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
         instanceId: INSTANCE_ID,
         templateId: TEMPLATE_ID,
       }),
@@ -2066,7 +2103,7 @@ describe("refreshProjectAgent", () => {
 
     await expect(
       instructionFailure.withIdentity(TEST_USER).action(
-        api.project_agents_node.refreshProjectAgent,
+        internal.project_agents_node.refreshProjectAgent,
         {
           instanceId: INSTANCE_ID,
           templateId: TEMPLATE_ID,
@@ -2095,7 +2132,7 @@ describe("refreshProjectAgent", () => {
       .mockResolvedValueOnce(fileWriteResult("ws-no-activation", "AGENTS.md"));
     addSeoMissionInstructionWriteMocks(waitForRuntimeEvent, "ws-no-activation");
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: TEMPLATE_ID,
     });
@@ -2314,7 +2351,7 @@ describe("Template-declared Agent Skills (issue #222)", () => {
       })
       .mockResolvedValueOnce(pluginsInstallResult(false));
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2366,7 +2403,7 @@ describe("Template-declared Agent Skills (issue #222)", () => {
         payload: { ok: false, commandId: "cmd-skill-install", instanceId: INSTANCE_ID, error: "network error" },
       });
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2415,7 +2452,7 @@ describe("Template-declared Agent Skills (issue #222)", () => {
         payload: { ok: true, commandId: "cmd-skill-install", instanceId: INSTANCE_ID, data: { output: "" } },
       });
 
-    await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2461,7 +2498,7 @@ describe("Template-declared Agent Skills (issue #222)", () => {
         payload: { ok: true, commandId: "cmd-skill-install", instanceId: INSTANCE_ID, data: { output: "" } },
       });
 
-    await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2541,7 +2578,7 @@ describe("Template-declared OpenClaw plugins (#661)", () => {
     const waitForRuntimeEvent = await mockRefreshUpToPlugins();
     waitForRuntimeEvent.mockResolvedValueOnce(pluginsInstallResult(true)).mockResolvedValueOnce(gatewayRestartResult());
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2560,7 +2597,7 @@ describe("Template-declared OpenClaw plugins (#661)", () => {
     const waitForRuntimeEvent = await mockRefreshUpToPlugins();
     waitForRuntimeEvent.mockResolvedValueOnce(pluginsInstallResult(false));
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2579,7 +2616,7 @@ describe("Template-declared OpenClaw plugins (#661)", () => {
       payload: { ok: false, commandId: "cmd-plugins-install", instanceId: INSTANCE_ID, error: "unsafe file path", data: { plugins: [] } },
     });
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -2599,7 +2636,7 @@ describe("Template-declared OpenClaw plugins (#661)", () => {
       payload: { ok: false, commandId: "cmd-plugins-install", instanceId: INSTANCE_ID },
     });
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SOCIAL_TEMPLATE_ID,
     });
@@ -3832,7 +3869,7 @@ describe("OpenClaw agent id derived from the Template id (issue #664)", () => {
     addFileDeleteMocks(waitForRuntimeEvent, "ws-legacy");
     waitForRuntimeEvent.mockResolvedValueOnce(fileWriteResult("ws-legacy", "AGENTS.md"));
 
-    const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.refreshProjectAgent, {
+    const result = await t.withIdentity(TEST_USER).action(internal.project_agents_node.refreshProjectAgent, {
       instanceId: INSTANCE_ID,
       templateId: SCOPED_ID,
     });

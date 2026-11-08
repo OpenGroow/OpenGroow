@@ -21,3 +21,7 @@ ADR-054 kept the official Templates compiled into Convex (`embedded.generated.ts
 
 - A deployment that skipped the migration loses the Agents whose Template is not installed until the migration is run (it is idempotent and can be run afterwards).
 - Editing a Template no longer requires a Convex redeploy.
+
+### Amendment (2026-11): no dashboard Refresh
+
+Every change to a Template already reconciles its active Agent: an install, a linked folder save, an applied update, a relinked Instance. The dashboard Refresh is removed; a running Agent receives a linked save on its own. When an Agent's workspace must be rebuilt anyway, deactivate and activate it. `project_agents_node:refreshProjectAgent` stays as an internal action for operators (`npx convex run`).

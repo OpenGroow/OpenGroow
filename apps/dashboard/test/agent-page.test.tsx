@@ -21,15 +21,16 @@ const notFoundMock = vi.fn(() => {
 const useQueryMock = vi.fn();
 const useActionMock = vi.fn();
 const useMutationMock = vi.fn();
-const refreshMock = vi.fn();
 const deactivateMock = vi.fn();
 const reconfigureMock = vi.fn();
-const setHiddenMissionTypesMock = vi.fn();
+const applyHiddenMissionTypesMock = vi.fn();
+const deleteMock = vi.fn();
 let pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
   notFound: () => notFoundMock(),
   usePathname: () => pathname,
 }));
@@ -40,8 +41,17 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+// The Template installs and update offers the Version card reads (reassigned by a test).
+let installs: Array<{ templateId: string; version: string; origin: string }> = [];
+let offers: Array<Record<string, unknown>> = [];
+const checkHubUpdatesMock = vi.fn();
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryWithTemplates(useQueryMock)(...args),
+  useQuery: (...args: unknown[]) =>
+    args[0] === "project_templates.origins"
+      ? installs
+      : args[0] === "project_templates.updates"
+        ? offers
+        : useQueryWithTemplates(useQueryMock)(...args),
   useAction: (...args: unknown[]) => useActionMock(...args),
   useMutation: (...args: unknown[]) => useMutationMock(...args),
 }));
@@ -50,7 +60,11 @@ vi.mock("@convex/_generated/api", () => ({
     project_templates: {
       listForProject: "project_templates.listForProject",
       getForProject: "project_templates.getForProject",
+      origins: "project_templates.origins",
+      updates: "project_templates.updates",
+      applyUpdate: "project_templates.applyUpdate",
     },
+    project_templates_node: { checkHubUpdates: "project_templates_node.checkHubUpdates" },
     template_mcp_overrides: {
       listForTemplate: "template_mcp_overrides.listForTemplate",
       set: "template_mcp_overrides.set",
@@ -59,11 +73,11 @@ vi.mock("@convex/_generated/api", () => ({
     missions: { overviewByTemplate: "missions.overviewByTemplate" },
     project_agents: {
       listByInstance: "project_agents.listByInstance",
-      setHiddenMissionTypes: "project_agents.setHiddenMissionTypes",
     },
     project_agents_node: {
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
-      refreshProjectAgent: "project_agents_node.refreshProjectAgent",
+      deleteProjectAgent: "project_agents_node.deleteProjectAgent",
+      applyHiddenMissionTypes: "project_agents_node.applyHiddenMissionTypes",
       reconfigureProjectAgent: "project_agents_node.reconfigureProjectAgent",
     },
   },
@@ -120,20 +134,26 @@ describe("Agent page", () => {
 
   beforeEach(() => {
     overview = NO_MISSIONS;
-    for (const m of [useQueryMock, useActionMock, useMutationMock, refreshMock, deactivateMock, reconfigureMock, setHiddenMissionTypesMock, pushMock]) {
+    installs = [];
+    offers = [];
+    checkHubUpdatesMock.mockReset();
+    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, deleteMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock, replaceMock]) {
       m.mockReset();
     }
+    notFoundMock.mockClear();
     pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
     serveProjectManifests(["video-demo", "hello", "engagement", "seo", "visual-social"].map(manifestOf));
     agents();
     useActionMock.mockImplementation((action: string) => {
-      if (action === "project_agents_node.refreshProjectAgent") return refreshMock;
+      if (action === "project_agents_node.applyHiddenMissionTypes") return applyHiddenMissionTypesMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
+      if (action === "project_agents_node.deleteProjectAgent") return deleteMock;
+      if (action === "project_templates_node.checkHubUpdates") return checkHubUpdatesMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return reconfigureMock;
       throw new Error(`Unexpected action: ${action}`);
     });
     useMutationMock.mockImplementation((mutation: string) => {
-      if (mutation === "project_agents.setHiddenMissionTypes") return setHiddenMissionTypesMock;
+      if (mutation === "project_templates.applyUpdate") return vi.fn();
       throw new Error(`Unexpected mutation: ${mutation}`);
     });
     container = document.createElement("div");
@@ -194,22 +214,13 @@ describe("Agent page", () => {
       </AgentPageLayout>
     );
 
-    it("lets an active Agent be refreshed, and deactivated from the more-actions menu", async () => {
+    it("has no actions in the header: no Refresh (changes sync on their own), no more-actions menu", async () => {
       agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
-      refreshMock.mockResolvedValue({ status: "refreshed" });
-      deactivateMock.mockResolvedValue({ status: "ok" });
       await render(layout("@opengroow/hello"));
 
-      await act(async () => button("Refresh")!.click());
-      expect(refreshMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(button("Refresh")).toBeUndefined();
       expect(button("Deactivate")).toBeUndefined();
-      await act(async () => (document.querySelector('[aria-label="More actions"]') as HTMLElement).click());
-      const deactivate = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) =>
-        el.textContent?.includes("Deactivate"),
-      ) as HTMLElement;
-      await act(async () => deactivate.click());
-      expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
-      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+      expect(document.querySelector('[aria-label="More actions"]')).toBeNull();
     });
 
     it("shows the stored error of a failed Agent, without Refresh or the menu", async () => {
@@ -266,27 +277,98 @@ describe("Agent page", () => {
     });
   });
 
-  describe("Header refresh", () => {
-    it("shows a spinner while refreshing and the refresh error afterwards", async () => {
-      agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
-      let resolve!: (v: { status: "error"; errorMessage: string }) => void;
-      refreshMock.mockReturnValue(new Promise((r) => (resolve = r)));
-      await render(
-        <AgentPageLayout instanceId="instance-1" templateId="@opengroow/hello">
-          <p>content</p>
-        </AgentPageLayout>,
-      );
-
-      await act(async () => button("Refresh")!.click());
-      expect(button("Refreshing…")!.disabled).toBe(true);
-
-      await act(async () => resolve({ status: "error", errorMessage: "Workspace write failed" }));
-      expect(button("Refresh")!.disabled).toBe(false);
-      expect(document.body.textContent).toContain("Workspace write failed");
-    });
-  });
-
   describe("Settings", () => {
+    describe("Version", () => {
+      const settings = () => render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      it("shows a hub Template's version and checks the hub only on Check for updates", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        checkHubUpdatesMock.mockResolvedValue({ offered: [] });
+        await settings();
+        expect(document.body.textContent).toContain("Current version1.0.0");
+        expect(checkHubUpdatesMock).not.toHaveBeenCalled();
+
+        await act(async () => button("Check for updates")!.click());
+        expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+        expect(document.body.textContent).toContain("Up to date");
+      });
+
+      it("offers a newer version for review, with its update plan", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        offers = [{
+          templateId: "@opengroow/hello", currentVersion: "1.0.0", availableVersion: "1.1.0", origin: "hub",
+          plan: {
+            fromVersion: "1.0.0", toVersion: "1.1.0", mcpHosts: { added: [], removed: [], changed: [] }, newSecrets: [], newPlugins: [],
+            newSkills: [], newRequiredFields: [], reactivationFields: [], removedMissionTypes: [], removedMissionTypesInUse: [], requiresAttention: false,
+          },
+        }];
+        await settings();
+        expect(document.body.textContent).toContain("1.1.0 available");
+        expect(button("Check for updates")).toBeUndefined();
+
+        await act(async () => button("Review update")!.click());
+        expect(document.body.textContent).toContain("Update @opengroow/hello to 1.1.0");
+        expect(button("Apply update")).toBeDefined();
+      });
+
+      it("shows the origin of a Template not from the hub, without checking it", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "0.3.0", origin: "linked_folder" }];
+        await settings();
+        expect(document.body.textContent).toContain("Local");
+        expect(document.body.textContent).not.toContain("Linked");
+        expect(button("Check for updates")).toBeUndefined();
+      });
+    });
+
+    it("deactivates an active Agent from the danger zone once confirmed, and goes back to the list", async () => {
+      agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+      deactivateMock.mockResolvedValue({ status: "inactive" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      await act(async () => button("Deactivate")!.click());
+      expect(deactivateMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Its configuration and its Missions are kept");
+      const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === "Deactivate");
+      await act(async () => confirm!.click());
+      expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+    });
+
+    it("goes to the Agents list, not a 404, when the Agent's Template disappears while its page is open", async () => {
+      agents({ templateId: "@opengroow/hello", status: "inactive" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+      expect(document.body.textContent).toContain("Danger zone");
+
+      serveProjectManifests(["video-demo", "engagement", "seo", "visual-social"].map(manifestOf));
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      expect(replaceMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+      expect(notFoundMock).not.toHaveBeenCalled();
+    });
+
+    it("deletes the Agent only once confirmed, and keeps the dialog open with the error when refused", async () => {
+      agents({ templateId: "@opengroow/hello", status: "inactive" });
+      deleteMock.mockResolvedValueOnce({ status: "error", errorMessage: "Cannot delete the Agent while one of its Runs is in flight" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      expect(button("Deactivate")).toBeUndefined();
+      await act(async () => button("Delete")!.click());
+      expect(deleteMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("This cannot be undone");
+
+      await act(async () => button("Delete Hello")!.click());
+      expect(deleteMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
+      expect(pushMock).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain("in flight");
+
+      deleteMock.mockResolvedValueOnce({ status: "deleted" });
+      await act(async () => button("Delete Hello")!.click());
+      expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+    });
+
     it("offers Edit config only when the Template has editable fields", async () => {
       agents({ templateId: "@opengroow/engagement", status: "active", workspaceKey: "ws-se" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/engagement" />);
@@ -344,8 +426,8 @@ describe("Agent page", () => {
           serverName: "article-mcp",
           url: "https://my-seo.internal/mcp",
         });
-        // Convex pushes the new URL to the running Agent itself: no refresh.
-        expect(refreshMock).not.toHaveBeenCalled();
+        // Convex pushes the new URL to the running Agent itself: no workspace sync from the page.
+        expect(applyHiddenMissionTypesMock).not.toHaveBeenCalled();
       });
     });
 
@@ -390,15 +472,14 @@ describe("Agent page", () => {
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
 
-    it("lists Available Mission types inverted against the deny-list, stores the unchecked ones, then refreshes", async () => {
+    it("lists Available Mission types inverted against the deny-list and applies the unchecked ones", async () => {
       agents({
         templateId: "@opengroow/video-demo",
         status: "active",
         workspaceKey: "ws-video",
         hiddenMissionTypes: ["create_chat_mock_video"],
       });
-      setHiddenMissionTypesMock.mockResolvedValue(undefined);
-      refreshMock.mockResolvedValue({ status: "refreshed" });
+      applyHiddenMissionTypesMock.mockResolvedValue({ status: "refreshed" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
 
       const checkbox = (label: string) =>
@@ -412,23 +493,36 @@ describe("Agent page", () => {
 
       await act(async () => checkbox("Create letter video").click());
       await act(async () => button("Save changes")!.click());
-      expect(setHiddenMissionTypesMock).toHaveBeenCalledWith({
+      expect(applyHiddenMissionTypesMock).toHaveBeenCalledWith({
         instanceId: "instance-1",
         templateId: "@opengroow/video-demo",
         hiddenMissionTypes: ["lym_create_letter_video", "create_chat_mock_video"],
       });
-      expect(refreshMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/video-demo" });
     });
 
-    it("explains that there is nothing to configure when an active Agent has no editable requirement and a single Mission type", async () => {
+    it("shows a Mission types failure at the top, not in the Delete confirmation", async () => {
+      agents({ templateId: "@opengroow/video-demo", status: "active", workspaceKey: "ws-video" });
+      applyHiddenMissionTypesMock.mockResolvedValue({ status: "error", errorMessage: "Workspace sync failed" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
+
+      const checkbox = Array.from(document.querySelectorAll("label"))
+        .find((l) => l.textContent?.includes("Create letter video"))
+        ?.querySelector('[role="checkbox"]') as HTMLElement;
+      await act(async () => checkbox.click());
+      await act(async () => button("Save changes")!.click());
+      expect(document.body.textContent).toContain("Workspace sync failed");
+
+      await act(async () => button("Delete")!.click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain("This cannot be undone");
+      expect(dialog.textContent).not.toContain("Workspace sync failed");
+    });
+
+    it("shows no configuration and no explanation when an active Agent has nothing to configure", async () => {
       agents({ templateId: "@opengroow/visual-social", status: "active", workspaceKey: "ws-visual-social" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/visual-social" />);
-      expect(document.body.textContent).toContain("Nothing to configure for this Agent");
+      expect(document.body.textContent).not.toContain("Nothing to configure");
       expect(button("Edit config")).toBeUndefined();
-
-      agents({ templateId: "@opengroow/video-demo", status: "active", workspaceKey: "ws-video" });
-      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
-      expect(document.body.textContent).not.toContain("Nothing to configure for this Agent");
     });
 
     it("hides Mission types when the Agent is inactive or has a single type", async () => {

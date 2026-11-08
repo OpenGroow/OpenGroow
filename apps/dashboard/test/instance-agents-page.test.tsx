@@ -14,8 +14,6 @@ import { InstanceAgentsContent } from "../src/components/instance-agents-page";
 const activateMock = vi.fn();
 const addAgentMock = vi.fn();
 const deactivateMock = vi.fn();
-const refreshMock = vi.fn();
-const setHiddenMissionTypesMock = vi.fn();
 const updateConfigMock = vi.fn();
 const retryStatusCheckMock = vi.fn();
 const useQueryMock = vi.fn();
@@ -48,10 +46,10 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_agents: {
       listByInstance: "project_agents.listByInstance",
-      setHiddenMissionTypes: "project_agents.setHiddenMissionTypes",
     },
     project_templates_node: {
       hubCatalogue: "project_templates_node.hubCatalogue",
+      checkHubUpdates: "project_templates_node.checkHubUpdates",
       previewHubTemplate: "project_templates_node.previewHubTemplate",
       installHubTemplate: "project_templates_node.installHubTemplate",
       previewLocalFolder: "project_templates_node.previewLocalFolder",
@@ -61,7 +59,7 @@ vi.mock("@convex/_generated/api", () => ({
       activateProjectAgent: "project_agents_node.activateProjectAgent",
       addProjectAgent: "project_agents_node.addProjectAgent",
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
-      refreshProjectAgent: "project_agents_node.refreshProjectAgent",
+      applyHiddenMissionTypes: "project_agents_node.applyHiddenMissionTypes",
       reconfigureProjectAgent: "project_agents_node.reconfigureProjectAgent",
       retryProjectAgentStatusCheck: "project_agents_node.retryProjectAgentStatusCheck",
     },
@@ -418,8 +416,6 @@ describe("InstanceAgentsContent", () => {
     addAgentMock.mockReset();
     serveCatalogue([]);
     deactivateMock.mockReset();
-    refreshMock.mockReset();
-    setHiddenMissionTypesMock.mockReset();
     useMutationMock.mockReset();
     updateConfigMock.mockReset();
     retryStatusCheckMock.mockReset();
@@ -437,7 +433,6 @@ describe("InstanceAgentsContent", () => {
       },
     ]);
     useMutationMock.mockImplementation((mutation: string) => {
-      if (mutation === "project_agents.setHiddenMissionTypes") return setHiddenMissionTypesMock;
       if (mutation === "project_templates.applyUpdate") return vi.fn();
       throw new Error(`Unexpected mutation: ${mutation}`);
     });
@@ -445,7 +440,6 @@ describe("InstanceAgentsContent", () => {
       if (action === "project_agents_node.activateProjectAgent") return activateMock;
       if (action === "project_agents_node.addProjectAgent") return addAgentMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
-      if (action === "project_agents_node.refreshProjectAgent") return refreshMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return updateConfigMock;
       if (action === "project_agents_node.retryProjectAgentStatusCheck") return retryStatusCheckMock;
       if (action.startsWith("project_templates_node.")) return vi.fn();
@@ -505,7 +499,8 @@ describe("InstanceAgentsContent", () => {
     expect(card?.textContent).not.toContain("Open");
     // The card itself carries no button: the buttons are page-level.
     expect(document.querySelectorAll('[data-slot="agent-card"] button')).toHaveLength(0);
-    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim()).slice(0, 3)).toEqual([
+    expect(Array.from(document.querySelectorAll("button")).map((b) => b.textContent?.trim()).slice(0, 4)).toEqual([
+      "Check for updates",
       "Add Agent",
       "All",
       "Active",
@@ -775,7 +770,7 @@ describe("Add Agent catalogue (#655)", () => {
 
     const dialog = getRequiredDialog();
     expect(dialog.textContent).toContain("SEO Agent");
-    expect(dialog.textContent).toContain("Local folder");
+    expect(dialog.textContent).toContain("Local");
     expect(dialog.textContent).toContain("1.2.0");
     expect(dialog.textContent).toContain("Hello Agent");
   });

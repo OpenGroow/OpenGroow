@@ -1,4 +1,4 @@
-import { mutation, query, internalMutation, internalQuery, type QueryCtx } from "./_generated/server.js";
+import { query, internalMutation, internalQuery, type QueryCtx } from "./_generated/server.js";
 import { v } from "convex/values";
 import { projectAgentSkillV, projectAgentStatusV } from "./validators.js";
 import { upsertSkillEntry } from "@opengroow/agent-templates/skills";
@@ -211,8 +211,10 @@ export const get = query({
  * Sets the Mission types the operator hides from an Agent (ADR-053).
  * Presentation only: it filters the creation forms and the workspace files,
  * and is not a permission — existing Missions and Schedules are untouched.
+ * Internal: `project_agents_node.applyHiddenMissionTypes` is the one entry
+ * point, so the stored choice and the workspace files change together.
  */
-export const setHiddenMissionTypes = mutation({
+export const setHiddenMissionTypes = internalMutation({
   args: { instanceId: v.string(), templateId: v.string(), hiddenMissionTypes: v.array(v.string()) },
   handler: async (ctx, args) => {
     if (!(await canReadInstance(ctx, args.instanceId))) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildUpdatePlan, isNewerVersion, type UpdatePlanSide } from "./update-plan";
+import { buildUpdatePlan, isNewerVersion, versionOfHubTag, type UpdatePlanSide } from "./update-plan";
 import type { AgentManifest } from "./types";
 
 const manifest = (overrides: Partial<AgentManifest> = {}): AgentManifest => ({
@@ -114,8 +114,29 @@ describe("isNewerVersion", () => {
     expect(isNewerVersion("1.0.0", "1.0.0")).toBe(false);
     expect(isNewerVersion("1.0.0", "1.2.0")).toBe(false);
   });
+  it("follows semver precedence for pre-releases", () => {
+    expect(isNewerVersion("1.2.0", "1.2.0-rc.1")).toBe(true);
+    expect(isNewerVersion("1.2.0-rc.1", "1.2.0")).toBe(false);
+    expect(isNewerVersion("1.2.0-rc.1", "1.3.0")).toBe(false);
+    expect(isNewerVersion("1.3.0-rc.1", "1.2.0")).toBe(true);
+    expect(isNewerVersion("1.2.0-rc.2", "1.2.0-rc.1")).toBe(true);
+    expect(isNewerVersion("1.2.0-rc.10", "1.2.0-rc.9")).toBe(true);
+    expect(isNewerVersion("1.2.0-beta", "1.2.0-alpha")).toBe(true);
+    expect(isNewerVersion("1.2.0-alpha", "1.2.0-alpha.1")).toBe(false);
+    expect(isNewerVersion("1.10", "1.9.9")).toBe(true);
+  });
   it("treats a version it cannot order as newer when it differs", () => {
     expect(isNewerVersion("nightly-2", "nightly-1")).toBe(true);
     expect(isNewerVersion("nightly-1", "nightly-1")).toBe(false);
+  });
+});
+
+describe("versionOfHubTag", () => {
+  it("reads the version of a hub tag", () => {
+    expect(versionOfHubTag("publisher-postiz@1.0.2")).toBe("1.0.2");
+    expect(versionOfHubTag("source@2.0.0-rc.1")).toBe("2.0.0-rc.1");
+    expect(versionOfHubTag("v1.2.0")).toBe("1.2.0");
+    expect(versionOfHubTag("postiz")).toBeUndefined();
+    expect(versionOfHubTag("postiz@latest")).toBeUndefined();
   });
 });

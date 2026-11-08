@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
+import { api, internal } from "./_generated/api.js";
 import { v, type ObjectType } from "convex/values";
 import {
   flattenRequirementFields,
@@ -426,19 +427,42 @@ async function refreshFromRegistry(
   }
 }
 
-export const refreshProjectAgent = action({
+/**
+ * Stores the Mission types hidden from an Agent (ADR-053, presentation only)
+ * and brings its workspace in line at once: the instruction files of hidden
+ * types are removed, those of visible types written. Returns the sync outcome
+ * so the dashboard can show a failure.
+ */
+export const applyHiddenMissionTypes = action({
+  args: { instanceId: v.string(), templateId: v.string(), hiddenMissionTypes: v.array(v.string()) },
+  handler: async (ctx, args): Promise<RefreshResult> => {
+    const user = await requireAuthenticatedUser(ctx);
+    const ownership = await requireInstanceOwner(ctx, args.instanceId, user);
+    if (!ownership.ok) return { status: "error", errorMessage: ownership.errorMessage };
+    await ctx.runMutation(internal.project_agents.setHiddenMissionTypes, args);
+    const { pluginsChanged, ...result } = await refreshFromRegistry(ctx, args.instanceId, args.templateId, {
+      ensureWorkspace: false,
+    });
+    if (pluginsChanged) await restartGatewayForPlugins(ctx, args.instanceId);
+    return result;
+  },
+});
+
+/**
+ * Re-pushes one active Agent's workspace files, skills and plugins from the
+ * registry. Not in the dashboard: every change to a Template (install, linked
+ * folder save, applied update, relinked Instance) already reconciles the
+ * Agent, and deactivating then activating it provisions it again. Kept as an
+ * operator escape hatch:
+ *   npx convex run project_agents_node:refreshProjectAgent '{"instanceId":"…","templateId":"…"}'
+ */
+export const refreshProjectAgent = internalAction({
   args: {
     instanceId: v.string(),
     templateId: v.string(),
   },
   handler: async (ctx, args): Promise<RefreshResult> => {
     const { instanceId, templateId } = args;
-
-    const user = await requireAuthenticatedUser(ctx);
-    const ownership = await requireInstanceOwner(ctx, instanceId, user);
-    if (!ownership.ok) {
-      return { status: "error", errorMessage: ownership.errorMessage };
-    }
 
     const { pluginsChanged, ...result } = await refreshFromRegistry(ctx, instanceId, templateId, {
       ensureWorkspace: false,
@@ -706,56 +730,95 @@ export const deactivateProjectAgent = action({
     if (!ownership.ok) {
       return { status: "error", errorMessage: ownership.errorMessage };
     }
+    return await deactivateAgent(ctx, instanceId, templateId);
+  },
+});
 
-    // Known race: the count is read outside a transaction; a new run may be created
-    // after this check and before the agent is set inactive below. Acceptable until
-    // a transactional deactivation mechanism is introduced (same window as MCP key removal).
-    const activeRunCount = await ctx.runQuery(countActiveRunsByInstanceTemplateQuery, { instanceId, templateId });
-    if (activeRunCount > 0) {
-      return { status: "error", errorMessage: `Cannot deactivate: ${activeRunCount} run(s) still active` };
+/** Removes an Agent from the runtime (its MCP servers no other Agent uses, its native OpenClaw agent) and marks it inactive. */
+async function deactivateAgent(ctx: ActionCtx, instanceId: string, templateId: string): Promise<DeactivationResult> {
+  // Known race: the count is read outside a transaction; a new run may be created
+  // after this check and before the agent is set inactive below. Acceptable until
+  // a transactional deactivation mechanism is introduced (same window as MCP key removal).
+  const activeRunCount = await ctx.runQuery(countActiveRunsByInstanceTemplateQuery, { instanceId, templateId });
+  if (activeRunCount > 0) {
+    return { status: "error", errorMessage: `Cannot deactivate: ${activeRunCount} run(s) still active` };
+  }
+
+  const agent = await ctx.runQuery(getByInstanceAndTemplateQuery, { instanceId, templateId });
+  if (!agent) {
+    return { status: "error", errorMessage: "Agent not found" };
+  }
+  if (agent.status === "inactive") {
+    return { status: "inactive" };
+  }
+
+  // Known race: if another agent is activated between this read and the remove
+  // below, we may wrongly remove a key that the new agent also references.
+  // The same window exists in activateProjectAgent; acceptable until a
+  // transactional deactivation mechanism is introduced.
+  const allActive = await ctx.runQuery(listActiveByInstanceQuery, { instanceId });
+
+  const refCounts = new Map<string, number>();
+  for (const a of allActive) {
+    for (const key of a.mcpServerKeys) {
+      refCounts.set(key, (refCounts.get(key) ?? 0) + 1);
     }
+  }
+
+  const keysToRemove = agent.mcpServerKeys.filter((key) => refCounts.get(key) === 1);
+
+  if (keysToRemove.length > 0) {
+    const removeResult = await sendAndAwait(ctx, instanceId, RUNTIME_MCP_SERVERS_REMOVE, {
+      keys: keysToRemove,
+    });
+    const removePayload = removeResult.payload as RuntimeMcpServersRemoveResultPayload | undefined;
+    if (!removeResult.found || !removePayload?.ok) {
+      const errorMessage = removePayload?.error ?? "MCP remove failed";
+      return { status: "error", errorMessage };
+    }
+  }
+
+  await deleteNativeOpenClawAgent(ctx, instanceId, agent.openclawAgentName ?? openClawAgentSlug(templateId));
+
+  const deactivateResult = await ctx.runMutation(markInactiveIfNoActiveRunsMutation, { instanceId, templateId });
+  if (!deactivateResult.ok) {
+    return { status: "error", errorMessage: `Cannot deactivate: ${deactivateResult.count} run(s) still active` };
+  }
+
+  return { status: "inactive" };
+}
+
+type DeletionResult = { status: "deleted" } | { status: "error"; errorMessage: string };
+
+/**
+ * Deletes an Agent and everything of its Template in the Project, history
+ * included: it is deactivated first (runtime cleanup), then its configuration,
+ * Schedules, Missions with their Runs and Publications, Jobs, installed
+ * Template versions and MCP URL overrides are deleted in batches
+ * (`agent_deletion.purgeBatch`). Sources outlive it (ADR-051). Refused while a
+ * Run is in flight. Irreversible. The workspace folder stays on the
+ * Instance's disk: the runtime has no command to delete it.
+ */
+export const deleteProjectAgent = action({
+  args: { instanceId: v.string(), templateId: v.string() },
+  handler: async (ctx, { instanceId, templateId }): Promise<DeletionResult> => {
+    const user = await requireAuthenticatedUser(ctx);
+    const ownership = await requireInstanceOwner(ctx, instanceId, user);
+    if (!ownership.ok) return { status: "error", errorMessage: ownership.errorMessage };
 
     const agent = await ctx.runQuery(getByInstanceAndTemplateQuery, { instanceId, templateId });
-    if (!agent) {
-      return { status: "error", errorMessage: "Agent not found" };
+    if (agent && agent.status !== "inactive") {
+      const deactivated = await deactivateAgent(ctx, instanceId, templateId);
+      if (deactivated.status === "error") return { status: "error", errorMessage: `Cannot delete: ${deactivated.errorMessage}` };
     }
-    if (agent.status === "inactive") {
-      return { status: "inactive" };
-    }
-
-    // Known race: if another agent is activated between this read and the remove
-    // below, we may wrongly remove a key that the new agent also references.
-    // The same window exists in activateProjectAgent; acceptable until a
-    // transactional deactivation mechanism is introduced.
-    const allActive = await ctx.runQuery(listActiveByInstanceQuery, { instanceId });
-
-    const refCounts = new Map<string, number>();
-    for (const a of allActive) {
-      for (const key of a.mcpServerKeys) {
-        refCounts.set(key, (refCounts.get(key) ?? 0) + 1);
+    try {
+      for (;;) {
+        const { done } = await ctx.runMutation(internal.agent_deletion.purgeBatch, { instanceId, templateId });
+        if (done) break;
       }
+    } catch (error) {
+      return { status: "error", errorMessage: error instanceof Error ? error.message : "Deletion failed" };
     }
-
-    const keysToRemove = agent.mcpServerKeys.filter((key) => refCounts.get(key) === 1);
-
-    if (keysToRemove.length > 0) {
-      const removeResult = await sendAndAwait(ctx, instanceId, RUNTIME_MCP_SERVERS_REMOVE, {
-        keys: keysToRemove,
-      });
-      const removePayload = removeResult.payload as RuntimeMcpServersRemoveResultPayload | undefined;
-      if (!removeResult.found || !removePayload?.ok) {
-        const errorMessage = removePayload?.error ?? "MCP remove failed";
-        return { status: "error", errorMessage };
-      }
-    }
-
-    await deleteNativeOpenClawAgent(ctx, instanceId, agent.openclawAgentName ?? openClawAgentSlug(templateId));
-
-    const deactivateResult = await ctx.runMutation(markInactiveIfNoActiveRunsMutation, { instanceId, templateId });
-    if (!deactivateResult.ok) {
-      return { status: "error", errorMessage: `Cannot deactivate: ${deactivateResult.count} run(s) still active` };
-    }
-
-    return { status: "inactive" };
+    return { status: "deleted" };
   },
 });

@@ -17,6 +17,7 @@ export type { ProjectAgentSkill } from "@opengroow/agent-templates/skills";
 export type { InstallationPlan } from "@opengroow/agent-templates/installation-plan";
 export { buildInstallationPlan } from "@opengroow/agent-templates/installation-plan";
 export type { UpdatePlan } from "@opengroow/agent-templates/update-plan";
+export { isNewerVersion, versionOfHubTag } from "@opengroow/agent-templates/update-plan";
 export {
   flattenRequirementFields,
   hasRetryableStatusCheck,

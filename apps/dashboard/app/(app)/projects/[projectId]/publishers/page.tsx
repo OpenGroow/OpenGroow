@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, Save, Settings } from "lucide-react";
+import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { isNewerVersion, versionOfHubTag } from "@convex/template_manifest_contract";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -73,6 +74,10 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const [awaiting, setAwaiting] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
   const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
+  // A newer version of the installed package in the hub (ADR-072), found by "Check for updates": installing it again replaces the installed one.
+  const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
+  // The outcome of the last check: the hub is read only when the user asks.
+  const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -145,6 +150,38 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       cancelled = true;
     };
   }, [missingAdapter, hubCatalogue]);
+
+  const installedPackage = packageInstalled ? installed?.find((p) => p.adapter === publisher?.adapter) : undefined;
+  const installedPackageId = installedPackage?.packageId;
+  const installedVersion = installedPackage?.version;
+  // A new installed version (an update just applied) makes the last check stale.
+  useEffect(() => {
+    setUpdate(null);
+    setUpdateCheck(null);
+  }, [installedPackageId, installedVersion]);
+
+  async function checkForUpdates() {
+    if (!installedPackageId || !installedVersion) return;
+    setUpdate(null);
+    setUpdateCheck({ status: "checking" });
+    try {
+      const result = await hubCatalogue({ kind: "publisher" });
+      if (result.error) {
+        setUpdateCheck({ status: "error", message: `The hub could not be read: ${result.error}` });
+        return;
+      }
+      const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
+      const version = entry ? versionOfHubTag(entry.tag) : undefined;
+      if (entry && version && isNewerVersion(version, installedVersion)) {
+        setUpdate({ packageId: entry.packageId, name: entry.name, version });
+        setUpdateCheck(null);
+      } else {
+        setUpdateCheck({ status: "upToDate" });
+      }
+    } catch (error) {
+      setUpdateCheck({ status: "error", message: errorMessage(error, "The hub could not be read") });
+    }
+  }
 
   if (!instance || !instanceId) return null;
   const id = instanceId;
@@ -348,6 +385,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       ) : null}
 
       {tab === "configuration" ? (
+        <>
         <Card className="gap-4 p-5">
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
@@ -409,6 +447,39 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
           </div>
         </Card>
+        {installedVersion ? (
+          <Card className="gap-4 p-5" data-testid="package-updates">
+            <h2 className="m-0 text-base font-semibold">Version</h2>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="grid flex-1 gap-1">
+                <span className="text-sm text-muted-foreground">Current version</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-2xl font-semibold">{installedVersion}</span>
+                  {updateCheck?.status === "checking" ? <StatusBadge tone="progress" label="Checking…" /> : null}
+                  {updateCheck?.status === "upToDate" ? <StatusBadge tone="active" label="Up to date" /> : null}
+                  {update ? <StatusBadge tone="info" label={`${update.version} available`} /> : null}
+                  {updateCheck?.status === "error" ? <StatusBadge tone="error" label="Check failed" /> : null}
+                </div>
+              </div>
+              <div className="flex shrink-0">
+                {update ? (
+                  <Button type="button" size="lg" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
+                    {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
+                    Update to {update.version}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" size="lg" disabled={updateCheck?.status === "checking" || installing !== null} onClick={() => void checkForUpdates()}>
+                    {updateCheck?.status === "checking" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+                    Check for updates
+                  </Button>
+                )}
+              </div>
+            </div>
+            {updateCheck?.status === "error" ? <p className="m-0 text-sm text-destructive">{updateCheck.message}</p> : null}
+            {update && installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
+          </Card>
+        ) : null}
+        </>
       ) : publisher ? (
         <PublishTargetsCard instanceId={id} publisher={publisher} />
       ) : (

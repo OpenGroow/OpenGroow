@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-type UpdateOffer = FunctionReturnType<typeof api.project_templates.updates>[number];
+export type UpdateOffer = FunctionReturnType<typeof api.project_templates.updates>[number];
 type Section = { title: string; items: string[]; warning?: boolean };
 
 /** Every kind of change an update plan lists, as readable sections (empty ones are dropped). */
@@ -46,30 +47,33 @@ export function planSections(offer: UpdateOffer): Section[] {
 }
 
 /**
- * Tells the Project a newer version of an installed Template is available and
- * lets the user review its update plan before confirming (#669). Nothing is
- * applied until "Apply update"; Missions in progress keep their version.
+ * The update plan of an offered version, to review before confirming (#669):
+ * nothing is applied until "Apply update"; Missions in progress keep their version.
  */
-export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
-  const offers = useQuery(api.project_templates.updates, { projectId });
+export function TemplateUpdateReviewDialog({
+  projectId,
+  offer,
+  onClose,
+}: {
+  projectId: string;
+  offer: UpdateOffer | null;
+  onClose: () => void;
+}) {
   const applyUpdate = useMutation(api.project_templates.applyUpdate);
-  const [reviewing, setReviewing] = React.useState<UpdateOffer | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
-  if (!offers || offers.length === 0) return null;
-
   function close() {
-    setReviewing(null);
     setError(null);
+    onClose();
   }
 
-  async function confirm(offer: UpdateOffer) {
+  async function confirm(reviewing: UpdateOffer) {
     setPending(true);
     setError(null);
     try {
-      await applyUpdate({ projectId, templateId: offer.templateId, version: offer.availableVersion });
-      setReviewing(null);
+      await applyUpdate({ projectId, templateId: reviewing.templateId, version: reviewing.availableVersion });
+      close();
     } catch (err) {
       setError(err instanceof Error ? err.message : "The update could not be applied");
     } finally {
@@ -77,7 +81,70 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
     }
   }
 
-  const sections = reviewing ? planSections(reviewing) : [];
+  const sections = offer ? planSections(offer) : [];
+  return (
+    <Dialog open={offer !== null} onOpenChange={(open) => !open && close()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Update {offer?.templateId} to {offer?.availableVersion}
+          </DialogTitle>
+          <DialogDescription>
+            Nothing changes until you confirm. Missions already in progress keep running version{" "}
+            {offer?.currentVersion}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 rounded-xl bg-muted p-4">
+          {sections.length === 0 ? (
+            <span className="text-sm text-muted-foreground">
+              No change to hosts, secrets, plugins, required configuration or Mission types.
+            </span>
+          ) : (
+            sections.map(({ title, items, warning }) => (
+              <div key={title} className="grid gap-1">
+                <span
+                  className={`text-xs font-semibold ${
+                    warning ? "text-destructive" : "text-muted-foreground"
+                  }`}
+                >
+                  {title}
+                </span>
+                <ul className="m-0 grid list-none gap-0.5 p-0 text-sm text-foreground">
+                  {items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          )}
+        </div>
+        {error ? (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={pending} onClick={() => offer && void confirm(offer)}>
+            Apply update
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Tells the Project a newer version of an installed Template is available and
+ * lets the user review its update plan before confirming (#669).
+ */
+export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
+  const offers = useQuery(api.project_templates.updates, { projectId });
+  const [reviewing, setReviewing] = React.useState<UpdateOffer | null>(null);
+
+  if (!offers || offers.length === 0) return null;
 
   return (
     <>
@@ -96,57 +163,47 @@ export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
+      <TemplateUpdateReviewDialog projectId={projectId} offer={reviewing} onClose={() => setReviewing(null)} />
+    </>
+  );
+}
 
-      <Dialog open={reviewing !== null} onOpenChange={(open) => !open && close()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Update {reviewing?.templateId} to {reviewing?.availableVersion}
-            </DialogTitle>
-            <DialogDescription>
-              Nothing changes until you confirm. Missions already in progress keep running version{" "}
-              {reviewing?.currentVersion}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 rounded-xl bg-muted p-4">
-            {sections.length === 0 ? (
-              <span className="text-sm text-muted-foreground">
-                No change to hosts, secrets, plugins, required configuration or Mission types.
-              </span>
-            ) : (
-              sections.map(({ title, items, warning }) => (
-                <div key={title} className="grid gap-1">
-                  <span
-                    className={`text-xs font-semibold ${
-                      warning ? "text-destructive" : "text-muted-foreground"
-                    }`}
-                  >
-                    {title}
-                  </span>
-                  <ul className="m-0 grid list-none gap-0.5 p-0 text-sm text-foreground">
-                    {items.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </div>
-          {error ? (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={close}>
-              Cancel
-            </Button>
-            <Button type="button" disabled={pending} onClick={() => reviewing && void confirm(reviewing)}>
-              Apply update
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+/**
+ * Asks the hub, on demand, for newer versions of the Project's hub Templates
+ * (`checkHubUpdates`): a newer one is offered (not applied) and appears in
+ * `TemplateUpdatesPanel`. The hub is read only when the button is clicked.
+ */
+export function CheckTemplateUpdatesButton({ projectId }: { projectId: string }) {
+  const offers = useQuery(api.project_templates.updates, { projectId });
+  const checkHubUpdates = useAction(api.project_templates_node.checkHubUpdates);
+  const [state, setState] = React.useState<{ status: "checking" | "done" | "error"; message?: string } | null>(null);
+
+  async function check() {
+    setState({ status: "checking" });
+    try {
+      const result = await checkHubUpdates({ instanceId: projectId });
+      if (result.error) {
+        setState({ status: "error", message: result.error });
+        return;
+      }
+      // An update offered earlier and not applied yet is still available.
+      const available = result.offered.length > 0 || (offers?.length ?? 0) > 0;
+      setState({ status: "done", message: available ? "Updates available below" : "Up to date" });
+    } catch (error) {
+      setState({ status: "error", message: error instanceof Error ? error.message : "The hub could not be read" });
+    }
+  }
+
+  const checking = state?.status === "checking";
+  return (
+    <>
+      {state && !checking ? (
+        <span className={`text-sm ${state.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>{state.message}</span>
+      ) : null}
+      <Button type="button" variant="outline" size="lg" disabled={checking} onClick={() => void check()}>
+        {checking ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+        Check for updates
+      </Button>
     </>
   );
 }

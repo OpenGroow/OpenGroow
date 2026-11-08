@@ -95,6 +95,42 @@ describe("Publishers page", () => {
     expect(text()).toContain("Postiz URL");
   });
 
+  it("reads the hub only on Check for updates, then offers the newer version and installs it on Update", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    const entry = { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.2", verification: "official" };
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [entry] }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed", packageId: entry.packageId, version: "1.0.2" }));
+    await render();
+    expect(text()).toContain("Current version1.0.0");
+    expect(actions["hub_packages_node.catalogue"]).not.toHaveBeenCalled();
+
+    await click(byText("Check for updates"));
+    expect(text()).toContain("1.0.2 available");
+    await click(byText("Update to 1.0.2"));
+    expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: entry.packageId });
+  });
+
+  it("says Up to date for the installed version, and reports a hub that cannot be read", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.0", verification: "official" }],
+    }));
+    await render();
+    await click(byText("Check for updates"));
+    expect(text()).toContain("Up to date");
+    expect(byText("Update to")).toBeUndefined();
+
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [], error: "offline" }));
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await render();
+    await click(byText("Check for updates"));
+    expect(text()).toContain("The hub could not be read: offline");
+    expect(byText("Update to")).toBeUndefined();
+  });
+
   it("shows Connected or Not connected following the connection test", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));

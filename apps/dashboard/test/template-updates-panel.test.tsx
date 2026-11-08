@@ -4,20 +4,25 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TemplateUpdatesPanel } from "../src/components/template-updates-panel";
+import { CheckTemplateUpdatesButton, TemplateUpdatesPanel } from "../src/components/template-updates-panel";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
 const applyUpdateMock = vi.fn();
+const checkHubUpdatesMock = vi.fn(async (): Promise<{ offered: Array<{ templateId: string; version: string }>; error?: string }> => ({ offered: [] }));
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   useMutation: () => applyUpdateMock,
+  useAction: () => checkHubUpdatesMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
-  api: { project_templates: { updates: "project_templates.updates", applyUpdate: "project_templates.applyUpdate" } },
+  api: {
+    project_templates: { updates: "project_templates.updates", applyUpdate: "project_templates.applyUpdate" },
+    project_templates_node: { checkHubUpdates: "project_templates_node.checkHubUpdates" },
+  },
 }));
 
 import type { UpdatePlan } from "@convex/template_manifest_contract";
@@ -68,6 +73,31 @@ describe("TemplateUpdatesPanel", () => {
     });
   const button = (text: string) =>
     Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes(text));
+
+  it("does not read the hub when shown: only Check for updates does, saying Up to date or why it failed", async () => {
+    useQueryMock.mockReturnValue([]);
+    checkHubUpdatesMock.mockClear();
+    await render();
+    expect(checkHubUpdatesMock).not.toHaveBeenCalled();
+
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [] });
+    await act(async () => root.render(<CheckTemplateUpdatesButton projectId="proj" />));
+    await click(button("Check for updates"));
+    expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "proj" });
+    expect(container.textContent).toContain("Up to date");
+
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [], error: "offline" });
+    await click(button("Check for updates"));
+    expect(container.textContent).toContain("offline");
+  });
+
+  it("says updates are available when the check offers one, or one was offered before", async () => {
+    useQueryMock.mockReturnValue([offer()]);
+    checkHubUpdatesMock.mockResolvedValueOnce({ offered: [] });
+    await act(async () => root.render(<CheckTemplateUpdatesButton projectId="proj" />));
+    await click(button("Check for updates"));
+    expect(container.textContent).toContain("Updates available below");
+  });
 
   it("renders nothing when no update is available", async () => {
     useQueryMock.mockReturnValue([]);

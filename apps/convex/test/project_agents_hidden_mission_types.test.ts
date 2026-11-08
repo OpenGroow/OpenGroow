@@ -54,7 +54,7 @@ describe("setHiddenMissionTypes (ADR-053)", () => {
   it("stores the hidden Mission types the operator chose and returns them with the Agent", async () => {
     const t = convexTest(schema, modules);
     await seedActiveAgent(t);
-    await t.withIdentity(OWNER).mutation(api.project_agents.setHiddenMissionTypes, {
+    await t.withIdentity(OWNER).mutation(internal.project_agents.setHiddenMissionTypes, {
       instanceId: INSTANCE,
       templateId: TEMPLATE,
       hiddenMissionTypes: ["create_chat_mock_video"],
@@ -66,11 +66,11 @@ describe("setHiddenMissionTypes (ADR-053)", () => {
     const t = convexTest(schema, modules);
     await seedActiveAgent(t);
     const args = { instanceId: INSTANCE, templateId: TEMPLATE };
-    await t.withIdentity(OWNER).mutation(api.project_agents.setHiddenMissionTypes, {
+    await t.withIdentity(OWNER).mutation(internal.project_agents.setHiddenMissionTypes, {
       ...args,
       hiddenMissionTypes: ["create_chat_mock_video"],
     });
-    await t.withIdentity(OWNER).mutation(api.project_agents.setHiddenMissionTypes, { ...args, hiddenMissionTypes: [] });
+    await t.withIdentity(OWNER).mutation(internal.project_agents.setHiddenMissionTypes, { ...args, hiddenMissionTypes: [] });
     expect((await agentFor(t, OWNER))?.hiddenMissionTypes ?? []).toEqual([]);
   });
 
@@ -78,7 +78,7 @@ describe("setHiddenMissionTypes (ADR-053)", () => {
     const t = convexTest(schema, modules);
     await seedActiveAgent(t);
     await expect(
-      t.withIdentity(STRANGER).mutation(api.project_agents.setHiddenMissionTypes, {
+      t.withIdentity(STRANGER).mutation(internal.project_agents.setHiddenMissionTypes, {
         instanceId: INSTANCE,
         templateId: TEMPLATE,
         hiddenMissionTypes: ["lym_create_letter_video"],

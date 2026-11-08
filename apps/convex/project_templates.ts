@@ -204,6 +204,26 @@ export const applyUpdate = mutation({
   },
 });
 
+/**
+ * The Templates of a Project installed from the hub, each with its current
+ * version and the version already offered as an update, if any (#669): what
+ * `checkHubUpdates` compares with the hub index.
+ */
+export const hubInstalls = internalQuery({
+  args: { projectId: v.string() },
+  handler: async (ctx, { projectId }) => {
+    const installs = (await listCurrentInstalls(ctx, projectId)).filter((install) => install.origin === "hub");
+    const staged = await ctx.db
+      .query("installedTemplates")
+      .withIndex("by_project_staged", (q) => q.eq("projectId", projectId).eq("staged", true))
+      .take(200);
+    return installs.map(({ templateId, version }) => {
+      const offered = staged.find((doc) => doc.templateId === templateId)?.version;
+      return { templateId, version, ...(offered ? { offeredVersion: offered } : {}) };
+    });
+  },
+});
+
 /** Internal reads for the actions' registry (`getTemplateRegistry`): they have no database, only `runQuery`. */
 export const resolveSnapshot = internalQuery({
   args: { projectId: v.string(), templateId: v.string(), version: v.optional(v.string()) },

@@ -7,7 +7,8 @@ import { clawPackageToTemplate } from "@opengroow/agent-templates";
 import type { AgentManifest } from "@opengroow/agent-templates/types";
 import { buildInstallationPlan, type InstallationPlan } from "@opengroow/agent-templates/installation-plan";
 import { assetField, fetchGitPackage, type GitOrigin } from "@opengroow/agent-templates/git-archive";
-import { fetchHubIndex, type HubEntry, type HubVerification } from "@opengroow/agent-templates/hub-index";
+import { fetchHubIndex, type HubEntry, type HubIndex, type HubVerification } from "@opengroow/agent-templates/hub-index";
+import { isNewerVersion, versionOfHubTag } from "@opengroow/agent-templates/update-plan";
 import { messageOf } from "./error_message.js";
 import { env } from "./env.js";
 import { requireAuthenticatedUser, requireInstanceOwner } from "./project_agents/auth.js";
@@ -64,8 +65,8 @@ export const hubCatalogue = action({
 type HubDownload = { files: PackageFile[]; gitOrigin: GitOrigin; manifest: AgentManifest };
 
 /** Downloads the entry's release, verified against the index's digest, and checks it is the Template the entry names. */
-async function downloadHubTemplate(templateId: string): Promise<HubDownload> {
-  const entry = (await loadHubIndex()).packages.find((candidate) => candidate.id === templateId);
+async function downloadHubTemplate(templateId: string, index?: HubIndex): Promise<HubDownload> {
+  const entry = (index ?? (await loadHubIndex())).packages.find((candidate) => candidate.id === templateId);
   if (!entry) throw new Error(`Template ${templateId} is not listed in the hub`);
   const { files, gitOrigin } = await fetchGitPackage({
     repository: entry.repository,
@@ -131,6 +132,52 @@ export const installHubTemplate = action({
     } catch (error) {
       return { status: "error", errorMessage: messageOf(error) };
     }
+  },
+});
+
+/**
+ * Offers the hub's newer versions of the Project's hub Templates (#669): for
+ * each Template installed from the hub whose index entry names a newer
+ * version, the release is downloaded, verified against the index and offered
+ * (`offerHubUpdate`), so the updates panel shows it with its plan. Nothing is
+ * applied. A version already offered is not downloaded again. A hub that
+ * cannot be read, or a release that cannot be offered, is reported. With
+ * `templateId` (an Agent's Version card), only that Template is checked, so
+ * another Template's release neither is offered nor fails the check. The
+ * releases are downloaded and offered concurrently.
+ */
+export const checkHubUpdates = action({
+  args: { instanceId: v.string(), templateId: v.optional(v.string()) },
+  handler: async (ctx, { instanceId, templateId }): Promise<{ offered: Array<{ templateId: string; version: string }>; error?: string }> => {
+    const owner = await requireOwner(ctx, instanceId);
+    if (!owner.ok) return { offered: [], error: owner.errorMessage };
+    let index: HubIndex;
+    try {
+      index = await loadHubIndex();
+    } catch (error) {
+      return { offered: [], error: messageOf(error) };
+    }
+    const installs = await ctx.runQuery(internal.project_templates.hubInstalls, { projectId: instanceId });
+    const outdated = installs.filter((install) => {
+      if (templateId !== undefined && install.templateId !== templateId) return false;
+      const entry = index.packages.find((candidate) => candidate.id === install.templateId);
+      const version = entry ? versionOfHubTag(entry.tag) : undefined;
+      return version !== undefined && isNewerVersion(version, install.version) && version !== install.offeredVersion;
+    });
+    const settled = await Promise.allSettled(
+      outdated.map(async (install) => {
+        const { files, gitOrigin } = await downloadHubTemplate(install.templateId, index);
+        const result = await ctx.runMutation(internal.template_install_local.offerHubUpdate, { projectId: instanceId, files, gitOrigin });
+        return { templateId: install.templateId, version: result.version };
+      }),
+    );
+    const offered: Array<{ templateId: string; version: string }> = [];
+    const errors: string[] = [];
+    settled.forEach((outcome, i) => {
+      if (outcome.status === "fulfilled") offered.push(outcome.value);
+      else errors.push(`${outdated[i].templateId}: ${messageOf(outcome.reason)}`);
+    });
+    return { offered, ...(errors.length > 0 ? { error: errors.join("; ") } : {}) };
   },
 });
 
