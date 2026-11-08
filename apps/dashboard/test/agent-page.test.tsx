@@ -41,8 +41,17 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+// The Template installs and update offers the Version card reads (reassigned by a test).
+let installs: Array<{ templateId: string; version: string; origin: string }> = [];
+let offers: Array<Record<string, unknown>> = [];
+const checkHubUpdatesMock = vi.fn();
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryWithTemplates(useQueryMock)(...args),
+  useQuery: (...args: unknown[]) =>
+    args[0] === "project_templates.origins"
+      ? installs
+      : args[0] === "project_templates.updates"
+        ? offers
+        : useQueryWithTemplates(useQueryMock)(...args),
   useAction: (...args: unknown[]) => useActionMock(...args),
   useMutation: (...args: unknown[]) => useMutationMock(...args),
 }));
@@ -51,7 +60,11 @@ vi.mock("@convex/_generated/api", () => ({
     project_templates: {
       listForProject: "project_templates.listForProject",
       getForProject: "project_templates.getForProject",
+      origins: "project_templates.origins",
+      updates: "project_templates.updates",
+      applyUpdate: "project_templates.applyUpdate",
     },
+    project_templates_node: { checkHubUpdates: "project_templates_node.checkHubUpdates" },
     template_mcp_overrides: {
       listForTemplate: "template_mcp_overrides.listForTemplate",
       set: "template_mcp_overrides.set",
@@ -122,6 +135,9 @@ describe("Agent page", () => {
 
   beforeEach(() => {
     overview = NO_MISSIONS;
+    installs = [];
+    offers = [];
+    checkHubUpdatesMock.mockReset();
     for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, deleteMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock, replaceMock]) {
       m.mockReset();
     }
@@ -133,10 +149,12 @@ describe("Agent page", () => {
       if (action === "project_agents_node.applyHiddenMissionTypes") return applyHiddenMissionTypesMock;
       if (action === "project_agents_node.deactivateProjectAgent") return deactivateMock;
       if (action === "project_agents_node.deleteProjectAgent") return deleteMock;
+      if (action === "project_templates_node.checkHubUpdates") return checkHubUpdatesMock;
       if (action === "project_agents_node.reconfigureProjectAgent") return reconfigureMock;
       throw new Error(`Unexpected action: ${action}`);
     });
     useMutationMock.mockImplementation((mutation: string) => {
+      if (mutation === "project_templates.applyUpdate") return vi.fn();
       throw new Error(`Unexpected mutation: ${mutation}`);
     });
     container = document.createElement("div");
@@ -261,6 +279,50 @@ describe("Agent page", () => {
   });
 
   describe("Settings", () => {
+    describe("Version", () => {
+      const settings = () => render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      it("shows a hub Template's version and checks the hub only on Check for updates", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        checkHubUpdatesMock.mockResolvedValue({ offered: [] });
+        await settings();
+        expect(document.body.textContent).toContain("Current version1.0.0");
+        expect(checkHubUpdatesMock).not.toHaveBeenCalled();
+
+        await act(async () => button("Check for updates")!.click());
+        expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "instance-1" });
+        expect(document.body.textContent).toContain("Up to date");
+      });
+
+      it("offers a newer version for review, with its update plan", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        offers = [{
+          templateId: "@opengroow/hello", currentVersion: "1.0.0", availableVersion: "1.1.0", origin: "hub",
+          plan: {
+            fromVersion: "1.0.0", toVersion: "1.1.0", mcpHosts: { added: [], removed: [], changed: [] }, newSecrets: [], newPlugins: [],
+            newSkills: [], newRequiredFields: [], reactivationFields: [], removedMissionTypes: [], removedMissionTypesInUse: [], requiresAttention: false,
+          },
+        }];
+        await settings();
+        expect(document.body.textContent).toContain("1.1.0 available");
+        expect(button("Check for updates")).toBeUndefined();
+
+        await act(async () => button("Review update")!.click());
+        expect(document.body.textContent).toContain("Update @opengroow/hello to 1.1.0");
+        expect(button("Apply update")).toBeDefined();
+      });
+
+      it("shows the origin of a Template not from the hub, without checking it", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "0.3.0", origin: "linked_folder" }];
+        await settings();
+        expect(document.body.textContent).toContain("Linked folder");
+        expect(button("Check for updates")).toBeUndefined();
+      });
+    });
+
     it("deactivates an active Agent from the danger zone once confirmed, and goes back to the list", async () => {
       agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
       deactivateMock.mockResolvedValue({ status: "inactive" });
