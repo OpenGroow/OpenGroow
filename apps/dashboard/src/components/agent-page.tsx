@@ -4,7 +4,7 @@ import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Pencil, Power, Trash2 } from "lucide-react";
+import { Pencil, Power, Trash2, TriangleAlert } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/opengroow/agent-avatar";
+import { PanelIcon } from "@/components/opengroow/settings-panel";
+import { Card, CardContent } from "@/components/ui/card";
 import { AGENT_STATUS } from "@/components/opengroow/agent-presentation";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { TabNav } from "@/components/opengroow/tab-nav";
@@ -348,53 +350,61 @@ function AgentDangerZone({
   const deactivating = busy === "deactivate";
   const deleting = busy === "delete";
   return (
-    <section className="grid gap-4 rounded-2xl border border-destructive/40 p-5" aria-label="Danger zone">
-      <h2 className="m-0 text-base font-semibold text-foreground">Danger zone</h2>
-      <div className="flex flex-wrap gap-3">
-        {active ? (
-          <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("deactivate")}>
-            <Power />
-            Deactivate
-          </Button>
-        ) : null}
-        <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("delete")}>
-          <Trash2 />
-          Delete
-        </Button>
-      </div>
-      <Dialog open={confirming !== null} onOpenChange={(open) => !open && busy === null && setConfirming(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{confirming === "delete" ? `Delete ${name}?` : `Deactivate ${name}?`}</DialogTitle>
-            <DialogDescription>
-              {confirming === "delete"
-                ? "The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are deleted. This cannot be undone."
-                : "This Agent will be deactivated. Its configuration and its Missions are kept, but it can no longer take new Missions until you activate it again."}
-            </DialogDescription>
-          </DialogHeader>
-          {error && busy === null ? (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" type="button" disabled={busy !== null} onClick={() => setConfirming(null)}>
-              Cancel
+    <Card data-slot="settings-panel" className="max-w-3xl" aria-label="Danger zone">
+      <CardContent className="grid gap-6">
+        <div className="flex items-start gap-4">
+          <PanelIcon icon={TriangleAlert} tone="danger" />
+          <div className="grid gap-1">
+            <h2 className="m-0 text-lg font-semibold text-foreground">Danger zone</h2>
+            <p className="m-0 text-sm text-muted-foreground">Deactivate this Agent, or delete it with its whole history.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {active ? (
+            <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("deactivate")}>
+              <Power />
+              Deactivate
             </Button>
-            {confirming === "delete" ? (
-              <Button variant="destructive" type="button" loading={deleting} onClick={onDelete}>
-                {deleting ? null : <Trash2 />}
-                {deleting ? "Deleting…" : `Delete ${name}`}
+          ) : null}
+          <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("delete")}>
+            <Trash2 />
+            Delete
+          </Button>
+        </div>
+        <Dialog open={confirming !== null} onOpenChange={(open) => !open && busy === null && setConfirming(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{confirming === "delete" ? `Delete ${name}?` : `Deactivate ${name}?`}</DialogTitle>
+              <DialogDescription>
+                {confirming === "delete"
+                  ? "The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are deleted. This cannot be undone."
+                  : "This Agent will be deactivated. Its configuration and its Missions are kept, but it can no longer take new Missions until you activate it again."}
+              </DialogDescription>
+            </DialogHeader>
+            {error && busy === null ? (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button variant="outline" type="button" disabled={busy !== null} onClick={() => setConfirming(null)}>
+                Cancel
               </Button>
-            ) : (
-              <Button type="button" loading={deactivating} onClick={onDeactivate}>
-                {deactivating ? null : <Power />}
-                {deactivating ? "Deactivating…" : "Deactivate"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </section>
+              {confirming === "delete" ? (
+                <Button variant="destructive" type="button" loading={deleting} onClick={onDelete}>
+                  {deleting ? null : <Trash2 />}
+                  {deleting ? "Deleting…" : `Delete ${name}`}
+                </Button>
+              ) : (
+                <Button type="button" loading={deactivating} onClick={onDeactivate}>
+                  {deactivating ? null : <Power />}
+                  {deactivating ? "Deactivating…" : "Deactivate"}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }

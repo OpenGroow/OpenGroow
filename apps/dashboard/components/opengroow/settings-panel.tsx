@@ -9,6 +9,7 @@ const ICON_TONE = {
   violet: "bg-tone-violet-soft text-tone-violet",
   cyan: "bg-tone-cyan-soft text-tone-cyan",
   blue: "bg-tone-blue-soft text-tone-blue",
+  danger: "bg-destructive/10 text-destructive",
 } as const
 
 /** The tinted icon tile that opens a settings card. */
