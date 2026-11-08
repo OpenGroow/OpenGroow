@@ -774,7 +774,7 @@ describe("Add Agent catalogue (#655)", () => {
 
     const dialog = getRequiredDialog();
     expect(dialog.textContent).toContain("SEO Agent");
-    expect(dialog.textContent).toContain("Local folder");
+    expect(dialog.textContent).toContain("Local");
     expect(dialog.textContent).toContain("1.2.0");
     expect(dialog.textContent).toContain("Hello Agent");
   });

@@ -20,8 +20,9 @@ type HubCatalogue = FunctionReturnType<typeof api.project_templates_node.hubCata
 type HubEntry = HubCatalogue["entries"][number];
 
 const ORIGIN_LABELS: Record<CatalogueEntry["origin"], string> = {
-  local_folder: "Local folder",
-  linked_folder: "Linked folder",
+  // A copy from a folder on the operator's machine, added once or kept linked: one label.
+  local_folder: "Local",
+  linked_folder: "Local",
   git: "Git",
   hub: "Hub",
 };

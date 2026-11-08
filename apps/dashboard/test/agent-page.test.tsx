@@ -318,7 +318,8 @@ describe("Agent page", () => {
         agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
         installs = [{ templateId: "@opengroow/hello", version: "0.3.0", origin: "linked_folder" }];
         await settings();
-        expect(document.body.textContent).toContain("Linked folder");
+        expect(document.body.textContent).toContain("Local");
+        expect(document.body.textContent).not.toContain("Linked");
         expect(button("Check for updates")).toBeUndefined();
       });
     });

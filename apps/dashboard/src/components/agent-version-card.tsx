@@ -11,8 +11,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TemplateUpdateReviewDialog, type UpdateOffer } from "@/src/components/template-updates-panel";
 
 const ORIGIN_LABEL: Record<string, string> = {
-  local_folder: "Local folder",
-  linked_folder: "Linked folder",
+  // A copy from a folder on the operator's machine, added once or kept linked: one label.
+  local_folder: "Local",
+  linked_folder: "Local",
   git: "Git",
 };
 
