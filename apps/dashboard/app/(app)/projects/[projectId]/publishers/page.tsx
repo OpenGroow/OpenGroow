@@ -450,7 +450,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         {installedVersion ? (
           <Card className="gap-4 p-5" data-testid="package-updates">
             <h2 className="m-0 text-base font-semibold">Updates</h2>
-            <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <div className="grid flex-1 gap-1">
                 <span className="text-sm text-muted-foreground">Current version</span>
                 <div className="flex flex-wrap items-center gap-3">
@@ -461,7 +461,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                   {updateCheck?.status === "error" ? <StatusBadge tone="error" label="Check failed" /> : null}
                 </div>
               </div>
-              <div className="flex shrink-0 sm:border-l sm:border-border sm:pl-6">
+              <div className="flex shrink-0">
                 {update ? (
                   <Button type="button" size="lg" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
                     {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
