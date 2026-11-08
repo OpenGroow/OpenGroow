@@ -338,7 +338,6 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       ) : (
       <div className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5">
       <header className="grid gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <PublisherLogo icon={current?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
           <div className="grid gap-1">
@@ -348,19 +347,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
               {connected === false ? <StatusBadge tone="error" label="Not connected" /> : null}
               {publisher && !publisher.hasApiKey ? <StatusBadge tone="warning" label="API key missing" /> : null}
             </div>
-            {installedVersion ? <p className="m-0 text-sm text-muted-foreground">Version {installedVersion}</p> : null}
           </div>
-        </div>
-        {installedVersion ? (
-          <div className="grid justify-items-end gap-1">
-            <Button type="button" variant="outline" disabled={updateCheck?.status === "checking" || installing !== null} onClick={() => void checkForUpdates()}>
-              {updateCheck?.status === "checking" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
-              Check for updates
-            </Button>
-            {updateCheck?.status === "upToDate" ? <p className="m-0 text-sm text-muted-foreground">Up to date</p> : null}
-            {updateCheck?.status === "error" ? <p className="m-0 text-sm text-destructive">{updateCheck.message}</p> : null}
-          </div>
-        ) : null}
         </div>
         <div className="flex gap-2 border-b border-border" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "configuration"} className={tabClass(tab === "configuration")} onClick={() => setTab("configuration")}>
@@ -397,25 +384,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         </Card>
       ) : null}
 
-      {update ? (
-        <Card className="gap-3 border-primary/40 p-5" data-testid="package-update">
-          <h2 className="m-0 text-base font-semibold">
-            {update.name} {update.version} is available
-          </h2>
-          <p className="m-0 text-sm text-muted-foreground">
-            Version {installedVersion} is installed. Updating replaces the package; the connection and the channels are kept.
-          </p>
-          {installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
-          <div>
-            <Button type="button" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
-              {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
-              Update to {update.version}
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
       {tab === "configuration" ? (
+        <>
         <Card className="gap-4 p-5">
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
@@ -477,6 +447,42 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
           </div>
         </Card>
+        {installedVersion ? (
+          <Card className="gap-4 p-5" data-testid="package-updates">
+            <div className="grid gap-1">
+              <h2 className="m-0 text-base font-semibold">Updates</h2>
+              <p className="m-0 text-sm text-muted-foreground">Check whether a newer version of this publisher is available.</p>
+            </div>
+            <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center">
+              <div className="grid flex-1 gap-1">
+                <span className="text-sm text-muted-foreground">Current version</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-2xl font-semibold">{installedVersion}</span>
+                  {updateCheck?.status === "checking" ? <StatusBadge tone="progress" label="Checking…" /> : null}
+                  {updateCheck?.status === "upToDate" ? <StatusBadge tone="active" label="Up to date" /> : null}
+                  {update ? <StatusBadge tone="info" label={`${update.version} available`} /> : null}
+                  {updateCheck?.status === "error" ? <StatusBadge tone="error" label="Check failed" /> : null}
+                </div>
+              </div>
+              <div className="flex shrink-0 sm:border-l sm:border-border sm:pl-6">
+                {update ? (
+                  <Button type="button" size="lg" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
+                    {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
+                    Update to {update.version}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" size="lg" disabled={updateCheck?.status === "checking" || installing !== null} onClick={() => void checkForUpdates()}>
+                    {updateCheck?.status === "checking" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+                    Check for updates
+                  </Button>
+                )}
+              </div>
+            </div>
+            {updateCheck?.status === "error" ? <p className="m-0 text-sm text-destructive">{updateCheck.message}</p> : null}
+            {update && installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
+          </Card>
+        ) : null}
+        </>
       ) : publisher ? (
         <PublishTargetsCard instanceId={id} publisher={publisher} />
       ) : (

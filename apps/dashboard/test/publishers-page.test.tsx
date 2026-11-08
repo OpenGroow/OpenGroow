@@ -102,12 +102,11 @@ describe("Publishers page", () => {
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [entry] }));
     actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed", packageId: entry.packageId, version: "1.0.2" }));
     await render();
-    expect(text()).toContain("Version 1.0.0");
+    expect(text()).toContain("Current version1.0.0");
     expect(actions["hub_packages_node.catalogue"]).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-testid="package-update"]')).toBeNull();
 
     await click(byText("Check for updates"));
-    expect(text()).toContain("Postiz 1.0.2 is available");
+    expect(text()).toContain("1.0.2 available");
     await click(byText("Update to 1.0.2"));
     expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: entry.packageId });
   });
@@ -121,7 +120,7 @@ describe("Publishers page", () => {
     await render();
     await click(byText("Check for updates"));
     expect(text()).toContain("Up to date");
-    expect(document.querySelector('[data-testid="package-update"]')).toBeNull();
+    expect(byText("Update to")).toBeUndefined();
 
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [], error: "offline" }));
     await act(async () => root.unmount());
@@ -129,7 +128,7 @@ describe("Publishers page", () => {
     await render();
     await click(byText("Check for updates"));
     expect(text()).toContain("The hub could not be read: offline");
-    expect(document.querySelector('[data-testid="package-update"]')).toBeNull();
+    expect(byText("Update to")).toBeUndefined();
   });
 
   it("shows Connected or Not connected following the connection test", async () => {
