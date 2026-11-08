@@ -8,7 +8,7 @@ import { loadPlugin } from "../publisher/load_node";
 // the way a hub release builds it. Node environment: the loader is a Node
 // action's code and evaluates the bundle with a data: import.
 
-const entry = path.resolve(__dirname, "postiz-reference/src/index.ts");
+const entry = path.resolve(__dirname, "postiz_reference/src/index.ts");
 const bundle = (source?: string) =>
   source ??
   buildSync({ entryPoints: [entry], bundle: true, format: "esm", platform: "neutral", mainFields: ["module", "main"], target: "es2022", write: false })

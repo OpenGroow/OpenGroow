@@ -45,7 +45,7 @@ The SDK gains a `contractVersion`. The package manifest declares the one it was 
 
 Postiz moves to the hub as the first Publisher package. `registry.ts`, the workspace dependency, the Dockerfile COPY lines and the CI path filters for `publisher-postiz` go away. No migration of existing data is needed. A Publisher whose package is not installed shows an "X is not installed" card on its page with an **Install** button, so a deployment that already had Postiz installs the package once, with the same digest check.
 
-The product keeps a copy of the Postiz plugin only as a test fixture (`apps/convex/test/postiz-reference`): the core's tests run the Publication flows (retry, scheduling, reconciliation) through a real plugin against a faked Postiz API. It is not a workspace package and is never shipped. The plugin imports only types from the SDK, so it builds and is tested in the hub without it.
+The product keeps a copy of the Postiz plugin only as a test fixture (`apps/convex/test/postiz_reference`): the core's tests run the Publication flows (retry, scheduling, reconciliation) through a real plugin against a faked Postiz API. It is not a workspace package and is never shipped. The plugin imports only types from the SDK, so it builds and is tested in the hub without it.
 
 ## What it looks like
 

@@ -1,5 +1,5 @@
 import { parseCapabilities, parsePublisherManifest, type CapabilitiesData, type ChannelOptionsData } from "@opengroow/publisher-sdk";
-import { HUB_PACKAGE_KINDS, type HubPackageKind } from "@opengroow/agent-templates/hub-index";
+import { HUB_PACKAGE_KINDS, type HubPackageKind } from "@opengroow/agent-templates/hub-package-kinds";
 import { v } from "convex/values";
 import type { PackageFile } from "./template_registry_store.js";
 

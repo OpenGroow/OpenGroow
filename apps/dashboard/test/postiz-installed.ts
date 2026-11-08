@@ -1,6 +1,6 @@
 // What `api.publisher_packages.list` returns once the Postiz package is installed (ADR-072):
 // the dashboard gets capabilities and channel options as data, not from an import.
-import { postizManifest, postizPlugin } from "../../convex/test/postiz-reference/src/index";
+import { postizManifest, postizPlugin } from "../../convex/test/postiz_reference/src/index";
 
 export const INSTALLED_PUBLISHERS = [
   {

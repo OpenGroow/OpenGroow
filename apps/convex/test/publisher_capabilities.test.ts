@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { capabilityIn, parseCapabilities } from "@opengroow/publisher-sdk";
-import { postizPlugin } from "./postiz-reference/src/index";
+import { postizPlugin } from "./postiz_reference/src/index";
 
 // The capabilities are the installed package's data (ADR-072); the core reads them with `capabilityIn`.
 const capabilityOf = (service: string | undefined, kind: string) => capabilityIn(postizPlugin.capabilities, service, kind);
