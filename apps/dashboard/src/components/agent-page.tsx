@@ -367,7 +367,7 @@ function AgentDangerZone({
             <DialogDescription>
               {confirming === "delete"
                 ? "The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are deleted. This cannot be undone."
-                : "It stops and leaves OpenClaw. Its configuration and its Missions are kept: activate it again from the Agents list."}
+                : "This Agent will be deactivated. Its configuration and its Missions are kept, but it can no longer take new Missions until you activate it again."}
             </DialogDescription>
           </DialogHeader>
           {error && busy === null ? (
