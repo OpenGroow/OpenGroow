@@ -52,6 +52,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_templates_node: {
       hubCatalogue: "project_templates_node.hubCatalogue",
+      checkHubUpdates: "project_templates_node.checkHubUpdates",
       previewHubTemplate: "project_templates_node.previewHubTemplate",
       installHubTemplate: "project_templates_node.installHubTemplate",
       previewLocalFolder: "project_templates_node.previewLocalFolder",

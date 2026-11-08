@@ -210,3 +210,58 @@ describe("previewHubTemplate", () => {
     expect(await t.withIdentity(OWNER).query(api.project_templates.origins, { projectId: PROJECT })).toEqual([]);
   });
 });
+
+describe("checkHubUpdates", () => {
+  const versioned = (version: string) =>
+    archiveOf(
+      withId(readHostedClawPackageFixture("seo"), "@alice/seo").map((f) =>
+        f.path === "package.json" ? { ...f, content: f.content.replace(/"version": ".*"/, `"version": "${version}"`) } : f,
+      ),
+    );
+  const V1 = versioned("1.0.0");
+  const V2 = versioned("1.1.0");
+  const tagged = (tag: string, archive: Buffer) => ({ ...entry("@alice/seo", archive), tag });
+  const urlOf = (tag: string) => `https://github.com/acme/seo/archive/refs/tags/${tag}.tar.gz`;
+
+  async function installV1(t: ReturnType<typeof convexTest>) {
+    stubNetwork({ packages: [tagged("v1.0.0", V1)], archives: { [urlOf("v1.0.0")]: V1 } });
+    await seedProject(t);
+    await t.withIdentity(OWNER).action(api.project_templates_node.installHubTemplate, { instanceId: PROJECT, templateId: "@alice/seo" });
+  }
+
+  it("offers the hub's newer version for review, once, without applying it", async () => {
+    const t = convexTest(schema, modules);
+    await installV1(t);
+    const fetchMock = stubNetwork({ packages: [tagged("v1.1.0", V2)], archives: { [urlOf("v1.1.0")]: V2 } });
+
+    const result = await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT });
+
+    expect(result).toEqual({ offered: [{ templateId: "@alice/seo", version: "1.1.0" }] });
+    const offers = await t.withIdentity(OWNER).query(api.project_templates.updates, { projectId: PROJECT });
+    expect(offers).toEqual([expect.objectContaining({ templateId: "@alice/seo", currentVersion: "1.0.0", availableVersion: "1.1.0" })]);
+    const origins = await t.withIdentity(OWNER).query(api.project_templates.origins, { projectId: PROJECT });
+    expect(origins.find((o) => o.templateId === "@alice/seo")?.version).toBe("1.0.0");
+
+    const again = await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT });
+    expect(again).toEqual({ offered: [] });
+    expect(fetchMock.mock.calls.filter(([url]) => url === urlOf("v1.1.0"))).toHaveLength(1);
+  });
+
+  it("offers nothing when the hub has the installed version, and refuses a non-owner", async () => {
+    const t = convexTest(schema, modules);
+    await installV1(t);
+    expect(await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT })).toEqual({ offered: [] });
+    const intruder = await t.withIdentity(INTRUDER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT });
+    expect(intruder.offered).toEqual([]);
+    expect(intruder.error).toBeTruthy();
+  });
+
+  it("reports a newer release that cannot be offered", async () => {
+    const t = convexTest(schema, modules);
+    await installV1(t);
+    stubNetwork({ packages: [tagged("v1.1.0", V2)], archives: { [urlOf("v1.1.0")]: V1 } });
+    const result = await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT });
+    expect(result.offered).toEqual([]);
+    expect(result.error).toMatch(/@alice\/seo: .*Digest mismatch/);
+  });
+});

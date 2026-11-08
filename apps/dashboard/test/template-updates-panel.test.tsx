@@ -10,14 +10,19 @@ import { TemplateUpdatesPanel } from "../src/components/template-updates-panel";
 
 const useQueryMock = vi.fn();
 const applyUpdateMock = vi.fn();
+const checkHubUpdatesMock = vi.fn(async () => ({ offered: [] }));
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   useMutation: () => applyUpdateMock,
+  useAction: () => checkHubUpdatesMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
-  api: { project_templates: { updates: "project_templates.updates", applyUpdate: "project_templates.applyUpdate" } },
+  api: {
+    project_templates: { updates: "project_templates.updates", applyUpdate: "project_templates.applyUpdate" },
+    project_templates_node: { checkHubUpdates: "project_templates_node.checkHubUpdates" },
+  },
 }));
 
 import type { UpdatePlan } from "@convex/template_manifest_contract";
@@ -68,6 +73,15 @@ describe("TemplateUpdatesPanel", () => {
     });
   const button = (text: string) =>
     Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.includes(text));
+
+  it("asks the hub for newer versions of the Project's Templates when shown, and survives a failure", async () => {
+    useQueryMock.mockReturnValue([]);
+    checkHubUpdatesMock.mockClear();
+    checkHubUpdatesMock.mockRejectedValueOnce(new Error("offline"));
+    await render();
+    expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "proj" });
+    expect(container.textContent).toBe("");
+  });
 
   it("renders nothing when no update is available", async () => {
     useQueryMock.mockReturnValue([]);

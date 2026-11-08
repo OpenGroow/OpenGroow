@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -53,9 +53,23 @@ export function planSections(offer: UpdateOffer): Section[] {
 export function TemplateUpdatesPanel({ projectId }: { projectId: string }) {
   const offers = useQuery(api.project_templates.updates, { projectId });
   const applyUpdate = useMutation(api.project_templates.applyUpdate);
+  const checkHubUpdates = useAction(api.project_templates_node.checkHubUpdates);
   const [reviewing, setReviewing] = React.useState<UpdateOffer | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
+
+  // Asks the hub for newer versions of the Project's hub Templates: a newer one
+  // is offered (not applied) and appears below through `updates`. Best effort:
+  // a hub that cannot be read, or a viewer who is not the owner, offers nothing.
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        await checkHubUpdates({ instanceId: projectId });
+      } catch {
+        // Nothing offered: the installed versions keep working.
+      }
+    })();
+  }, [projectId, checkHubUpdates]);
 
   if (!offers || offers.length === 0) return null;
 
