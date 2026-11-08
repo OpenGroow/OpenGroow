@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, Save, Settings } from "lucide-react";
+import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { isNewerVersion, versionOfTag } from "@/src/lib/package-versions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -73,6 +74,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const [awaiting, setAwaiting] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
   const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
+  // A newer version of the installed package in the hub (ADR-072): installing it again replaces the installed one.
+  const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -145,6 +148,28 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       cancelled = true;
     };
   }, [missingAdapter, hubCatalogue]);
+
+  const installedPackage = packageInstalled ? installed?.find((p) => p.adapter === publisher?.adapter) : undefined;
+  const installedPackageId = installedPackage?.packageId;
+  const installedVersion = installedPackage?.version;
+  useEffect(() => {
+    setUpdate(null);
+    if (!installedPackageId || !installedVersion) return;
+    let cancelled = false;
+    hubCatalogue({ kind: "publisher" })
+      .then((result) => {
+        if (cancelled) return;
+        const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
+        const version = entry ? versionOfTag(entry.tag) : undefined;
+        if (entry && version && isNewerVersion(version, installedVersion)) setUpdate({ packageId: entry.packageId, name: entry.name, version });
+      })
+      .catch(() => {
+        // The hub cannot be read: no update is offered, the installed version keeps working.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [installedPackageId, installedVersion, hubCatalogue]);
 
   if (!instance || !instanceId) return null;
   const id = instanceId;
@@ -342,6 +367,24 @@ export default function PublishersPage({ params }: PublishersPageProps) {
             <Button type="button" disabled={!missing?.entry || installing !== null} onClick={() => void installMissing(missing!.entry!.packageId)}>
               {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
               Install {missing?.entry?.name ?? serviceName}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {update ? (
+        <Card className="gap-3 border-primary/40 p-5" data-testid="package-update">
+          <h2 className="m-0 text-base font-semibold">
+            {update.name} {update.version} is available
+          </h2>
+          <p className="m-0 text-sm text-muted-foreground">
+            Version {installedVersion} is installed. Updating replaces the package; the connection and the channels are kept.
+          </p>
+          {installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
+          <div>
+            <Button type="button" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
+              {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+              Update to {update.version}
             </Button>
           </div>
         </Card>

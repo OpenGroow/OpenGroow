@@ -95,6 +95,36 @@ describe("Publishers page", () => {
     expect(text()).toContain("Postiz URL");
   });
 
+  it("offers the hub's newer version of the installed package and installs it on Update", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    const entry = { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.2", verification: "official" };
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [entry] }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed", packageId: entry.packageId, version: "1.0.2" }));
+    await render();
+    expect(text()).toContain("Postiz 1.0.2 is available");
+    expect(text()).toContain("Version 1.0.0 is installed");
+    await click(byText("Update to 1.0.2"));
+    expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: entry.packageId });
+  });
+
+  it("offers no update when the hub has the installed version, or cannot be read", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.0", verification: "official" }],
+    }));
+    await render();
+    expect(document.querySelector('[data-testid="package-update"]')).toBeNull();
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    actions["hub_packages_node.catalogue"] = vi.fn(async (): Promise<unknown> => {
+      throw new Error("offline");
+    });
+    await render();
+    expect(document.querySelector('[data-testid="package-update"]')).toBeNull();
+  });
+
   it("shows Connected or Not connected following the connection test", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
