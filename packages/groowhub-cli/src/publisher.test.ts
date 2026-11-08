@@ -7,7 +7,7 @@ import { run } from "./cli.js";
 import { checkPublisherFolder, packPublisher } from "./publisher.js";
 
 // The Postiz copy the core's tests use: a complete, valid Publisher package.
-const POSTIZ = resolve(__dirname, "../../../apps/convex/test/postiz-reference");
+const POSTIZ = resolve(__dirname, "../../../apps/convex/test/postiz_reference");
 
 function copyOfPostiz() {
   const dir = mkdtempSync(join(tmpdir(), "groowhub-cli-"));

@@ -22,6 +22,7 @@
     "./review-contract": "./src/review-contract.ts",
     "./registry": "./src/registry.ts",
     "./hub-index": "./src/hub-index.ts",
+    "./hub-package-kinds": "./src/hub-package-kinds.ts",
     "./folder-files": "./src/folder-files.ts",
     "./git-archive": "./src/git-archive.ts",
     "./pinned-source": "./src/pinned-source.ts"

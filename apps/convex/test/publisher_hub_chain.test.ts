@@ -31,7 +31,7 @@ let hubUrl: string;
 
 beforeAll(async () => {
   hubDir = mkdtempSync(join(tmpdir(), "hub-chain-"));
-  packPublisher(join(__dirname, "postiz-reference"), join(hubDir, "dist"), { indexFile: join(hubDir, "publishers.json") });
+  packPublisher(join(__dirname, "postiz_reference"), join(hubDir, "dist"), { indexFile: join(hubDir, "publishers.json") });
   server = createHubServer(hubDir);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   hubUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

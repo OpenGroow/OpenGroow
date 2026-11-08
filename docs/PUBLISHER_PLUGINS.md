@@ -1,6 +1,6 @@
 # Writing a Publisher plugin
 
-A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher/postiz` in the hub (groowhub). Contract: `packages/publisher-sdk`. The core's tests use a copy of it, `apps/convex/test/postiz-reference`, which is never shipped.
+A Publisher plugin connects OpenGroow to one external publishing service (ADR-070). It is an isolated code module that exposes a few functions; the core calls them and owns everything else. Reference implementation: `packages/publisher/postiz` in the hub (groowhub). Contract: `packages/publisher-sdk`. The core's tests use a copy of it, `apps/convex/test/postiz_reference`, which is never shipped.
 
 ## Package layout
 
