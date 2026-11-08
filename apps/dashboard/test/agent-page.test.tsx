@@ -438,15 +438,11 @@ describe("Agent page", () => {
       });
     });
 
-    it("explains that there is nothing to configure when an active Agent has no editable requirement and a single Mission type", async () => {
+    it("shows no configuration and no explanation when an active Agent has nothing to configure", async () => {
       agents({ templateId: "@opengroow/visual-social", status: "active", workspaceKey: "ws-visual-social" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/visual-social" />);
-      expect(document.body.textContent).toContain("Nothing to configure for this Agent");
+      expect(document.body.textContent).not.toContain("Nothing to configure");
       expect(button("Edit config")).toBeUndefined();
-
-      agents({ templateId: "@opengroow/video-demo", status: "active", workspaceKey: "ws-video" });
-      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
-      expect(document.body.textContent).not.toContain("Nothing to configure for this Agent");
     });
 
     it("hides Mission types when the Agent is inactive or has a single type", async () => {

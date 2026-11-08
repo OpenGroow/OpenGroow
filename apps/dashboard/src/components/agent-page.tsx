@@ -285,11 +285,6 @@ function AgentSettingsContent({
           Activate this Agent from the Agents list to configure it.
         </p>
       ) : null}
-      {active && !editable && !configurableMissionTypes && !overridableMcpUrls ? (
-        <p className="m-0 text-sm text-muted-foreground">
-          Nothing to configure for this Agent: its configuration is fixed at activation and it offers at most one Mission type.
-        </p>
-      ) : null}
       {editable ? (
         <div>
           <Button variant="outline" size="lg" type="button" onClick={() => setEditing(true)}>
