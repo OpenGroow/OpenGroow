@@ -326,7 +326,8 @@ function AgentSettingsContent({
 /**
  * Deactivate (reversible: the Agent leaves OpenClaw, its configuration and
  * history stay) and Delete (irreversible: the Agent, its Template, Schedules
- * and every Mission with its history), apart from the everyday settings.
+ * and every Mission with its history), each confirmed in a dialog that says
+ * what it does.
  */
 function AgentDangerZone({
   name,
@@ -343,41 +344,30 @@ function AgentDangerZone({
   onDeactivate: () => void;
   onDelete: () => void;
 }) {
-  const [confirming, setConfirming] = React.useState(false);
+  const [confirming, setConfirming] = React.useState<"deactivate" | "delete" | null>(null);
+  const deactivating = busy === "deactivate";
+  const deleting = busy === "delete";
   return (
     <section className="grid gap-4 rounded-2xl border border-destructive/40 p-5" aria-label="Danger zone">
       <h2 className="m-0 text-base font-semibold text-foreground">Danger zone</h2>
-      {active ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <div className="grid min-w-0 flex-1 gap-1">
-            <span className="text-sm font-medium text-foreground">Deactivate this Agent</span>
-            <span className="max-w-md text-sm text-muted-foreground">
-              It stops and leaves OpenClaw. Its configuration and its Missions are kept: activate it again from the Agents list.
-            </span>
-          </div>
-          <Button className="w-32 shrink-0 self-start sm:self-auto" variant="outline" size="lg" type="button" loading={busy === "deactivate"} disabled={busy !== null} onClick={onDeactivate}>
-            {busy === "deactivate" ? "Deactivating…" : "Deactivate"}
+      <div className="flex flex-wrap gap-3">
+        {active ? (
+          <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("deactivate")}>
+            Deactivate
           </Button>
-        </div>
-      ) : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-        <div className="grid min-w-0 flex-1 gap-1">
-          <span className="text-sm font-medium text-foreground">Delete this Agent</span>
-          <span className="max-w-md text-sm text-muted-foreground">
-            Removes the Agent, its Template, its Schedules and all its Missions with their history. This cannot be undone.
-          </span>
-        </div>
-        <Button className="w-32 shrink-0 self-start sm:self-auto" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming(true)}>
+        ) : null}
+        <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("delete")}>
           Delete
         </Button>
       </div>
-      <Dialog open={confirming} onOpenChange={(open) => busy !== "delete" && setConfirming(open)}>
+      <Dialog open={confirming !== null} onOpenChange={(open) => !open && busy === null && setConfirming(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {name}?</DialogTitle>
+            <DialogTitle>{confirming === "delete" ? `Delete ${name}?` : `Deactivate ${name}?`}</DialogTitle>
             <DialogDescription>
-              The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are
-              deleted. This cannot be undone.
+              {confirming === "delete"
+                ? "The Agent, its configuration, its Template, its Schedules and all its Missions with their Runs and publications are deleted. This cannot be undone."
+                : "It stops and leaves OpenClaw. Its configuration and its Missions are kept: activate it again from the Agents list."}
             </DialogDescription>
           </DialogHeader>
           {error && busy === null ? (
@@ -386,12 +376,18 @@ function AgentDangerZone({
             </p>
           ) : null}
           <DialogFooter>
-            <Button variant="outline" type="button" disabled={busy === "delete"} onClick={() => setConfirming(false)}>
+            <Button variant="outline" type="button" disabled={busy !== null} onClick={() => setConfirming(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" type="button" loading={busy === "delete"} onClick={onDelete}>
-              {busy === "delete" ? "Deleting…" : `Delete ${name}`}
-            </Button>
+            {confirming === "delete" ? (
+              <Button variant="destructive" type="button" loading={deleting} onClick={onDelete}>
+                {deleting ? "Deleting…" : `Delete ${name}`}
+              </Button>
+            ) : (
+              <Button type="button" loading={deactivating} onClick={onDeactivate}>
+                {deactivating ? "Deactivating…" : "Deactivate"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

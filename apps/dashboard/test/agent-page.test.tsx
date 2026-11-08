@@ -259,12 +259,16 @@ describe("Agent page", () => {
   });
 
   describe("Settings", () => {
-    it("deactivates an active Agent from the danger zone and goes back to the list", async () => {
+    it("deactivates an active Agent from the danger zone once confirmed, and goes back to the list", async () => {
       agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
       deactivateMock.mockResolvedValue({ status: "inactive" });
       await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
 
       await act(async () => button("Deactivate")!.click());
+      expect(deactivateMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Its configuration and its Missions are kept");
+      const confirm = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === "Deactivate");
+      await act(async () => confirm!.click());
       expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
       expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
     });
