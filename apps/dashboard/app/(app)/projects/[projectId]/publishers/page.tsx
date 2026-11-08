@@ -74,8 +74,10 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const [awaiting, setAwaiting] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
   const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
-  // A newer version of the installed package in the hub (ADR-072): installing it again replaces the installed one.
+  // A newer version of the installed package in the hub (ADR-072), found by "Check for updates": installing it again replaces the installed one.
   const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
+  // The outcome of the last check: the hub is read only when the user asks.
+  const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -152,24 +154,34 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const installedPackage = packageInstalled ? installed?.find((p) => p.adapter === publisher?.adapter) : undefined;
   const installedPackageId = installedPackage?.packageId;
   const installedVersion = installedPackage?.version;
+  // A new installed version (an update just applied) makes the last check stale.
   useEffect(() => {
     setUpdate(null);
+    setUpdateCheck(null);
+  }, [installedPackageId, installedVersion]);
+
+  async function checkForUpdates() {
     if (!installedPackageId || !installedVersion) return;
-    let cancelled = false;
-    hubCatalogue({ kind: "publisher" })
-      .then((result) => {
-        if (cancelled) return;
-        const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
-        const version = entry ? versionOfTag(entry.tag) : undefined;
-        if (entry && version && isNewerVersion(version, installedVersion)) setUpdate({ packageId: entry.packageId, name: entry.name, version });
-      })
-      .catch(() => {
-        // The hub cannot be read: no update is offered, the installed version keeps working.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [installedPackageId, installedVersion, hubCatalogue]);
+    setUpdate(null);
+    setUpdateCheck({ status: "checking" });
+    try {
+      const result = await hubCatalogue({ kind: "publisher" });
+      if (result.error) {
+        setUpdateCheck({ status: "error", message: `The hub could not be read: ${result.error}` });
+        return;
+      }
+      const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
+      const version = entry ? versionOfTag(entry.tag) : undefined;
+      if (entry && version && isNewerVersion(version, installedVersion)) {
+        setUpdate({ packageId: entry.packageId, name: entry.name, version });
+        setUpdateCheck(null);
+      } else {
+        setUpdateCheck({ status: "upToDate" });
+      }
+    } catch (error) {
+      setUpdateCheck({ status: "error", message: errorMessage(error, "The hub could not be read") });
+    }
+  }
 
   if (!instance || !instanceId) return null;
   const id = instanceId;
@@ -326,6 +338,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       ) : (
       <div className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5">
       <header className="grid gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <PublisherLogo icon={current?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
           <div className="grid gap-1">
@@ -335,7 +348,19 @@ export default function PublishersPage({ params }: PublishersPageProps) {
               {connected === false ? <StatusBadge tone="error" label="Not connected" /> : null}
               {publisher && !publisher.hasApiKey ? <StatusBadge tone="warning" label="API key missing" /> : null}
             </div>
+            {installedVersion ? <p className="m-0 text-sm text-muted-foreground">Version {installedVersion}</p> : null}
           </div>
+        </div>
+        {installedVersion ? (
+          <div className="grid justify-items-end gap-1">
+            <Button type="button" variant="outline" disabled={updateCheck?.status === "checking" || installing !== null} onClick={() => void checkForUpdates()}>
+              {updateCheck?.status === "checking" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+              Check for updates
+            </Button>
+            {updateCheck?.status === "upToDate" ? <p className="m-0 text-sm text-muted-foreground">Up to date</p> : null}
+            {updateCheck?.status === "error" ? <p className="m-0 text-sm text-destructive">{updateCheck.message}</p> : null}
+          </div>
+        ) : null}
         </div>
         <div className="flex gap-2 border-b border-border" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "configuration"} className={tabClass(tab === "configuration")} onClick={() => setTab("configuration")}>
