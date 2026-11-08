@@ -28,8 +28,9 @@ const deleteMock = vi.fn();
 let pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, replace: replaceMock }),
   notFound: () => notFoundMock(),
   usePathname: () => pathname,
 }));
@@ -121,9 +122,10 @@ describe("Agent page", () => {
 
   beforeEach(() => {
     overview = NO_MISSIONS;
-    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, deleteMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock]) {
+    for (const m of [useQueryMock, useActionMock, useMutationMock, deactivateMock, deleteMock, reconfigureMock, applyHiddenMissionTypesMock, pushMock, replaceMock]) {
       m.mockReset();
     }
+    notFoundMock.mockClear();
     pathname = "/projects/instance-1/agents/%40opengroow%2Fvideo-demo";
     serveProjectManifests(["video-demo", "hello", "engagement", "seo", "visual-social"].map(manifestOf));
     agents();
@@ -271,6 +273,18 @@ describe("Agent page", () => {
       await act(async () => confirm!.click());
       expect(deactivateMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
       expect(pushMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+    });
+
+    it("goes to the Agents list, not a 404, when the Agent's Template disappears while its page is open", async () => {
+      agents({ templateId: "@opengroow/hello", status: "inactive" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+      expect(document.body.textContent).toContain("Danger zone");
+
+      serveProjectManifests(["video-demo", "engagement", "seo", "visual-social"].map(manifestOf));
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/hello" />);
+
+      expect(replaceMock).toHaveBeenCalledWith("/projects/instance-1/agents");
+      expect(notFoundMock).not.toHaveBeenCalled();
     });
 
     it("deletes the Agent only once confirmed, and keeps the dialog open with the error when refused", async () => {

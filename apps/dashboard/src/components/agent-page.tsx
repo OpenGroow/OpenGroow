@@ -121,7 +121,17 @@ function WithAgentManifest({
   templateId: string;
   children: (manifest: AgentManifest) => React.ReactNode;
 }) {
+  const router = useRouter();
   const manifest = useProjectManifest(instanceId, templateId);
+  // The Template was shown, then went away while the page is open (the Agent
+  // was just deleted): go to the Agents list rather than a 404.
+  const seen = React.useRef(false);
+  if (manifest) seen.current = true;
+  const removed = manifest === null && seen.current;
+  React.useEffect(() => {
+    if (removed) router.replace(`/projects/${encodeURIComponent(instanceId)}/agents`);
+  }, [removed, router, instanceId]);
+  if (removed) return null;
   if (manifest === null) notFound();
   return manifest ? <>{children(manifest)}</> : null;
 }
