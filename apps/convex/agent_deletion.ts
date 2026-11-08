@@ -6,6 +6,9 @@ import type { TableNames } from "./_generated/dataModel.js";
 /** Documents deleted per call: each mutation stays well under Convex's write and read limits. */
 const BATCH = 64;
 
+/** Statuses of a Run that is not finished; the same as `runs.countActiveByInstanceTemplate`. */
+const LIVE_RUN_STATUSES = ["pending", "dispatching", "running", "awaiting_job"] as const;
+
 /**
  * One step of `deleteProjectAgent`: deletes up to `BATCH` documents belonging
  * to the Agent of `templateId` in the Project, children before parents, and
@@ -15,13 +18,14 @@ const BATCH = 64;
  * Schedules, Jobs, installed Template versions (with their files), MCP URL
  * overrides, then the Agent row. Sources are kept: they are append-only and
  * outlive the Missions that produced them (ADR-051), like `deleteMission`.
- * Refused while a Run is live on the Instance (its callback would reference a
- * deleted Run).
+ * Refused while one of its Runs is live (pending, dispatching, running or
+ * awaiting an external job, as `runs.countActiveByInstanceTemplate` counts
+ * them): its callback, poll or claim would reference a deleted Run.
  */
 export const purgeBatch = internalMutation({
   args: { instanceId: v.string(), templateId: v.string() },
   handler: async (ctx, { instanceId, templateId }): Promise<{ done: boolean }> => {
-    for (const status of ["dispatching", "running"] as const) {
+    for (const status of LIVE_RUN_STATUSES) {
       const live = await ctx.db
         .query("runs")
         .withIndex("by_instance_template_status", (q) =>

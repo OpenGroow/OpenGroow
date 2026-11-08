@@ -108,24 +108,61 @@ export function buildUpdatePlan(from: UpdatePlanSide, to: UpdatePlanSide, schedu
   return { ...plan, requiresAttention };
 }
 
-function numericParts(version: string): number[] | null {
-  const parts = version.split(".");
-  return parts.every((part) => /^\d+$/.test(part)) ? parts.map(Number) : null;
+/** A dotted numeric version with an optional pre-release: `1.2.0`, `1.2`, `2.0.0-rc.1`. */
+const DOTTED_VERSION = /^(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?$/;
+
+function parseDotted(version: string): { core: number[]; pre: string[] | null } | null {
+  const match = DOTTED_VERSION.exec(version);
+  if (!match) return null;
+  return { core: match[1].split(".").map(Number), pre: match[2] ? match[2].split(".") : null };
+}
+
+/** Semver precedence of two pre-release identifier lists: numeric ids compare numerically and rank below alphanumeric ones. */
+function comparePreRelease(a: string[], b: string[]): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] === undefined) return -1;
+    if (b[i] === undefined) return 1;
+    const aNumeric = /^\d+$/.test(a[i]);
+    const bNumeric = /^\d+$/.test(b[i]);
+    if (aNumeric && bNumeric) {
+      const diff = Number(a[i]) - Number(b[i]);
+      if (diff !== 0) return diff;
+    } else if (aNumeric !== bNumeric) {
+      return aNumeric ? -1 : 1;
+    } else if (a[i] !== b[i]) {
+      return a[i] < b[i] ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 /**
- * Whether `candidate` is a newer version than `current`. Dotted numeric
- * versions are compared numerically; any other version string cannot be
- * ordered, so a different one counts as newer (the user still confirms).
+ * Whether `candidate` is a newer version than `current`, for Templates and hub
+ * packages, on the server and in the dashboard. Dotted numeric versions with
+ * an optional pre-release follow semver precedence: `1.10.0` > `1.9.0`, a
+ * release beats its pre-releases (`1.2.0` > `1.2.0-rc.1`), and a pre-release
+ * of an equal or lower version is not newer. Any other version string cannot
+ * be ordered, so a different one counts as newer (the user still confirms).
  */
 export function isNewerVersion(candidate: string, current: string): boolean {
   if (candidate === current) return false;
-  const a = numericParts(candidate);
-  const b = numericParts(current);
+  const a = parseDotted(candidate);
+  const b = parseDotted(current);
   if (!a || !b) return true;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+  for (let i = 0; i < Math.max(a.core.length, b.core.length); i++) {
+    const diff = (a.core[i] ?? 0) - (b.core[i] ?? 0);
     if (diff !== 0) return diff > 0;
   }
-  return false;
+  if (a.pre === null || b.pre === null) return a.pre === null && b.pre !== null;
+  return comparePreRelease(a.pre, b.pre) > 0;
+}
+
+/**
+ * The version a hub tag names: `source@1.2.0` or `v1.2.0` -> `1.2.0`,
+ * `seo@2.0.0-rc.1` -> `2.0.0-rc.1`; undefined when it is not a dotted version
+ * (`postiz`, `postiz@latest`).
+ */
+export function versionOfHubTag(tag: string): string | undefined {
+  const version = tag.includes("@") ? tag.slice(tag.lastIndexOf("@") + 1) : tag.replace(/^v/, "");
+  return DOTTED_VERSION.test(version) ? version : undefined;
 }

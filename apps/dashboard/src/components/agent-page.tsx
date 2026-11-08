@@ -54,7 +54,9 @@ function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHr
   const reconfigureAction = useAction(api.project_agents_node.reconfigureProjectAgent);
   const applyHiddenMissionTypesAction = useAction(api.project_agents_node.applyHiddenMissionTypes);
   const [busy, setBusy] = React.useState<Busy | null>(null);
-  const [error, setError] = React.useState<string | undefined>();
+  // The last failure and the action it came from: Deactivate and Delete show
+  // theirs in their confirmation dialog, the Mission types change at the top.
+  const [error, setError] = React.useState<{ kind: Busy; message: string } | undefined>();
 
   async function run(
     kind: Busy,
@@ -67,12 +69,12 @@ function useAgentActions(runtimeInstanceId: string, templateId: string, agentsHr
     try {
       const result = await work();
       if (result && result.status === "error") {
-        setError(result.errorMessage);
+        setError({ kind, message: result.errorMessage ?? failure });
         return false;
       }
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : failure);
+      setError({ kind, message: err instanceof Error ? err.message : failure });
       return false;
     } finally {
       setBusy(null);
@@ -280,7 +282,7 @@ function AgentSettingsContent({
 
   return (
     <div className="grid gap-5">
-      {actions.error ? <ErrorMessage message={actions.error} /> : null}
+      {actions.error?.kind === "hidden" ? <ErrorMessage message={actions.error.message} /> : null}
       {!active ? (
         <p className="m-0 text-sm text-muted-foreground">
           Activate this Agent from the Agents list to configure it.
@@ -310,7 +312,7 @@ function AgentSettingsContent({
         name={manifest.name}
         active={active}
         busy={actions.busy}
-        error={actions.error}
+        error={actions.error?.kind === "deactivate" || actions.error?.kind === "delete" ? actions.error : undefined}
         onDeactivate={() => void actions.deactivate()}
         onDelete={() => void actions.remove()}
       />
@@ -349,7 +351,7 @@ function AgentDangerZone({
   name: string;
   active: boolean;
   busy: Busy | null;
-  error?: string;
+  error?: { kind: Busy; message: string };
   onDeactivate: () => void;
   onDelete: () => void;
 }) {
@@ -388,9 +390,9 @@ function AgentDangerZone({
                   : "This Agent will be deactivated. Its configuration and its Missions are kept, but it can no longer take new Missions until you activate it again."}
               </DialogDescription>
             </DialogHeader>
-            {error && busy === null ? (
+            {error && error.kind === confirming && busy === null ? (
               <p role="alert" className="m-0 text-sm text-destructive">
-                {error}
+                {error.message}
               </p>
             ) : null}
             <DialogFooter>

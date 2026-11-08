@@ -14,7 +14,6 @@ import { InstanceAgentsContent } from "../src/components/instance-agents-page";
 const activateMock = vi.fn();
 const addAgentMock = vi.fn();
 const deactivateMock = vi.fn();
-const setHiddenMissionTypesMock = vi.fn();
 const updateConfigMock = vi.fn();
 const retryStatusCheckMock = vi.fn();
 const useQueryMock = vi.fn();
@@ -47,7 +46,6 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_agents: {
       listByInstance: "project_agents.listByInstance",
-      setHiddenMissionTypes: "project_agents.setHiddenMissionTypes",
     },
     project_templates_node: {
       hubCatalogue: "project_templates_node.hubCatalogue",
@@ -418,7 +416,6 @@ describe("InstanceAgentsContent", () => {
     addAgentMock.mockReset();
     serveCatalogue([]);
     deactivateMock.mockReset();
-    setHiddenMissionTypesMock.mockReset();
     useMutationMock.mockReset();
     updateConfigMock.mockReset();
     retryStatusCheckMock.mockReset();
@@ -436,7 +433,6 @@ describe("InstanceAgentsContent", () => {
       },
     ]);
     useMutationMock.mockImplementation((mutation: string) => {
-      if (mutation === "project_agents.setHiddenMissionTypes") return setHiddenMissionTypesMock;
       if (mutation === "project_templates.applyUpdate") return vi.fn();
       throw new Error(`Unexpected mutation: ${mutation}`);
     });

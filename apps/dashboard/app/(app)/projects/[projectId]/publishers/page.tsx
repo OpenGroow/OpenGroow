@@ -9,7 +9,7 @@ import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
-import { isNewerVersion, versionOfTag } from "@/src/lib/package-versions";
+import { isNewerVersion, versionOfHubTag } from "@convex/template_manifest_contract";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -171,7 +171,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
         return;
       }
       const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
-      const version = entry ? versionOfTag(entry.tag) : undefined;
+      const version = entry ? versionOfHubTag(entry.tag) : undefined;
       if (entry && version && isNewerVersion(version, installedVersion)) {
         setUpdate({ packageId: entry.packageId, name: entry.name, version });
         setUpdateCheck(null);

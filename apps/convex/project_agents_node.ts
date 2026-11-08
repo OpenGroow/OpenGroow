@@ -439,7 +439,7 @@ export const applyHiddenMissionTypes = action({
     const user = await requireAuthenticatedUser(ctx);
     const ownership = await requireInstanceOwner(ctx, args.instanceId, user);
     if (!ownership.ok) return { status: "error", errorMessage: ownership.errorMessage };
-    await ctx.runMutation(api.project_agents.setHiddenMissionTypes, args);
+    await ctx.runMutation(internal.project_agents.setHiddenMissionTypes, args);
     const { pluginsChanged, ...result } = await refreshFromRegistry(ctx, args.instanceId, args.templateId, {
       ensureWorkspace: false,
     });

@@ -27,7 +27,7 @@ const INTRUDER = { name: "X", email: "x@e.com", tokenIdentifier: "test|del-x", s
 type T = ReturnType<typeof convexTest>;
 
 /** One Template's full footprint: Agent, versions with files, override, Schedule, Job, Missions with Runs, events and Publications. */
-async function seedTemplate(t: T, templateId: string, opts: { missions?: number; runsPerMission?: number; runStatus?: "completed" | "running" } = {}) {
+async function seedTemplate(t: T, templateId: string, opts: { missions?: number; runsPerMission?: number; runStatus?: "completed" | "pending" | "dispatching" | "running" | "awaiting_job" } = {}) {
   const now = Date.now();
   await t.run(async (ctx) => {
     await ctx.db.insert("projectAgents", {
@@ -126,10 +126,10 @@ describe("deleteProjectAgent", () => {
     expect(Object.values(await counts(t)).every((n) => n === 0)).toBe(true);
   });
 
-  it("refuses while a Run is in flight, deleting nothing", async () => {
+  it.each(["pending", "dispatching", "running", "awaiting_job"] as const)("refuses while a Run is %s, deleting nothing", async (runStatus) => {
     const t = convexTest(schema, modules);
     await seedInstance(t);
-    await seedTemplate(t, TEMPLATE_ID, { runStatus: "running" });
+    await seedTemplate(t, TEMPLATE_ID, { runStatus });
     const before = await counts(t);
 
     const result = await t.withIdentity(OWNER).action(api.project_agents_node.deleteProjectAgent, { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID });

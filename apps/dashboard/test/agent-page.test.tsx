@@ -73,7 +73,6 @@ vi.mock("@convex/_generated/api", () => ({
     missions: { overviewByTemplate: "missions.overviewByTemplate" },
     project_agents: {
       listByInstance: "project_agents.listByInstance",
-      setHiddenMissionTypes: "project_agents.setHiddenMissionTypes",
     },
     project_agents_node: {
       deactivateProjectAgent: "project_agents_node.deactivateProjectAgent",
@@ -291,7 +290,7 @@ describe("Agent page", () => {
         expect(checkHubUpdatesMock).not.toHaveBeenCalled();
 
         await act(async () => button("Check for updates")!.click());
-        expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "instance-1" });
+        expect(checkHubUpdatesMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@opengroow/hello" });
         expect(document.body.textContent).toContain("Up to date");
       });
 
@@ -499,6 +498,24 @@ describe("Agent page", () => {
         templateId: "@opengroow/video-demo",
         hiddenMissionTypes: ["lym_create_letter_video", "create_chat_mock_video"],
       });
+    });
+
+    it("shows a Mission types failure at the top, not in the Delete confirmation", async () => {
+      agents({ templateId: "@opengroow/video-demo", status: "active", workspaceKey: "ws-video" });
+      applyHiddenMissionTypesMock.mockResolvedValue({ status: "error", errorMessage: "Workspace sync failed" });
+      await render(<AgentSettings instanceId="instance-1" templateId="@opengroow/video-demo" />);
+
+      const checkbox = Array.from(document.querySelectorAll("label"))
+        .find((l) => l.textContent?.includes("Create letter video"))
+        ?.querySelector('[role="checkbox"]') as HTMLElement;
+      await act(async () => checkbox.click());
+      await act(async () => button("Save changes")!.click());
+      expect(document.body.textContent).toContain("Workspace sync failed");
+
+      await act(async () => button("Delete")!.click());
+      const dialog = document.querySelector('[role="dialog"]')!;
+      expect(dialog.textContent).toContain("This cannot be undone");
+      expect(dialog.textContent).not.toContain("Workspace sync failed");
     });
 
     it("shows no configuration and no explanation when an active Agent has nothing to configure", async () => {

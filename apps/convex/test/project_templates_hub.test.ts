@@ -256,6 +256,25 @@ describe("checkHubUpdates", () => {
     expect(intruder.error).toBeTruthy();
   });
 
+  it("checks only the given Template", async () => {
+    const t = convexTest(schema, modules);
+    await installV1(t);
+    const fetchMock = stubNetwork({ packages: [tagged("v1.1.0", V2)], archives: { [urlOf("v1.1.0")]: V2 } });
+    const other = await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT, templateId: "@alice/other" });
+    expect(other).toEqual({ offered: [] });
+    expect(fetchMock.mock.calls.filter(([url]) => url === urlOf("v1.1.0"))).toHaveLength(0);
+    const own = await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT, templateId: "@alice/seo" });
+    expect(own).toEqual({ offered: [{ templateId: "@alice/seo", version: "1.1.0" }] });
+  });
+
+  it("does not offer a hub pre-release of the installed version or below", async () => {
+    const t = convexTest(schema, modules);
+    await installV1(t);
+    const fetchMock = stubNetwork({ packages: [tagged("v1.0.0-rc.2", V2)], archives: { [urlOf("v1.0.0-rc.2")]: V2 } });
+    expect(await t.withIdentity(OWNER).action(api.project_templates_node.checkHubUpdates, { instanceId: PROJECT })).toEqual({ offered: [] });
+    expect(fetchMock.mock.calls.filter(([url]) => url === urlOf("v1.0.0-rc.2"))).toHaveLength(0);
+  });
+
   it("reports a newer release that cannot be offered", async () => {
     const t = convexTest(schema, modules);
     await installV1(t);

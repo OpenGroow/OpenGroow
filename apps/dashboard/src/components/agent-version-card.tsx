@@ -19,8 +19,9 @@ const ORIGIN_LABEL: Record<string, string> = {
 
 /**
  * The installed version of an Agent's Template. For a Template from the hub,
- * "Check for updates" asks the hub on demand (`checkHubUpdates`, nothing is
- * read before); a newer version is offered, then reviewed and applied through
+ * "Check for updates" asks the hub on demand for this Template only
+ * (`checkHubUpdates` with `templateId`, nothing is read before); a newer
+ * version is offered, then reviewed and applied through
  * its update plan. Other origins are not checked: their label is shown instead.
  */
 export function AgentVersionCard({ projectId, templateId }: { projectId: string; templateId: string }) {
@@ -41,7 +42,7 @@ export function AgentVersionCard({ projectId, templateId }: { projectId: string;
   async function checkForUpdates() {
     setCheck({ status: "checking" });
     try {
-      const result = await checkHubUpdates({ instanceId: projectId });
+      const result = await checkHubUpdates({ instanceId: projectId, templateId });
       if (result.error) {
         setCheck({ status: "error", message: result.error });
         return;
