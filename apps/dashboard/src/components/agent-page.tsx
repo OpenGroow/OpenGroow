@@ -4,7 +4,7 @@ import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Pencil, Power, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
@@ -351,12 +351,11 @@ function AgentDangerZone({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
           <div className="grid min-w-0 flex-1 gap-1">
             <span className="text-sm font-medium text-foreground">Deactivate this Agent</span>
-            <span className="max-w-xl text-sm text-muted-foreground">
+            <span className="max-w-md text-sm text-muted-foreground">
               It stops and leaves OpenClaw. Its configuration and its Missions are kept: activate it again from the Agents list.
             </span>
           </div>
-          <Button className="w-36 shrink-0 self-start sm:self-auto" variant="outline" type="button" loading={busy === "deactivate"} disabled={busy !== null} onClick={onDeactivate}>
-            {busy === "deactivate" ? null : <Power />}
+          <Button className="w-32 shrink-0 self-start sm:self-auto" variant="outline" size="lg" type="button" loading={busy === "deactivate"} disabled={busy !== null} onClick={onDeactivate}>
             {busy === "deactivate" ? "Deactivating…" : "Deactivate"}
           </Button>
         </div>
@@ -364,12 +363,11 @@ function AgentDangerZone({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="grid min-w-0 flex-1 gap-1">
           <span className="text-sm font-medium text-foreground">Delete this Agent</span>
-          <span className="max-w-xl text-sm text-muted-foreground">
+          <span className="max-w-md text-sm text-muted-foreground">
             Removes the Agent, its Template, its Schedules and all its Missions with their history. This cannot be undone.
           </span>
         </div>
-        <Button className="w-36 shrink-0 self-start sm:self-auto" variant="destructive" type="button" disabled={busy !== null} onClick={() => setConfirming(true)}>
-          <Trash2 />
+        <Button className="w-32 shrink-0 self-start sm:self-auto" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming(true)}>
           Delete
         </Button>
       </div>
