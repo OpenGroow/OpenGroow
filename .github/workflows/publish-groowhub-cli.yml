@@ -54,10 +54,26 @@ jobs:
       - name: Update npm
         run: npm install -g npm@^11.5.1
 
-      # dist/ must exist before npm reads package.json, or it drops the `bin` entry.
       - name: Build
         run: pnpm --filter @opengroow/groowhub-cli build
 
-      - name: Publish
+      # Publish the packed tarball, not the folder: npm 11 `publish <folder>` drops
+      # the `bin` entry ("script name dist/cli.js was invalid and removed"), while
+      # `npm pack` keeps it. The tarball is checked before it goes out.
+      - name: Pack
+        id: pack
         working-directory: packages/groowhub-cli
-        run: npm publish --access public
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/pack"
+          file=$(ls "$RUNNER_TEMP"/pack/*.tgz)
+          tar -xzf "$file" -C "$RUNNER_TEMP/pack" package/package.json
+          node -e '
+            const p = require(process.argv[1]);
+            if (!p.bin || !p.bin.groowhub) { console.error("The packed package.json has no bin.groowhub"); process.exit(1); }
+          ' "$RUNNER_TEMP/pack/package/package.json"
+          tar -tzf "$file" | grep -qx "package/dist/cli.js" || { echo "dist/cli.js missing from the tarball" >&2; exit 1; }
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        run: npm publish "${{ steps.pack.outputs.file }}" --access public
