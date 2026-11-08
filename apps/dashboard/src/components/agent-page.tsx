@@ -4,7 +4,7 @@ import { notFound, usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Pencil } from "lucide-react";
+import { Pencil, Power, Trash2 } from "lucide-react";
 import type { AgentManifest } from "@convex/template_manifest_contract";
 import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge-agent-states";
 import { flatConfig, hasEditableRequirements, immutableKeys } from "@/src/utils/agent-requirements";
@@ -353,10 +353,12 @@ function AgentDangerZone({
       <div className="flex flex-wrap gap-3">
         {active ? (
           <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("deactivate")}>
+            <Power />
             Deactivate
           </Button>
         ) : null}
         <Button className="w-32" variant="outline" size="lg" type="button" disabled={busy !== null} onClick={() => setConfirming("delete")}>
+          <Trash2 />
           Delete
         </Button>
       </div>
@@ -381,10 +383,12 @@ function AgentDangerZone({
             </Button>
             {confirming === "delete" ? (
               <Button variant="destructive" type="button" loading={deleting} onClick={onDelete}>
+                {deleting ? null : <Trash2 />}
                 {deleting ? "Deleting…" : `Delete ${name}`}
               </Button>
             ) : (
               <Button type="button" loading={deactivating} onClick={onDeactivate}>
+                {deactivating ? null : <Power />}
                 {deactivating ? "Deactivating…" : "Deactivate"}
               </Button>
             )}
