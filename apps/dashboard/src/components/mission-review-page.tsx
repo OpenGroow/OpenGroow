@@ -242,26 +242,14 @@ function ReviewActionsSection({
 
   // Find the action that matches the current mission status, excluding reject
   // (which has its own expand-on-click affordance in RejectSection).
-  const pendingAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
-  const eligibleAction = pendingAction?.enabled ? pendingAction : undefined;
-  if (!pendingAction) return null;
-  if (!eligibleAction) {
-    // Blocked (for example a chosen channel has no media in this content): shown greyed with the reason, not hidden.
-    return (
-      <section className="grid gap-3">
-        <div className="flex gap-4">
-          <Button size="lg" type="button" disabled data-testid={`review-action-${pendingAction.key}`}>
-            {pendingAction.label}
-          </Button>
-        </div>
-        {pendingAction.disabledReason && (
-          <p data-testid="review-action-disabled-reason" className="m-0 text-sm text-muted-foreground">
-            {pendingAction.disabledReason}
-          </p>
-        )}
-      </section>
-    );
-  }
+  // The action of this status, even when it is blocked: it is shown greyed with the reason, not hidden.
+  const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
+  if (!eligibleAction) return null;
+  const blockedReason = !eligibleAction.enabled
+    ? (eligibleAction.disabledReason ?? "This action is unavailable.")
+    : disabled
+      ? "This action is unavailable until the review content is complete."
+      : undefined;
 
   async function handleAction(action: ReviewActionDescriptor) {
     setActiveAction(action.key);
@@ -321,15 +309,15 @@ function ReviewActionsSection({
           size="lg"
           type="button"
           onClick={() => { void handleAction(eligibleAction); }}
-          disabled={isLoading || disabled}
+          disabled={isLoading || blockedReason !== undefined}
           data-testid={`review-action-${eligibleAction.key}`}
         >
           {isLoading ? `${eligibleAction.label}…` : eligibleAction.label}
         </Button>
       </div>
-      {disabled && (
+      {blockedReason && (
         <p data-testid="review-action-blocked" className="m-0 text-sm text-muted-foreground">
-          This action is unavailable until the review content is complete.
+          {blockedReason}
         </p>
       )}
     </section>

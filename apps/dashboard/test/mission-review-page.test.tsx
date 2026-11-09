@@ -345,7 +345,7 @@ describe("MissionReviewContent", () => {
       await render();
       await act(async () => {});
       expect((document.querySelector('[data-testid="review-action-publish"]') as HTMLButtonElement).disabled).toBe(true);
-      expect(document.querySelector('[data-testid="review-action-disabled-reason"]')?.textContent).toContain("made for instagram only");
+      expect(document.querySelector('[data-testid="review-action-blocked"]')?.textContent).toContain("made for instagram only");
     });
 
     it("shows no preview for a Mission without a Publishable", async () => {
