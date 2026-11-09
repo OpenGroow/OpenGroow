@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BlockedNotice } from "@/src/components/blocked-notice";
 import { useQuery, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@convex/_generated/api";
@@ -316,9 +317,9 @@ function ReviewActionsSection({
         </Button>
       </div>
       {blockedReason && (
-        <p data-testid="review-action-blocked" className="m-0 text-sm text-muted-foreground">
+        <BlockedNotice padding="p-4" testId="review-action-blocked">
           {blockedReason}
-        </p>
+        </BlockedNotice>
       )}
     </section>
   );
