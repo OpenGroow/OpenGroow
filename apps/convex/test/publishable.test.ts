@@ -5,7 +5,7 @@ import { convexTest } from "convex-test";
 import { internal } from "../_generated/api";
 import schema from "../schema";
 import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation.js";
-import { type Publishable, publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
+import { type Publishable, publishableForService, publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
 import type { Id } from "../_generated/dataModel";
 
 // Issue #16, ADR-069: the Publishable of an Artifact, validated against the
@@ -199,7 +199,7 @@ describe("Publishable schema definition", () => {
   it("pins the manifest's optional fields to the zod schema", () => {
     for (const option of publishableSchema.options) {
       const optional = Object.entries(option.shape)
-        .filter(([key, field]) => key !== "metadata" && (field as z.ZodType).safeParse(undefined).success)
+        .filter(([key, field]) => key !== "metadata" && key !== "imageUrl" && key !== "slideUrls" && (field as z.ZodType).safeParse(undefined).success)
         .map(([key]) => key);
       expect([...OPTIONAL_PUBLISHABLE_FIELDS[option.shape.kind.value]].sort()).toEqual(optional.sort());
     }
@@ -211,7 +211,9 @@ describe("Publishable schema definition", () => {
       required: string[];
     };
     expect(schema.properties.kind.const).toBe("carousel");
-    expect(schema.required).toEqual(expect.arrayContaining(["kind", "slideUrls", "caption"]));
+    expect(schema.required).toEqual(expect.arrayContaining(["kind", "caption"]));
+    expect(Object.keys(schema.properties)).toEqual(expect.arrayContaining(["slideUrls", "variants"]));
+    expect(renderPublishableSection("carousel")).toContain("`slideUrls` or `variants`");
   });
 });
 
@@ -246,5 +248,54 @@ describe("Publishable stored with a completed Run", () => {
     });
     const mission = await t.run((ctx) => ctx.db.get(missionId));
     expect(mission?.lastArtifact?.publishable).toEqual(publishable);
+  });
+});
+
+describe("Publishable variants (ADR-073)", () => {
+  const A = "https://cdn.example.com/a.png";
+  const B = "https://cdn.example.com/b.png";
+  const carousel = {
+    kind: "carousel",
+    caption: "default",
+    variants: {
+      instagram: { slideUrls: [A], caption: "ig" },
+      pinterest: { slideUrls: [B], title: "pin", caption: "pin text", link: "https://example.com/p" },
+    },
+  };
+
+  it("accepts slideUrls or variants, never neither", () => {
+    expect(publishableSchema.safeParse({ kind: "carousel", caption: "c", slideUrls: [A] }).success).toBe(true);
+    expect(publishableSchema.safeParse(carousel).success).toBe(true);
+    expect(publishableSchema.safeParse({ kind: "carousel", caption: "c" }).success).toBe(false);
+    expect(publishableSchema.safeParse({ kind: "image", caption: "c", variants: {} }).success).toBe(false);
+    expect(publishableSchema.safeParse({ kind: "image", caption: "c", variants: { tiktok: { imageUrl: A } } }).success).toBe(true);
+  });
+
+  it("picks the variant of the channel's service and overrides its text", () => {
+    const result = publishableForService(carousel, "pinterest");
+    expect(result).toEqual({
+      ok: true,
+      publishable: { kind: "carousel", caption: "pin text", slideUrls: [B], title: "pin", link: "https://example.com/p" },
+    });
+  });
+
+  it("falls back from a service to its family", () => {
+    expect(publishableForService(carousel, "instagram-standalone")).toMatchObject({ ok: true, publishable: { slideUrls: [A], caption: "ig" } });
+  });
+
+  it("refuses a channel the variants do not serve, naming the services it was made for", () => {
+    expect(publishableForService(carousel, "x")).toEqual({
+      ok: false,
+      error: "this carousel was made for instagram, pinterest only, it has no media for x",
+    });
+  });
+
+  it("keeps the default media for a channel without a variant, and a Publishable without variants as is", () => {
+    const withDefault = { kind: "carousel", caption: "c", slideUrls: [A], variants: { tiktok: { slideUrls: [B] } } };
+    expect(publishableForService(withDefault, "x")).toEqual({ ok: true, publishable: { kind: "carousel", caption: "c", slideUrls: [A] } });
+    expect(publishableForService({ kind: "video", videoUrl: A, caption: "c" }, undefined)).toEqual({
+      ok: true,
+      publishable: { kind: "video", videoUrl: A, caption: "c" },
+    });
   });
 });

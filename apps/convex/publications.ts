@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
+import { publishableForService } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
@@ -212,6 +213,11 @@ export const beginAll = internalMutation({
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
     if (typeof publishable.kind === "string") await assertChannelsSupportKind(ctx, publisher, targets, publishable.kind);
+    // A Publishable made of variants only serves those services: refuse the others before any row exists.
+    for (const target of targets) {
+      const forChannel = publishableForService(publishable, publisher.targets.find((t) => t.target === target)?.channelService);
+      if (!forChannel.ok) throw new Error(`Channel "${target}": ${forChannel.error}`);
+    }
 
     const now = Date.now();
     const toSend = [];

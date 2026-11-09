@@ -31,6 +31,26 @@ export function PublishablePreview({ publishable }: PreviewProps) {
   const caption = typeof p.caption === "string" ? p.caption : "";
   const title = typeof p.title === "string" ? p.title : "";
 
+  const imageOf = (src: string, alt: string, className: string) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} className={className} />
+  );
+  const imageMedia = (value: unknown) => {
+    const src = httpUrl(value);
+    return src ? imageOf(src, "Image to publish", "mx-auto max-h-[70vh] w-auto max-w-full rounded-xl object-contain") : null;
+  };
+  const carouselMedia = (value: unknown) => {
+    if (!Array.isArray(value)) return null;
+    const slides = value.map(httpUrl).filter((url): url is string => url !== null);
+    return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        {slides.map((src, index) => (
+          <span key={`${index}-${src}`}>{imageOf(src, `Slide ${index + 1}`, "w-full rounded-xl border border-border object-contain")}</span>
+        ))}
+      </div>
+    );
+  };
+
   let media: React.ReactNode = null;
   if (kind === "video") {
     const src = httpUrl(p.videoUrl);
@@ -50,33 +70,34 @@ export function PublishablePreview({ publishable }: PreviewProps) {
       );
     }
   } else if (kind === "image") {
-    const src = httpUrl(p.imageUrl);
-    if (src) {
-      // eslint-disable-next-line @next/next/no-img-element
-      media = <img src={src} alt="Image to publish" className="mx-auto max-h-[70vh] w-auto max-w-full rounded-xl object-contain" />;
-    }
-  } else if (kind === "carousel" && Array.isArray(p.slideUrls)) {
-    const slides = p.slideUrls.map(httpUrl).filter((url): url is string => url !== null);
-    media = (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {slides.map((src, index) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={`${index}-${src}`}
-            src={src}
-            alt={`Slide ${index + 1}`}
-            className="w-full rounded-xl border border-border object-contain"
-          />
-        ))}
-      </div>
-    );
+    media = imageMedia(p.imageUrl);
+  } else if (kind === "carousel") {
+    media = carouselMedia(p.slideUrls);
   }
+
+  // Variants (ADR-073): the same content made for each service, with its own text.
+  const variants =
+    (kind === "image" || kind === "carousel") && p.variants && typeof p.variants === "object"
+      ? Object.entries(p.variants as Record<string, Record<string, unknown>>)
+      : [];
 
   return (
     <Card className="grid min-w-0 gap-4 p-6" data-testid="publishable-preview">
       <h2 className="m-0 text-lg font-semibold text-foreground">{KIND_LABEL[kind]}</h2>
       {title && <p className="m-0 text-sm font-semibold text-foreground">{title}</p>}
-      {media ?? <p className="m-0 text-sm text-muted-foreground">No previewable media.</p>}
+      {media ?? (variants.length === 0 && <p className="m-0 text-sm text-muted-foreground">No previewable media.</p>)}
+      {variants.map(([service, variant]) => (
+        <section key={service} className="grid gap-3 border-t border-border pt-4" data-testid={`publishable-variant-${service}`}>
+          <h3 className="m-0 text-sm font-semibold capitalize text-foreground">{service}</h3>
+          {typeof variant.title === "string" && variant.title && (
+            <p className="m-0 text-sm font-semibold text-foreground">{variant.title}</p>
+          )}
+          {kind === "image" ? imageMedia(variant.imageUrl) : carouselMedia(variant.slideUrls)}
+          {typeof variant.caption === "string" && variant.caption && (
+            <p className="m-0 whitespace-pre-wrap text-sm text-foreground">{variant.caption}</p>
+          )}
+        </section>
+      ))}
       {caption && <p className="m-0 whitespace-pre-wrap text-sm text-foreground">{caption}</p>}
     </Card>
   );

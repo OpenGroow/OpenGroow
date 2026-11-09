@@ -31,24 +31,53 @@ export const videoPublishableSchema = z.strictObject({
   metadata,
 });
 
-export const imagePublishableSchema = z.strictObject({
+// Per-service content of an image or carousel (ADR-073): the same content
+// rendered once per service (aspect ratio, safe zones) with that service's own
+// text, keyed by the channel's service (`instagram`, `tiktok`, `pinterest`...).
+// A variant carries a complete set of media and may override the text fields
+// of the Publishable. The key is free: the MCP decides which services it serves.
+const serviceKey = z.string().min(1).max(50);
+const variantText = {
+  caption: caption.optional(),
+  title: z.string().max(500).optional(),
+  link: link.optional(),
+  altText: altText.optional(),
+};
+const imageVariant = z.strictObject({ imageUrl: url, ...variantText });
+const carouselVariant = z.strictObject({ slideUrls: z.array(url).min(1).max(20), ...variantText });
+
+// Without refinement: `omit` (the Agent's text part) is not allowed on a refined object.
+const imageBase = z.strictObject({
   kind: z.literal("image"),
-  imageUrl: url,
+  // The media is `imageUrl` or `variants`, never neither (see the refinement below).
+  imageUrl: url.optional(),
+  variants: z.record(serviceKey, imageVariant).optional(),
   caption,
   link: link.optional(),
   altText: altText.optional(),
   metadata,
 });
 
-export const carouselPublishableSchema = z.strictObject({
+const carouselBase = z.strictObject({
   kind: z.literal("carousel"),
   // Ordered: the first URL is the first slide.
-  slideUrls: z.array(url).min(1).max(20),
+  slideUrls: z.array(url).min(1).max(20).optional(),
+  variants: z.record(serviceKey, carouselVariant).optional(),
   caption,
   link: link.optional(),
   altText: altText.optional(),
   metadata,
 });
+
+const NO_MEDIA = "needs media: set the default media or at least one variant";
+export const imagePublishableSchema = imageBase.refine(
+  (p) => p.imageUrl !== undefined || Object.keys(p.variants ?? {}).length > 0,
+  { message: `an image ${NO_MEDIA} (imageUrl or variants)`, path: ["imageUrl"] },
+);
+export const carouselPublishableSchema = carouselBase.refine(
+  (p) => p.slideUrls !== undefined || Object.keys(p.variants ?? {}).length > 0,
+  { message: `a carousel ${NO_MEDIA} (slideUrls or variants)`, path: ["slideUrls"] },
+);
 
 export const publishableSchema = z.discriminatedUnion("kind", [
   videoPublishableSchema,
@@ -66,8 +95,8 @@ export type Publishable = z.output<typeof publishableSchema>;
  */
 export const publishableDraftSchema = z.discriminatedUnion("kind", [
   videoPublishableSchema.omit({ videoUrl: true, coverUrl: true }),
-  imagePublishableSchema.omit({ imageUrl: true }),
-  carouselPublishableSchema.omit({ slideUrls: true }),
+  imageBase.omit({ imageUrl: true, variants: true }),
+  carouselBase.omit({ slideUrls: true, variants: true }),
 ]);
 
 export type PublishableDraft = z.output<typeof publishableDraftSchema>;
@@ -84,9 +113,46 @@ export const publishableV = zodToConvex(publishableSchema) as unknown as Validat
 
 const SCHEMA_BY_KIND = {
   video: videoPublishableSchema,
-  image: imagePublishableSchema,
-  carousel: carouselPublishableSchema,
+  image: imageBase,
+  carousel: carouselBase,
 } satisfies Record<PublishableKind, z.ZodType>;
+
+/**
+ * The service of a channel as `variants` names it: the channel's service as is
+ * (`instagram`), else its family (`instagram-standalone` -> `instagram`).
+ */
+function variantKey(variants: Record<string, unknown>, service: string): string | undefined {
+  if (service in variants) return service;
+  const family = service.split("-")[0];
+  return family in variants ? family : undefined;
+}
+
+/**
+ * The Publishable as one channel receives it (ADR-073). With `variants`, the
+ * channel's variant replaces the media and overrides the text; without a
+ * variant for that service, the default media (`slideUrls`/`imageUrl`) is kept.
+ * `variants` never reaches a Publisher plugin. Pure.
+ * `error`: the channel has no media at all (a Publishable made of variants
+ * that does not serve this service).
+ */
+export function publishableForService(
+  publishable: Record<string, unknown>,
+  service: string | undefined,
+): { ok: true; publishable: Record<string, unknown> } | { ok: false; error: string } {
+  const { variants, ...rest } = publishable;
+  const served = variants && typeof variants === "object" ? (variants as Record<string, unknown>) : {};
+  const key = service ? variantKey(served, service) : undefined;
+  if (key) return { ok: true, publishable: { ...rest, ...(served[key] as Record<string, unknown>) } };
+  const offered = Object.keys(served);
+  // No variants at all (a video, or media given once) or a default media: as is.
+  if (offered.length === 0 || rest.slideUrls !== undefined || rest.imageUrl !== undefined) {
+    return { ok: true, publishable: rest };
+  }
+  return {
+    ok: false,
+    error: `this ${String(publishable.kind)} was made for ${offered.join(", ")} only, it has no media for ${service ?? "this channel"}`,
+  };
+}
 
 /** The section of context.md that tells the Agent what to return (ADR-069). */
 export function renderPublishableSection(
@@ -99,6 +165,12 @@ export function renderPublishableSection(
     "## Publishable",
     "",
     `This Mission type produces a \`${kind}\` deliverable. In your RunResult, set \`artifact.publishable\` to an object matching this JSON Schema (references only, never content). You never publish yourself: a human review or auto-publish does it. Do not call any publishing tool.`,
+    ...(kind === "image" || kind === "carousel"
+      ? [
+          "",
+          `Media: give the default \`${kind === "image" ? "imageUrl" : "slideUrls"}\` or \`variants\` (one entry per service the content was made for, each with its own media and optionally its own \`caption\`, \`title\`, \`link\`, \`altText\`), at least one of the two. A channel without a variant gets the default media; with variants only, a channel they do not name cannot be published to.`,
+        ]
+      : []),
     ...(required.length > 0
       ? [
           "",

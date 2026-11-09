@@ -77,6 +77,30 @@ describe("mergePublishResource", () => {
     });
   });
 
+  it("takes variants (images and text per service) when the tool returns them", () => {
+    const output = { variants: { instagram: { slideUrls: ["https://a.example.com/1.png"], caption: "ig" } } };
+    const result = mergePublishResource({
+      missionType: "make",
+      declaration: { kind: "carousel", resource: { tool: "get_carousel" } },
+      draft: { kind: "carousel", caption: "default" },
+      toolOutput: output,
+    });
+    expect(result).toEqual({ ok: true, publishable: { kind: "carousel", caption: "default", variants: output.variants } });
+  });
+
+  it("fails with one message when the tool returns neither slideUrls nor variants", () => {
+    const result = mergePublishResource({
+      missionType: "make",
+      declaration: { kind: "carousel", resource: { tool: "get_carousel" } },
+      draft: { kind: "carousel", caption: "c" },
+      toolOutput: {},
+    });
+    expect(result).toEqual({
+      ok: false,
+      message: 'publishable.slideUrls is missing: tool "get_carousel" returned nothing at "slideUrls" nor at "variants"',
+    });
+  });
+
   it("never lets the tool overwrite the Agent's text fields", () => {
     const result = merge(declaration({ tool: "get_video" }), {
       videoUrl: "https://cdn.example.com/v.mp4",

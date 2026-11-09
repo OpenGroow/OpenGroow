@@ -150,8 +150,10 @@ Required vs optional fields (source of truth: `apps/convex/publishable.ts`):
 | `kind` | Required | Optional |
 | --- | --- | --- |
 | `video` | `videoUrl`, `caption` | `coverUrl`, `title` (max 500), `link`, `tags` (max 30), `metadata` |
-| `image` | `imageUrl`, `caption` | `link`, `altText` (max 1000), `metadata` |
-| `carousel` | `slideUrls` (1 to 20 URLs, in slide order), `caption` | `link`, `altText` (max 1000), `metadata` |
+| `image` | `caption`, and `imageUrl` or `variants` | `imageUrl`, `variants`, `link`, `altText` (max 1000), `metadata` |
+| `carousel` | `caption`, and `slideUrls` (1 to 20 URLs, in slide order) or `variants` | `slideUrls`, `variants`, `link`, `altText` (max 1000), `metadata` |
+
+**Variants** (ADR-073): an `image` or `carousel` made once per service (another aspect ratio, another text) carries `variants`, keyed by the channel's service (`instagram`, `tiktok`, `pinterest`…): `{ "instagram": { "slideUrls": [...], "caption": "…" } }` (`imageUrl` for an image). A variant has its own media and may override `caption`, `title`, `link` and `altText`. At publish time a channel receives the variant of its service (`instagram-standalone` falls back to `instagram`), else the default media; with variants only, a channel they do not name is refused with the list of services the content was made for. An asynchronous MCP returns `variants` from its `publish.resource` tool, text included; the Agent never writes it.
 
 URLs (including `link`) are valid URLs of at most 2048 characters; `caption` is at most 5000. Per-target settings (TikTok privacy, Pinterest board...) come from the Publisher configuration, never from the Publishable; `metadata` is not forwarded.
 

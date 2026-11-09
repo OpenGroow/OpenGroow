@@ -14,16 +14,16 @@ export type PublishableKind = (typeof PUBLISHABLE_KINDS)[number];
  * `apps/convex/publishable.ts`). `metadata` is free-form and cannot be required. */
 export const OPTIONAL_PUBLISHABLE_FIELDS = {
   video: ["coverUrl", "title", "link", "tags"],
-  image: ["link", "altText"],
-  carousel: ["link", "altText"],
+  image: ["variants", "link", "altText"],
+  carousel: ["variants", "link", "altText"],
 } as const satisfies Record<PublishableKind, readonly string[]>;
 
 /** The media fields of each kind: the only ones `publish.resource` fetches and
  * `publish.resource.map` may map. The Agent never writes them. */
 export const MEDIA_PUBLISHABLE_FIELDS = {
   video: ["videoUrl", "coverUrl"],
-  image: ["imageUrl"],
-  carousel: ["slideUrls"],
+  image: ["imageUrl", "variants"],
+  carousel: ["slideUrls", "variants"],
 } as const satisfies Record<PublishableKind, readonly string[]>;
 
 // A path in the MCP tool output: dot-separated keys, each optionally followed

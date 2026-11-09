@@ -271,6 +271,23 @@ describe("MissionReviewContent", () => {
       ]);
     });
 
+    it("previews each variant of a carousel with its own images and text", async () => {
+      await renderWith({
+        kind: "carousel",
+        caption: "Default",
+        variants: {
+          instagram: { slideUrls: ["https://cdn.example.com/ig-1.png"], caption: "For Instagram" },
+          pinterest: { slideUrls: ["https://cdn.example.com/pin-1.png"], title: "Pin title", caption: "For Pinterest" },
+        },
+      });
+      const pinterest = document.querySelector('[data-testid="publishable-variant-pinterest"]');
+      expect(pinterest?.textContent).toContain("Pin title");
+      expect(pinterest?.textContent).toContain("For Pinterest");
+      expect((pinterest?.querySelector("img") as HTMLImageElement).src).toBe("https://cdn.example.com/pin-1.png");
+      expect(document.querySelector('[data-testid="publishable-variant-instagram"] img')).not.toBeNull();
+      expect(document.body.textContent).not.toContain("No previewable media");
+    });
+
     it("reviews a Mission type that declares publish from its publishable only: no review.path content is loaded or shown", async () => {
       const base = getReviewMock.getMockImplementation()!;
       getReviewMock.mockImplementation(async () => ({
