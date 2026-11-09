@@ -115,6 +115,21 @@ describe("PublishChannelPicker", () => {
     expect(isDisabled(item("instagram:myinsta")!)).toBe(false);
   });
 
+  it("lists the channels that cannot be used last, keeping the others in the Publisher's order", async () => {
+    useQueryMock.mockReturnValue({
+      ...PUBLISHER,
+      targets: [
+        PUBLISHER.targets[1],
+        { target: "tiktok:tt", mapped: true, channelId: "c3", channelName: "TT", channelService: "tiktok", channelProfile: "tt" },
+        PUBLISHER.targets[0],
+      ],
+    });
+    await render("", vi.fn(), "carousel", ["instagram", "tiktok"]);
+    await openList();
+    const order = [...document.querySelectorAll('[data-testid^="publish-target-"]')].map((el) => el.getAttribute("data-testid")).filter((id) => !/^publish-target-(reason|warning)-/.test(id ?? ""));
+    expect(order).toEqual(["publish-target-tiktok:tt", "publish-target-instagram:myinsta", "publish-target-pinterest:pins"]);
+  });
+
   it("says so when the Publisher has no channel on a platform the Mission type publishes to", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     await render("", vi.fn(), "carousel", ["instagram", "tiktok"]);

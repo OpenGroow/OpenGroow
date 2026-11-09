@@ -116,13 +116,18 @@ export function ChannelSelect({
   const capabilities = useInstalledPublisher(publisher.adapter)?.capabilities;
   const [open, setOpen] = useState(false);
   // Stable between renders: the Combobox filters on the identity of `items`.
-  const { byTarget, items } = useMemo(
-    () => ({
+  // Channels that cannot be used (not configured, or on a platform or a kind the Mission cannot go to) come last,
+  // in the Publisher's order otherwise.
+  const { byTarget, items } = useMemo(() => {
+    const unusable = (channel: PublisherChannel) =>
+      !channel.mapped || channelCapability(capabilities, channel, kind, platforms).level === "unsupported";
+    return {
       byTarget: new Map(publisher.targets.map((channel) => [channel.target, channel])),
-      items: publisher.targets.map((channel) => channel.target),
-    }),
-    [publisher.targets],
-  );
+      items: [...publisher.targets]
+        .sort((a, b) => Number(unusable(a)) - Number(unusable(b)))
+        .map((channel) => channel.target),
+    };
+  }, [publisher.targets, capabilities, kind, platforms]);
   const labelOf = (target: string) => {
     const channel = byTarget.get(target);
     if (!channel) return target;
