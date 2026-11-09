@@ -117,6 +117,7 @@ On the Mission type's entry in `missionTypes[]`:
 ```json
 "publish": {
   "kind": "video",
+  "platforms": ["instagram", "tiktok"],
   "require": ["title", "coverUrl"],
   "resource": { "tool": "get_video" }
 }
@@ -125,6 +126,7 @@ On the Mission type's entry in `missionTypes[]`:
 | Key | Required | Meaning |
 | --- | --- | --- |
 | `kind` | yes | One of `video`, `image`, `carousel` (closed set owned by OpenGroow; a new kind is a product change). |
+| `platforms` | no | The platforms the content can go to, among the identifiers of `PLATFORM_IDS` in `@opengroow/publisher-sdk` (`instagram`, `tiktok`, `pinterest`, `youtube`, `x`, …). A channel on another platform is disabled in the picker and refused by the server; `instagram` also covers `instagram-standalone`. Absent: every channel that can carry the kind. An unknown identifier is refused by `template:validate` (ADR-073). |
 | `require` | no | Optional fields of that kind your Template **guarantees**. A RunResult without one of them is rejected with a precise per-field error and the Agent retries. It can only tighten the format, never loosen it: required fields cannot be listed, `metadata` cannot be required, duplicates and unknown names are refused. |
 | `resource` | no | Asynchronous MCP only: `{ "tool", "idArg"?, "map"? }`. `tool` is an MCP tool of the server that runs the External Job; `idArg` is the argument carrying the job id (default `runId`); `map` is an optional map from a media field (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`) to a path in the tool output (dot keys, `[n]`, `[*]`; `[*]` only for `slideUrls`) for an MCP that does not use the recommended names. Requires an `externalJobsByMissionType` entry for the Mission type. Replaces the former `publish.media`, which is now rejected. See the next section. |
 
@@ -153,7 +155,7 @@ Required vs optional fields (source of truth: `apps/convex/publishable.ts`):
 | `image` | `caption`, and `imageUrl` or `variants` | `imageUrl`, `variants`, `link`, `altText` (max 1000), `metadata` |
 | `carousel` | `caption`, and `slideUrls` (1 to 20 URLs, in slide order) or `variants` | `slideUrls`, `variants`, `link`, `altText` (max 1000), `metadata` |
 
-**Variants** (ADR-073): an `image` or `carousel` made once per service (another aspect ratio, another text) carries `variants`, keyed by the channel's service (`instagram`, `tiktok`, `pinterest`…): `{ "instagram": { "slideUrls": [...], "caption": "…" } }` (`imageUrl` for an image). A variant has its own media and may override `caption`, `title`, `link` and `altText`. At publish time a channel receives the variant of its service (`instagram-standalone` falls back to `instagram`), else the default media; with variants only, a channel they do not name is refused with the list of services the content was made for. An asynchronous MCP returns `variants` from its `publish.resource` tool, text included; the Agent never writes it.
+**Variants** (ADR-073): an `image` or `carousel` made once per service (another aspect ratio, another text) carries `variants`, keyed by the channel's platform (`instagram`, `tiktok`, `pinterest`…): `{ "instagram": { "slideUrls": [...], "caption": "…" } }` (`imageUrl` for an image). A variant has its own media and may override `caption`, `title`, `link` and `altText`. At publish time a channel receives the variant of its platform (`instagram-standalone` falls back to `instagram`), else the default media; with variants only, a channel they do not name is refused with the list of services the content was made for. An asynchronous MCP returns `variants` from its `publish.resource` tool, text included; the Agent never writes it.
 
 URLs (including `link`) are valid URLs of at most 2048 characters; `caption` is at most 5000. Per-target settings (TikTok privacy, Pinterest board...) come from the Publisher configuration, never from the Publishable; `metadata` is not forwarded.
 

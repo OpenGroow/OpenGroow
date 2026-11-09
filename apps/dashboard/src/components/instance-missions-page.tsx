@@ -298,6 +298,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 instanceId={instanceId}
                 payloadText={payloadText}
                 kind={publishDecl?.kind}
+                platforms={publishDecl?.platforms}
                 onChange={setPayloadText}
                 autoPublish={autoPublishAllowed ? { checked: autoPublish, onChange: setAutoPublish } : undefined}
               />

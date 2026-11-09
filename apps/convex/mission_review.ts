@@ -66,6 +66,8 @@ export type MissionPublishProjection = {
   unmappedTargets: string[];
   /** The Project has a Publisher with an API key. Without it nothing can be sent. */
   publisherReady: boolean;
+  /** The platforms the Mission type publishes to (`publish.platforms`); absent = every channel. */
+  platforms?: string[];
   /** The date the human chose (epoch ms); absent = publish immediately. */
   publishAt?: number;
   publications: Array<{

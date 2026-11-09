@@ -2,6 +2,7 @@ import type { Validator } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import type { PublishableKind } from "@opengroow/agent-templates";
+import { matchPlatform } from "@opengroow/publisher-sdk";
 
 // The Publishable (issue #16, ADR-069): the unified format of a deliverable,
 // of one kind from a closed set. References only (URLs), never content
@@ -31,12 +32,12 @@ export const videoPublishableSchema = z.strictObject({
   metadata,
 });
 
-// Per-service content of an image or carousel (ADR-073): the same content
-// rendered once per service (aspect ratio, safe zones) with that service's own
-// text, keyed by the channel's service (`instagram`, `tiktok`, `pinterest`...).
+// Per-platform content of an image or carousel (ADR-073): the same content
+// rendered once per platform (aspect ratio, safe zones) with that platform's own
+// text, keyed by the channel's platform (`instagram`, `tiktok`, `pinterest`...).
 // A variant carries a complete set of media and may override the text fields
-// of the Publishable. The key is free: the MCP decides which services it serves.
-const serviceKey = z.string().min(1).max(50);
+// of the Publishable. The key is free: the MCP decides which platforms it serves.
+const platformKey = z.string().min(1).max(50);
 const variantText = {
   caption: caption.optional(),
   title: z.string().max(500).optional(),
@@ -51,7 +52,7 @@ const imageBase = z.strictObject({
   kind: z.literal("image"),
   // The media is `imageUrl` or `variants`, never neither (see the refinement below).
   imageUrl: url.optional(),
-  variants: z.record(serviceKey, imageVariant).optional(),
+  variants: z.record(platformKey, imageVariant).optional(),
   caption,
   link: link.optional(),
   altText: altText.optional(),
@@ -62,7 +63,7 @@ const carouselBase = z.strictObject({
   kind: z.literal("carousel"),
   // Ordered: the first URL is the first slide.
   slideUrls: z.array(url).min(1).max(20).optional(),
-  variants: z.record(serviceKey, carouselVariant).optional(),
+  variants: z.record(platformKey, carouselVariant).optional(),
   caption,
   link: link.optional(),
   altText: altText.optional(),
@@ -118,30 +119,20 @@ const SCHEMA_BY_KIND = {
 } satisfies Record<PublishableKind, z.ZodType>;
 
 /**
- * The service of a channel as `variants` names it: the channel's service as is
- * (`instagram`), else its family (`instagram-standalone` -> `instagram`).
- */
-function variantKey(variants: Record<string, unknown>, service: string): string | undefined {
-  if (service in variants) return service;
-  const family = service.split("-")[0];
-  return family in variants ? family : undefined;
-}
-
-/**
  * The Publishable as one channel receives it (ADR-073). With `variants`, the
  * channel's variant replaces the media and overrides the text; without a
- * variant for that service, the default media (`slideUrls`/`imageUrl`) is kept.
+ * variant for that platform, the default media (`slideUrls`/`imageUrl`) is kept.
  * `variants` never reaches a Publisher plugin. Pure.
  * `error`: the channel has no media at all (a Publishable made of variants
- * that does not serve this service).
+ * that does not serve this platform).
  */
-export function publishableForService(
+export function publishableForPlatform(
   publishable: Record<string, unknown>,
-  service: string | undefined,
+  platform: string | undefined,
 ): { ok: true; publishable: Record<string, unknown> } | { ok: false; error: string } {
   const { variants, ...rest } = publishable;
   const served = variants && typeof variants === "object" ? (variants as Record<string, unknown>) : {};
-  const key = service ? variantKey(served, service) : undefined;
+  const key = matchPlatform(Object.keys(served), platform);
   if (key) return { ok: true, publishable: { ...rest, ...(served[key] as Record<string, unknown>) } };
   const offered = Object.keys(served);
   // No variants at all (a video, or media given once) or a default media: as is.
@@ -150,7 +141,7 @@ export function publishableForService(
   }
   return {
     ok: false,
-    error: `this ${String(publishable.kind)} was made for ${offered.join(", ")} only, it has no media for ${service ?? "this channel"}`,
+    error: `this ${String(publishable.kind)} was made for ${offered.join(", ")} only, it has no media for ${platform ?? "this channel"}`,
   };
 }
 
@@ -168,7 +159,7 @@ export function renderPublishableSection(
     ...(kind === "image" || kind === "carousel"
       ? [
           "",
-          `Media: give the default \`${kind === "image" ? "imageUrl" : "slideUrls"}\` or \`variants\` (one entry per service the content was made for, each with its own media and optionally its own \`caption\`, \`title\`, \`link\`, \`altText\`), at least one of the two. A channel without a variant gets the default media; with variants only, a channel they do not name cannot be published to.`,
+          `Media: give the default \`${kind === "image" ? "imageUrl" : "slideUrls"}\` or \`variants\` (one entry per platform the content was made for, each with its own media and optionally its own \`caption\`, \`title\`, \`link\`, \`altText\`), at least one of the two. A channel without a variant gets the default media; with variants only, a channel they do not name cannot be published to.`,
         ]
       : []),
     ...(required.length > 0

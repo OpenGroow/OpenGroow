@@ -3,6 +3,8 @@
  * ADR-069). Pure function over raw manifest data.
  */
 
+import { isKnownPlatform, PLATFORM_IDS } from "@opengroow/publisher-sdk";
+
 /** The closed set of Publishable kinds (V1). A new kind is a product change:
  * add it here and to the Publishable schema in `apps/convex/publishable.ts`
  * (a test pins both lists together). */
@@ -30,13 +32,21 @@ export const MEDIA_PUBLISHABLE_FIELDS = {
 // by `[n]` or `[*]` (every item of an array).
 const MEDIA_PATH_SEGMENT = /^[A-Za-z_][\w-]*(\[(\*|\d+)\])*$/;
 
-/** What a Mission type declares: the kind it produces. Where it goes is chosen
- * per Mission or Schedule among the Publisher's channels (ADR-069).
+/** What a Mission type declares: the kind it produces and, optionally, the
+ * platforms it can go to. The channels are chosen per Mission or Schedule
+ * among the Publisher's channels (ADR-069).
  * `require` lists optional fields of the kind that the Template guarantees: it
  * can only tighten the Publishable, never loosen it. */
 export type PublishDeclaration = {
   kind: PublishableKind;
   require?: string[];
+  /**
+   * The platforms the content can go to (ADR-073), among `PLATFORM_IDS` of the
+   * Publisher SDK: a channel on another platform is refused, and the channel
+   * picker disables it. Absent: every channel. A channel's own platform or its
+   * family matches (`instagram` covers `instagram-standalone`).
+   */
+  platforms?: string[];
   /**
    * For an asynchronous MCP (launch, poll, then fetch): the MCP tool OpenGroow
    * calls once when the External Job completes, to get the media (ADR-069
@@ -72,14 +82,27 @@ export function publishDeclarationFor(
 export function publishDeclarationProblem(raw: unknown, at: string): string | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return `${at}.publish must be an object { kind, require?, resource? }`;
+    return `${at}.publish must be an object { kind, platforms?, require?, resource? }`;
   }
   const publish = raw as Record<string, unknown>;
   for (const key of Object.keys(publish)) {
-    if (key !== "kind" && key !== "require" && key !== "media" && key !== "resource") return `${at}.publish has unknown key "${key}"`;
+    if (key !== "kind" && key !== "platforms" && key !== "require" && key !== "media" && key !== "resource") return `${at}.publish has unknown key "${key}"`;
   }
   if (!(PUBLISHABLE_KINDS as readonly unknown[]).includes(publish.kind)) {
     return `${at}.publish.kind ${JSON.stringify(publish.kind)} is not a known Publishable kind — one of ${PUBLISHABLE_KINDS.join(", ")}`;
+  }
+  if (publish.platforms !== undefined) {
+    if (!Array.isArray(publish.platforms) || publish.platforms.length === 0) {
+      return `${at}.publish.platforms must be a non-empty array of platforms, one of ${PLATFORM_IDS.join(", ")}`;
+    }
+    const seenPlatforms = new Set<unknown>();
+    for (const platform of publish.platforms) {
+      if (seenPlatforms.has(platform)) return `${at}.publish.platforms lists ${JSON.stringify(platform)} twice`;
+      seenPlatforms.add(platform);
+      if (!isKnownPlatform(platform)) {
+        return `${at}.publish.platforms ${JSON.stringify(platform)} is not a known platform — one of ${PLATFORM_IDS.join(", ")}`;
+      }
+    }
   }
   if (publish.require !== undefined) {
     if (!Array.isArray(publish.require)) return `${at}.publish.require must be an array of field names`;

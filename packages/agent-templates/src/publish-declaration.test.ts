@@ -54,6 +54,20 @@ describe("validateManifest — missionTypes[].publish", () => {
     expect((result as { reason: string }).reason).toContain('unknown key "targets"');
   });
 
+  it("accepts platforms among the known identifiers", () => {
+    expect(validateManifest(manifestWith({ kind: "carousel", platforms: ["instagram", "tiktok"] })).ok).toBe(true);
+  });
+
+  it("rejects a misspelled, duplicated or empty platforms list, naming the known ones", () => {
+    const typo = validateManifest(manifestWith({ kind: "carousel", platforms: ["instagram", "tiktkok"] })) as { ok: boolean; reason: string };
+    expect(typo.ok).toBe(false);
+    expect(typo.reason).toContain('"tiktkok" is not a known platform');
+    expect(typo.reason).toContain("tiktok");
+    expect((validateManifest(manifestWith({ kind: "carousel", platforms: ["tiktok", "tiktok"] })) as { reason: string }).reason).toContain("twice");
+    expect((validateManifest(manifestWith({ kind: "carousel", platforms: [] })) as { reason: string }).reason).toContain("non-empty");
+    expect(validateManifest(manifestWith({ kind: "carousel", platforms: "tiktok" })).ok).toBe(false);
+  });
+
   it("accepts require with optional fields of the kind", () => {
     expect(validateManifest(manifestWith({ kind: "video", require: ["title", "coverUrl"] })).ok).toBe(true);
   });

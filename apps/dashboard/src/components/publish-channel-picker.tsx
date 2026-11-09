@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
-import { capabilityIn, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
+import { capabilityFor, matchPlatform, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
 import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AlertTriangle, ChevronDown } from "lucide-react";
@@ -37,9 +37,21 @@ export type PublisherChannel = Publisher["targets"][number];
  * Publishable `kind`; `supported` when no kind is known, `uncertain` when the
  * package is not installed (`capabilities` undefined).
  */
-export function channelCapability(capabilities: CapabilitiesData | undefined, channel: PublisherChannel, kind: string | undefined): Capability {
+export function channelCapability(
+  capabilities: CapabilitiesData | undefined,
+  channel: PublisherChannel,
+  kind: string | undefined,
+  platforms?: readonly string[],
+): Capability {
   if (!kind || !channel.mapped) return { level: "supported" };
-  return capabilityIn(capabilities, channel.channelService, kind);
+  return capabilityFor(capabilities, channel.channelService, kind, platforms);
+}
+
+/** The platforms a Mission type publishes to that no channel of the Publisher is on (empty when it is not limited). */
+export function platformsWithoutChannel(publisher: Publisher, platforms: readonly string[] | undefined): string[] {
+  return (platforms ?? []).filter(
+    (platform) => !publisher.targets.some((channel) => channel.mapped && matchPlatform([platform], channel.channelService)),
+  );
 }
 
 /**
@@ -87,12 +99,15 @@ export function CapabilityWarning({ capability, testId }: { capability: Capabili
 export function ChannelSelect({
   publisher,
   kind,
+  platforms,
   selected,
   disabled,
   onChange,
 }: {
   publisher: Publisher;
   kind: string | undefined;
+  /** The platforms the Mission type publishes to: channels on another platform are disabled. */
+  platforms?: readonly string[];
   selected: string[];
   disabled: boolean;
   onChange: (targets: string[]) => void;
@@ -114,7 +129,15 @@ export function ChannelSelect({
     return `${channel.mapped && channel.channelService ? platformName(channel.channelService) : ""} ${accountLabel(channel)}`.trim();
   };
 
+  const missing = platformsWithoutChannel(publisher, platforms);
+
   return (
+    <>
+    {missing.length > 0 ? (
+      <p data-testid="publish-missing-platforms" className="m-0 text-xs text-amber-600">
+        This Mission type publishes to {missing.map(platformName).join(" and ")}, but this Publisher has no such channel.
+      </p>
+    ) : null}
     <Combobox
       multiple
       items={items}
@@ -156,7 +179,7 @@ export function ChannelSelect({
           {(target: string) => {
             const channel = byTarget.get(target);
             if (!channel) return null;
-            const capability = channelCapability(capabilities, channel, kind);
+            const capability = channelCapability(capabilities, channel, kind, platforms);
             const unsupported = capability.level === "unsupported";
             const isSelected = selected.includes(target);
             return (
@@ -195,6 +218,7 @@ export function ChannelSelect({
         </div>
       </ComboboxContent>
     </Combobox>
+    </>
   );
 }
 
@@ -218,6 +242,7 @@ export function PublishChannelPicker({
   instanceId,
   payloadText,
   kind,
+  platforms,
   onChange,
   autoPublish,
 }: {
@@ -227,6 +252,8 @@ export function PublishChannelPicker({
   autoPublish?: { checked: boolean; onChange: (next: boolean) => void; hint?: string };
   /** The Mission type's declared `publish.kind`: channels that cannot carry it are disabled. */
   kind?: string;
+  /** The Mission type's declared `publish.platforms`: channels on another platform are disabled. */
+  platforms?: readonly string[];
   onChange: (payloadText: string) => void;
 }) {
   const publisher = useQuery(api.publishers.get, { instanceId });
@@ -264,6 +291,7 @@ export function PublishChannelPicker({
         <ChannelSelect
           publisher={publisher}
           kind={kind}
+          platforms={platforms}
           selected={selected}
           disabled={!payload}
           onChange={(targets) => write({ publishTargets: targets })}

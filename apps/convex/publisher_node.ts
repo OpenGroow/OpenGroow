@@ -6,7 +6,7 @@ import { internal } from "./_generated/api.js";
 import { action, type ActionCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { loadPlugin } from "./publisher/load_node.js";
-import { publishableForService } from "./publishable.js";
+import { publishableForPlatform } from "./publishable.js";
 import { errorMessage } from "./mission_dispatcher_node.js";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 
@@ -92,7 +92,7 @@ export async function publishThroughPublisher(
       }
     }
     // The media of this channel's service (ADR-073); none = nothing to send, a clear error.
-    const forChannel = publishableForService(prepared.publishable, item.channelService);
+    const forChannel = publishableForPlatform(prepared.publishable, item.channelService);
     if (!forChannel.ok) {
       await ctx.runMutation(internal.publications.finish, {
         publicationId: item.publicationId,

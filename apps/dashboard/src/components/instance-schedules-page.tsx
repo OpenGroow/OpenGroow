@@ -404,6 +404,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                 instanceId={instanceId}
                 payloadText={payloadText}
                 kind={publishDecl?.kind}
+                platforms={publishDecl?.platforms}
                 onChange={setPayloadText}
                 autoPublish={
                   autoPublishAllowed

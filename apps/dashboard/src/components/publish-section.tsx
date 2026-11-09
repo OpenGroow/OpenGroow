@@ -28,6 +28,8 @@ export type PublishProjection = {
   unmappedTargets: string[];
   /** The Project has a Publisher with an API key. */
   publisherReady: boolean;
+  /** The platforms the Mission type publishes to; absent = every channel. */
+  platforms?: string[];
   /** The date the reviewer chose (epoch ms); absent = publish immediately. */
   publishAt?: number;
   publications: Array<{
@@ -121,6 +123,7 @@ export function PublishSection({
             <ChannelSelect
               publisher={publisher}
               kind={kind}
+              platforms={publish.platforms}
               selected={targets}
               disabled={!editable}
               onChange={(next) => { void changeTargets(next); }}
@@ -137,7 +140,7 @@ export function PublishSection({
         <dl data-testid="publish-readonly" className="m-0 grid gap-2 text-sm">
           {targets.map((target) => {
             const channel = publisher?.targets.find((c) => c.target === target);
-            const capability = channel && publisher ? channelCapability(capabilities, channel, kind) : undefined;
+            const capability = channel && publisher ? channelCapability(capabilities, channel, kind, publish.platforms) : undefined;
             return (
               <div key={target} data-testid={`publish-row-${target}`} className="flex items-center gap-3 border-b border-border pb-2 last:border-0">
                 <PlatformLogo

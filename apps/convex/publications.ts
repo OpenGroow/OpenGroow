@@ -1,12 +1,14 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
-import { publishableForService } from "./publishable.js";
+import { publishableForPlatform } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
 import { renderPostUrl } from "@opengroow/publisher-sdk";
+import { publishDeclarationFor } from "@opengroow/agent-templates";
+import { getTemplateRegistry } from "./template_registry.js";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 
@@ -159,8 +161,11 @@ export const reviewState = internalQuery({
       .query("publications")
       .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
       .collect();
+    const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
+    const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;
     return {
       target: targets[0] ?? null,
+      ...(platforms ? { platforms } : {}),
       targets,
       mapped: targets.length > 0 && unmappedTargets.length === 0,
       unmappedTargets,
@@ -212,10 +217,14 @@ export const beginAll = internalMutation({
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
-    if (typeof publishable.kind === "string") await assertChannelsSupportKind(ctx, publisher, targets, publishable.kind);
+    if (typeof publishable.kind === "string") {
+      const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
+      const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;
+      await assertChannelsSupportKind(ctx, publisher, targets, publishable.kind, platforms);
+    }
     // A Publishable made of variants only serves those services: refuse the others before any row exists.
     for (const target of targets) {
-      const forChannel = publishableForService(publishable, publisher.targets.find((t) => t.target === target)?.channelService);
+      const forChannel = publishableForPlatform(publishable, publisher.targets.find((t) => t.target === target)?.channelService);
       if (!forChannel.ok) throw new Error(`Channel "${target}": ${forChannel.error}`);
     }
 

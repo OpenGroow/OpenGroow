@@ -5,7 +5,7 @@ import { convexTest } from "convex-test";
 import { internal } from "../_generated/api";
 import schema from "../schema";
 import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation.js";
-import { type Publishable, publishableForService, publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
+import { type Publishable, publishableForPlatform, publishableJsonSchema, publishableSchema, renderPublishableSection } from "../publishable.js";
 import type { Id } from "../_generated/dataModel";
 
 // Issue #16, ADR-069: the Publishable of an Artifact, validated against the
@@ -272,7 +272,7 @@ describe("Publishable variants (ADR-073)", () => {
   });
 
   it("picks the variant of the channel's service and overrides its text", () => {
-    const result = publishableForService(carousel, "pinterest");
+    const result = publishableForPlatform(carousel, "pinterest");
     expect(result).toEqual({
       ok: true,
       publishable: { kind: "carousel", caption: "pin text", slideUrls: [B], title: "pin", link: "https://example.com/p" },
@@ -280,11 +280,11 @@ describe("Publishable variants (ADR-073)", () => {
   });
 
   it("falls back from a service to its family", () => {
-    expect(publishableForService(carousel, "instagram-standalone")).toMatchObject({ ok: true, publishable: { slideUrls: [A], caption: "ig" } });
+    expect(publishableForPlatform(carousel, "instagram-standalone")).toMatchObject({ ok: true, publishable: { slideUrls: [A], caption: "ig" } });
   });
 
   it("refuses a channel the variants do not serve, naming the services it was made for", () => {
-    expect(publishableForService(carousel, "x")).toEqual({
+    expect(publishableForPlatform(carousel, "x")).toEqual({
       ok: false,
       error: "this carousel was made for instagram, pinterest only, it has no media for x",
     });
@@ -292,8 +292,8 @@ describe("Publishable variants (ADR-073)", () => {
 
   it("keeps the default media for a channel without a variant, and a Publishable without variants as is", () => {
     const withDefault = { kind: "carousel", caption: "c", slideUrls: [A], variants: { tiktok: { slideUrls: [B] } } };
-    expect(publishableForService(withDefault, "x")).toEqual({ ok: true, publishable: { kind: "carousel", caption: "c", slideUrls: [A] } });
-    expect(publishableForService({ kind: "video", videoUrl: A, caption: "c" }, undefined)).toEqual({
+    expect(publishableForPlatform(withDefault, "x")).toEqual({ ok: true, publishable: { kind: "carousel", caption: "c", slideUrls: [A] } });
+    expect(publishableForPlatform({ kind: "video", videoUrl: A, caption: "c" }, undefined)).toEqual({
       ok: true,
       publishable: { kind: "video", videoUrl: A, caption: "c" },
     });
