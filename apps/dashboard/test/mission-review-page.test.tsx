@@ -395,6 +395,18 @@ describe("MissionReviewContent", () => {
       await renderEmbedded();
       expect(document.querySelector('[data-testid="review-bar"]')?.textContent).toContain("Ready to publish");
     });
+
+    it("puts the review bar first, above the deliverable, and keeps Reject an outline button", async () => {
+      withPublish(PUBLISH);
+      setStatus("to_validate");
+      await renderEmbedded();
+      const bar = document.querySelector('[data-testid="review-bar"]')!;
+      const preview = document.querySelector('[data-testid="publishable-preview"]')!;
+      // DOCUMENT_POSITION_FOLLOWING: the preview comes after the bar.
+      expect(bar.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const reject = document.querySelector('[data-testid="reject-button"]') as HTMLElement;
+      expect(reject.className).not.toContain("text-destructive");
+    });
   });
 
   const PUBLISHER = {
