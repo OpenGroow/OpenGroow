@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation.js";
+import { decideReconciliation, validateDeclaredBlockerCode, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation.js";
 import type { Id } from "../_generated/dataModel";
 
 const MISSION_ID = "mission-abc" as Id<"missions">;
@@ -243,6 +243,20 @@ describe("decideReconciliation", () => {
       { ...CTX, retryableFailureCount: 3 },
     );
     expect(decision).toMatchObject({ type: "markFailed", code: "file_invalid" });
+  });
+
+  it("explains in plain words that the Agent's retries ran out, the validator's detail coming after", () => {
+    const decision = decideReconciliation(
+      {
+        ...BASE_SNAPSHOT,
+        execResult: { ok: true },
+        resultReadCommandId: READ_COMMAND_ID,
+        readResult: { ok: true, data: { content: "{not json" } },
+      },
+      { ...CTX, retryableFailureCount: 3 },
+    );
+    const message = (decision as { message: string }).message;
+    expect(message).toMatch(/^The Agent kept returning a result OpenGroow could not accept, and its retries ran out\. Last problem: /);
   });
 
   it("fails a SourceJob's Run at once on invalid output, since no Mission can resume", () => {
@@ -578,5 +592,17 @@ describe("decideReconciliation", () => {
     );
 
     expect(decision).toMatchObject({ type: "markFailedRetryable", jobType: undefined });
+  });
+});
+
+describe("validateDeclaredBlockerCode", () => {
+  const blocked = { status: "blocked_external", summary: "s", blockerCode: "SINGLES_NOT_CONFIGURED", message: "m" } as never;
+
+  it("names the codes the Mission type declares, so the Agent can correct itself", () => {
+    expect(validateDeclaredBlockerCode(blocked, { missionType: "create_single", blockerCodes: ["singles_not_configured"] })).toBe(
+      'blocked_external.blockerCode "SINGLES_NOT_CONFIGURED" is not declared for Mission type "create_single" (declared: singles_not_configured)',
+    );
+    expect(validateDeclaredBlockerCode(blocked, { missionType: "create_single", blockerCodes: [] })).toContain("(declared: none)");
+    expect(validateDeclaredBlockerCode(blocked, { missionType: "create_single", blockerCodes: ["SINGLES_NOT_CONFIGURED"] })).toBeUndefined();
   });
 });
