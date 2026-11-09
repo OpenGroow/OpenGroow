@@ -3,6 +3,7 @@ import { anyApi } from "convex/server";
 import type { FunctionReference } from "convex/server";
 import type { Event } from "@opengroow/protocol";
 import { HmacSigner } from "@opengroow/hmac";
+import { convexSafe } from "./convex-safe.js";
 
 const api = anyApi;
 const internal = anyApi;
@@ -27,9 +28,11 @@ const ingestEventAction = api.events_node.ingest;
 const callIngestEvent = (
   client: ConvexHttpClient,
   instanceId: string,
-  event: BrokerEvent,
+  rawEvent: BrokerEvent,
   signer: HmacSigner | undefined,
 ) => {
+  // Before the body is signed: the signature covers what Convex will store.
+  const event = convexSafe(rawEvent);
   const rawBody = JSON.stringify({ instanceId, event });
   const args: Record<string, unknown> = { instanceId, event, rawBody };
   if (signer) {
