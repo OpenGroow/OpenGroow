@@ -302,6 +302,28 @@ describe("MissionReviewContent", () => {
       expect(document.body.textContent).not.toContain("SEO Metadata");
     });
 
+    it("lets a publish-driven image Mission be validated: the review.path content it never loads does not block the action", async () => {
+      const publishable = { kind: "carousel", caption: "Swipe", variants: { instagram: { slideUrls: ["https://cdn.example.com/ig-1.png"] } } };
+      const mission = missionWithPublishable(publishable);
+      useQueryMock.mockImplementation((key: string) =>
+        key === "missions.get"
+          ? { ...mission, status: "to_validate", lastResult: { ...mission.lastResult, artifact: { ...mission.lastResult.artifact, kind: "image" } } }
+          : undefined,
+      );
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        content: null,
+        publish: { targets: [], mapped: true, unmappedTargets: [], publisherReady: true, publications: [] },
+      }));
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect(loadReviewContentMock).not.toHaveBeenCalled();
+      expect((document.querySelector('[data-testid="review-action-approve"]') as HTMLButtonElement).disabled).toBe(false);
+      expect(document.querySelector('[data-testid="review-action-blocked"]')).toBeNull();
+    });
+
     it("shows no preview for a Mission without a Publishable", async () => {
       setupDefaultQuery();
       loadReviewContentMock.mockReturnValue(new Promise(() => {}));

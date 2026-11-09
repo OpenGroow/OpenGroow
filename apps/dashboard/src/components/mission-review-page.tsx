@@ -601,13 +601,14 @@ export function MissionReviewContent({
     isCarouselMission && reviewKind === "image" && reviewContent
       ? parseCarouselReviewPayload(reviewContent)
       : null;
+  // A Mission type that declares `publish` is reviewed from its publishable (PublishablePreview),
+  // not from a review.path content route: that content is never loaded, so it cannot block the action.
+  const publishDriven = reviewProjection?.publish !== undefined;
   const carouselReviewBlocked =
     isCarouselMission &&
+    !publishDriven &&
     (reviewContent === null || reviewKind !== "image" || carouselReview === null || carouselReview.missingImages.length > 0);
 
-  // A Mission type that declares `publish` is reviewed from its publishable
-  // (PublishablePreview above), not from a review.path content route.
-  const publishDriven = reviewProjection?.publish !== undefined;
   const reviewActions = reviewProjection?.actions ?? [];
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;
