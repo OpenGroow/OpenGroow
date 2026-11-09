@@ -1,6 +1,6 @@
 {
   "name": "@opengroow/groowhub-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Validate and build the packages of the OpenGroow hub (groowhub) with the code the product runs at installation",
   "license": "AGPL-3.0-only",
   "repository": {
