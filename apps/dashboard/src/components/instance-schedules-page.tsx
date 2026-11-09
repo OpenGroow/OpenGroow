@@ -139,9 +139,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const [type, setType] = useState("");
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
-  // null = follow the default: open when the Mission type declares payload
-  // fields (the form must be visible), collapsed for a plain JSON payload.
-  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
+  // The plain JSON payload starts collapsed (declared fields are always shown).
+  const [payloadOpen, setPayloadOpen] = useState(false);
   const [unit, setUnit] = useState<"daily" | "weekly" | "monthly">("daily");
   const [dayOfWeek, setDayOfWeek] = useState(1); // Monday
   const [dayOfMonth, setDayOfMonth] = useState(1);
@@ -162,8 +161,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
-  const payloadOpen =
-    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
+  // Declared fields are Mission settings, shown inline like Name; only a
+  // plain JSON payload sits behind the collapsed "Payload (optional)".
+  const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
+  const hasPayloadFields = (payloadFields?.length ?? 0) > 0;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
   const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
   const declaresPublish = publishDecl !== undefined;
@@ -415,29 +416,39 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               />
             ) : null}
 
-            <div className="grid gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                aria-expanded={payloadOpen}
-                onClick={() => setPayloadOpenOverride(!payloadOpen)}
-                className="-ml-3 w-fit"
-              >
-                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
-                Payload (optional)
-              </Button>
-              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
-              <div hidden={!payloadOpen}>
-                <MissionPayloadEditor
-                  fields={missionTypes.find((t) => t.type === type)?.fields}
-                  payloadText={payloadText}
-                  onChange={setPayloadText}
-                  rawMode={rawPayloadMode}
-                  onRawModeChange={setRawPayloadMode}
-                />
+            {hasPayloadFields ? (
+              <MissionPayloadEditor
+                fields={payloadFields}
+                payloadText={payloadText}
+                onChange={setPayloadText}
+                rawMode={rawPayloadMode}
+                onRawModeChange={setRawPayloadMode}
+              />
+            ) : (
+              <div className="grid gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  aria-expanded={payloadOpen}
+                  onClick={() => setPayloadOpen(!payloadOpen)}
+                  className="-ml-3 w-fit"
+                >
+                  <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
+                  Payload (optional)
+                </Button>
+                {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
+                <div hidden={!payloadOpen}>
+                  <MissionPayloadEditor
+                    fields={payloadFields}
+                    payloadText={payloadText}
+                    onChange={setPayloadText}
+                    rawMode={rawPayloadMode}
+                    onRawModeChange={setRawPayloadMode}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
               <legend className="px-1 text-sm font-semibold text-muted-foreground">

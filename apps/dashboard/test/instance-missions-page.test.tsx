@@ -489,6 +489,9 @@ describe("InstanceMissionsContent — mission list", () => {
     const labels = Array.from(document.querySelectorAll("label")).map((l) => l.textContent);
     expect(labels.some((l) => l?.includes("Category"))).toBe(true);
     expect(labels.some((l) => l?.includes("Occasion"))).toBe(true);
+    // Declared fields are Mission settings shown inline, not an optional payload.
+    const buttons = Array.from(document.querySelectorAll("button")).map((b) => b.textContent);
+    expect(buttons.some((t) => t?.includes("Payload (optional)"))).toBe(false);
   });
 
   it("blocks submission with an error when a required field is missing for lym_create_marketing_video", async () => {

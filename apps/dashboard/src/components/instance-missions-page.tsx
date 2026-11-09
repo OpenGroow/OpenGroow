@@ -66,9 +66,8 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
-  // null = follow the default: open when the Mission type declares payload
-  // fields (the form must be visible), collapsed for a plain JSON payload.
-  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
+  // The plain JSON payload starts collapsed (declared fields are always shown).
+  const [payloadOpen, setPayloadOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -86,9 +85,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
-  const payloadOpen =
-    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
-  const setPayloadOpen = setPayloadOpenOverride;
+  // Declared fields are Mission settings, shown inline like Name; only a
+  // plain JSON payload sits behind the collapsed "Payload (optional)".
+  const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
+  const hasPayloadFields = (payloadFields?.length ?? 0) > 0;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
   // A Mission type that declares `publish` groups channels, Auto-publish and the
   // date in one "Publish" card; others keep the standalone toggle.
@@ -307,29 +307,39 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
               />
             ) : null}
 
-            <div className="grid gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                aria-expanded={payloadOpen}
-                onClick={() => setPayloadOpen(!payloadOpen)}
-                className="-ml-3 w-fit"
-              >
-                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
-                Payload (optional)
-              </Button>
-              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
-              <div hidden={!payloadOpen}>
-                <MissionPayloadEditor
-                  fields={missionTypes.find((t) => t.type === type)?.fields}
-                  payloadText={payloadText}
-                  onChange={setPayloadText}
-                  rawMode={rawPayloadMode}
-                  onRawModeChange={setRawPayloadMode}
-                />
+            {hasPayloadFields ? (
+              <MissionPayloadEditor
+                fields={payloadFields}
+                payloadText={payloadText}
+                onChange={setPayloadText}
+                rawMode={rawPayloadMode}
+                onRawModeChange={setRawPayloadMode}
+              />
+            ) : (
+              <div className="grid gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  aria-expanded={payloadOpen}
+                  onClick={() => setPayloadOpen(!payloadOpen)}
+                  className="-ml-3 w-fit"
+                >
+                  <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
+                  Payload (optional)
+                </Button>
+                {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
+                <div hidden={!payloadOpen}>
+                  <MissionPayloadEditor
+                    fields={payloadFields}
+                    payloadText={payloadText}
+                    onChange={setPayloadText}
+                    rawMode={rawPayloadMode}
+                    onRawModeChange={setRawPayloadMode}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
