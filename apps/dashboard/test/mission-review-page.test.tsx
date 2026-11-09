@@ -271,6 +271,23 @@ describe("MissionReviewContent", () => {
       ]);
     });
 
+    it("previews each variant of a carousel with its own images and text", async () => {
+      await renderWith({
+        kind: "carousel",
+        caption: "Default",
+        variants: {
+          instagram: { slideUrls: ["https://cdn.example.com/ig-1.png"], caption: "For Instagram" },
+          pinterest: { slideUrls: ["https://cdn.example.com/pin-1.png"], title: "Pin title", caption: "For Pinterest" },
+        },
+      });
+      const pinterest = document.querySelector('[data-testid="publishable-variant-pinterest"]');
+      expect(pinterest?.textContent).toContain("Pin title");
+      expect(pinterest?.textContent).toContain("For Pinterest");
+      expect((pinterest?.querySelector("img") as HTMLImageElement).src).toBe("https://cdn.example.com/pin-1.png");
+      expect(document.querySelector('[data-testid="publishable-variant-instagram"] img')).not.toBeNull();
+      expect(document.body.textContent).not.toContain("No previewable media");
+    });
+
     it("reviews a Mission type that declares publish from its publishable only: no review.path content is loaded or shown", async () => {
       const base = getReviewMock.getMockImplementation()!;
       getReviewMock.mockImplementation(async () => ({
@@ -283,6 +300,52 @@ describe("MissionReviewContent", () => {
       expect(loadReviewContentMock).not.toHaveBeenCalled();
       expect(document.body.textContent).not.toContain("Loading article");
       expect(document.body.textContent).not.toContain("SEO Metadata");
+    });
+
+    it("lets a publish-driven image Mission be validated: the review.path content it never loads does not block the action", async () => {
+      const publishable = { kind: "carousel", caption: "Swipe", variants: { instagram: { slideUrls: ["https://cdn.example.com/ig-1.png"] } } };
+      const mission = missionWithPublishable(publishable);
+      useQueryMock.mockImplementation((key: string) =>
+        key === "missions.get"
+          ? { ...mission, status: "to_validate", lastResult: { ...mission.lastResult, artifact: { ...mission.lastResult.artifact, kind: "image" } } }
+          : undefined,
+      );
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => ({
+        ...(await base()),
+        content: null,
+        publish: { targets: [], mapped: true, unmappedTargets: [], publisherReady: true, publications: [] },
+      }));
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect(loadReviewContentMock).not.toHaveBeenCalled();
+      expect((document.querySelector('[data-testid="review-action-approve"]') as HTMLButtonElement).disabled).toBe(false);
+      expect(document.querySelector('[data-testid="review-action-blocked"]')).toBeNull();
+    });
+
+    it("shows a blocked Publish greyed with its reason, instead of hiding it", async () => {
+      const mission = missionWithPublishable({ kind: "image", caption: "c", variants: { instagram: { imageUrl: "https://cdn.example.com/ig.png" } } });
+      useQueryMock.mockImplementation((key: string) => (key === "missions.get" ? { ...mission, status: "approved" } : undefined));
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => {
+        const review = await base();
+        return {
+          ...review,
+          content: null,
+          publish: { targets: ["pinterest:pins"], mapped: true, unmappedTargets: [], publisherReady: true, publications: [] },
+          actions: review.actions.map((action: { key: string }) =>
+            action.key === "publish"
+              ? { ...action, enabled: false, disabledReason: 'Channel "pinterest:pins": this image was made for instagram only, it has no media for pinterest' }
+              : action,
+          ),
+        };
+      });
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect((document.querySelector('[data-testid="review-action-publish"]') as HTMLButtonElement).disabled).toBe(true);
+      expect(document.querySelector('[data-testid="review-action-blocked"]')?.textContent).toContain("made for instagram only");
     });
 
     it("shows no preview for a Mission without a Publishable", async () => {

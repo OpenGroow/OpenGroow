@@ -74,3 +74,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 070 | Publisher plugins are isolated code modules; the core keeps the Publication lifecycle | Accepted | no | [070-publisher-plugins-are-code-modules.md](070-publisher-plugins-are-code-modules.md) |
 | 071 | `routing` never authors the brief of a Source reel; the producing Agent reads the Source through `observationId` | Accepted | yes | [071-routing-never-authors-the-brief-of-a-source-reel.md](071-routing-never-authors-the-brief-of-a-source-reel.md) |
 | 072 | Hub packages have a `kind`; Publishers are the first code kind, run in Node actions | Accepted | no | [072-publisher-packages-installed-from-the-hub.md](072-publisher-packages-installed-from-the-hub.md) |
+| 073 | A Publishable image or carousel may carry one variant per platform, and a Mission type may limit its platforms | Accepted | no | [073-publishable-variants-per-platform.md](073-publishable-variants-per-platform.md) |

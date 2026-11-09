@@ -53,6 +53,10 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
 
 Expose both on the plugin object (`capabilities`, `channelOptions`); the SDK provides `parseCapabilities` to validate the first.
 
+### Platform identifiers
+
+The keys of `platforms` (and each channel's `channelService`) are platform identifiers: `instagram`, `tiktok`, `pinterest`, `youtube`, `x`… A Template limits where its content goes with `publish.platforms`, and `template:validate` checks those values against `PLATFORM_IDS` in `@opengroow/publisher-sdk` (ADR-073). **A plugin that brings a platform not in that list adds its identifier to `PLATFORM_IDS`** (and the `@opengroow/groowhub-cli` bundle is republished), otherwise no Template can name it. A test pins the list to the reference Postiz capabilities. A channel matches a platform as is or by family (`instagram-standalone` is `instagram`).
+
 ## How the core calls the plugin
 
 A plugin is not imported by the core: it is an **installed Publisher package** (ADR-072). Add publisher lists the hub's `publishers.json`, downloads the chosen package, verifies its digest and stores it (`hub_packages_node.install`). Installing derives the package's data once (`hub_package_kinds.describe`): the manifest, the capabilities and the channel options, which queries, mutations and the dashboard read (`publisher_packages.ts`, `api.publisher_packages.list`). The code (`dist/plugin.mjs`, whose default export is the plugin) is evaluated only in Node actions (`publisher/load_node.ts`, `loadPlugin(ctx, adapter)`), cached per digest.

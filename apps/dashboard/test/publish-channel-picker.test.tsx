@@ -58,9 +58,9 @@ describe("PublishChannelPicker", () => {
     container.remove();
   });
 
-  async function render(payloadText: string, onChange = vi.fn(), kind?: string) {
+  async function render(payloadText: string, onChange = vi.fn(), kind?: string, platforms?: string[]) {
     await act(async () => {
-      root.render(<PublishChannelPicker instanceId="inst-1" payloadText={payloadText} kind={kind} onChange={onChange} />);
+      root.render(<PublishChannelPicker instanceId="inst-1" payloadText={payloadText} kind={kind} platforms={platforms} onChange={onChange} />);
     });
     return onChange;
   }
@@ -104,6 +104,38 @@ describe("PublishChannelPicker", () => {
     expect(isDisabled(item("youtube:yt")!)).toBe(true);
     expect(document.body.textContent).toContain("YouTube cannot publish an image");
     expect(isDisabled(item("instagram:myinsta")!)).toBe(false);
+  });
+
+  it("disables the channels on a platform the Mission type does not publish to, naming the ones it does", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    await render("", vi.fn(), "carousel", ["instagram", "tiktok"]);
+    await openList();
+    expect(isDisabled(item("pinterest:pins")!)).toBe(true);
+    expect(document.body.textContent).toContain("This Mission type publishes to Instagram and TikTok only");
+    expect(isDisabled(item("instagram:myinsta")!)).toBe(false);
+  });
+
+  it("lists the channels that cannot be used last, keeping the others in the Publisher's order", async () => {
+    useQueryMock.mockReturnValue({
+      ...PUBLISHER,
+      targets: [
+        PUBLISHER.targets[1],
+        { target: "tiktok:tt", mapped: true, channelId: "c3", channelName: "TT", channelService: "tiktok", channelProfile: "tt" },
+        PUBLISHER.targets[0],
+      ],
+    });
+    await render("", vi.fn(), "carousel", ["instagram", "tiktok"]);
+    await openList();
+    const order = [...document.querySelectorAll('[data-testid^="publish-target-"]')].map((el) => el.getAttribute("data-testid")).filter((id) => !/^publish-target-(reason|warning)-/.test(id ?? ""));
+    expect(order).toEqual(["publish-target-tiktok:tt", "publish-target-instagram:myinsta", "publish-target-pinterest:pins"]);
+  });
+
+  it("says so when the Publisher has no channel on a platform the Mission type publishes to", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    await render("", vi.fn(), "carousel", ["instagram", "tiktok"]);
+    expect(document.querySelector('[data-testid="publish-missing-platforms"]')?.textContent).toContain("TikTok");
+    await render("", vi.fn(), "carousel", ["instagram", "pinterest"]);
+    expect(document.querySelector('[data-testid="publish-missing-platforms"]')).toBeNull();
   });
 
   it("warns on a channel whose support for the kind is not confirmed", async () => {

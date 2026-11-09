@@ -4,6 +4,8 @@
 // through this pure module: no network, no per-platform branch in code.
 // Importable from Convex functions and from the dashboard.
 
+import { matchPlatform } from "./platforms";
+
 export const CAPABILITY_KINDS = ["video", "image", "carousel"] as const;
 export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
 export type CapabilityLevel = "supported" | "uncertain" | "unsupported";
@@ -62,4 +64,29 @@ export function capabilityIn(data: CapabilitiesData | undefined, service: string
     return { level, reason: `${name} cannot publish ${kind === "image" ? "an" : "a"} ${kind}${detail ? ` (${detail})` : ""}` };
   }
   return { level };
+}
+
+/**
+ * What a channel can carry for a Mission type: `capabilityIn`, after the
+ * platforms the Mission type is limited to (`publish.platforms`, ADR-073). A
+ * channel on another platform is `unsupported`, with the platforms it can go to
+ * named in the reason. Without `platforms`, only the capability of the service.
+ */
+export function capabilityFor(
+  data: CapabilitiesData | undefined,
+  service: string | undefined,
+  kind: string,
+  platforms?: readonly string[],
+  /** The platforms the content was actually made for (the keys of its `variants`, when it has no default media). */
+  madeFor?: readonly string[],
+): Capability {
+  if (platforms && platforms.length > 0 && !matchPlatform(platforms, service)) {
+    const names = platforms.map((platform) => data?.platforms[platform]?.name ?? platform);
+    return { level: "unsupported", reason: `This Mission type publishes to ${names.join(" and ")} only` };
+  }
+  if (madeFor && madeFor.length > 0 && !matchPlatform(madeFor, service)) {
+    const names = madeFor.map((platform) => data?.platforms[platform]?.name ?? platform);
+    return { level: "unsupported", reason: `This ${kind} was made for ${names.join(" and ")} only` };
+  }
+  return capabilityIn(data, service, kind);
 }

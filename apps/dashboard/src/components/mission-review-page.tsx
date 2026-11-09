@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BlockedNotice } from "@/src/components/blocked-notice";
 import { useQuery, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@convex/_generated/api";
@@ -242,10 +243,14 @@ function ReviewActionsSection({
 
   // Find the action that matches the current mission status, excluding reject
   // (which has its own expand-on-click affordance in RejectSection).
-  const eligibleAction = actions.find(
-    (a) => a.requiredStatus === status && a.key !== "reject" && a.enabled,
-  );
+  // The action of this status, even when it is blocked: it is shown greyed with the reason, not hidden.
+  const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
   if (!eligibleAction) return null;
+  const blockedReason = !eligibleAction.enabled
+    ? (eligibleAction.disabledReason ?? "This action is unavailable.")
+    : disabled
+      ? "This action is unavailable until the review content is complete."
+      : undefined;
 
   async function handleAction(action: ReviewActionDescriptor) {
     setActiveAction(action.key);
@@ -305,16 +310,16 @@ function ReviewActionsSection({
           size="lg"
           type="button"
           onClick={() => { void handleAction(eligibleAction); }}
-          disabled={isLoading || disabled}
+          disabled={isLoading || blockedReason !== undefined}
           data-testid={`review-action-${eligibleAction.key}`}
         >
           {isLoading ? `${eligibleAction.label}…` : eligibleAction.label}
         </Button>
       </div>
-      {disabled && (
-        <p data-testid="review-action-blocked" className="m-0 text-sm text-muted-foreground">
-          This action is unavailable until the review content is complete.
-        </p>
+      {blockedReason && (
+        <BlockedNotice padding="p-4" testId="review-action-blocked">
+          {blockedReason}
+        </BlockedNotice>
       )}
     </section>
   );
@@ -601,13 +606,14 @@ export function MissionReviewContent({
     isCarouselMission && reviewKind === "image" && reviewContent
       ? parseCarouselReviewPayload(reviewContent)
       : null;
+  // A Mission type that declares `publish` is reviewed from its publishable (PublishablePreview),
+  // not from a review.path content route: that content is never loaded, so it cannot block the action.
+  const publishDriven = reviewProjection?.publish !== undefined;
   const carouselReviewBlocked =
     isCarouselMission &&
+    !publishDriven &&
     (reviewContent === null || reviewKind !== "image" || carouselReview === null || carouselReview.missingImages.length > 0);
 
-  // A Mission type that declares `publish` is reviewed from its publishable
-  // (PublishablePreview above), not from a review.path content route.
-  const publishDriven = reviewProjection?.publish !== undefined;
   const reviewActions = reviewProjection?.actions ?? [];
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;

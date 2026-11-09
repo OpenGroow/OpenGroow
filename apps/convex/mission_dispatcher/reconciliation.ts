@@ -117,7 +117,12 @@ function decideInvalidOutput(
   if (isRetryDecision(decision)) {
     return { type: "markFailedRetryable", jobType: undefined, error: message, details: undefined };
   }
-  return { type: "markFailed", code: "file_invalid", message };
+  // Shown to the person on the Mission page: the plain sentence first, the validator's detail (written for the Agent) after.
+  return {
+    type: "markFailed",
+    code: "file_invalid",
+    message: `The Agent kept returning a result OpenGroow could not accept, and its retries ran out. Last problem: ${message}`,
+  };
 }
 
 /**
@@ -135,7 +140,7 @@ export function validateDeclaredBlockerCode(
   if (ctx.blockerCodes.includes(result.blockerCode)) {
     return undefined;
   }
-  return `blocked_external.blockerCode "${result.blockerCode}" is not declared for Mission type "${ctx.missionType}"`;
+  return `blocked_external.blockerCode "${result.blockerCode}" is not declared for Mission type "${ctx.missionType}" (declared: ${ctx.blockerCodes.length > 0 ? ctx.blockerCodes.join(", ") : "none"})`;
 }
 
 /**

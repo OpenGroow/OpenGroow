@@ -24,7 +24,12 @@ const TEMPLATE_ID = "@test/image-maker";
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|cap", subject: "cap-owner" };
 
 useTemplateRegistry([INSTANCE_ID], [
-  fixtureTemplate(TEMPLATE_ID, { missionTypes: [{ type: "make_image", publish: { kind: "image" } }] } as never),
+  fixtureTemplate(TEMPLATE_ID, {
+    missionTypes: [
+      { type: "make_image", publish: { kind: "image" } },
+      { type: "make_carousel", publish: { kind: "carousel", platforms: ["instagram", "tiktok"] } },
+    ],
+  } as never),
 ]);
 
 async function seed() {
@@ -40,6 +45,8 @@ async function seed() {
       targets: [
         { target: "youtube:yt", channelId: "c1", channelService: "youtube" },
         { target: "mastodon:m", channelId: "c2", channelService: "mastodon" },
+        { target: "instagram:ig", channelId: "c3", channelService: "instagram" },
+        { target: "pinterest:pin", channelId: "c4", channelService: "pinterest" },
       ],
       updatedAt: Date.now(),
     });
@@ -68,5 +75,25 @@ describe("channel capabilities on creation and edit", () => {
     await expect(
       owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishTargets: ["youtube:yt"] } }),
     ).rejects.toThrow(/YouTube cannot publish an image/);
+  });
+
+  it("refuses a channel on a platform the Mission type does not publish to, and allows one it does", async () => {
+    const owner = await seed();
+    const carousel = { ...base, type: "make_carousel" };
+    await expect(
+      owner.mutation(api.missions.create, { ...carousel, payload: { publishTargets: ["pinterest:pin"] } }),
+    ).rejects.toThrow(/publishes to Instagram and TikTok only/);
+    // Past the channel checks the fixture has no active Agent, which is unrelated: only the platform check matters here.
+    const failure = async (promise: Promise<unknown>) => {
+      try {
+        await promise;
+        return "";
+      } catch (error) {
+        return String(error);
+      }
+    };
+    expect(await failure(owner.mutation(api.missions.create, { ...carousel, payload: { publishTargets: ["instagram:ig"] } }))).not.toMatch(/publishes to/);
+    // A Mission type that declares no platforms is open to every channel that can carry its kind.
+    expect(await failure(owner.mutation(api.missions.create, { ...base, payload: { publishTargets: ["pinterest:pin"] } }))).not.toMatch(/publishes to/);
   });
 });

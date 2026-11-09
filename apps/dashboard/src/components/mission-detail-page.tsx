@@ -11,6 +11,7 @@ import { AutoPublishToggle, supportsAutoPublish, type AutoPublishControl } from 
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref, runPromptHref } from "@/src/lib/instance-path";
 import { blockedExternalResult } from "@/src/lib/mission-result";
+import { BlockedNotice } from "@/src/components/blocked-notice";
 import { Button } from "@/components/ui/button";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -349,22 +350,17 @@ export function MissionDetailContent({
 
         {/* Blocked — a Template-declared human-action blocker (issue #323). */}
         {blocked !== undefined && (
-          <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
-            <h2 className="m-0 text-sm font-semibold text-status-warning">
-              Blocked
-            </h2>
-            <p className="m-0 text-sm text-status-warning">
-              {blocked.message}{" "}
-              {blocked.resolution?.kind === "link" && (
-                <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
-                  Open resolution link
-                </a>
-              )}
-              {blocked.resolution?.kind === "execution_device" && (
-                <span className="font-semibold">Resolve on the execution device.</span>
-              )}
-            </p>
-          </section>
+          <BlockedNotice>
+            {blocked.message}{" "}
+            {blocked.resolution?.kind === "link" && (
+              <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+                Open resolution link
+              </a>
+            )}
+            {blocked.resolution?.kind === "execution_device" && (
+              <span className="font-semibold">Resolve on the execution device.</span>
+            )}
+          </BlockedNotice>
         )}
       </>
     ) : undefined;

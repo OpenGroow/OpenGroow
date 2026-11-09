@@ -66,6 +66,12 @@ export type MissionPublishProjection = {
   unmappedTargets: string[];
   /** The Project has a Publisher with an API key. Without it nothing can be sent. */
   publisherReady: boolean;
+  /** The platforms the Mission type publishes to (`publish.platforms`); absent = every channel. */
+  platforms?: string[];
+  /** The platforms the content was made for, when it is made of per-platform variants only (ADR-073); absent = any. */
+  madeFor?: string[];
+  /** Chosen channels that have no media in this content: publishing to them is refused, with the reason. */
+  unserved?: Array<{ target: string; reason: string }>;
   /** The date the human chose (epoch ms); absent = publish immediately. */
   publishAt?: number;
   publications: Array<{
@@ -207,6 +213,9 @@ function publishBlockedReason(publish: MissionPublishProjection): string | undef
   if (publish.unmappedTargets.length > 0) {
     const names = publish.unmappedTargets.map((t) => `"${t}"`).join(", ");
     return `Channel ${names} is not on the Project's Publisher (or not configured): check the Publishers page`;
+  }
+  if (publish.unserved && publish.unserved.length > 0) {
+    return `${publish.unserved.map(({ target, reason }) => `Channel "${target}": ${reason}`).join("; ")}. Remove it, or create the content again with that platform enabled`;
   }
   return undefined;
 }

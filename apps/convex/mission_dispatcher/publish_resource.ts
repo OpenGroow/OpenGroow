@@ -49,15 +49,23 @@ export function mergePublishResource(input: {
 
   const media: Record<string, unknown> = {};
   const problems: string[] = [];
-  // A media is required unless the kind lists it among its optional fields (`coverUrl`).
+  // A media is required unless the kind lists it among its optional fields
+  // (`coverUrl`, `variants`). An image or carousel needs its default media or
+  // variants: one of the two, checked once below.
   const optional: readonly string[] = OPTIONAL_PUBLISHABLE_FIELDS[declaration.kind];
+  const alternative = declaration.kind === "image" || declaration.kind === "carousel";
   for (const field of MEDIA_PUBLISHABLE_FIELDS[declaration.kind]) {
     const path = resource.map?.[field] ?? field;
     const value = readMediaPath(input.toolOutput, path);
     if (value !== undefined && value !== null) media[field] = value;
-    else if (!optional.includes(field)) {
+    else if (!optional.includes(field) && !alternative) {
       problems.push(`publishable.${field} is missing: tool "${resource.tool}" returned nothing at "${path}"`);
     }
+  }
+  if (alternative && Object.keys(media).length === 0) {
+    const [first, second] = MEDIA_PUBLISHABLE_FIELDS[declaration.kind];
+    const where = (field: string) => `"${resource.map?.[field as "variants"] ?? field}"`;
+    problems.push(`publishable.${first} is missing: tool "${resource.tool}" returned nothing at ${where(first)} nor at ${where(second)}`);
   }
   if (problems.length > 0) return { ok: false, message: problems.join("; ") };
 

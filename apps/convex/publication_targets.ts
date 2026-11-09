@@ -4,7 +4,7 @@
 
 import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { QueryCtx } from "./_generated/server.js";
-import { capabilityIn } from "@opengroow/publisher-sdk";
+import { capabilityFor } from "@opengroow/publisher-sdk";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -45,12 +45,14 @@ export async function assertKnownPublishTargets(ctx: QueryCtx, instanceId: strin
   }
 }
 
-/** Refuses targets whose channel cannot carry `kind` (capabilities are owned by the adapter). `uncertain` is allowed. */
+/** Refuses targets whose channel cannot carry `kind` (capabilities are owned by the adapter) or is on a platform the
+ * Mission type does not publish to (`platforms`, ADR-073). `uncertain` is allowed. */
 export async function assertChannelsSupportKind(
   ctx: QueryCtx,
   publisher: { adapter: string; targets: ReadonlyArray<{ target: string; channelService?: string }> } | null | undefined,
   targets: readonly string[],
   kind: string,
+  platforms?: readonly string[],
 ): Promise<void> {
   if (!publisher) return;
   // Capabilities are data of the installed package; a Publisher whose package is gone has none: every pair is `uncertain`.
@@ -58,7 +60,7 @@ export async function assertChannelsSupportKind(
   const refused = targets
     .map((t) => publisher.targets.find((entry) => entry.target === t))
     .filter((entry): entry is NonNullable<typeof entry> => entry !== undefined)
-    .map((entry) => ({ target: entry.target, capability: capabilityIn(capabilities, entry.channelService, kind) }))
+    .map((entry) => ({ target: entry.target, capability: capabilityFor(capabilities, entry.channelService, kind, platforms) }))
     .filter(({ capability }) => capability.level === "unsupported");
   if (refused.length > 0) {
     throw new Error(refused.map(({ target, capability }) => `${capability.reason} (channel "${target}")`).join("; "));
@@ -79,5 +81,5 @@ export async function assertPayloadChannelsSupportMissionType(
     .query("publishers")
     .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
     .unique();
-  await assertChannelsSupportKind(ctx, publisher, targets, declaration.kind);
+  await assertChannelsSupportKind(ctx, publisher, targets, declaration.kind, declaration.platforms);
 }
