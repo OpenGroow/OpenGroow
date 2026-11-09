@@ -400,7 +400,7 @@ export function MissionDetailContent({
           <div className="flex flex-wrap items-center gap-2">
             {showRetry && (
               <Button
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 type="button"
                 aria-label="Retry mission"
