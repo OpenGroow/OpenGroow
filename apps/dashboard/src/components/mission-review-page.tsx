@@ -377,7 +377,7 @@ function RejectSection({
   if (!rejecting) {
     return (
       <Button
-        variant="destructive"
+        variant="outline"
         size="lg"
         type="button"
         onClick={() => { setRejecting(true); }}
@@ -612,8 +612,49 @@ export function MissionReviewContent({
       />
     ) : null;
 
+  // The primary action of a Mission waiting for a decision: first thing of the overview, not below the content.
+  const reviewBar =
+    reviewArtifact?.available && isReviewable ? (
+      <section
+        data-testid="review-bar"
+        className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-4"
+      >
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex min-w-56 flex-1 items-center gap-3">
+            <Clock aria-hidden="true" className="size-6 shrink-0 text-status-warning" />
+            <div className="grid gap-0.5">
+              <p className="m-0 text-sm font-semibold text-foreground">
+                {mission.status === "approved" ? "Ready to publish" : "Ready for review"}
+              </p>
+              <p className="m-0 text-xs text-muted-foreground">
+                {mission.status === "approved"
+                  ? "Choose the channels and the date, then publish."
+                  : "Review the generated content before approving it."}
+              </p>
+            </div>
+          </div>
+          <ReviewActionsSection
+            missionId={missionId}
+            instanceId={instanceId}
+            status={mission.status}
+            actions={reviewActions}
+            disabled={carouselReviewBlocked}
+          />
+          {/* Reject is only available from to_validate, not after approval */}
+          {rejectCapability && (
+            <RejectSection
+              missionId={missionId}
+              instanceId={instanceId}
+              rejectCapability={rejectCapability}
+            />
+          )}
+        </div>
+      </section>
+    ) : null;
+
   const main = (
     <>
+      {reviewBar}
       <PublishablePreview publishable={publishable} />
       {!reviewArtifact?.available ? null : (
         <>
@@ -689,44 +730,6 @@ export function MissionReviewContent({
             )}
           </Card>}
 
-          {/* Generic review action panel + generic reject affordance (ADR-020) */}
-          {isReviewable && (
-            <section
-              data-testid="review-bar"
-              className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-4"
-            >
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex min-w-56 flex-1 items-center gap-3">
-                  <Clock aria-hidden="true" className="size-6 shrink-0 text-status-warning" />
-                  <div className="grid gap-0.5">
-                    <p className="m-0 text-sm font-semibold text-foreground">
-                      {mission.status === "approved" ? "Ready to publish" : "Ready for review"}
-                    </p>
-                    <p className="m-0 text-xs text-muted-foreground">
-                      {mission.status === "approved"
-                        ? "Choose the channels and the date, then publish."
-                        : "Review the generated content before approving it."}
-                    </p>
-                  </div>
-                </div>
-                <ReviewActionsSection
-                  missionId={missionId}
-                  instanceId={instanceId}
-                  status={mission.status}
-                  actions={reviewActions}
-                  disabled={carouselReviewBlocked}
-                />
-                {/* Reject is only available from to_validate, not after approval */}
-                {rejectCapability && (
-                  <RejectSection
-                    missionId={missionId}
-                    instanceId={instanceId}
-                    rejectCapability={rejectCapability}
-                  />
-                )}
-              </div>
-            </section>
-          )}
         </>
       )}
     </>
