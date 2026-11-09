@@ -14,7 +14,7 @@ import {
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
-  validateMissionPayloadUnlessRaw,
+  validateMissionPayload,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,9 @@ export const WEEKDAYS = [
 
 /** Human-readable cadence, e.g. "Daily at 09:00", "Weekly on Monday at 09:00",
  * "Monthly on day 15 at 09:00". */
+// Payload keys the PublishChannelPicker edits: never shown in the extra-options JSON.
+const PUBLISH_PICKER_KEYS = ["publishTargets", "publishAt"];
+
 export function formatCadence(schedule: {
   unit: string;
   hour: number;
@@ -205,11 +208,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
       setError("Type is required.");
       return;
     }
-    const payloadError = validateMissionPayloadUnlessRaw({
+    const payloadError = validateMissionPayload({
       missionTypes: declaredMissionTypes,
       type: type.trim(),
       payload,
-      rawMode: rawPayloadMode,
     });
     if (payloadError) {
       setError(payloadError);
@@ -413,6 +415,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
 
             <MissionPayloadEditor
               fields={payloadFields}
+              reservedKeys={declaresPublish ? PUBLISH_PICKER_KEYS : undefined}
               payloadText={payloadText}
               onChange={setPayloadText}
               rawMode={rawPayloadMode}

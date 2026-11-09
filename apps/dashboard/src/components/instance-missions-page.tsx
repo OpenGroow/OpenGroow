@@ -11,7 +11,7 @@ import { PublishChannelPicker } from "./publish-channel-picker";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
-  validateMissionPayloadUnlessRaw,
+  validateMissionPayload,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,9 @@ type Props = {
 };
 
 const DONE_PAGE_SIZE = 5;
+
+// Payload keys the PublishChannelPicker edits: never shown in the extra-options JSON.
+const PUBLISH_PICKER_KEYS = ["publishTargets", "publishAt"];
 
 export function InstanceMissionsPage({ params }: Props) {
   const { instanceId } = use(params);
@@ -127,11 +130,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
       setError("Type is required.");
       return;
     }
-    const payloadError = validateMissionPayloadUnlessRaw({
+    const payloadError = validateMissionPayload({
       missionTypes: declaredMissionTypes,
       type: type.trim(),
       payload,
-      rawMode: rawPayloadMode,
     });
     if (payloadError) {
       setError(payloadError);
@@ -303,6 +305,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
 
             <MissionPayloadEditor
               fields={payloadFields}
+              reservedKeys={declaresPublish ? PUBLISH_PICKER_KEYS : undefined}
               payloadText={payloadText}
               onChange={setPayloadText}
               rawMode={rawPayloadMode}

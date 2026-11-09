@@ -275,7 +275,7 @@ describe("InstanceSchedulesContent", () => {
     );
   });
 
-  it("submits an empty object payload when the optional payload textarea is blank", async () => {
+  it("shows only the extra options in the raw JSON, and keeps the fields when they are cleared", async () => {
     const createSchedule = vi.fn();
     useMutationMock.mockReturnValue(createSchedule);
     useQueryMock.mockImplementation((key: string) => {
@@ -293,9 +293,8 @@ describe("InstanceSchedulesContent", () => {
 
     await render();
 
-    // engage now declares a `fields` schema (issue #352), so the payload
-    // editor defaults to the generic select-driven form — flip to the raw
-    // JSON escape hatch to exercise the blank-textarea submission path.
+    // engage declares `variant` as a field: the raw JSON holds only the extra
+    // options (sessionDurationMs), and clearing it leaves the field intact.
     const rawModeToggle = Array.from(document.querySelectorAll("button")).find(
       (btn) => btn.textContent === "Edit as raw JSON",
     ) as HTMLButtonElement;
@@ -305,6 +304,7 @@ describe("InstanceSchedulesContent", () => {
     });
 
     const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    expect(JSON.parse(textarea.value)).toEqual({ sessionDurationMs: 480000 });
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value",
@@ -328,7 +328,7 @@ describe("InstanceSchedulesContent", () => {
         instanceId: "instance-1",
         templateId: "@opengroow/engagement",
         type: "engage",
-        payload: {},
+        payload: { variant: "a" },
       }),
     );
   });
