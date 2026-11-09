@@ -439,12 +439,15 @@ export function MissionReviewContent({
   instanceId,
   missionId,
   aside,
+  notices,
   autoPublish,
 }: {
   instanceId: string;
   missionId: string;
   /** Shown above the Publishing card, in the right column. */
   aside?: React.ReactNode;
+  /** Shown at the top of the left column, so the right column starts at the same height. */
+  notices?: React.ReactNode;
   /** Auto-publish of the Mission, shown in the Publishing card. */
   autoPublish?: AutoPublishControl;
 }) {
@@ -731,7 +734,10 @@ export function MissionReviewContent({
 
   return (
     <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
-      <div className="grid min-w-0 gap-6">{main}</div>
+      <div className="grid min-w-0 gap-6">
+        {notices}
+        {main}
+      </div>
       <aside className="grid min-w-0 gap-6">
         {aside}
         {publishingNode}

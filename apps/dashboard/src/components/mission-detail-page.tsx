@@ -334,6 +334,41 @@ export function MissionDetailContent({
       }
     : undefined;
 
+  const notices =
+    failureError !== undefined || blocked !== undefined ? (
+      <>
+        {/* What happened — only for failed missions */}
+        {failureError !== undefined && (
+          <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
+            <h2 className="m-0 text-sm font-semibold text-destructive">
+              What happened
+            </h2>
+            <p className="m-0 break-words text-sm text-destructive">{failureError}</p>
+          </section>
+        )}
+
+        {/* Blocked — a Template-declared human-action blocker (issue #323). */}
+        {blocked !== undefined && (
+          <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
+            <h2 className="m-0 text-sm font-semibold text-status-warning">
+              Blocked
+            </h2>
+            <p className="m-0 text-sm text-status-warning">
+              {blocked.message}{" "}
+              {blocked.resolution?.kind === "link" && (
+                <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
+                  Open resolution link
+                </a>
+              )}
+              {blocked.resolution?.kind === "execution_device" && (
+                <span className="font-semibold">Resolve on the execution device.</span>
+              )}
+            </p>
+          </section>
+        )}
+      </>
+    ) : undefined;
+
   const detailsCard = (
     <Card className="grid gap-4 p-6" data-testid="mission-details">
       <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-foreground">
@@ -400,7 +435,7 @@ export function MissionDetailContent({
           <div className="flex flex-wrap items-center gap-2">
             {showRetry && (
               <Button
-                variant="secondary"
+                variant="outline"
                 size="sm"
                 type="button"
                 aria-label="Retry mission"
@@ -427,7 +462,7 @@ export function MissionDetailContent({
             {showDelete && (
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  render={<Button variant="outline" size="icon" aria-label="More actions" data-action="more" />}
+                  render={<Button variant="outline" size="icon-sm" aria-label="More actions" data-action="more" />}
                 >
                   <Ellipsis />
                 </DropdownMenuTrigger>
@@ -469,35 +504,6 @@ export function MissionDetailContent({
 
       {/* Both panels stay mounted (the inactive one hidden): switching tabs must not reload the review. */}
       <div hidden={tab !== "overview"} className="grid min-w-0 gap-6">
-        {/* What happened — only for failed missions */}
-        {failureError !== undefined && (
-          <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
-            <h2 className="m-0 text-sm font-semibold text-destructive">
-              What happened
-            </h2>
-            <p className="m-0 text-sm text-destructive">{failureError}</p>
-          </section>
-        )}
-
-        {/* Blocked — a Template-declared human-action blocker (issue #323). */}
-        {blocked !== undefined && (
-          <section className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-6">
-            <h2 className="m-0 text-sm font-semibold text-status-warning">
-              Blocked
-            </h2>
-            <p className="m-0 text-sm text-status-warning">
-              {blocked.message}{" "}
-              {blocked.resolution?.kind === "link" && (
-                <a href={blocked.resolution.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">
-                  Open resolution link
-                </a>
-              )}
-              {blocked.resolution?.kind === "execution_device" && (
-                <span className="font-semibold">Resolve on the execution device.</span>
-              )}
-            </p>
-          </section>
-        )}
 
 
           {!declaresPublish && <PublicationList missionId={missionId} title="Publications" />}
@@ -506,6 +512,7 @@ export function MissionDetailContent({
             instanceId={instanceId}
             missionId={missionId}
             aside={detailsCard}
+            notices={notices}
             autoPublish={declaresPublish ? autoPublish : undefined}
           />
       </div>
