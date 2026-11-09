@@ -345,7 +345,7 @@ describe("InstanceMissionsContent — mission list", () => {
     // engage declares `variant` as a field: the raw JSON holds only the extra
     // options (sessionDurationMs), and clearing it leaves the field intact.
     const rawModeToggle = Array.from(document.querySelectorAll("button")).find(
-      (btn) => btn.textContent === "Edit as raw JSON",
+      (btn) => btn.textContent === "Extra options",
     ) as HTMLButtonElement;
     expect(rawModeToggle).toBeTruthy();
     await act(async () => {

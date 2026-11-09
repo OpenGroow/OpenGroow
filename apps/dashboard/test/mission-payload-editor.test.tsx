@@ -31,7 +31,7 @@ describe("MissionPayloadEditor", () => {
     { key: "category", label: "Category", type: "text", required: true },
   ];
 
-  it("hides the raw JSON behind a discreet toggle when the mission type has no fields", async () => {
+  it("hides the JSON behind a collapsed Extra options when the mission type has no fields", async () => {
     const onRawModeChange = vi.fn();
     await act(async () => {
       root.render(
@@ -41,14 +41,15 @@ describe("MissionPayloadEditor", () => {
 
     expect(document.querySelector("textarea")).toBeNull();
     const toggle = document.querySelector("button") as HTMLButtonElement;
-    expect(toggle.textContent).toBe("Edit as raw JSON");
+    expect(toggle.textContent).toBe("Extra options");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     await act(async () => {
       toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onRawModeChange).toHaveBeenCalledWith(true);
   });
 
-  it("shows the raw JSON textarea with a hide toggle when rawMode is on and the type has no fields", async () => {
+  it("shows the JSON textarea, expanded, when rawMode is on and the type has no fields", async () => {
     await act(async () => {
       root.render(
         <MissionPayloadEditor fields={undefined} payloadText="{}" onChange={() => {}} rawMode={true} onRawModeChange={() => {}} />,
@@ -56,10 +57,10 @@ describe("MissionPayloadEditor", () => {
     });
 
     expect(document.querySelector("textarea")).not.toBeNull();
-    expect((document.querySelector("button") as HTMLButtonElement).textContent).toBe("Hide raw JSON");
+    expect((document.querySelector("button") as HTMLButtonElement).getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("keeps the field form and offers the raw JSON toggle when fields are declared", async () => {
+  it("keeps the field form and offers Extra options when fields are declared", async () => {
     await act(async () => {
       root.render(
         <MissionPayloadEditor fields={fields} payloadText="{}" onChange={() => {}} rawMode={false} onRawModeChange={() => {}} />,
@@ -68,10 +69,10 @@ describe("MissionPayloadEditor", () => {
 
     expect(document.querySelector("textarea")).toBeNull();
     expect(document.querySelector("label")?.textContent).toContain("Category");
-    expect((document.querySelector("button") as HTMLButtonElement).textContent).toBe("Edit as raw JSON");
+    expect((document.querySelector("button") as HTMLButtonElement).textContent).toBe("Extra options");
   });
 
-  it("shows only the undeclared and unreserved keys in the raw JSON, next to the fields", async () => {
+  it("shows only the undeclared and unreserved keys in the Extra options JSON, next to the fields", async () => {
     await act(async () => {
       root.render(
         <MissionPayloadEditor
@@ -87,7 +88,7 @@ describe("MissionPayloadEditor", () => {
 
     expect(document.querySelector("label")?.textContent).toContain("Category");
     expect(JSON.parse((document.querySelector("textarea") as HTMLTextAreaElement).value)).toEqual({ extra: 1 });
-    expect((document.querySelector("button") as HTMLButtonElement).textContent).toBe("Hide raw JSON");
+    expect((document.querySelector("button") as HTMLButtonElement).getAttribute("aria-expanded")).toBe("true");
   });
 
   it("merges the edited extra options into the payload without touching the fields", async () => {

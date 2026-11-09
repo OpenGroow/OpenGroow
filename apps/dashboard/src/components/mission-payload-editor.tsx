@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { MissionPayloadField } from "@convex/template_manifest_contract";
+import { ChevronDown } from "lucide-react";
 import { MissionPayloadFields } from "./mission-payload-fields";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type Props = {
   /** The selected Mission type's declared field schema, if any. */
@@ -13,7 +15,7 @@ type Props = {
   reservedKeys?: readonly string[];
   payloadText: string;
   onChange: (nextPayloadText: string) => void;
-  /** Whether the raw JSON of the extra options is open; owned by the parent, which closes it on a type change. */
+  /** Whether the "Extra options" JSON is open; owned by the parent, which closes it on a type change. */
   rawMode: boolean;
   onRawModeChange: (rawMode: boolean) => void;
 };
@@ -39,7 +41,7 @@ function split(payload: Payload, managed: ReadonlySet<string>): { managedPart: P
 
 /**
  * Edits a Mission payload: the Mission type's declared `fields` (issue #300)
- * are shown inline, and a discreet "Edit as raw JSON" opens only the extra
+ * are shown inline, and a collapsed "Extra options" opens, as JSON, only the
  * options — the keys no field and no other control of the form edits. Shared
  * by Mission creation and Schedule creation/editing so the two never drift.
  */
@@ -50,10 +52,18 @@ export function MissionPayloadEditor({ fields, reservedKeys, payloadText, onChan
   return (
     <div className="grid gap-2">
       {hasFields ? <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} /> : null}
-      {rawMode ? <ExtraOptionsJson managed={managed} payloadText={payloadText} onChange={onChange} /> : null}
-      <Button variant="ghost" size="sm" type="button" className="-ml-3 w-fit" onClick={() => onRawModeChange(!rawMode)}>
-        {rawMode ? "Hide raw JSON" : "Edit as raw JSON"}
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        aria-expanded={rawMode}
+        className="-ml-3 w-fit"
+        onClick={() => onRawModeChange(!rawMode)}
+      >
+        <ChevronDown className={cn("transition-transform", !rawMode && "-rotate-90")} />
+        Extra options
       </Button>
+      {rawMode ? <ExtraOptionsJson managed={managed} payloadText={payloadText} onChange={onChange} /> : null}
     </div>
   );
 }
