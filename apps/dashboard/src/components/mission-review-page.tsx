@@ -480,6 +480,8 @@ export function MissionReviewContent({
   } | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  // externalId of the deliverable on screen, to tell a refresh from a new deliverable.
+  const shownArtifactRef = useRef<{ externalId: string | undefined } | null>(null);
 
   // Suppress unused variable warning — router is used in sub-components
   void router;
@@ -489,17 +491,34 @@ export function MissionReviewContent({
       ? mission.lastResult.additionalDetails
       : undefined;
 
+  // Another Mission: nothing of the previous one may stay on screen.
   useEffect(() => {
-    if (!mission) return;
-    let cancelled = false;
     setReviewContent(null);
     setReviewKind(null);
     setReviewCoverUrl(null);
     setReviewProjection(null);
     setFetchError(null);
+    shownArtifactRef.current = null;
+  }, [missionId]);
+
+  // The same Mission updated (a channel or the date saved in Publishing, a status change): the projection is
+  // read again but what is on screen stays until it arrives, so the page does not flash through "Loading
+  // review…" and the video is not reloaded. The content is only dropped when the deliverable itself changed.
+  useEffect(() => {
+    if (!mission) return;
+    let cancelled = false;
+    setFetchError(null);
     void getReview({ missionId: missionId as Id<"missions"> })
       .then((projection) => {
-        if (!cancelled) setReviewProjection(projection);
+        if (cancelled) return;
+        const externalId = projection.artifact.externalId;
+        if (shownArtifactRef.current !== null && shownArtifactRef.current.externalId !== externalId) {
+          setReviewContent(null);
+          setReviewKind(null);
+          setReviewCoverUrl(null);
+        }
+        shownArtifactRef.current = { externalId };
+        setReviewProjection(projection);
       })
       .catch((err: unknown) => {
         if (!cancelled) {

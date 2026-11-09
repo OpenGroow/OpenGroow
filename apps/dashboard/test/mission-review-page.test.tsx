@@ -407,6 +407,30 @@ describe("MissionReviewContent", () => {
       const reject = document.querySelector('[data-testid="reject-button"]') as HTMLElement;
       expect(reject.className).not.toContain("text-destructive");
     });
+
+    it("keeps the review on screen while it is read again after an update, instead of flashing through Loading review", async () => {
+      withPublish(PUBLISH);
+      setStatus("to_validate");
+      await renderEmbedded();
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+
+      // A channel is saved in Publishing: the Mission's updatedAt moves and the projection is read again, slowly.
+      const base = getReviewMock.getMockImplementation()!;
+      let answer!: () => void;
+      getReviewMock.mockImplementation(() => new Promise((resolve) => { answer = () => resolve(base()); }));
+      const query = useQueryMock.getMockImplementation()!;
+      useQueryMock.mockImplementation((key: string, ...rest: unknown[]) =>
+        key === "missions.get" ? { ...(query(key, ...rest) as object), updatedAt: Date.now() + 1000 } : query(key, ...rest),
+      );
+      await renderEmbedded();
+
+      expect(document.body.textContent).not.toContain("Loading review");
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="publishable-preview"]')).not.toBeNull();
+
+      await act(async () => { answer(); });
+      expect(document.querySelector('[data-testid="publish-section"]')).not.toBeNull();
+    });
   });
 
   const PUBLISHER = {
