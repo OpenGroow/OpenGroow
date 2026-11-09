@@ -11,7 +11,7 @@ import { PublishChannelPicker } from "./publish-channel-picker";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
-  validateMissionPayloadUnlessRaw,
+  validateMissionPayload,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
 import { Button } from "@/components/ui/button";
@@ -25,16 +25,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { CountTile } from "@/components/opengroow/count-tile";
 import { SearchField } from "@/components/opengroow/filter-bar";
-import { ChevronDown, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
 };
 
 const DONE_PAGE_SIZE = 5;
+
+// Payload keys the PublishChannelPicker edits: never shown in the extra-options JSON.
+const PUBLISH_PICKER_KEYS = ["publishTargets", "publishAt"];
 
 export function InstanceMissionsPage({ params }: Props) {
   const { instanceId } = use(params);
@@ -66,9 +68,6 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
-  // null = follow the default: open when the Mission type declares payload
-  // fields (the form must be visible), collapsed for a plain JSON payload.
-  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -86,9 +85,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
-  const payloadOpen =
-    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
-  const setPayloadOpen = setPayloadOpenOverride;
+  const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
   // A Mission type that declares `publish` groups channels, Auto-publish and the
   // date in one "Publish" card; others keep the standalone toggle.
@@ -133,11 +130,10 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
       setError("Type is required.");
       return;
     }
-    const payloadError = validateMissionPayloadUnlessRaw({
+    const payloadError = validateMissionPayload({
       missionTypes: declaredMissionTypes,
       type: type.trim(),
       payload,
-      rawMode: rawPayloadMode,
     });
     if (payloadError) {
       setError(payloadError);
@@ -307,29 +303,14 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
               />
             ) : null}
 
-            <div className="grid gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                aria-expanded={payloadOpen}
-                onClick={() => setPayloadOpen(!payloadOpen)}
-                className="-ml-3 w-fit"
-              >
-                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
-                Payload (optional)
-              </Button>
-              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
-              <div hidden={!payloadOpen}>
-                <MissionPayloadEditor
-                  fields={missionTypes.find((t) => t.type === type)?.fields}
-                  payloadText={payloadText}
-                  onChange={setPayloadText}
-                  rawMode={rawPayloadMode}
-                  onRawModeChange={setRawPayloadMode}
-                />
-              </div>
-            </div>
+            <MissionPayloadEditor
+              fields={payloadFields}
+              reservedKeys={declaresPublish ? PUBLISH_PICKER_KEYS : undefined}
+              payloadText={payloadText}
+              onChange={setPayloadText}
+              rawMode={rawPayloadMode}
+              onRawModeChange={setRawPayloadMode}
+            />
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

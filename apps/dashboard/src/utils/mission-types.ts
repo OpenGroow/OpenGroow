@@ -72,23 +72,6 @@ export function validateMissionPayload(args: {
 }
 
 /**
- * Same as `validateMissionPayload`, but skips the check entirely when
- * `rawMode` is true — the raw-JSON escape hatch (issue #300) deliberately
- * bypasses per-field validation. Shared by the Mission and Schedule create
- * forms so the "skip validation while editing raw JSON" rule lives in one
- * place instead of being duplicated at each call site.
- */
-export function validateMissionPayloadUnlessRaw(args: {
-  missionTypes: readonly MissionType[];
-  type: string;
-  payload: unknown;
-  rawMode: boolean;
-}): string | null {
-  if (args.rawMode) return null;
-  return validateMissionPayload(args);
-}
-
-/**
  * Returns the mission types declared in the resolved Template manifest.
  * Templates without `missionTypes` return an empty array, causing the forms
  * to fall back to a free-text type input (behaviour unchanged for unknown templates).

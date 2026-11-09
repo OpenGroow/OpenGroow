@@ -54,6 +54,37 @@ A `machinePrerequisites` entry can also declare `install` so the tool is install
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 
+## Mission payload: fields and Extra options
+
+A Mission type's `payload` is the JSON a Mission starts with; `fields` decides how the Create Mission and Create Schedule forms show it. The dashboard applies one rule to every Mission type, with no per-Template code:
+
+- A key declared in `fields` is a form input (`text`, `select` or `number`), shown inline. `required: true` blocks the creation while it is empty.
+- Every other key of the payload is under the collapsed **Extra options**, as JSON. Editing it never touches the fields, and invalid JSON blocks the creation. `publishTargets` / `publishAt` are not there when the Mission type declares `publish`: the publish picker edits them.
+
+Convention for Template authors:
+
+- **Declare in `fields`** what a human must answer for every Mission (the `format` of a video, a `category`). A frequent optional choice may be declared too, with `required: false` (`occasion`), to show it without opening Extra options.
+- **Leave in the payload only** the optional overrides the Agent handles without them, with an empty default that shows they exist (`{"keyword": ""}`: empty, the Agent picks the best keyword itself). Say in the Mission instructions what an empty value does.
+- Structured values a form input cannot hold (arrays, objects) also stay in the payload.
+
+```yaml
+missionTypes:
+  - type: create_article
+    payload: '{"keyword":""}'        # optional override: under Extra options
+  - type: lym_create_letter_video
+    payload: '{"format":"hook-plus-letter"}'
+    fields:                           # asked on every Mission: inline
+      - key: format
+        label: Format
+        type: select
+        required: true
+        options:
+          - { value: hook-plus-letter, label: Hook + letter }
+          - { value: letter-only, label: Letter only }
+```
+
+Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
+
 ## Publishing from a Template: the Publishable guide (ADR-069)
 
 By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`): the Agent returns a **Publishable**, a small JSON object of references (URLs) and text, and OpenGroow posts it on the channels the human chose. This guide is the whole path for an author writing a Template for their own MCP. Opting in is per Mission type; Mission types without `publish` behave as before.

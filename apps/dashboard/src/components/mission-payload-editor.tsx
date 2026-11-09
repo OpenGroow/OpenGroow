@@ -1,52 +1,106 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { MissionPayloadField } from "@convex/template_manifest_contract";
+import { ChevronDown } from "lucide-react";
 import { MissionPayloadFields } from "./mission-payload-fields";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type Props = {
   /** The selected Mission type's declared field schema, if any. */
   fields: MissionPayloadField[] | undefined;
+  /** Payload keys another control of the form edits (e.g. the publish picker's `publishTargets`). */
+  reservedKeys?: readonly string[];
   payloadText: string;
   onChange: (nextPayloadText: string) => void;
-  /**
-   * Raw-JSON escape hatch (issue #300). When a Mission type declares `fields`,
-   * the operator can still flip to a raw JSON textarea to bypass the generic
-   * form and its per-field validation. The mode is owned by the parent so the
-   * submit handler can skip `validateMissionPayload` while raw mode is active.
-   */
+  /** Whether the "Extra options" JSON is open; owned by the parent, which closes it on a type change. */
   rawMode: boolean;
   onRawModeChange: (rawMode: boolean) => void;
 };
 
-/**
- * Chooses how a Mission payload is edited: a generic per-field form when the
- * Mission type declares `fields` (issue #300), otherwise the raw JSON textarea.
- * A raw-JSON toggle stays available even when `fields` is declared, so nothing
- * about the payload is ever un-editable. Shared by Mission creation and
- * Schedule creation/editing so the two surfaces never drift.
- */
-export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, onRawModeChange }: Props) {
-  const hasFields = !!fields && fields.length > 0;
+type Payload = Record<string, unknown>;
 
-  if (hasFields && !rawMode) {
-    return (
-      <div className="grid gap-2">
-        <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} />
-        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(true)} >
-          Edit as raw JSON
-        </Button>
-      </div>
-    );
+function parseObject(text: string): Payload | null {
+  if (!text.trim()) return {};
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Payload) : null;
+  } catch {
+    return null;
   }
+}
+
+function split(payload: Payload, managed: ReadonlySet<string>): { managedPart: Payload; extras: Payload } {
+  const managedPart: Payload = {};
+  const extras: Payload = {};
+  for (const [key, value] of Object.entries(payload)) (managed.has(key) ? managedPart : extras)[key] = value;
+  return { managedPart, extras };
+}
+
+/**
+ * Edits a Mission payload: the Mission type's declared `fields` (issue #300)
+ * are shown inline, and a collapsed "Extra options" opens, as JSON, only the
+ * options — the keys no field and no other control of the form edits. Shared
+ * by Mission creation and Schedule creation/editing so the two never drift.
+ */
+export function MissionPayloadEditor({ fields, reservedKeys, payloadText, onChange, rawMode, onRawModeChange }: Props) {
+  const hasFields = !!fields && fields.length > 0;
+  const managed = new Set([...(fields ?? []).map((field) => field.key), ...(reservedKeys ?? [])]);
 
   return (
     <div className="grid gap-2">
+      {hasFields ? <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} /> : null}
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        aria-expanded={rawMode}
+        className="-ml-3 w-fit"
+        onClick={() => onRawModeChange(!rawMode)}
+      >
+        <ChevronDown className={cn("transition-transform", !rawMode && "-rotate-90")} />
+        Extra options
+      </Button>
+      {rawMode ? <ExtraOptionsJson managed={managed} payloadText={payloadText} onChange={onChange} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The extra options as JSON. Its text is local (seeded when opened) so a
+ * half-typed edit never wipes the fields; only valid JSON is merged into the
+ * payload, and invalid JSON blocks the form's submission.
+ */
+function ExtraOptionsJson({ managed, payloadText, onChange }: { managed: ReadonlySet<string>; payloadText: string; onChange: (next: string) => void }) {
+  const [text, setText] = useState(() => {
+    const { extras } = split(parseObject(payloadText) ?? {}, managed);
+    return Object.keys(extras).length ? JSON.stringify(extras, null, 2) : "";
+  });
+  const invalid = parseObject(text) === null;
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    ref.current?.setCustomValidity(invalid ? "Invalid JSON: expected an object." : "");
+  }, [invalid]);
+
+  function edit(nextText: string) {
+    setText(nextText);
+    const extras = parseObject(nextText);
+    if (!extras) return;
+    const { managedPart } = split(parseObject(payloadText) ?? {}, managed);
+    const merged = { ...split(extras, managed).extras, ...managedPart };
+    onChange(Object.keys(merged).length ? JSON.stringify(merged) : "");
+  }
+
+  return (
+    <div className="grid gap-1.5">
       <Textarea
-        aria-label="Payload (JSON)"
-        value={payloadText}
-        onChange={(e) => onChange(e.target.value)}
+        ref={ref}
+        aria-label="Extra options (JSON)"
+        aria-invalid={invalid}
+        value={text}
+        onChange={(e) => edit(e.target.value)}
         rows={3}
         placeholder='{"url": "https://example.com"}'
         autoCorrect="off"
@@ -54,11 +108,7 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
         spellCheck={false}
         className="font-mono"
       />
-      {hasFields ? (
-        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(false)} >
-          Back to form
-        </Button>
-      ) : null}
+      {invalid ? <p className="text-xs text-destructive">Invalid JSON: expected an object.</p> : null}
     </div>
   );
 }

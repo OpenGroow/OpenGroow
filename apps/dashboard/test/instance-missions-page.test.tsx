@@ -329,7 +329,7 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(engageSelect()?.value).toBe("engage");
   });
 
-  it("submits an empty object payload when the optional payload textarea is blank", async () => {
+  it("shows only the extra options in the raw JSON, and keeps the fields when they are cleared", async () => {
     const createMission = vi.fn();
     useMutationMock.mockReturnValue(createMission);
     useQueryMock.mockImplementation((key: string) => {
@@ -342,11 +342,10 @@ describe("InstanceMissionsContent — mission list", () => {
 
     await render([...allManifests, manifestFixture("engagement")]);
 
-    // engage now declares a `fields` schema (issue #352), so the payload
-    // editor defaults to the generic select-driven form — flip to the raw
-    // JSON escape hatch to exercise the blank-textarea submission path.
+    // engage declares `variant` as a field: the raw JSON holds only the extra
+    // options (sessionDurationMs), and clearing it leaves the field intact.
     const rawModeToggle = Array.from(document.querySelectorAll("button")).find(
-      (btn) => btn.textContent === "Edit as raw JSON",
+      (btn) => btn.textContent === "Extra options",
     ) as HTMLButtonElement;
     expect(rawModeToggle).toBeTruthy();
     await act(async () => {
@@ -354,6 +353,7 @@ describe("InstanceMissionsContent — mission list", () => {
     });
 
     const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
+    expect(JSON.parse(textarea.value)).toEqual({ sessionDurationMs: 480000 });
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
       "value",
@@ -376,7 +376,7 @@ describe("InstanceMissionsContent — mission list", () => {
       instanceId: "instance-1",
       templateId: "@opengroow/engagement",
       type: "engage",
-      payload: {},
+      payload: { variant: "a" },
       name: "",
     });
   });
@@ -489,6 +489,9 @@ describe("InstanceMissionsContent — mission list", () => {
     const labels = Array.from(document.querySelectorAll("label")).map((l) => l.textContent);
     expect(labels.some((l) => l?.includes("Category"))).toBe(true);
     expect(labels.some((l) => l?.includes("Occasion"))).toBe(true);
+    // Declared fields are Mission settings shown inline, not an optional payload.
+    const buttons = Array.from(document.querySelectorAll("button")).map((b) => b.textContent);
+    expect(buttons.some((t) => t?.includes("Payload (optional)"))).toBe(false);
   });
 
   it("blocks submission with an error when a required field is missing for lym_create_marketing_video", async () => {

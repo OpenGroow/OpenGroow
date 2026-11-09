@@ -14,7 +14,7 @@ import {
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
   missionTypesForManifest,
-  validateMissionPayloadUnlessRaw,
+  validateMissionPayload,
   visibleMissionTypes,
 } from "@/src/utils/mission-types";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,9 @@ export const WEEKDAYS = [
 
 /** Human-readable cadence, e.g. "Daily at 09:00", "Weekly on Monday at 09:00",
  * "Monthly on day 15 at 09:00". */
+// Payload keys the PublishChannelPicker edits: never shown in the extra-options JSON.
+const PUBLISH_PICKER_KEYS = ["publishTargets", "publishAt"];
+
 export function formatCadence(schedule: {
   unit: string;
   hour: number;
@@ -139,9 +142,6 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const [type, setType] = useState("");
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
-  // null = follow the default: open when the Mission type declares payload
-  // fields (the form must be visible), collapsed for a plain JSON payload.
-  const [payloadOpenOverride, setPayloadOpenOverride] = useState<boolean | null>(null);
   const [unit, setUnit] = useState<"daily" | "weekly" | "monthly">("daily");
   const [dayOfWeek, setDayOfWeek] = useState(1); // Monday
   const [dayOfMonth, setDayOfMonth] = useState(1);
@@ -162,8 +162,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const hiddenKey = (hiddenMissionTypes ?? []).join("\u0000");
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
-  const payloadOpen =
-    payloadOpenOverride ?? (missionTypes.find((t) => t.type === type)?.fields?.length ?? 0) > 0;
+  const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
   const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
   const declaresPublish = publishDecl !== undefined;
@@ -209,11 +208,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
       setError("Type is required.");
       return;
     }
-    const payloadError = validateMissionPayloadUnlessRaw({
+    const payloadError = validateMissionPayload({
       missionTypes: declaredMissionTypes,
       type: type.trim(),
       payload,
-      rawMode: rawPayloadMode,
     });
     if (payloadError) {
       setError(payloadError);
@@ -415,29 +413,14 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               />
             ) : null}
 
-            <div className="grid gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                type="button"
-                aria-expanded={payloadOpen}
-                onClick={() => setPayloadOpenOverride(!payloadOpen)}
-                className="-ml-3 w-fit"
-              >
-                <ChevronDown className={cn("transition-transform", !payloadOpen && "-rotate-90")} />
-                Payload (optional)
-              </Button>
-              {/* Kept mounted (hidden) so the edited payload survives a collapse. */}
-              <div hidden={!payloadOpen}>
-                <MissionPayloadEditor
-                  fields={missionTypes.find((t) => t.type === type)?.fields}
-                  payloadText={payloadText}
-                  onChange={setPayloadText}
-                  rawMode={rawPayloadMode}
-                  onRawModeChange={setRawPayloadMode}
-                />
-              </div>
-            </div>
+            <MissionPayloadEditor
+              fields={payloadFields}
+              reservedKeys={declaresPublish ? PUBLISH_PICKER_KEYS : undefined}
+              payloadText={payloadText}
+              onChange={setPayloadText}
+              rawMode={rawPayloadMode}
+              onRawModeChange={setRawPayloadMode}
+            />
 
             <fieldset className="grid gap-3 rounded-xl border border-border bg-card p-4">
               <legend className="px-1 text-sm font-semibold text-muted-foreground">

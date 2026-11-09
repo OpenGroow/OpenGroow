@@ -3,7 +3,6 @@ import { manifestFixture } from "./fixtures/manifests";
 import {
   missionTypesForManifest,
   validateMissionPayload,
-  validateMissionPayloadUnlessRaw,
   visibleMissionTypes,
 } from "../src/utils/mission-types";
 
@@ -146,25 +145,6 @@ describe("missionTypesForManifest", () => {
         missionTypes: typesOf("video-demo"),
         type: "create_chat_mock_video",
         payload: {},
-      }),
-    ).not.toBeNull();
-  });
-
-  it("validateMissionPayloadUnlessRaw skips validation when rawMode is true (issue #300 escape hatch)", () => {
-    expect(
-      validateMissionPayloadUnlessRaw({
-        missionTypes: typesOf("video-demo"),
-        type: "lym_create_marketing_video",
-        payload: {},
-        rawMode: true,
-      }),
-    ).toBeNull();
-    expect(
-      validateMissionPayloadUnlessRaw({
-        missionTypes: typesOf("video-demo"),
-        type: "lym_create_marketing_video",
-        payload: {},
-        rawMode: false,
       }),
     ).not.toBeNull();
   });
