@@ -77,10 +77,16 @@ export function capabilityFor(
   service: string | undefined,
   kind: string,
   platforms?: readonly string[],
+  /** The platforms the content was actually made for (the keys of its `variants`, when it has no default media). */
+  madeFor?: readonly string[],
 ): Capability {
   if (platforms && platforms.length > 0 && !matchPlatform(platforms, service)) {
     const names = platforms.map((platform) => data?.platforms[platform]?.name ?? platform);
     return { level: "unsupported", reason: `This Mission type publishes to ${names.join(" and ")} only` };
+  }
+  if (madeFor && madeFor.length > 0 && !matchPlatform(madeFor, service)) {
+    const names = madeFor.map((platform) => data?.platforms[platform]?.name ?? platform);
+    return { level: "unsupported", reason: `This ${kind} was made for ${names.join(" and ")} only` };
   }
   return capabilityIn(data, service, kind);
 }

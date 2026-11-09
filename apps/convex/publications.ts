@@ -163,9 +163,26 @@ export const reviewState = internalQuery({
       .collect();
     const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
     const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;
+    // Content made of per-platform variants only serves those platforms (ADR-073): a chosen channel on another one
+    // would be refused at publish time, so say so now.
+    const publishable = publishableOf(mission);
+    const unserved = publishable
+      ? targets.flatMap((target) => {
+          const channel = publisher?.targets.find((t) => t.target === target);
+          const result = publishableForPlatform(publishable, channel?.channelService);
+          return result.ok ? [] : [{ target, reason: result.error }];
+        })
+      : [];
+    const variants = publishable?.variants;
+    const madeFor =
+      variants && typeof variants === "object" && publishable.slideUrls === undefined && publishable.imageUrl === undefined
+        ? Object.keys(variants)
+        : [];
     return {
       target: targets[0] ?? null,
       ...(platforms ? { platforms } : {}),
+      ...(madeFor.length > 0 ? { madeFor } : {}),
+      ...(unserved.length > 0 ? { unserved } : {}),
       targets,
       mapped: targets.length > 0 && unmappedTargets.length === 0,
       unmappedTargets,

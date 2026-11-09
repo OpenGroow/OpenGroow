@@ -242,10 +242,26 @@ function ReviewActionsSection({
 
   // Find the action that matches the current mission status, excluding reject
   // (which has its own expand-on-click affordance in RejectSection).
-  const eligibleAction = actions.find(
-    (a) => a.requiredStatus === status && a.key !== "reject" && a.enabled,
-  );
-  if (!eligibleAction) return null;
+  const pendingAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
+  const eligibleAction = pendingAction?.enabled ? pendingAction : undefined;
+  if (!pendingAction) return null;
+  if (!eligibleAction) {
+    // Blocked (for example a chosen channel has no media in this content): shown greyed with the reason, not hidden.
+    return (
+      <section className="grid gap-3">
+        <div className="flex gap-4">
+          <Button size="lg" type="button" disabled data-testid={`review-action-${pendingAction.key}`}>
+            {pendingAction.label}
+          </Button>
+        </div>
+        {pendingAction.disabledReason && (
+          <p data-testid="review-action-disabled-reason" className="m-0 text-sm text-muted-foreground">
+            {pendingAction.disabledReason}
+          </p>
+        )}
+      </section>
+    );
+  }
 
   async function handleAction(action: ReviewActionDescriptor) {
     setActiveAction(action.key);

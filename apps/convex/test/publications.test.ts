@@ -324,6 +324,32 @@ describe("review projection", () => {
     expect(review.actions.find((a) => a.key === "publish")?.disabledReason).toMatch(/"pinterest:pins".*Publishers page/);
   });
 
+  it("disables publish, and says why, when a chosen channel is on a platform the content has no variant for", async () => {
+    const variantsOnly = { kind: "image", caption: "Hello", variants: { instagram: { imageUrl: "https://cdn.example.com/ig.png" } } };
+    const { owner, missionId } = await seed({
+      publishable: variantsOnly,
+      payload: { publishTargets: ["instagram:love_youmake", "pinterest:pins"] },
+    });
+    await owner.mutation(api.publishers.addChannel, PIN);
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({
+      madeFor: ["instagram"],
+      unserved: [{ target: "pinterest:pins", reason: "this image was made for instagram only, it has no media for pinterest" }],
+    });
+    const publish = review.actions.find((a) => a.key === "publish");
+    expect(publish).toMatchObject({ enabled: false });
+    expect(publish?.disabledReason).toMatch(/Channel "pinterest:pins": this image was made for instagram only.*create the content again/);
+  });
+
+  it("keeps publish enabled when every chosen channel has a variant", async () => {
+    const variantsOnly = { kind: "image", caption: "Hello", variants: { instagram: { imageUrl: "https://cdn.example.com/ig.png" } } };
+    const { owner, missionId } = await seed({ publishable: variantsOnly });
+    const review = await owner.action(api.missions_node.getReview, { missionId });
+    expect(review.publish).toMatchObject({ madeFor: ["instagram"] });
+    expect(review.publish).not.toHaveProperty("unserved");
+    expect(review.actions.find((a) => a.key === "publish")).toMatchObject({ enabled: true });
+  });
+
   it("disables publish, pointing at the Publishers page, when the Publisher has no API key", async () => {
     const { t, owner, missionId } = await seed();
     await t.run(async (ctx) => {

@@ -42,9 +42,10 @@ export function channelCapability(
   channel: PublisherChannel,
   kind: string | undefined,
   platforms?: readonly string[],
+  madeFor?: readonly string[],
 ): Capability {
   if (!kind || !channel.mapped) return { level: "supported" };
-  return capabilityFor(capabilities, channel.channelService, kind, platforms);
+  return capabilityFor(capabilities, channel.channelService, kind, platforms, madeFor);
 }
 
 /** The platforms a Mission type publishes to that no channel of the Publisher is on (empty when it is not limited). */
@@ -100,6 +101,7 @@ export function ChannelSelect({
   publisher,
   kind,
   platforms,
+  madeFor,
   selected,
   disabled,
   onChange,
@@ -108,6 +110,8 @@ export function ChannelSelect({
   kind: string | undefined;
   /** The platforms the Mission type publishes to: channels on another platform are disabled. */
   platforms?: readonly string[];
+  /** The platforms the content was actually made for (per-platform variants only): channels on another one are disabled. */
+  madeFor?: readonly string[];
   selected: string[];
   disabled: boolean;
   onChange: (targets: string[]) => void;
@@ -120,14 +124,14 @@ export function ChannelSelect({
   // in the Publisher's order otherwise.
   const { byTarget, items } = useMemo(() => {
     const unusable = (channel: PublisherChannel) =>
-      !channel.mapped || channelCapability(capabilities, channel, kind, platforms).level === "unsupported";
+      !channel.mapped || channelCapability(capabilities, channel, kind, platforms, madeFor).level === "unsupported";
     return {
       byTarget: new Map(publisher.targets.map((channel) => [channel.target, channel])),
       items: [...publisher.targets]
         .sort((a, b) => Number(unusable(a)) - Number(unusable(b)))
         .map((channel) => channel.target),
     };
-  }, [publisher.targets, capabilities, kind, platforms]);
+  }, [publisher.targets, capabilities, kind, platforms, madeFor]);
   const labelOf = (target: string) => {
     const channel = byTarget.get(target);
     if (!channel) return target;
@@ -184,7 +188,7 @@ export function ChannelSelect({
           {(target: string) => {
             const channel = byTarget.get(target);
             if (!channel) return null;
-            const capability = channelCapability(capabilities, channel, kind, platforms);
+            const capability = channelCapability(capabilities, channel, kind, platforms, madeFor);
             const unsupported = capability.level === "unsupported";
             const isSelected = selected.includes(target);
             return (

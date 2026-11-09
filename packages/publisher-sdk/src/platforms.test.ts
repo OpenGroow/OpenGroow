@@ -23,4 +23,11 @@ describe("platforms", () => {
     expect(capabilityFor(data, "instagram", "carousel", ["instagram", "tiktok"])).toEqual({ level: "supported" });
     expect(capabilityFor(data, "pinterest", "carousel").level).toBe("uncertain");
   });
+
+  it("limits a channel to the platforms the content was made for", () => {
+    const data = { schemaVersion: 1, adapter: "x", platforms: { instagram: { name: "Instagram", image: "supported" as const }, pinterest: { name: "Pinterest", image: "supported" as const } } };
+    expect(capabilityFor(data, "pinterest", "image", undefined, ["instagram"])).toEqual({ level: "unsupported", reason: "This image was made for Instagram only" });
+    expect(capabilityFor(data, "instagram-standalone", "image", undefined, ["instagram"]).level).not.toBe("unsupported");
+    expect(capabilityFor(data, "pinterest", "image", undefined, []).level).toBe("supported");
+  });
 });

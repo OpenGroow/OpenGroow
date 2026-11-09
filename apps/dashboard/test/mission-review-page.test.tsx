@@ -324,6 +324,30 @@ describe("MissionReviewContent", () => {
       expect(document.querySelector('[data-testid="review-action-blocked"]')).toBeNull();
     });
 
+    it("shows a blocked Publish greyed with its reason, instead of hiding it", async () => {
+      const mission = missionWithPublishable({ kind: "image", caption: "c", variants: { instagram: { imageUrl: "https://cdn.example.com/ig.png" } } });
+      useQueryMock.mockImplementation((key: string) => (key === "missions.get" ? { ...mission, status: "approved" } : undefined));
+      const base = getReviewMock.getMockImplementation()!;
+      getReviewMock.mockImplementation(async () => {
+        const review = await base();
+        return {
+          ...review,
+          content: null,
+          publish: { targets: ["pinterest:pins"], mapped: true, unmappedTargets: [], publisherReady: true, publications: [] },
+          actions: review.actions.map((action: { key: string }) =>
+            action.key === "publish"
+              ? { ...action, enabled: false, disabledReason: 'Channel "pinterest:pins": this image was made for instagram only, it has no media for pinterest' }
+              : action,
+          ),
+        };
+      });
+      loadReviewContentMock.mockReturnValue(new Promise(() => {}));
+      await render();
+      await act(async () => {});
+      expect((document.querySelector('[data-testid="review-action-publish"]') as HTMLButtonElement).disabled).toBe(true);
+      expect(document.querySelector('[data-testid="review-action-disabled-reason"]')?.textContent).toContain("made for instagram only");
+    });
+
     it("shows no preview for a Mission without a Publishable", async () => {
       setupDefaultQuery();
       loadReviewContentMock.mockReturnValue(new Promise(() => {}));
