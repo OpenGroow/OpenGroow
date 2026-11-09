@@ -42,8 +42,9 @@ export function postizSettings(
         brand_content_toggle: false,
         brand_organic_toggle: false,
         content_posting_method: "DIRECT_POST",
-        // duet and stitch apply to videos, autoAddMusic to photos (image, carousel).
-        ...(kind === "video" ? { duet: true, stitch: true } : { autoAddMusic: "no" }),
+        // Postiz requires duet and stitch as booleans on every TikTok post, photos included (TikTok ignores
+        // them there); autoAddMusic only applies to photos (image, carousel).
+        ...(kind === "video" ? { duet: true, stitch: true } : { duet: false, stitch: false, autoAddMusic: "no" }),
         ...(title ? { title: title.slice(0, 90) } : {}),
       };
       break;
@@ -68,12 +69,10 @@ export function postizSettings(
   // `__type` last: a stored value (copied from another channel) never changes the provider.
   const settings: Settings = { ...defaults, ...(stored ?? {}), __type: service };
   if (service === "tiktok") {
-    // The channel stores every TikTok option; send only those of this kind of post.
+    // The channel stores every TikTok option; autoAddMusic only goes with a photo post.
     if (kind === "video") delete settings.autoAddMusic;
-    else {
-      delete settings.duet;
-      delete settings.stitch;
-    }
+    // Postiz refuses a post whose duet or stitch is not a boolean (400), photos included.
+    for (const key of ["duet", "stitch"] as const) if (typeof settings[key] !== "boolean") settings[key] = false;
   }
   if (service === "pinterest" && !settings.board) {
     return { ok: false, error: "Pinterest needs a board: set the Board ID of this channel on the Publishers page" };
