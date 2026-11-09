@@ -21,20 +21,20 @@ type Props = {
 };
 
 /**
- * Chooses how a Mission payload is edited: a generic per-field form when the
- * Mission type declares `fields` (issue #300), otherwise the raw JSON textarea.
- * A raw-JSON toggle stays available even when `fields` is declared, so nothing
- * about the payload is ever un-editable. Shared by Mission creation and
- * Schedule creation/editing so the two surfaces never drift.
+ * Edits a Mission payload: the Mission type's declared `fields` (issue #300)
+ * are shown inline, and a discreet "Edit as raw JSON" opens the whole payload
+ * as JSON — for options the Template does not declare as fields, or for a
+ * type that declares none. Shared by Mission creation and Schedule
+ * creation/editing so the two surfaces never drift.
  */
 export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, onRawModeChange }: Props) {
   const hasFields = !!fields && fields.length > 0;
 
-  if (hasFields && !rawMode) {
+  if (!rawMode) {
     return (
       <div className="grid gap-2">
-        <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} />
-        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(true)} >
+        {hasFields ? <MissionPayloadFields fields={fields} payloadText={payloadText} onChange={onChange} /> : null}
+        <Button variant="ghost" size="sm" type="button" className="-ml-3 w-fit" onClick={() => onRawModeChange(true)}>
           Edit as raw JSON
         </Button>
       </div>
@@ -54,11 +54,9 @@ export function MissionPayloadEditor({ fields, payloadText, onChange, rawMode, o
         spellCheck={false}
         className="font-mono"
       />
-      {hasFields ? (
-        <Button variant="outline" size="sm" type="button" onClick={() => onRawModeChange(false)} >
-          Back to form
-        </Button>
-      ) : null}
+      <Button variant="ghost" size="sm" type="button" className="-ml-3 w-fit" onClick={() => onRawModeChange(false)}>
+        {hasFields ? "Back to form" : "Hide raw JSON"}
+      </Button>
     </div>
   );
 }

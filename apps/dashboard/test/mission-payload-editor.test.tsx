@@ -31,15 +31,32 @@ describe("MissionPayloadEditor", () => {
     { key: "category", label: "Category", type: "text", required: true },
   ];
 
-  it("renders the raw JSON textarea (no toggle) when the mission type has no fields", async () => {
+  it("hides the raw JSON behind a discreet toggle when the mission type has no fields", async () => {
+    const onRawModeChange = vi.fn();
     await act(async () => {
       root.render(
-        <MissionPayloadEditor fields={undefined} payloadText="{}" onChange={() => {}} rawMode={false} onRawModeChange={() => {}} />,
+        <MissionPayloadEditor fields={undefined} payloadText="{}" onChange={() => {}} rawMode={false} onRawModeChange={onRawModeChange} />,
+      );
+    });
+
+    expect(document.querySelector("textarea")).toBeNull();
+    const toggle = document.querySelector("button") as HTMLButtonElement;
+    expect(toggle.textContent).toBe("Edit as raw JSON");
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(onRawModeChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows the raw JSON textarea with a hide toggle when rawMode is on and the type has no fields", async () => {
+    await act(async () => {
+      root.render(
+        <MissionPayloadEditor fields={undefined} payloadText="{}" onChange={() => {}} rawMode={true} onRawModeChange={() => {}} />,
       );
     });
 
     expect(document.querySelector("textarea")).not.toBeNull();
-    expect(document.querySelector("button")).toBeNull();
+    expect((document.querySelector("button") as HTMLButtonElement).textContent).toBe("Hide raw JSON");
   });
 
   it("renders the field form (not the textarea) but keeps a raw-JSON escape hatch when fields are declared", async () => {
