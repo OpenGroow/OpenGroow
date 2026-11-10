@@ -19,7 +19,7 @@ export function NoProviderNotice({ projectId }: { projectId: string }) {
   return (
     <section
       data-testid="no-provider-notice"
-      className="flex flex-wrap items-center gap-4 rounded-xl border border-status-warning/30 bg-status-warning/10 p-5"
+      className="flex max-w-full flex-wrap items-center gap-4 rounded-xl border border-status-warning/30 bg-status-warning/10 p-5 lg:w-fit lg:gap-6"
     >
       <TriangleAlert aria-hidden="true" className="size-5 shrink-0 text-status-warning" />
       <div className="grid min-w-0 flex-1 gap-1">
