@@ -38,7 +38,7 @@ export function agentInitials(name: string): string {
 }
 
 export const AGENT_STATUS: Record<"inactive" | "activating" | "active" | "error", { label: string; tone: StatusTone }> = {
-  inactive: { label: "Inactive", tone: "info" },
+  inactive: { label: "Inactive", tone: "neutral" },
   activating: { label: "Activating", tone: "progress" },
   active: { label: "Active", tone: "active" },
   error: { label: "Error", tone: "error" },
