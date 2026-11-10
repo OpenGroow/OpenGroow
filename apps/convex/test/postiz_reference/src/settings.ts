@@ -42,9 +42,10 @@ export function postizSettings(
         brand_content_toggle: false,
         brand_organic_toggle: false,
         content_posting_method: "DIRECT_POST",
-        // Postiz requires duet and stitch as booleans on every TikTok post, photos included (TikTok ignores
-        // them there); autoAddMusic only applies to photos (image, carousel).
-        ...(kind === "video" ? { duet: true, stitch: true } : { duet: false, stitch: false, autoAddMusic: "no" }),
+        // Postiz requires duet, stitch and autoAddMusic on every TikTok post, whatever its kind (TikTok ignores
+        // duet and stitch on a photo, autoAddMusic on a video).
+        ...(kind === "video" ? { duet: true, stitch: true } : { duet: false, stitch: false }),
+        autoAddMusic: "no",
         ...(title ? { title: title.slice(0, 90) } : {}),
       };
       break;
@@ -52,6 +53,17 @@ export function postizSettings(
     case "pinterest":
       defaults = { ...(title ? { title } : {}), ...(link ? { link } : {}) };
       break;
+    case "x":
+      // Postiz requires who_can_reply_post on every post that is not an article.
+      defaults = { who_can_reply_post: "everyone" };
+      break;
+    case "dribbble": {
+      // Postiz requires a title (1 character at least): the Publishable's, else the first line of its caption.
+      const caption = typeof publishable.caption === "string" ? publishable.caption : "";
+      const fallback = text(caption.split("\n").find((line) => line.trim() !== ""), 100);
+      defaults = { ...(title ?? fallback ? { title: title ?? fallback } : {}) };
+      break;
+    }
     case "youtube": {
       const caption = typeof publishable.caption === "string" ? publishable.caption : "";
       const fallback = text(caption.split("\n").find((line) => line.trim() !== ""), 100);
@@ -69,13 +81,23 @@ export function postizSettings(
   // `__type` last: a stored value (copied from another channel) never changes the provider.
   const settings: Settings = { ...defaults, ...(stored ?? {}), __type: service };
   if (service === "tiktok") {
-    // The channel stores every TikTok option; autoAddMusic only goes with a photo post.
-    if (kind === "video") delete settings.autoAddMusic;
+    // Postiz answers 400 unless autoAddMusic is "yes" or "no", on a video too (it is only used on a photo):
+    // a video always sends "no", a photo keeps a stored value that is valid.
+    if (kind === "video" || (settings.autoAddMusic !== "yes" && settings.autoAddMusic !== "no")) settings.autoAddMusic = "no";
     // Postiz refuses a post whose duet or stitch is not a boolean (400), photos included.
     for (const key of ["duet", "stitch"] as const) if (typeof settings[key] !== "boolean") settings[key] = false;
   }
   if (service === "pinterest" && !settings.board) {
     return { ok: false, error: "Pinterest needs a board: set the Board ID of this channel on the Publishers page" };
+  }
+  if (service === "dribbble" && (typeof settings.title !== "string" || settings.title.trim() === "")) {
+    return { ok: false, error: "Dribbble needs a title: give the shot a title or a caption" };
+  }
+  if (service === "reddit" && !(Array.isArray(settings.subreddit) && settings.subreddit.length > 0)) {
+    return {
+      ok: false,
+      error: "Reddit is not supported yet: Postiz needs a subreddit, a title and a post type for every post, and OpenGroow does not set them",
+    };
   }
   if (service === "youtube" && (typeof settings.title !== "string" || settings.title.trim() === "")) {
     return { ok: false, error: "YouTube needs a title: give the video a title or a caption" };
