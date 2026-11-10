@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
+import { NoProviderNotice } from "@/src/components/no-provider-notice";
 import { relativeTime } from "@/src/lib/relative-time";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -191,18 +192,21 @@ export function ProjectOverviewPage({ projectId }: { projectId: string }) {
   const agentName = (templateId: string) => manifestOf(templateId)?.name ?? slugOf(templateId);
 
   const header = (
-    <PageHeader
-      title="Overview"
-      description="How your agents are doing over time."
-      action={
-        <FilterChips
-          label="Period"
-          options={RANGES}
-          value={String(days)}
-          onChange={(id) => setDays(Number(id) as Days)}
-        />
-      }
-    />
+    <>
+      <PageHeader
+        title="Overview"
+        description="How your agents are doing over time."
+        action={
+          <FilterChips
+            label="Period"
+            options={RANGES}
+            value={String(days)}
+            onChange={(id) => setDays(Number(id) as Days)}
+          />
+        }
+      />
+      <NoProviderNotice projectId={projectId} />
+    </>
   );
 
   if (overview === undefined) {

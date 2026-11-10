@@ -15,6 +15,7 @@ import { AgentOverviewMissions } from "@/src/components/agent-overview-missions"
 import { AgentVersionCard } from "@/src/components/agent-version-card";
 import { AvailableMissionTypes } from "@/src/components/available-mission-types";
 import { McpUrlOverrides } from "@/src/components/mcp-url-overrides";
+import { NoProviderNotice } from "@/src/components/no-provider-notice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -237,6 +238,7 @@ function AgentOverviewContent({ instanceId, manifest }: { instanceId: string; ma
   const persistedError = card.status === "error" ? card.errorMessage : undefined;
   return (
     <div className="grid gap-6">
+      <NoProviderNotice projectId={instanceId} />
       {persistedError ? <ErrorMessage message={persistedError} link={card.errorLink} /> : null}
       <AgentOverviewMissions runtimeInstanceId={runtimeInstanceId} projectId={instanceId} manifest={manifest} />
     </div>

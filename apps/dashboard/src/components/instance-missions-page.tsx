@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
+import { NoProviderNotice } from "@/src/components/no-provider-notice";
 import {
   Dialog,
   DialogContent,
@@ -177,6 +178,8 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
           </Button>
         }
       />
+
+      <NoProviderNotice projectId={instanceId} />
 
       {missions !== undefined && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
