@@ -37,6 +37,14 @@ export type MachineToolVersionCheck = {
   pattern?: string;
 };
 
+/** A command the tool puts on the user's PATH, as a launcher in `~/.opengroow/bin`. */
+export type MachineToolBin = {
+  /** Command name the Agent runs, e.g. `opengroow-android`. */
+  name: string;
+  /** Executable inside the install directory; must start with `{dir}/`. */
+  target: string;
+};
+
 export type MachineToolInstall = {
   /** Slug naming the install directory on the machine. */
   id: string;
@@ -44,10 +52,13 @@ export type MachineToolInstall = {
   requires?: MachineToolRequirement[];
   bootstrap?: MachineToolStep[];
   versionCheck?: MachineToolVersionCheck;
+  /** Commands exposed on the PATH of the paired node once the tool is installed. */
+  bin?: MachineToolBin[];
 };
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const BIN_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const PLACEHOLDER = /\{[^}]*\}/g;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -119,6 +130,25 @@ export function machineToolInstallProblem(raw: unknown, at: string, minVersion: 
     }
   } else if (minVersion !== undefined) {
     return `${at}.versionCheck is required when minVersion is declared`;
+  }
+
+  if (raw.bin !== undefined) {
+    if (!Array.isArray(raw.bin)) return `${at}.bin must be an array`;
+    const names = new Set<string>();
+    for (const [i, entry] of raw.bin.entries()) {
+      const bat = `${at}.bin[${i}]`;
+      if (!isObj(entry)) return `${bat} must be an object`;
+      if (typeof entry.name !== "string" || !BIN_NAME.test(entry.name)) {
+        return `${bat}.name must be a lowercase command name (letters, digits, dots, dashes)`;
+      }
+      if (names.has(entry.name)) return `${bat}.name "${entry.name}" is declared twice`;
+      names.add(entry.name);
+      if (typeof entry.target !== "string" || !entry.target.startsWith("{dir}/") || entry.target.split("/").includes("..")) {
+        return `${bat}.target must start with {dir}/ and stay inside the install directory`;
+      }
+      const problem = argvProblem([entry.target], bat, "target");
+      if (problem) return problem;
+    }
   }
   return undefined;
 }

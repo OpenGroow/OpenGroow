@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
@@ -28,6 +29,11 @@ import {
 import { sleep } from "./ws-utils.js";
 
 loadOpenClawConnectEnvFile();
+
+// Commands that installed machine tools expose (~/.opengroow/bin, #726) are on
+// the PATH of the node and of everything it runs, e.g. `opengroow-android`.
+const MACHINE_TOOL_BIN_DIR = path.join(os.homedir(), ".opengroow", "bin");
+process.env.PATH = [MACHINE_TOOL_BIN_DIR, ...(process.env.PATH ?? "").split(path.delimiter).filter((p) => p && p !== MACHINE_TOOL_BIN_DIR)].join(path.delimiter);
 
 const DEFAULT_PAIRING_WAIT_MS = 120_000;
 const DEFAULT_PAIRING_RETRY_MS = 3_000;

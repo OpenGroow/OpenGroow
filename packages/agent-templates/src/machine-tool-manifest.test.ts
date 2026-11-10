@@ -74,4 +74,12 @@ describe("machinePrerequisites[].install (#726)", () => {
   it("refuses an invalid versionCheck pattern", () => {
     expect(reason(withInstall({ versionCheck: { run: ["{dir}/x", "--version"], pattern: "(" } }))).toContain("versionCheck.pattern");
   });
+
+  it("validates bin: a command name and a target inside the install directory", () => {
+    expect(reason(withInstall({ bin: [{ name: "Bad Name", target: "{dir}/bin/x" }] }))).toContain("install.bin[0].name");
+    expect(reason(withInstall({ bin: [{ name: "x", target: "/usr/bin/x" }] }))).toContain("install.bin[0].target");
+    expect(reason(withInstall({ bin: [{ name: "x", target: "{dir}/../x" }] }))).toContain("install.bin[0].target");
+    expect(reason(withInstall({ bin: [{ name: "x", target: "{dir}/x" }, { name: "x", target: "{dir}/y" }] }))).toContain("declared twice");
+    expect(reason(withInstall({ bin: [{ name: "x", target: "{dir}/x", extra: 1 }] }))).toContain("install.bin[0].extra");
+  });
 });

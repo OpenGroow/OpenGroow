@@ -50,7 +50,11 @@ A `machinePrerequisites` entry can also declare `install` so the tool is install
       - { label: Create the venv, run: [python3, -m, venv, "{dir}/engine/.venv"] }
       - { label: Install dependencies, run: ["{dir}/engine/.venv/bin/pip", install, -r, "{dir}/engine/requirements.txt"] }
     versionCheck: { run: ["{dir}/bin/opengroow-android", --version] }   # required with minVersion
+    bin:                              # commands the Agent can run by name
+      - { name: opengroow-android, target: "{dir}/bin/opengroow-android" }
 ```
+
+Each `bin` entry becomes a launcher in `~/.opengroow/bin`, which the paired node puts on its `PATH` (restart `openclaw-connect:node-run` after the first install). The target must be executable and live inside `{dir}`.
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 

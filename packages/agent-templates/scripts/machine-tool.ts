@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { clawPackageToTemplate } from "../src/claw-package.js";
 import { describeMachineToolPlan, describeMachineToolUninstall } from "../src/machine-tool-consent.js";
 import { installMachineTool, planMachineToolInstall, uninstallMachineTool } from "../src/machine-tool-install.js";
-import { DEFAULT_TOOLS_ROOT, nodeMachineToolPorts } from "../src/machine-tool-node-ports.js";
+import { DEFAULT_BIN_ROOT, DEFAULT_TOOLS_ROOT, nodeMachineToolPorts } from "../src/machine-tool-node-ports.js";
 import { readPackageFolder } from "../src/package-folder.js";
 
 const USAGE = "Usage: template:machine-tool <folder> [--tool <id>] [--uninstall] [--root <dir>]";
@@ -43,7 +43,10 @@ async function main(args: MachineToolArgs): Promise<number> {
     console.error(`ERROR ${converted.reason}`);
     return 1;
   }
-  const ports = nodeMachineToolPorts(args.root ? resolve(args.root) : DEFAULT_TOOLS_ROOT);
+  const ports = nodeMachineToolPorts(
+    args.root ? resolve(args.root) : DEFAULT_TOOLS_ROOT,
+    args.root ? resolve(args.root, "..", "bin") : DEFAULT_BIN_ROOT,
+  );
   const candidates = (converted.template.manifest.machinePrerequisites ?? []).filter(
     (p) => p.install && (!args.tool || p.install.id === args.tool),
   );
@@ -55,7 +58,7 @@ async function main(args: MachineToolArgs): Promise<number> {
     );
     return 1;
   }
-  const plan = planMachineToolInstall(candidates[0]!, ports.toolsRoot)!;
+  const plan = planMachineToolInstall(candidates[0]!, ports.toolsRoot, ports.binRoot)!;
   const consent = {
     async confirm() {
       console.log(args.uninstall ? describeMachineToolUninstall(plan) : describeMachineToolPlan(plan));

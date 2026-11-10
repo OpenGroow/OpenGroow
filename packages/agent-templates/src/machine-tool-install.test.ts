@@ -13,7 +13,9 @@ import type { MachinePrerequisite } from "./types.js";
 const ARCHIVE = new TextEncoder().encode("pretend this is android-0.1.0.tgz");
 const ARCHIVE_SHA = createHash("sha256").update(ARCHIVE).digest("hex");
 const ROOT = "/home/u/.opengroow/tools";
+const BIN_ROOT = "/home/u/.opengroow/bin";
 const DIR = `${ROOT}/android`;
+const LAUNCHER = `${BIN_ROOT}/opengroow-android`;
 
 const prerequisite = (overrides: Partial<MachinePrerequisite["install"] & object> = {}): MachinePrerequisite =>
   ({
@@ -22,11 +24,14 @@ const prerequisite = (overrides: Partial<MachinePrerequisite["install"] & object
   }) as MachinePrerequisite;
 
 /** An in-memory machine: a set of existing paths, a log of everything done, scripted command results. */
-function fakeMachine(opts: { paths?: string[]; results?: (argv: string[]) => RunResult | undefined; archive?: Uint8Array; tarListing?: { names: string; types: string }; renameFails?: (from: string) => boolean } = {}) {
+function fakeMachine(opts: { files?: Record<string, string>; paths?: string[]; results?: (argv: string[]) => RunResult | undefined; archive?: Uint8Array; tarListing?: { names: string; types: string }; renameFails?: (from: string) => boolean } = {}) {
   const paths = new Set(opts.paths ?? []);
   const log: string[] = [];
+  const files = new Map(Object.entries(opts.files ?? {}));
+  for (const f of files.keys()) paths.add(f);
   const ports: MachineToolPorts = {
     toolsRoot: ROOT,
+    binRoot: BIN_ROOT,
     async download(url) {
       log.push(`download ${url}`);
       return opts.archive ?? ARCHIVE;
@@ -43,6 +48,14 @@ function fakeMachine(opts: { paths?: string[]; results?: (argv: string[]) => Run
         log.push(`write ${p}`);
         paths.add(p);
       },
+      async readText(p) {
+        return files.get(p);
+      },
+      async writeExecutable(p, text) {
+        log.push(`writeExecutable ${p}`);
+        files.set(p, text);
+        paths.add(p);
+      },
       async rename(from, to) {
         if (opts.renameFails?.(from)) throw new Error("EBUSY");
         log.push(`rename ${from} -> ${to}`);
@@ -51,6 +64,7 @@ function fakeMachine(opts: { paths?: string[]; results?: (argv: string[]) => Run
       },
       async remove(p) {
         log.push(`remove ${p}`);
+        files.delete(p);
         for (const existing of [...paths]) if (existing === p || existing.startsWith(`${p}/`)) paths.delete(existing);
       },
     },
@@ -65,12 +79,12 @@ function fakeMachine(opts: { paths?: string[]; results?: (argv: string[]) => Run
       return { code: 0, output: "" };
     },
   };
-  return { ports, log, paths };
+  return { ports, log, paths, files };
 }
 
 describe("planMachineToolInstall", () => {
   it("shows the source and the exact commands that will run, with the real directory", () => {
-    const plan = planMachineToolInstall(prerequisite(), ROOT);
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT);
     expect(plan).toMatchObject({
       name: "Android CLI",
       dir: DIR,
@@ -86,14 +100,14 @@ describe("planMachineToolInstall", () => {
 
   it("returns undefined for a prerequisite with no install declaration", () => {
     const { install: _install, ...linkOnly } = ANDROID_TOOL_FIXTURE;
-    expect(planMachineToolInstall(linkOnly, ROOT)).toBeUndefined();
+    expect(planMachineToolInstall(linkOnly, ROOT, BIN_ROOT)).toBeUndefined();
   });
 });
 
 describe("installMachineTool", () => {
   it("runs exactly the commands it showed, in order, and reports the installed version", async () => {
     const machine = fakeMachine();
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result).toEqual({ status: "installed", dir: DIR, version: "0.1.3" });
     const ran = machine.log.filter((l) => l.startsWith("run ")).map((l) => l.slice(4));
@@ -109,7 +123,7 @@ describe("installMachineTool", () => {
 
   it("changes nothing when the user refuses", async () => {
     const machine = fakeMachine();
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => false }, machine.ports);
     expect(result).toEqual({ status: "refused" });
     expect(machine.log).toEqual([]);
@@ -117,7 +131,7 @@ describe("installMachineTool", () => {
 
   it("names the missing prerequisites with their instructions and downloads nothing", async () => {
     const machine = fakeMachine({ results: (argv) => (argv[0] === "adb" ? { code: 127, output: "not found" } : undefined) });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result).toEqual({
       status: "prerequisite-missing",
@@ -129,7 +143,7 @@ describe("installMachineTool", () => {
 
   it("refuses an artifact whose sha256 differs and leaves nothing behind", async () => {
     const machine = fakeMachine({ archive: new TextEncoder().encode("tampered") });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result).toMatchObject({ status: "failed", step: "Verify the download" });
     expect((result as { message: string }).message).toContain("sha256");
@@ -140,7 +154,7 @@ describe("installMachineTool", () => {
 
   it("does not touch an existing install when the download is rejected", async () => {
     const machine = fakeMachine({ paths: [DIR], archive: new TextEncoder().encode("tampered") });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(machine.paths.has(DIR)).toBe(true);
     expect(machine.log).not.toContain(`remove ${DIR}`);
@@ -151,7 +165,7 @@ describe("installMachineTool", () => {
       paths: [DIR],
       results: (argv) => (argv.includes("pip") || argv[0]?.endsWith("/pip") ? { code: 1, output: "No matching distribution" } : undefined),
     });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result).toMatchObject({ status: "failed", step: "Install the engine dependencies" });
     expect((result as { message: string }).message).toContain("No matching distribution");
@@ -162,7 +176,7 @@ describe("installMachineTool", () => {
 
   it("leaves no directory when a first install fails", async () => {
     const machine = fakeMachine({ results: (argv) => (argv[0] === "python3" && argv[1] === "-m" ? { code: 1, output: "boom" } : undefined) });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(machine.paths.has(DIR)).toBe(false);
   });
@@ -171,7 +185,7 @@ describe("installMachineTool", () => {
     const machine = fakeMachine({
       results: (argv) => (argv.at(-1) === "--version" && argv[0] === `${DIR}/bin/opengroow-android` ? { code: 0, output: "0.0.9" } : undefined),
     });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result).toMatchObject({ status: "failed", step: "Check the version" });
     expect((result as { message: string }).message).toContain("0.0.9");
@@ -183,13 +197,13 @@ describe("installMachineTool", () => {
     const machine = fakeMachine({
       results: (argv) => (argv.at(-1) === "--version" && argv[0] === `${DIR}/bin/opengroow-android` ? { code: 0, output: "v0.10.0" } : undefined),
     });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     expect((await installMachineTool(plan, { confirm: async () => true }, machine.ports)).status).toBe("installed");
   });
 
   it("keeps the previous install in place until the new one succeeds (update)", async () => {
     const machine = fakeMachine({ paths: [DIR] });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     const result = await installMachineTool(plan, { confirm: async () => true }, machine.ports);
     expect(result.status).toBe("installed");
     const moved = machine.log.indexOf(`rename ${DIR} -> ${DIR}.previous`);
@@ -203,7 +217,7 @@ describe("installMachineTool", () => {
 describe("archive safety", () => {
   const install = (tarListing: { names: string; types: string }, paths: string[] = []) => {
     const machine = fakeMachine({ tarListing, paths });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     return installMachineTool(plan, { confirm: async () => true }, machine.ports).then((result) => ({ result, machine }));
   };
   const okTypes = "-rw-r--r-- 0/0 1 2026-01-01 00:00 bin/x\ndrwxr-xr-x 0/0 0 2026-01-01 00:00 bin/\n";
@@ -232,7 +246,7 @@ describe("archive safety", () => {
 
 describe("interrupted runs and failing rollbacks", () => {
   const run = (machine: ReturnType<typeof fakeMachine>) =>
-    installMachineTool(planMachineToolInstall(prerequisite(), ROOT)!, { confirm: async () => true }, machine.ports);
+    installMachineTool(planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!, { confirm: async () => true }, machine.ports);
 
   it("fails clearly, destroying nothing, when both the install and a stale .previous exist", async () => {
     const machine = fakeMachine({ paths: [DIR, `${DIR}.previous`] });
@@ -273,10 +287,49 @@ describe("interrupted runs and failing rollbacks", () => {
   });
 });
 
+describe("exposed commands (bin)", () => {
+  const run = (machine: ReturnType<typeof fakeMachine>) =>
+    installMachineTool(planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!, { confirm: async () => true }, machine.ports);
+
+  it("puts a launcher on the bin directory, owned by the tool, only after the version check", async () => {
+    const machine = fakeMachine();
+    expect((await run(machine)).status).toBe("installed");
+    expect(machine.files.get(LAUNCHER)).toBe(
+      `#!/bin/sh\n# opengroow-machine-tool: android\nexec '${DIR}/bin/opengroow-android' "$@"\n`,
+    );
+    const versionAt = machine.log.indexOf(`run ${DIR}/bin/opengroow-android --version`);
+    expect(machine.log.indexOf(`writeExecutable ${LAUNCHER}`)).toBeGreaterThan(versionAt);
+  });
+
+  it("updates a launcher it created", async () => {
+    const machine = fakeMachine({ files: { [LAUNCHER]: "#!/bin/sh\n# opengroow-machine-tool: android\nexec old\n" } });
+    expect((await run(machine)).status).toBe("installed");
+    expect(machine.files.get(LAUNCHER)).toContain(`${DIR}/bin/opengroow-android`);
+  });
+
+  it("refuses to overwrite a command it did not create, and leaves the machine unchanged", async () => {
+    const machine = fakeMachine({ files: { [LAUNCHER]: "#!/bin/sh\necho mine\n" } });
+    const result = await run(machine);
+    expect(result).toMatchObject({ status: "failed", step: "Expose the command" });
+    expect(machine.files.get(LAUNCHER)).toBe("#!/bin/sh\necho mine\n");
+    expect(machine.paths.has(DIR)).toBe(false);
+  });
+
+  it("removes the launcher on uninstall, but not a command it did not create", async () => {
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
+    const ours = fakeMachine({ paths: [DIR], files: { [LAUNCHER]: "# opengroow-machine-tool: android\n" } });
+    await uninstallMachineTool(plan, { confirm: async () => true }, ours.ports);
+    expect(ours.files.has(LAUNCHER)).toBe(false);
+    const foreign = fakeMachine({ paths: [DIR], files: { [LAUNCHER]: "echo mine\n" } });
+    await uninstallMachineTool(plan, { confirm: async () => true }, foreign.ports);
+    expect(foreign.files.has(LAUNCHER)).toBe(true);
+  });
+});
+
 describe("uninstallMachineTool", () => {
   it("removes the tool directory after consent, and nothing otherwise", async () => {
     const machine = fakeMachine({ paths: [DIR, `${DIR}/engine/.venv`] });
-    const plan = planMachineToolInstall(prerequisite(), ROOT)!;
+    const plan = planMachineToolInstall(prerequisite(), ROOT, BIN_ROOT)!;
     expect(await uninstallMachineTool(plan, { confirm: async () => false }, machine.ports)).toEqual({ status: "refused" });
     expect(machine.paths.has(DIR)).toBe(true);
     expect(await uninstallMachineTool(plan, { confirm: async () => true }, machine.ports)).toEqual({ status: "uninstalled", dir: DIR });

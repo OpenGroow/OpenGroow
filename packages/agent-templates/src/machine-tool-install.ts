@@ -25,11 +25,17 @@ export type RunResult = { code: number; output: string };
 export type MachineToolPorts = {
   /** Directory holding every tool, e.g. `~/.opengroow/tools`. */
   toolsRoot: string;
+  /** Directory of the launchers put on the node's PATH, e.g. `~/.opengroow/bin`. */
+  binRoot: string;
   download(url: string): Promise<Uint8Array>;
   fs: {
     exists(path: string): Promise<boolean>;
     mkdir(path: string): Promise<void>;
     write(path: string, bytes: Uint8Array): Promise<void>;
+    /** Text content of a file, or undefined when absent. */
+    readText(path: string): Promise<string | undefined>;
+    /** Writes a text file that can be executed. */
+    writeExecutable(path: string, text: string): Promise<void>;
     rename(from: string, to: string): Promise<void>;
     /** Recursive, no error when absent. */
     remove(path: string): Promise<void>;
@@ -48,6 +54,10 @@ export type MachineToolInstallPlan = {
   steps: { label: string; run: string[] }[];
   versionCheck?: { run: string[]; pattern?: string; minVersion?: string };
   /** Read-only listings run before extraction: entry names, then entry types. */
+  /** Directory of the launchers. */
+  binDir: string;
+  /** Launchers written once the tool passes its version check. */
+  bins: { name: string; path: string; target: string }[];
   archiveChecks: { names: string[]; types: string[] };
   downloadDir: string;
   archivePath: string;
@@ -67,6 +77,7 @@ const resolve = (argv: string[], dir: string) => argv.map((arg) => arg.replaceAl
 export function planMachineToolInstall(
   prerequisite: MachinePrerequisite,
   toolsRoot: string,
+  binRoot: string,
 ): MachineToolInstallPlan | undefined {
   const install: MachineToolInstall | undefined = prerequisite.install;
   if (!install) return undefined;
@@ -93,6 +104,12 @@ export function planMachineToolInstall(
           },
         }
       : {}),
+    binDir: binRoot.replace(/\/+$/, ""),
+    bins: (install.bin ?? []).map((b) => ({
+      name: b.name,
+      path: `${binRoot.replace(/\/+$/, "")}/${b.name}`,
+      target: b.target.replaceAll("{dir}", dir),
+    })),
     archiveChecks: { names: ["tar", "-tzf", archivePath], types: ["tar", "-tvzf", archivePath] },
     downloadDir,
     archivePath,
@@ -126,6 +143,14 @@ export function compareVersions(a: string, b: string): number {
     if (diff !== 0) return diff < 0 ? -1 : 1;
   }
   return 0;
+}
+
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+const launcherMarker = (id: string) => `# opengroow-machine-tool: ${id}`;
+
+/** The launcher: a tiny script that runs the tool's executable. Owned by the tool `id`. */
+export function launcherScript(id: string, target: string): string {
+  return `#!/bin/sh\n${launcherMarker(id)}\nexec ${shellQuote(target)} "$@"\n`;
 }
 
 const tail = (output: string) => output.trim().split("\n").slice(-5).join("\n");
@@ -210,6 +235,22 @@ export async function installMachineTool(
       }
     }
 
+    const writtenBins: string[] = [];
+    try {
+      for (const bin of plan.bins) {
+        const existing = await ports.fs.readText(bin.path);
+        if (existing !== undefined && !existing.includes(launcherMarker(plan.id))) {
+          throw new StepFailure("Expose the command", `${bin.path} already exists and was not created by this tool; nothing was overwritten`);
+        }
+        await ports.fs.mkdir(plan.binDir);
+        await ports.fs.writeExecutable(bin.path, launcherScript(plan.id, bin.target));
+        writtenBins.push(bin.path);
+      }
+    } catch (error) {
+      for (const path of writtenBins) await ports.fs.remove(path).catch(() => undefined);
+      throw error;
+    }
+
     if (movedPrevious) await ports.fs.remove(previous).catch(() => undefined);
     return { status: "installed", dir: plan.dir, ...(version ? { version } : {}) };
   } catch (error) {
@@ -241,5 +282,9 @@ export async function uninstallMachineTool(
 ): Promise<MachineToolUninstallResult> {
   if (!(await consent.confirm(plan))) return { status: "refused" };
   await ports.fs.remove(plan.dir);
+  for (const bin of plan.bins) {
+    const existing = await ports.fs.readText(bin.path);
+    if (existing?.includes(launcherMarker(plan.id))) await ports.fs.remove(bin.path);
+  }
   return { status: "uninstalled", dir: plan.dir };
 }

@@ -4,7 +4,7 @@ import { describeMachineToolPlan, describeMachineToolUninstall } from "./machine
 import { planMachineToolInstall } from "./machine-tool-install.js";
 
 describe("describeMachineToolPlan", () => {
-  const text = describeMachineToolPlan(planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/home/u/.opengroow/tools")!);
+  const text = describeMachineToolPlan(planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/home/u/.opengroow/tools", "/home/u/.opengroow/bin")!);
 
   it("states the source, the digest and the directory", () => {
     expect(text).toContain(ANDROID_TOOL_FIXTURE.install.source.url);
@@ -15,7 +15,7 @@ describe("describeMachineToolPlan", () => {
   it("lists every command exactly as it will run, quoting arguments with spaces", () => {
     expect(text).toContain("python3 -m venv /home/u/.opengroow/tools/android/engine/.venv");
     expect(text).toContain("tar -xzf /home/u/.opengroow/tools/.android.download/archive.tgz -C /home/u/.opengroow/tools/android");
-    const spaced = describeMachineToolPlan({ ...planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/a b")! });
+    const spaced = describeMachineToolPlan({ ...planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/a b", "/a b/bin")! });
     expect(spaced).toContain("'/a b/android'");
   });
 
@@ -26,7 +26,7 @@ describe("describeMachineToolPlan", () => {
 });
 
 describe("describeMachineToolUninstall", () => {
-  const text = describeMachineToolUninstall(planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/home/u/.opengroow/tools")!);
+  const text = describeMachineToolUninstall(planMachineToolInstall(ANDROID_TOOL_FIXTURE, "/home/u/.opengroow/tools", "/home/u/.opengroow/bin")!);
 
   it("says that the directory is deleted recursively, not that something is installed", () => {
     expect(text).toContain("Remove");
