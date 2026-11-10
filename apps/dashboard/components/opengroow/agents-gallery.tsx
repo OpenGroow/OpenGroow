@@ -21,6 +21,8 @@ type AgentsGalleryProps = {
   onActivate: (card: AgentCardState) => void;
   /** Shown before Add Agent in the header (e.g. Check for updates). */
   headerActions?: React.ReactNode;
+  /** Shown right under the header (e.g. the no-provider warning). */
+  notice?: React.ReactNode;
 };
 
 /** Presentation of the Agents page: header, aggregates, filters and the card grid. */
@@ -32,6 +34,7 @@ export function AgentsGallery({
   onAddAgent,
   onActivate,
   headerActions,
+  notice,
 }: AgentsGalleryProps) {
   // UI-only filtering of the cards already on the page.
   const [filter, setFilter] = React.useState<string>("all");
@@ -75,6 +78,8 @@ export function AgentsGallery({
           </div>
         }
       />
+
+      {notice}
 
       {loading && (
         <div className="flex items-center gap-3 text-muted-foreground">
