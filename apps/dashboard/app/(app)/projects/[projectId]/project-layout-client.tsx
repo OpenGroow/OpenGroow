@@ -211,7 +211,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
   return (
     <main className="min-h-screen bg-background">
       <section className="flex min-h-screen flex-col">
-        <section className="flex flex-1 flex-col items-start gap-6 xl:flex-row xl:gap-8">
+        <section className="flex flex-1 flex-col items-start xl:flex-row xl:gap-8">
           <aside
             className={`flex w-full flex-col gap-6 border-b border-sidebar-border bg-sidebar px-5 py-6 text-sidebar-foreground xl:min-h-screen xl:flex-none xl:border-r xl:border-b-0 xl:py-6 xl:transition-[width,padding] xl:duration-150 ${
               isSidebarCollapsed ? "xl:w-16 xl:px-3" : "xl:w-72 xl:px-4"
