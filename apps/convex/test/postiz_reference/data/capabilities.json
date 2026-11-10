@@ -8,10 +8,14 @@
     "linkedin-page": { "name": "LinkedIn Page", "video": "supported", "image": "supported", "carousel": "supported" },
     "reddit": {
       "name": "Reddit",
-      "video": "supported",
-      "image": "supported",
+      "video": "unsupported",
+      "image": "unsupported",
       "carousel": "unsupported",
-      "reasons": { "carousel": "Reddit media posts take exactly one attachment" }
+      "reasons": {
+        "video": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post",
+        "image": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post",
+        "carousel": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post"
+      }
     },
     "instagram": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
     "instagram-standalone": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
