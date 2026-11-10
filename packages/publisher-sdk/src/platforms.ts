@@ -34,7 +34,7 @@ export function isKnownPlatform(value: unknown): value is PlatformId {
 
 /** The family of a platform: `instagram-standalone` is `instagram`, `linkedin-page` is `linkedin`. */
 export function platformFamily(platform: string): string {
-  return platform.split("-")[0];
+  return platform.split("-")[0] ?? platform;
 }
 
 /**
