@@ -53,6 +53,17 @@ export function postizSettings(
     case "pinterest":
       defaults = { ...(title ? { title } : {}), ...(link ? { link } : {}) };
       break;
+    case "x":
+      // Postiz requires who_can_reply_post on every post that is not an article.
+      defaults = { who_can_reply_post: "everyone" };
+      break;
+    case "dribbble": {
+      // Postiz requires a title (1 character at least): the Publishable's, else the first line of its caption.
+      const caption = typeof publishable.caption === "string" ? publishable.caption : "";
+      const fallback = text(caption.split("\n").find((line) => line.trim() !== ""), 100);
+      defaults = { ...(title ?? fallback ? { title: title ?? fallback } : {}) };
+      break;
+    }
     case "youtube": {
       const caption = typeof publishable.caption === "string" ? publishable.caption : "";
       const fallback = text(caption.split("\n").find((line) => line.trim() !== ""), 100);
@@ -78,6 +89,15 @@ export function postizSettings(
   }
   if (service === "pinterest" && !settings.board) {
     return { ok: false, error: "Pinterest needs a board: set the Board ID of this channel on the Publishers page" };
+  }
+  if (service === "dribbble" && (typeof settings.title !== "string" || settings.title.trim() === "")) {
+    return { ok: false, error: "Dribbble needs a title: give the shot a title or a caption" };
+  }
+  if (service === "reddit" && !(Array.isArray(settings.subreddit) && settings.subreddit.length > 0)) {
+    return {
+      ok: false,
+      error: "Reddit is not supported yet: Postiz needs a subreddit, a title and a post type for every post, and OpenGroow does not set them",
+    };
   }
   if (service === "youtube" && (typeof settings.title !== "string" || settings.title.trim() === "")) {
     return { ok: false, error: "YouTube needs a title: give the video a title or a caption" };
