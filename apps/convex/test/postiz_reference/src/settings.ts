@@ -42,9 +42,10 @@ export function postizSettings(
         brand_content_toggle: false,
         brand_organic_toggle: false,
         content_posting_method: "DIRECT_POST",
-        // Postiz requires duet and stitch as booleans on every TikTok post, photos included (TikTok ignores
-        // them there); autoAddMusic only applies to photos (image, carousel).
-        ...(kind === "video" ? { duet: true, stitch: true } : { duet: false, stitch: false, autoAddMusic: "no" }),
+        // Postiz requires duet, stitch and autoAddMusic on every TikTok post, whatever its kind (TikTok ignores
+        // duet and stitch on a photo, autoAddMusic on a video).
+        ...(kind === "video" ? { duet: true, stitch: true } : { duet: false, stitch: false }),
+        autoAddMusic: "no",
         ...(title ? { title: title.slice(0, 90) } : {}),
       };
       break;
@@ -69,8 +70,9 @@ export function postizSettings(
   // `__type` last: a stored value (copied from another channel) never changes the provider.
   const settings: Settings = { ...defaults, ...(stored ?? {}), __type: service };
   if (service === "tiktok") {
-    // The channel stores every TikTok option; autoAddMusic only goes with a photo post.
-    if (kind === "video") delete settings.autoAddMusic;
+    // Postiz answers 400 unless autoAddMusic is "yes" or "no", on a video too (it is only used on a photo):
+    // a video always sends "no", a photo keeps a stored value that is valid.
+    if (kind === "video" || (settings.autoAddMusic !== "yes" && settings.autoAddMusic !== "no")) settings.autoAddMusic = "no";
     // Postiz refuses a post whose duet or stitch is not a boolean (400), photos included.
     for (const key of ["duet", "stitch"] as const) if (typeof settings[key] !== "boolean") settings[key] = false;
   }
