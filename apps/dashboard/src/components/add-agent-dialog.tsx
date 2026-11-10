@@ -203,6 +203,7 @@ export function AddAgentDialog({ projectId, instanceId, selfHost = false, open, 
                 meta={`${ORIGIN_LABELS.hub} · ${entry.category} · ${entry.tag}`}
                 trust={entry.verification}
                 busy={previewing === entry.templateId}
+                actionLabel="Install"
                 onChoose={() => void chooseHubEntry(entry.templateId)}
               />
             ))}
