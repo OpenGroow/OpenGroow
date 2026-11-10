@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils"
 
 // The product's status vocabulary (DESIGN.md "Status vocabulary"):
 // active = live or successful (the only green), progress = a process running,
-// info = inactive or informational, warning, error, neutral = paused / queued /
+// info = informational, warning, error, neutral = inactive / paused / queued /
 // unavailable. Colour lives in the dot and the border; the label stays light
 // and is always shown, so colour is never the only signal.
 type StatusTone = "active" | "info" | "progress" | "warning" | "error" | "neutral"

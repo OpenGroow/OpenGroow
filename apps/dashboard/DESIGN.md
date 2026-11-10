@@ -119,10 +119,10 @@ These are inspirations, not copied proprietary assets or brand identities.
 Every status is a `StatusBadge`: a small tinted pill (border and dot carry the colour, the label stays light). Tones:
 - `active`: green. Active agent, ready or completed work, published.
 - `progress`: cyan, with a pulsing dot. A process is running (Mission in progress, Run running, Source processing).
-- `info`: blue. Inactive, or a stage that is neither good nor bad (Source ready/scored/routed).
+- `info`: blue. A stage that is neither good nor bad (Source ready/scored/routed).
 - `warning`: amber. Waiting for a human (To validate, Blocked).
 - `error`: red.
-- `neutral`: grey. Paused, queued, stopped, unavailable.
+- `neutral`: grey. Inactive, paused, queued, stopped, unavailable.
 A badge always contains human-readable text, never a raw enum value; labels come from the glossary (`mission-status.ts`, `agent-presentation.ts`). The generic `Badge` (default, secondary, outline, tag) is only for non-status labels.
 
 ## 7. Screen-specific composition
