@@ -33,6 +33,7 @@ export function CatalogueItem({
   meta,
   trust,
   busy = false,
+  actionLabel = "Choose",
   onChoose,
 }: {
   name: string;
@@ -40,6 +41,8 @@ export function CatalogueItem({
   meta: string;
   trust: Verification | null;
   busy?: boolean;
+  /** `Install` for a hub entry (downloaded on confirmation), `Choose` for a template already in the registry. */
+  actionLabel?: string;
   onChoose: () => void;
 }) {
   return (
@@ -54,7 +57,7 @@ export function CatalogueItem({
           <span className="text-xs text-muted-foreground">{meta}</span>
         </div>
         <Button type="button" variant="outline" disabled={busy} onClick={onChoose}>
-          Choose<span className="sr-only"> {name}</span>
+          {actionLabel}<span className="sr-only"> {name}</span>
         </Button>
       </div>
       <p className="m-0 text-sm leading-6 text-muted-foreground">{description}</p>

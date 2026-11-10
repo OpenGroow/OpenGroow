@@ -923,7 +923,7 @@ describe("Add Agent hub entries and trust badges (#668)", () => {
     installHubMock.mockResolvedValue({ status: "installed", templateId: "@alice/seo", version: "2.0.0" });
     addAgentMock.mockResolvedValue({ status: "active", workspaceKey: "ws", mcpServerKeys: [] });
     await openCatalogue();
-    await click(getRequiredButtonWithin(getRequiredDialog(), "Choose Alice SEO"));
+    await click(getRequiredButtonWithin(getRequiredDialog(), "Install Alice SEO"));
 
     expect(previewHubMock).toHaveBeenCalledWith({ instanceId: "instance-1", templateId: "@alice/seo" });
     expect(getRequiredDialog().textContent).toContain("seo.alice.dev");
@@ -944,7 +944,7 @@ describe("Add Agent hub entries and trust badges (#668)", () => {
     previewHubMock.mockResolvedValue({ status: "ok", manifest: seoManifest, plan: { mcpHosts: [], secrets: [], skills: [], prerequisites: [] } });
     installHubMock.mockResolvedValue({ status: "error", errorMessage: "Digest mismatch for acme/seo@v2.0.0" });
     await openCatalogue();
-    await click(getRequiredButtonWithin(getRequiredDialog(), "Choose Alice SEO"));
+    await click(getRequiredButtonWithin(getRequiredDialog(), "Install Alice SEO"));
     await typeInto(getRequiredInput("API key"), "key-1");
     await click(getRequiredButtonWithin(getRequiredDialog(), "Install and activate"));
 
