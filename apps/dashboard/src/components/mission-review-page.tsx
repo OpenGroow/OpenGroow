@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BlockedNotice } from "@/src/components/blocked-notice";
 import { useQuery, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "@convex/_generated/api";
@@ -11,7 +10,7 @@ import {
   SocialEngagementReport,
   isSocialEngagementReport,
 } from "@/src/components/social-engagement-report/social-engagement-report";
-import { Clock } from "lucide-react";
+import { Clock, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -221,6 +220,21 @@ function IndexingBadge({ indexing }: { indexing: Doc<"missions">["indexing"] }) 
  * Reject capabilities are intentionally excluded from this panel — they are
  * rendered by `RejectSection` which provides the expand-on-click feedback UX.
  */
+/**
+ * Why the action of this status cannot be run, or undefined when it can. The action is shown greyed
+ * with this reason, not hidden; the review bar prints the reason under its row.
+ */
+function reviewActionBlockedReason(
+  actions: ReviewActionDescriptor[],
+  status: string,
+  disabled: boolean,
+): string | undefined {
+  const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
+  if (!eligibleAction) return undefined;
+  if (!eligibleAction.enabled) return eligibleAction.disabledReason ?? "This action is unavailable.";
+  return disabled ? "This action is unavailable until the review content is complete." : undefined;
+}
+
 function ReviewActionsSection({
   missionId,
   instanceId,
@@ -243,14 +257,10 @@ function ReviewActionsSection({
 
   // Find the action that matches the current mission status, excluding reject
   // (which has its own expand-on-click affordance in RejectSection).
-  // The action of this status, even when it is blocked: it is shown greyed with the reason, not hidden.
+  // The action of this status, even when it is blocked: it is shown greyed, the bar prints the reason.
   const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
   if (!eligibleAction) return null;
-  const blockedReason = !eligibleAction.enabled
-    ? (eligibleAction.disabledReason ?? "This action is unavailable.")
-    : disabled
-      ? "This action is unavailable until the review content is complete."
-      : undefined;
+  const blockedReason = reviewActionBlockedReason(actions, status, disabled);
 
   async function handleAction(action: ReviewActionDescriptor) {
     setActiveAction(action.key);
@@ -316,11 +326,6 @@ function ReviewActionsSection({
           {isLoading ? `${eligibleAction.label}…` : eligibleAction.label}
         </Button>
       </div>
-      {blockedReason && (
-        <BlockedNotice padding="p-4" testId="review-action-blocked">
-          {blockedReason}
-        </BlockedNotice>
-      )}
     </section>
   );
 }
@@ -638,6 +643,7 @@ export function MissionReviewContent({
     ) : null;
 
   // The primary action of a Mission waiting for a decision: first thing of the overview, not below the content.
+  const reviewBlockedReason = reviewActionBlockedReason(reviewActions, mission.status, carouselReviewBlocked);
   const reviewBar =
     reviewArtifact?.available && isReviewable ? (
       <section
@@ -674,6 +680,19 @@ export function MissionReviewContent({
             />
           )}
         </div>
+        {/* Why the action is greyed: one line under the bar's row, not a card inside the bar. */}
+        {reviewBlockedReason && (
+          <p
+            data-testid="review-action-blocked"
+            className="m-0 flex items-start gap-2 border-t border-status-warning/30 pt-3 text-sm text-status-warning"
+          >
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>
+              <span className="font-semibold">Blocked: </span>
+              {reviewBlockedReason}
+            </span>
+          </p>
+        )}
       </section>
     ) : null;
 
