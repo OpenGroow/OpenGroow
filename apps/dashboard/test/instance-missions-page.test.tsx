@@ -27,6 +27,10 @@ vi.mock("convex/react", () => ({
   usePaginatedQuery: (...args: unknown[]) => usePaginatedQueryMock(...args),
 }));
 
+// A Project with a Provider: the no-provider notice stays out of these tests.
+vi.mock("@/src/hooks/use-authenticated-instances", () => ({
+  useAuthenticatedInstances: () => [{ openclawId: "instance-1", jobId: "job-1", providers: [{ provider: "openai" }] }],
+}));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     project_templates: {

@@ -10,6 +10,7 @@ import { mergeTemplatesWithAgents, type AgentCardState } from "@/src/utils/merge
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { ActivationDialog } from "@/src/components/activation-dialog";
+import { NoProviderNotice } from "@/src/components/no-provider-notice";
 import { AddAgentDialog } from "@/src/components/add-agent-dialog";
 import { CheckTemplateUpdatesButton, TemplateUpdatesPanel } from "@/src/components/template-updates-panel";
 import { devActivationDefaults } from "@/src/utils/dev-activation-defaults";
@@ -163,6 +164,7 @@ export function InstanceAgentsContent({
         onAddAgent={() => setAddAgentOpen(true)}
         onActivate={(card) => (card.status === "error" ? handleRetryClick(card) : handleActivateClick(card))}
         headerActions={<CheckTemplateUpdatesButton projectId={decodedInstanceId} />}
+        notice={<NoProviderNotice projectId={decodedInstanceId} />}
       />
 
       <TemplateUpdatesPanel projectId={decodedInstanceId} />
