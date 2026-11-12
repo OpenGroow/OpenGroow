@@ -253,6 +253,20 @@ export function extractRepairRequestIds(output: string): string[] {
 }
 
 /**
+ * MCP servers an `openclaw exec` command's Agent session needs. The Worker
+ * probes them before starting the session. Missing or malformed means no
+ * probe: older Convex deployments do not send the field.
+ */
+export function readRequiredMcpServers(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+  const value = (payload as Record<string, unknown>).requiredMcpServers;
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((key): key is string => typeof key === "string" && key.trim().length > 0)
+    .map((key) => key.trim());
+}
+
+/**
  * Files an `openclaw exec` command asks the Worker to write into the
  * workspace, in order, before the agent process starts. Entries that are not
  * `{ filePath: string; content: string }` are rejected rather than silently

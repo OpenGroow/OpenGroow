@@ -16,6 +16,7 @@ import {
   defaultApiKeyForProvider,
   defaultBaseUrlForProvider,
   labelForProvider,
+  displayModelForProvider,
   qualifyModelForProvider,
 } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
@@ -189,7 +190,7 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
 
   function handleActivateFromList(provider: string, model: string, baseUrl?: string): void {
     setAiProvider(provider);
-    setAiModel(model);
+    setAiModel(displayModelForProvider(provider, model));
     setAiBaseUrl(baseUrl ?? defaultBaseUrlForProvider(provider));
     setAiApiKey("");
     setEditingProvider(provider);
@@ -370,7 +371,9 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
               </div>
               <div className="min-w-0">
                 <Badge variant="tag" className="max-w-full font-mono text-xs">
-                  <span className="truncate">{entry.model}</span>
+                  <span className="truncate">
+                    {isSubscription ? entry.model : displayModelForProvider(entry.provider, entry.model)}
+                  </span>
                 </Badge>
               </div>
               <div>
@@ -731,7 +734,7 @@ export function ProvidersPageContent({ resolvedInstanceId }: Props) {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ai-model">Model</Label>
-                  <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="gpt-4o, mimo-v2.5… (provider prefix added automatically)" className="h-12 rounded-xl border-border bg-card px-4" />
+                  <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="gpt-4o, deepseek/deepseek-v4.1-flash…" className="h-12 rounded-xl border-border bg-card px-4" />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="ai-base-url">Base URL <span className="text-xs text-muted-foreground">(optional)</span></Label>

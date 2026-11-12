@@ -121,6 +121,8 @@ export type ValidatedRuntimeResultPayload = {
   instanceId: string;
   ok: boolean;
   error?: string;
+  /** Machine-readable cause of a failure, e.g. `MCP_SERVER_UNREACHABLE`. */
+  errorCode?: string;
   data: Record<string, unknown>;
 };
 
@@ -388,6 +390,9 @@ export function parseRuntimeResult(
   if (envelope.error !== undefined && typeof envelope.error !== "string") {
     throw new InvalidWireMessageError({ ...issue, path: "$.payload.error" });
   }
+  if (envelope.errorCode !== undefined && typeof envelope.errorCode !== "string") {
+    throw new InvalidWireMessageError({ ...issue, path: "$.payload.errorCode" });
+  }
   if (!isRecord(envelope.data)) {
     throw new InvalidWireMessageError({ ...issue, path: "$.payload.data" });
   }
@@ -396,6 +401,7 @@ export function parseRuntimeResult(
     instanceId,
     ok: envelope.ok,
     error: typeof envelope.error === "string" ? envelope.error : undefined,
+    ...(typeof envelope.errorCode === "string" ? { errorCode: envelope.errorCode } : {}),
     data: envelope.data,
   };
 }

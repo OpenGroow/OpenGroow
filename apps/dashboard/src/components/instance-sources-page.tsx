@@ -33,7 +33,7 @@ type SourceRow = Pick<
   | "status"
   | "origin"
   | "templateId"
-  | "capturedAt"
+  | "createdAt"
   | "marketing"
   | "scoring"
   | "selectedAt"
@@ -279,7 +279,7 @@ function SourceRowItem({ source, instanceId }: { source: SourceRow; instanceId: 
         </div>
         <span className="truncate text-sm text-muted-foreground">{agentLabel(source.templateId)}</span>
         <span className="truncate text-sm text-foreground">{source.family}</span>
-        <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.capturedAt)}</span>
+        <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.createdAt)}</span>
         <span className="text-sm text-foreground tabular-nums">
           {score ?? "–"}
         </span>

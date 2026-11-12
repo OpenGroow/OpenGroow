@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  MCP_SERVER_UNREACHABLE,
   RUNTIME_AI_CONFIG_SET_RESULT,
   RUNTIME_OPENCLAW_EXEC,
   RUNTIME_OPENCLAW_EXEC_CANCEL,
@@ -193,6 +194,74 @@ describe("handleOpenClawExec", () => {
       ok: false,
       error: "filesToWrite must contain only filePath/content string pairs",
     });
+  });
+});
+
+describe("handleOpenClawExec MCP preflight", () => {
+  const execCommand = (requiredMcpServers?: unknown): Command => ({
+    id: "cmd-exec",
+    type: RUNTIME_OPENCLAW_EXEC,
+    ts: Date.now(),
+    payload: {
+      commandText: "openclaw agent run",
+      workspaceKey: "ws-1",
+      filesToWrite: [{ filePath: "AGENTS.md", content: "instructions" }],
+      ...(requiredMcpServers === undefined ? {} : { requiredMcpServers }),
+    },
+  });
+  const paths = (deps: any) => deps.gatewayClient.requestGatewayControl.mock.calls.map((call: unknown[]) => call[0]);
+
+  it("fails the exec with the probe's reason and never starts the agent", async () => {
+    const deps = makeDeps();
+    deps.gatewayClient.requestGatewayControl.mockResolvedValueOnce({
+      results: [
+        { key: "enrich-mcp", ok: false, error: "Blocked: resolves to private/internal/special-use IP address" },
+        { key: "seo-mcp", ok: true },
+      ],
+    });
+
+    const event = await handleOpenClawExec(execCommand(["enrich-mcp", "seo-mcp"]), deps);
+
+    expect(deps.gatewayClient.requestGatewayControl).toHaveBeenCalledWith("/mcp/servers/probe", {
+      keys: ["enrich-mcp", "seo-mcp"],
+    });
+    expect(paths(deps)).toEqual(["/mcp/servers/probe"]);
+    expect(event.event.payload).toMatchObject({
+      ok: false,
+      errorCode: MCP_SERVER_UNREACHABLE,
+      error:
+        "MCP server unreachable from OpenClaw: enrich-mcp (Blocked: resolves to private/internal/special-use IP address)",
+    });
+  });
+
+  it("starts the agent once every required server answered", async () => {
+    const deps = makeDeps({ output: "done", success: true, exitCode: 0 });
+    deps.gatewayClient.requestGatewayControl.mockResolvedValueOnce({ results: [{ key: "enrich-mcp", ok: true }] });
+
+    const event = await handleOpenClawExec(execCommand(["enrich-mcp"]), deps);
+
+    expect(paths(deps)).toEqual(["/mcp/servers/probe", "/workspace/file/write", "/openclaw/exec"]);
+    expect(event.event.payload).toMatchObject({ ok: true });
+  });
+
+  it("starts the agent when the Gateway cannot probe (image without the route)", async () => {
+    const deps = makeDeps({ output: "done", success: true, exitCode: 0 });
+    deps.gatewayClient.requestGatewayControl.mockRejectedValueOnce(new Error("Not found"));
+
+    const event = await handleOpenClawExec(execCommand(["enrich-mcp"]), deps);
+
+    expect(paths(deps)).toEqual(["/mcp/servers/probe", "/workspace/file/write", "/openclaw/exec"]);
+    expect(deps.warn).toHaveBeenCalledWith("MCP probe skipped: Not found");
+    expect(event.event.payload).toMatchObject({ ok: true });
+  });
+
+  it("does not probe when no server is required", async () => {
+    const deps = makeDeps({ output: "done", success: true, exitCode: 0 });
+
+    await handleOpenClawExec(execCommand([]), deps);
+    await handleOpenClawExec(execCommand(), deps);
+
+    expect(paths(deps)).not.toContain("/mcp/servers/probe");
   });
 });
 

@@ -125,6 +125,9 @@ export const handleAgentRegisterAndConfigure: CommandHandler = async (command, d
   const listCommandText = readString(command.payload, "listCommandText");
   const registerCommandText = readString(command.payload, "registerCommandText");
   const configureCommandText = readString(command.payload, "configureCommandText");
+  // Where the Agent's files are; `rebindCommandText` moves an agent registered elsewhere there.
+  const workspace = readString(command.payload, "workspace");
+  const rebindCommandText = readString(command.payload, "rebindCommandText");
   const timeoutMs = readTimeoutMs(command.payload, DEFAULT_STEP_TIMEOUT_MS);
 
   const fail = (error: string, data: Record<string, unknown> = {}) =>
@@ -155,10 +158,25 @@ export const handleAgentRegisterAndConfigure: CommandHandler = async (command, d
     );
   }
 
-  // Already registered: the caller only wants to know where, so it can warn
-  // on a workspace mismatch. Re-adding would fail and rewriting the config is
-  // not this command's job.
+  // Already registered (re-activation, or an Agent deleted and installed
+  // again): re-adding would fail. A reinstalled Agent gets a new workspace, so
+  // the registration follows it: otherwise the Agent keeps reading its old
+  // instructions while OpenGroow writes its run files elsewhere. The profile
+  // is applied again, as it may have changed with the Template.
   if (existing) {
+    const moved = Boolean(workspace && rebindCommandText && existing.workspace !== workspace);
+    if (moved) {
+      const rebind = await runOpenClawCommand(deps, rebindCommandText!, timeoutMs);
+      if (!rebind.ok) {
+        return fail(
+          `OpenClaw agent ${agentId} is registered for ${existing.workspace ?? "another workspace"} and could not be moved to ${workspace}: ${
+            rebind.error ?? "unknown error"
+          }`,
+          { alreadyRegistered: true, registered: true, workspace: existing.workspace },
+        );
+      }
+    }
+    const configure = configureCommandText ? await runOpenClawCommand(deps, configureCommandText, timeoutMs) : undefined;
     return createEventMessage(RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT, command.id, {
       commandId: command.id,
       instanceId: deps.getRuntimeInstanceId(),
@@ -167,8 +185,10 @@ export const handleAgentRegisterAndConfigure: CommandHandler = async (command, d
         agentId,
         alreadyRegistered: true,
         registered: true,
-        configured: false,
-        workspace: existing.workspace,
+        rebound: moved,
+        configured: configure?.ok === true,
+        configureError: configure && !configure.ok ? configure.error : undefined,
+        workspace: moved ? workspace : existing.workspace,
       },
     });
   }

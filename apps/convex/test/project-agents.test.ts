@@ -718,10 +718,13 @@ describe("activateProjectAgent", () => {
     expect(commands[2].payload).toMatchObject({
       agentId: "opengroow--seo",
       listCommandText: "openclaw agents list --json",
+      // An agent registered elsewhere (deleted and installed again) follows its workspace.
+      workspace: WORKSPACE_ABSOLUTE_PATH,
+      rebindCommandText: `openclaw config set agents.entries.opengroow--seo.workspace '"${WORKSPACE_ABSOLUTE_PATH}"' --json`,
     });
   });
 
-  it("cold activation warns and continues when OpenClaw lists the template in a different workspace", async () => {
+  it("cold activation warns and continues when a runtime without the rebind keeps the template in a different workspace", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const t = convexTest(schema, modules);
     const waitForRuntimeEvent = await getWaitForRuntimeEvent();

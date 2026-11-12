@@ -85,6 +85,10 @@ node /opt/openclaw-control/optional-plugins.js
 echo "[entrypoint] Enforcing config invariants ..."
 openclaw config set --json agents.defaults.heartbeat.every '"0m"' \
   || echo "[entrypoint] WARNING: failed to disable heartbeat — continuing"
+# The interval alone is not enough: an exec that ends (backgrounded, or on a
+# paired node) still requests a heartbeat, which lands in the mission session.
+openclaw config set --json tools.exec.notifyOnExit false \
+  || echo "[entrypoint] WARNING: failed to disable exec exit notifications — continuing"
 openclaw config unset agents.defaults.models \
   || echo "[entrypoint] WARNING: failed to unset agents.defaults.models — continuing"
 

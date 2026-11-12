@@ -30,7 +30,7 @@ function makeSource(overrides: Partial<Record<string, unknown>> = {}) {
     family: "search",
     status: "ready",
     origin: "https://example.com/serp",
-    capturedAt: Date.UTC(2026, 0, 15),
+    createdAt: Date.UTC(2026, 0, 15),
     marketing: {},
     analysis: {},
     ...overrides,

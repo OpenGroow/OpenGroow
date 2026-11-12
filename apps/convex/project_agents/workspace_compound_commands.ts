@@ -125,6 +125,8 @@ export async function registerNativeOpenClawAgent(
   const listCommandText = "openclaw agents list --json";
   const registerCommandText = `openclaw agents add ${shellQuote(agentId)} --workspace ${shellQuote(workspaceAbsolutePath)} --non-interactive --json`;
   const configureCommandText = openClawToolsConfigCommand(agentId, profile);
+  const rebindCommandText = openClawWorkspaceRebindCommand(agentId, workspaceAbsolutePath);
+  // list + add or rebind + configure.
   const steps = configureCommandText ? 3 : 2;
   const result = await sendAndAwait(
     ctx,
@@ -135,6 +137,8 @@ export async function registerNativeOpenClawAgent(
       listCommandText,
       registerCommandText,
       configureCommandText,
+      workspace: workspaceAbsolutePath,
+      rebindCommandText,
       timeoutMs: COMPOUND_STEP_TIMEOUT_MS,
     },
     compoundWaitMs(steps),
@@ -151,13 +155,19 @@ export async function registerNativeOpenClawAgent(
       workspaceAbsolutePath,
       registerCommandText,
       configureCommandText,
+      rebindCommandText,
     );
     return;
   }
 
   const data = parseAgentRegisterAndConfigureResult(result);
   if (data.alreadyRegistered) {
-    warnOnWorkspaceMismatch(agentId, data.workspace, workspaceAbsolutePath);
+    // A runtime that predates the rebind still reports the old workspace.
+    if (data.rebound) console.info(`[project_agents/workspace_provisioning] Moved OpenClaw agent ${agentId} to ${workspaceAbsolutePath}`);
+    else warnOnWorkspaceMismatch(agentId, data.workspace, workspaceAbsolutePath);
+    if (data.configureError) {
+      console.warn(`[project_agents/workspace_provisioning] Could not apply the OpenClaw profile of ${templateId}: ${data.configureError}`);
+    }
     return;
   }
   if (configureCommandText && !data.configured) {
@@ -176,11 +186,16 @@ async function registerNativeOpenClawAgentIndividually(
   workspaceAbsolutePath: string,
   registerCommandText: string,
   configureCommandText: string | undefined,
+  rebindCommandText: string,
 ): Promise<void> {
   const agents = await listNativeOpenClawAgents(ctx, instanceId);
   const existing = agents.find((agent) => agent.id === agentId);
   if (existing) {
-    warnOnWorkspaceMismatch(agentId, existing.workspace, workspaceAbsolutePath);
+    if (existing.workspace !== workspaceAbsolutePath) {
+      const rebindResult = await sendAndAwait(ctx, instanceId, RUNTIME_OPENCLAW_EXEC, { commandText: rebindCommandText });
+      parseOpenClawExecResult(rebindResult, `OpenClaw agent ${agentId} could not be moved to ${workspaceAbsolutePath}`);
+    }
+    if (configureCommandText) await applyAgentToolRestrictions(ctx, instanceId, agentId, configureCommandText);
     return;
   }
   const addResult = await sendAndAwait(ctx, instanceId, RUNTIME_OPENCLAW_EXEC, {
@@ -204,13 +219,14 @@ function warnOnWorkspaceMismatch(
 
 function parseAgentRegisterAndConfigureResult(
   result: RuntimeResultQueryResult,
-): { alreadyRegistered: boolean; workspace?: string; configured: boolean; configureError?: string } {
+): { alreadyRegistered: boolean; rebound: boolean; workspace?: string; configured: boolean; configureError?: string } {
   const payload = result.payload as
     | {
         ok?: boolean;
         error?: string;
         data?: {
           alreadyRegistered?: boolean;
+          rebound?: boolean;
           workspace?: string;
           configured?: boolean;
           configureError?: string;
@@ -222,10 +238,16 @@ function parseAgentRegisterAndConfigureResult(
   }
   return {
     alreadyRegistered: payload.data?.alreadyRegistered === true,
+    rebound: payload.data?.rebound === true,
     workspace: payload.data?.workspace,
     configured: payload.data?.configured === true,
     configureError: payload.data?.configureError,
   };
+}
+
+/** The `openclaw config set` command pointing an already registered agent at its workspace. */
+function openClawWorkspaceRebindCommand(agentId: string, workspaceAbsolutePath: string): string {
+  return `openclaw config set ${shellQuote(`agents.entries.${agentId}.workspace`)} ${shellQuote(JSON.stringify(workspaceAbsolutePath))} --json`;
 }
 
 /**

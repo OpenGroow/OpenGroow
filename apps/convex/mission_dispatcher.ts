@@ -139,7 +139,7 @@ export const loadReconcileState = internalQuery({
       .unique();
     const workspaceKey = projectAgent?.workspaceKey ?? null;
 
-    let execResult: { ok: boolean; error?: string } | null = null;
+    let execResult: { ok: boolean; error?: string; errorCode?: string } | null = null;
     if (run.dispatchCommandId) {
       const evt = await ctx.db
         .query("events")
@@ -148,8 +148,12 @@ export const loadReconcileState = internalQuery({
         )
         .unique();
       if (evt) {
-        const p = (evt.payload ?? {}) as { ok?: boolean; error?: string };
-        execResult = { ok: p.ok === true, error: p.error };
+        const p = (evt.payload ?? {}) as { ok?: boolean; error?: string; errorCode?: string };
+        execResult = {
+          ok: p.ok === true,
+          error: p.error,
+          ...(typeof p.errorCode === "string" ? { errorCode: p.errorCode } : {}),
+        };
       }
     }
 

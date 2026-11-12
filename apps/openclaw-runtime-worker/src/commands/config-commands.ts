@@ -1,4 +1,5 @@
 import {
+  MCP_SERVER_UNREACHABLE,
   RUNTIME_AI_CONFIG_SET_RESULT,
   RUNTIME_OPENCLAW_EXEC_CANCEL_RESULT,
   RUNTIME_OPENCLAW_EXEC_RESULT,
@@ -9,12 +10,13 @@ import {
   readAuthSessionId,
   readCommandText,
   readFilesToWrite,
+  readRequiredMcpServers,
   readTimeoutMs,
   readWorkspaceKey,
 } from "./command-inputs.js";
 import { makeGatewayCommandHandler } from "./auth-commands.js";
 import { createEventMessage } from "./event-message.js";
-import type { CommandHandler } from "./types.js";
+import type { CommandHandler, RuntimeDeps } from "./types.js";
 
 export const handleTelegramConfigSet: CommandHandler = async (
   command,
@@ -142,6 +144,31 @@ export const handleSpeechToTextConfigSet: CommandHandler = async (
   }
 };
 
+/**
+ * Connects to the MCP servers an Agent session needs before starting it.
+ * OpenClaw starts a session even when one of them fails to connect, and the
+ * Agent then only notices a tool is missing after doing the rest of its work.
+ * Returns the failure message, or `null` when every server answered. A probe
+ * that cannot run at all (a Gateway image without the route) does not block
+ * the session: it behaves as before the probe existed.
+ */
+async function probeRequiredMcpServers(keys: string[], deps: RuntimeDeps): Promise<string | null> {
+  if (keys.length === 0) return null;
+  let results: Array<{ key: string; ok: boolean; error?: string }>;
+  try {
+    ({ results } = await deps.gatewayClient.requestGatewayControl<{
+      results: Array<{ key: string; ok: boolean; error?: string }>;
+    }>("/mcp/servers/probe", { keys }));
+  } catch (error) {
+    deps.warn(`MCP probe skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+  const failed = results.filter((result) => !result.ok);
+  if (failed.length === 0) return null;
+  const reasons = failed.map((result) => `${result.key} (${result.error ?? "failed to start"})`).join("; ");
+  return `MCP server unreachable from OpenClaw: ${reasons}`;
+}
+
 export const handleOpenClawExec: CommandHandler = async (command, deps) => {
   const commandText = readCommandText(command.payload);
   const timeoutMs = readTimeoutMs(command.payload, 30_000);
@@ -176,6 +203,19 @@ export const handleOpenClawExec: CommandHandler = async (command, deps) => {
       data: { output: "", commandText, exitCode: null },
     });
   }
+
+  const unreachable = await probeRequiredMcpServers(readRequiredMcpServers(command.payload), deps);
+  if (unreachable) {
+    return createEventMessage(RUNTIME_OPENCLAW_EXEC_RESULT, command.id, {
+      commandId: command.id,
+      instanceId: deps.getRuntimeInstanceId(),
+      ok: false,
+      errorCode: MCP_SERVER_UNREACHABLE,
+      error: unreachable,
+      data: { output: "", commandText, exitCode: null },
+    });
+  }
+
   if (filesToWrite.length > 0) {
     if (!workspaceKey) {
       return createEventMessage(RUNTIME_OPENCLAW_EXEC_RESULT, command.id, {

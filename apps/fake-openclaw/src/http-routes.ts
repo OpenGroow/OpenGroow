@@ -66,6 +66,22 @@ export async function handleRequest(req: IncomingMessage, res: ServerResponse): 
     return;
   }
 
+  if (method === "POST" && pathname === "/mcp/servers/probe") {
+    try {
+      const body = await parseJsonBody(req);
+      const keys = body.keys;
+      if (!Array.isArray(keys) || keys.length === 0) {
+        jsonResponse(res, 400, { error: "keys is required" });
+        return;
+      }
+      // The fake runs no MCP server: every declared one answers.
+      jsonResponse(res, 200, { ok: true, data: { results: keys.map((key) => ({ key, ok: true })) } });
+    } catch {
+      jsonResponse(res, 400, { error: "Invalid payload" });
+    }
+    return;
+  }
+
   if (method === "POST" && pathname === "/mcp/servers/remove") {
     try {
       const body = await parseJsonBody(req);

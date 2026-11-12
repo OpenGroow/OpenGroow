@@ -183,6 +183,27 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
     },
   );
 
+  it("does not insert again a Source a previous execution already wrote from the same report", async () => {
+    const t = convexTest(schema, modules);
+    // An earlier execution wrote it, then failed before the cursor moved.
+    await t.run((ctx) =>
+      ctx.db.insert("sources", {
+        instanceId: INSTANCE, ownerId: OWNER, templateId: TEMPLATE, sourceId: "keyword", label: "Search keyword",
+        family: "search", status: "ready", origin: keyword().common.origin, capturedAt: keyword().common.capturedAt,
+        marketing: {}, analysis: { query: "running shoes" }, createdAt: 1,
+      }),
+    );
+    // The same post seen again later is a new record (append-only): it is kept.
+    const seenLater = keyword({ common: { ...keyword().common, capturedAt: 1_700_000_500_000 } });
+    // Re-read with the capture time rounded differently: still the same record.
+    const reRead = keyword({ common: { ...keyword().common, capturedAt: 1_700_000_000_060 } });
+    await runJob(t, success([keyword(), reRead, seenLater]));
+
+    const sources = await allSources(t);
+    expect(sources.map((s) => s.capturedAt).sort()).toEqual([1_700_000_000_000, 1_700_000_500_000]);
+    expect(await getJob(t)).toMatchObject({ lastOutcome: "succeeded" });
+  });
+
   it("stores the optional raw capture and normalizes the topics", async () => {
     const t = convexTest(schema, modules);
     await runJob(t, success([keyword({ common: { ...keyword().common, raw: "full transcript" } })]));

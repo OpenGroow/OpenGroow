@@ -64,13 +64,14 @@ async function seed(t: ReturnType<typeof convexTest>, rows: Array<Record<string,
 const FIRST_PAGE = { numItems: 50, cursor: null };
 
 describe("sources.listByInstance", () => {
-  it("lists the owner's Sources most-recently-captured first", async () => {
+  it("lists the owner's Sources most-recently-added first, whatever their capture date", async () => {
     const t = convexTest(schema, modules);
-    await seed(t, [{ origin: "old" }, { origin: "new" }]);
+    // "late" was captured first but ingested last (a drained backlog).
+    await seed(t, [{ origin: "old" }, { origin: "new" }, { origin: "late", capturedAt: 1 }]);
     const result = await t
       .withIdentity(OWNER)
       .query(api.sources.listByInstance, { instanceId: INSTANCE_ID, paginationOpts: FIRST_PAGE });
-    expect(result.page.map((r) => r.origin)).toEqual(["new", "old"]);
+    expect(result.page.map((r) => r.origin)).toEqual(["late", "new", "old"]);
     expect(result.isDone).toBe(true);
   });
 
