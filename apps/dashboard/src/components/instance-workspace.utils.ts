@@ -248,6 +248,14 @@ export function qualifyModelForProvider(provider: string, model: string): string
   return trimmed;
 }
 
+// The provider prefix is an OpenClaw detail: the form and the list show the
+// model as the user typed it (`deepseek/deepseek-v4.1-flash`), and
+// `qualifyModelForProvider` adds the prefix back on save.
+export function displayModelForProvider(provider: string, model: string): string {
+  const trimmed = model.trim();
+  return trimmed.startsWith(`${provider}/`) ? trimmed.slice(provider.length + 1) : trimmed;
+}
+
 export function isAiConfigured(aiConfig: AiConfigState): boolean {
   return aiConfig.status === "saved";
 }
