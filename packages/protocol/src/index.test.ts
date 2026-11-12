@@ -265,6 +265,26 @@ describe("validated wire codecs", () => {
     ).toThrow(InvalidWireMessageError);
   });
 
+  it("keeps a failed result's errorCode and rejects a non-string one", () => {
+    const failed = {
+      commandId: "cmd-1",
+      instanceId: "instance-1",
+      ok: false,
+      error: "MCP server unreachable from OpenClaw: enrich-mcp (Blocked)",
+      data: { output: "" },
+    };
+    expect(
+      parseRuntimeResult(protocol.RUNTIME_OPENCLAW_EXEC_RESULT, {
+        ...failed,
+        errorCode: protocol.MCP_SERVER_UNREACHABLE,
+      }),
+    ).toMatchObject({ ok: false, errorCode: "mcp_server_unreachable" });
+    expect(parseRuntimeResult(protocol.RUNTIME_OPENCLAW_EXEC_RESULT, failed)).not.toHaveProperty("errorCode");
+    expect(() =>
+      parseRuntimeResult(protocol.RUNTIME_OPENCLAW_EXEC_RESULT, { ...failed, errorCode: 42 }),
+    ).toThrow(InvalidWireMessageError);
+  });
+
   it("validates runtime result envelopes and keeps error paths safe", () => {
     expect(
       parseRuntimeResult(protocol.RUNTIME_WORKSPACE_FILE_READ_RESULT, {
