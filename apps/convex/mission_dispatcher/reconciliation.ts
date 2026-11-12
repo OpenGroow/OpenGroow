@@ -28,7 +28,8 @@ const SALVAGE_FINAL_READ_MAX_ATTEMPTS = 1;
  * loose locals.
  */
 export type ReconcileSnapshot = {
-  execResult: { ok: boolean; error?: string } | null;
+  /** `errorCode` names a known cause, e.g. `mcp_server_unreachable` (the Worker's MCP probe). */
+  execResult: { ok: boolean; error?: string; errorCode?: string } | null;
   resultReadCommandId: Id<"commands"> | null;
   readResult: { ok: boolean; error?: string; data?: { content?: string; found?: boolean } } | null;
   workspaceKey: string | null;
@@ -233,7 +234,7 @@ export function decideReconciliation(
   if (snapshot.execResult && snapshot.execResult.ok === false) {
     return {
       type: "markFailed",
-      code: "runtime",
+      code: snapshot.execResult.errorCode ?? "runtime",
       message: snapshot.execResult.error ?? "openclaw exec failed",
     };
   }

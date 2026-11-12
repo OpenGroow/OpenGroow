@@ -73,6 +73,16 @@ function buildOpenClawExecCommandText(args: {
   return `openclaw agent --agent ${args.agentName} --session-id ${args.sessionKey} --message "${message}" --json --timeout ${timeoutSec}`;
 }
 
+/**
+ * The MCP servers a Template's sessions use. The Runtime Worker probes them
+ * from the Gateway before starting the session and fails the Run with the
+ * real cause when one does not answer, instead of letting the Agent work for
+ * minutes and only then notice a tool is missing.
+ */
+function requiredMcpServers(template: { manifest: { mcpServers: ReadonlyArray<{ name: string }> } } | null | undefined): string[] {
+  return template?.manifest.mcpServers.map((server) => server.name) ?? [];
+}
+
 export const tick = internalAction({
   args: {},
   handler: async (ctx) => {
@@ -506,6 +516,7 @@ export const dispatchPendingRuns = internalAction({
             filesToWrite,
             runFilePath: runPath,
             outputsFilePath: outputsPath,
+            requiredMcpServers: requiredMcpServers(template),
           },
         });
 
@@ -577,6 +588,7 @@ async function dispatchSourceJobRun(
         filesToWrite,
         runFilePath: runPath,
         outputsFilePath: outputsPath,
+        requiredMcpServers: requiredMcpServers(template),
       },
     });
     await ctx.runMutation(internal.runs.markRunning, {
@@ -628,6 +640,7 @@ async function dispatchSourceScoringRun(
         ],
         runFilePath: runPath,
         outputsFilePath: outputsPath,
+        requiredMcpServers: requiredMcpServers(template),
       },
     });
     await ctx.runMutation(internal.runs.markRunning, {
@@ -678,6 +691,7 @@ async function dispatchSourceRoutingRun(
         ],
         runFilePath: runPath,
         outputsFilePath: outputsPath,
+        requiredMcpServers: requiredMcpServers(template),
       },
     });
     await ctx.runMutation(internal.runs.markRunning, {

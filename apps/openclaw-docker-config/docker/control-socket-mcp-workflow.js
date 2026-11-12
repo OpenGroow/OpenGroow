@@ -1,7 +1,9 @@
 const { mergeMcpServers, removeMcpServers } = require("./control-socket-mcp");
+const { probeMcpServers } = require("./control-socket-mcp-probe");
 
 function createMcpWorkflow(options = {}) {
   const mcpOptions = { homeDir: options.homeDir };
+  const probeOptions = { runProbe: options.runProbe };
 
   async function merge(body = {}) {
     try {
@@ -33,7 +35,24 @@ function createMcpWorkflow(options = {}) {
     }
   }
 
-  return { merge, remove };
+  // A server that fails its probe is a 200 with `ok: false` in its result:
+  // the route worked, the server did not. 400 is kept for a malformed request.
+  async function probe(body = {}) {
+    try {
+      const result = await probeMcpServers({ keys: body.keys, timeoutMs: body.timeoutMs }, probeOptions);
+      return { status: 200, body: { ok: true, data: result } };
+    } catch (error) {
+      return {
+        status: 400,
+        body: {
+          ok: false,
+          error: error instanceof Error ? error.message : "Failed to probe MCP servers",
+        },
+      };
+    }
+  }
+
+  return { merge, remove, probe };
 }
 
 module.exports = { createMcpWorkflow };

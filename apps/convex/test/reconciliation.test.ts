@@ -179,6 +179,16 @@ describe("decideReconciliation", () => {
     expect(decision).toEqual({ type: "markFailed", code: "runtime", message: "boom" });
   });
 
+  it("fails with the exec's own error code when the Worker names the cause", () => {
+    const message =
+      "MCP server unreachable from OpenClaw: enrich-mcp (Blocked: resolves to private/internal/special-use IP address)";
+    const decision = decideReconciliation(
+      { ...BASE_SNAPSHOT, execResult: { ok: false, error: message, errorCode: "mcp_server_unreachable" } },
+      CTX,
+    );
+    expect(decision).toEqual({ type: "markFailed", code: "mcp_server_unreachable", message });
+  });
+
   it("enqueues a read on the canonical outputs path when exec succeeded and no read is dispatched yet", () => {
     const decision = decideReconciliation({ ...BASE_SNAPSHOT, execResult: { ok: true } }, CTX);
     expect(decision).toEqual({

@@ -435,6 +435,8 @@ describe("mission_dispatcher_node.dispatchPendingRuns", () => {
 
       const exec = execs[0];
       expect((exec.payload as { workspaceKey: string }).workspaceKey).toBe(WORKSPACE_KEY);
+      // The Worker probes the Template's MCP servers before starting the session.
+      expect((exec.payload as { requiredMcpServers: string[] }).requiredMcpServers).toEqual(["article-mcp"]);
       // Order matters: context must be ready before the agent reads the run.
       expect(execFilesToWrite(exec).map((file) => file.filePath)).toEqual([
         `missions/${missionId}/context.md`,

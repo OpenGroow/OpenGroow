@@ -363,6 +363,11 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/mcp/servers/probe") {
+      await handleWorkflowRoute(req, res, mcpWorkflow.probe);
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/plugins/install") {
       await handleWorkflowRoute(req, res, pluginsWorkflow.install);
       return;
