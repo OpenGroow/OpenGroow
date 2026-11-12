@@ -18,6 +18,14 @@ export function effectivePublishTargets(payload: unknown): string[] {
   return [...new Set(many.filter((t): t is string => typeof t === "string" && t !== ""))];
 }
 
+/** The Project's Publisher, or null when none is configured. */
+async function projectPublisher(ctx: QueryCtx, instanceId: string) {
+  return await ctx.db
+    .query("publishers")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .unique();
+}
+
 /** Names the keys of `targets` that are not (mapped) channels of the Publisher. */
 export function unusableTargets(
   publisherTargets: ReadonlyArray<{ target: string; channelId?: string }> | undefined,
@@ -36,10 +44,7 @@ export function unusableTargets(
 export async function assertKnownPublishTargets(ctx: QueryCtx, instanceId: string, payload: unknown): Promise<void> {
   const targets = effectivePublishTargets(payload);
   if (targets.length === 0) return;
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, instanceId);
   const { unknown } = unusableTargets(publisher?.targets, targets);
   if (unknown.length > 0) {
     throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
@@ -78,10 +83,7 @@ export async function assertPayloadChannelsSupportMissionType(
   const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId);
   const declaration = publishDeclarationFor(template?.manifest, args.type);
   if (!declaration) return;
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, args.instanceId);
   await assertChannelsSupportKind(ctx, publisher, targets, declaration.kind, declaration.platforms);
 }
 
@@ -105,9 +107,6 @@ export async function assertPayloadSchedulable(ctx: QueryCtx, instanceId: string
   const targets = effectivePublishTargets(payload);
   const publishAt = effectivePublishAt(payload, Date.now());
   if (targets.length === 0 || publishAt === undefined) return;
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, instanceId);
   await assertSchedulable(ctx, publisher, targets, publishAt);
 }

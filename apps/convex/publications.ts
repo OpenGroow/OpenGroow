@@ -118,8 +118,8 @@ export const setPublishAt = mutation({
       throw new Error(`The publication date can only be changed during review, got: "${mission.status}"`);
     }
     if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
-    if (args.publishAt !== null) assertValidPublishAt({ publishAt: args.publishAt });
     if (args.publishAt !== null) {
+      assertValidPublishAt({ publishAt: args.publishAt });
       await assertPayloadSchedulable(ctx, mission.instanceId, { publishTargets: effectivePublishTargets(mission.payload), publishAt: args.publishAt });
     }
     const { publishAt: _previous, ...rest } = (
