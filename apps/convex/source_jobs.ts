@@ -44,6 +44,8 @@ const AWAITING_ENRICHMENT_LIMIT = 50;
 
 type SourceJobBatch = {
   boundAt: number;
+  /** More Runs were waiting than one batch holds: a backlog remains after it. */
+  truncated?: boolean;
   runIds: Id<"runs">[];
   retrySourceIds: Id<"sources">[];
 };
@@ -57,6 +59,8 @@ type SourceJobRuntime = {
   inFlightTries?: number;
   inFlightChained?: number;
   inFlightBatch?: SourceJobBatch;
+  /** Batches started back to back so far to drain a backlog (reset when it stops). */
+  backlogBatches?: number;
 };
 
 type SourceJob = Doc<"jobs"> & SourceJobRuntime;
@@ -97,6 +101,11 @@ export const MAX_ENRICHMENT_RESUMES = 50;
 // anything below `AWAITING_ENRICHMENT_LIMIT` would fail a job that is making
 // progress, with a reason ("still awaiting enrichment") that would not be true.
 export const MAX_CHAINED_EXECUTIONS = AWAITING_ENRICHMENT_LIMIT;
+
+// Bound on the batches started back to back to drain a backlog (after an
+// outage, say): each is an Agent session on the user's key. Past it, the rest
+// waits for the next scheduled run, which starts a new series.
+export const MAX_BACKLOG_BATCHES = 10;
 
 function frequencyOf(job: Doc<"jobs">): Frequency {
   return {
@@ -163,7 +172,7 @@ export async function insertSourceIngestionJobForAgent(
   return true;
 }
 
-const SOURCE_JOB_BATCH_SIZE = 15;
+export const SOURCE_JOB_BATCH_SIZE = 15;
 
 /**
  * The batch of one execution: Runs of the Agent's Missions completed after the
@@ -180,7 +189,8 @@ async function buildBatch(ctx: MutationCtx, job: SourceJob, now: number) {
       until: now,
     })
   ).filter((run) => (run.completedAt ?? 0) > job.cursorAt);
-  // The agent reads every report within one execution timeout: a backlog is drained over successive ticks.
+  // The agent reads every report within one execution timeout: a backlog is
+  // drained over successive batches, started back to back (`settle`).
   const runs = completed.slice(0, SOURCE_JOB_BATCH_SIZE);
   const truncated = completed.length > runs.length;
   const boundAt = truncated ? (runs[runs.length - 1].completedAt ?? now) : now;
@@ -192,6 +202,7 @@ async function buildBatch(ctx: MutationCtx, job: SourceJob, now: number) {
     .take(RETRY_SOURCES_LIMIT);
   return {
     boundAt,
+    ...(truncated ? { truncated } : {}),
     runIds: runs.map((r) => r._id),
     retrySourceIds: retrySources.map((s) => s._id),
   };
@@ -446,6 +457,7 @@ export async function settleSourceJobRun(
     const exhausted = outcome.feedback ? `Still invalid after ${MAX_SOURCE_TRIES} tries. ` : "";
     await patchSourceRuntime(ctx, row, {
       ...CLEARED_IN_FLIGHT,
+      backlogBatches: undefined,
     }, {
       lastOutcome: "failed",
       lastError: `${exhausted}${outcome.error}`,
@@ -458,12 +470,21 @@ export async function settleSourceJobRun(
       await ctx.db.patch(sourceId, { retryRequested: undefined });
     }
   }
+  // A backlog remains past this batch: the next one is due now rather than at
+  // the next scheduled run, within a bound. Only after a success that moved the
+  // cursor, so a failing batch never loops.
+  const backlogBatches = (job.backlogBatches ?? 0) + 1;
+  const drainBacklog =
+    !outcome.keepCursor && job.inFlightBatch?.truncated === true && job.state === "active" &&
+    backlogBatches <= MAX_BACKLOG_BATCHES;
   await patchSourceRuntime(ctx, row, {
     cursorAt: outcome.keepCursor ? job.cursorAt : (job.inFlightBatch?.boundAt ?? job.cursorAt),
     ...CLEARED_IN_FLIGHT,
+    backlogBatches: drainBacklog ? backlogBatches : undefined,
   }, {
     lastOutcome: "succeeded",
     lastError: undefined,
+    ...(drainBacklog ? { nextRunAt: now } : {}),
   });
 }
 

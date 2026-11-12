@@ -14,6 +14,7 @@ import {
 } from "@opengroow/protocol";
 
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
+import { MAX_BACKLOG_BATCHES, SOURCE_JOB_BATCH_SIZE } from "../source_jobs";
 
 let restoreRegistry: () => void;
 
@@ -393,6 +394,60 @@ describe("SourceJob tick", () => {
     expect(failed).toMatchObject({ cursorAt: 1000, lastOutcome: "failed" });
     expect(failed.lastError).toBeTruthy();
     expect(failed.inFlightRunId).toBeUndefined();
+  });
+
+  async function backlogOf(t: Harness, runs: number) {
+    await seedInstance(t);
+    await activate(t);
+    const job = (await getJob(t))!;
+    await t.run((ctx) => ctx.db.patch(job._id, { runtime: { ...(job.runtime as Record<string, unknown>), cursorAt: 1000 } }));
+    for (let i = 1; i <= runs; i++) await seedMissionRun(t, 1000 + i);
+    await makeDue(t);
+    await fireTick(t);
+  }
+
+  it("drains a backlog over one batch at once: the next batch is due right after a success", async () => {
+    const t = convexTest(schema, modules);
+    await backlogOf(t, SOURCE_JOB_BATCH_SIZE + 5);
+    await runToTerminal(t, SUCCESS);
+
+    const first = (await getJob(t))!;
+    expect(first).toMatchObject({ cursorAt: 1000 + SOURCE_JOB_BATCH_SIZE, lastOutcome: "succeeded", backlogBatches: 1 });
+    expect(first.nextRunAt).toBeLessThanOrEqual(NOW);
+
+    await fireTick(t);
+    await runToTerminal(t, SUCCESS);
+    const drained = (await getJob(t))!;
+    expect(drained.cursorAt).toBe(NOW);
+    expect(drained.backlogBatches).toBeUndefined();
+    expect(drained.nextRunAt).toBeGreaterThan(NOW); // back to the schedule
+    expect(await sourceJobRuns(t)).toHaveLength(2);
+  });
+
+  it("does not chain a batch after a failure: the backlog waits for the schedule", async () => {
+    const t = convexTest(schema, modules);
+    await backlogOf(t, SOURCE_JOB_BATCH_SIZE + 5);
+    await runToTerminal(t, { status: "failed", summary: "boom", error: { code: "x", message: "boom" } });
+
+    const job = (await getJob(t))!;
+    expect(job).toMatchObject({ cursorAt: 1000, lastOutcome: "failed" });
+    expect(job.backlogBatches).toBeUndefined();
+    expect(job.nextRunAt).toBeGreaterThan(NOW);
+  });
+
+  it("stops chaining after the bound and resumes at the next scheduled run", async () => {
+    const t = convexTest(schema, modules);
+    await backlogOf(t, SOURCE_JOB_BATCH_SIZE + 5);
+    const job = (await getJob(t))!;
+    await t.run((ctx) =>
+      ctx.db.patch(job._id, { runtime: { ...(job.runtime as Record<string, unknown>), backlogBatches: MAX_BACKLOG_BATCHES } }),
+    );
+    await runToTerminal(t, SUCCESS);
+
+    const stopped = (await getJob(t))!;
+    expect(stopped).toMatchObject({ cursorAt: 1000 + SOURCE_JOB_BATCH_SIZE, lastOutcome: "succeeded" });
+    expect(stopped.backlogBatches).toBeUndefined();
+    expect(stopped.nextRunAt).toBeGreaterThan(NOW);
   });
 
   it("skips a tick while an execution is in flight, reports skipped and advances the next run", async () => {
