@@ -8,7 +8,7 @@ import { isKnownPlatform, PLATFORM_IDS } from "@opengroow/publisher-sdk";
 /** The closed set of Publishable kinds (V1). A new kind is a product change:
  * add it here and to the Publishable schema in `apps/convex/publishable.ts`
  * (a test pins both lists together). */
-export const PUBLISHABLE_KINDS = ["video", "image", "carousel"] as const;
+export const PUBLISHABLE_KINDS = ["video", "image", "carousel", "article"] as const;
 export type PublishableKind = (typeof PUBLISHABLE_KINDS)[number];
 
 /** The optional fields of each kind that a Template may guarantee through
@@ -18,14 +18,26 @@ export const OPTIONAL_PUBLISHABLE_FIELDS = {
   video: ["coverUrl", "title", "link", "tags"],
   image: ["variants", "link", "altText"],
   carousel: ["variants", "link", "altText"],
+  article: ["category"],
 } as const satisfies Record<PublishableKind, readonly string[]>;
 
-/** The media fields of each kind: the only ones `publish.resource` fetches and
- * `publish.resource.map` may map. The Agent never writes them. */
+/** The kinds whose whole Publishable belongs to the MCP (ADR-074): it comes
+ * from `publish.resource`, the Agent writes none of it. A rule of the kind,
+ * not a manifest option. */
+export const MCP_OWNED_PUBLISHABLE_KINDS = ["article"] as const satisfies readonly PublishableKind[];
+
+export function isMcpOwnedKind(kind: string): boolean {
+  return (MCP_OWNED_PUBLISHABLE_KINDS as readonly string[]).includes(kind);
+}
+
+/** The fields of each kind `publish.resource` fetches and `publish.resource.map`
+ * may map: the media, or every field of a kind the MCP owns. The Agent never
+ * writes them. */
 export const MEDIA_PUBLISHABLE_FIELDS = {
   video: ["videoUrl", "coverUrl"],
   image: ["imageUrl", "variants"],
   carousel: ["slideUrls", "variants"],
+  article: ["markdownUrl", "coverUrl", "slug", "title", "description", "category", "metadata"],
 } as const satisfies Record<PublishableKind, readonly string[]>;
 
 // A path in the MCP tool output: dot-separated keys, each optionally followed
@@ -120,6 +132,9 @@ export function publishDeclarationProblem(raw: unknown, at: string): string | un
     return `${at}.publish.media was replaced by publish.resource: { tool, idArg?, map? } — OpenGroow now calls the MCP tool \`resource.tool\` when the External Job completes (move your paths to resource.map)`;
   }
   if (publish.resource !== undefined) return publishResourceProblem(publish.resource, publish.kind as PublishableKind, at);
+  if (isMcpOwnedKind(publish.kind as string)) {
+    return `${at}.publish.resource is required for kind "${String(publish.kind)}": the MCP returns the whole Publishable, the Agent writes none of it`;
+  }
   return undefined;
 }
 

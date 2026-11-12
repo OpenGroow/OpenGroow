@@ -1,4 +1,5 @@
 import {
+  isMcpOwnedKind,
   MEDIA_PUBLISHABLE_FIELDS,
   OPTIONAL_PUBLISHABLE_FIELDS,
   readMediaPath,
@@ -32,7 +33,8 @@ export type MergedPublishable = { ok: true; publishable: Publishable } | { ok: f
  * Pure. The Agent's fields always win: the tool only contributes the media
  * fields of the kind (read from the recommended names or `resource.map`).
  * Nothing partial comes out: a missing or invalid media is one precise message
- * per field.
+ * per field. For a kind the MCP owns (`article`, ADR-074) there is no text
+ * part: the tool returns every field, and a draft is refused.
  */
 export function mergePublishResource(input: {
   missionType: string;
@@ -42,9 +44,19 @@ export function mergePublishResource(input: {
 }): MergedPublishable {
   const { declaration, missionType } = input;
   const { resource } = declaration;
-  const draft = publishableDraftSchema.safeParse(input.draft);
-  if (!draft.success) {
-    return { ok: false, message: `the in_progress publishable is not a valid text part: ${formatIssues(draft.error.issues)}` };
+  const ownedByMcp = isMcpOwnedKind(declaration.kind);
+  let text: Record<string, unknown> = {};
+  if (ownedByMcp) {
+    if (input.draft !== undefined) {
+      return { ok: false, message: `the Agent wrote a publishable, but the MCP owns the whole ${declaration.kind}` };
+    }
+    text = { kind: declaration.kind };
+  } else {
+    const draft = publishableDraftSchema.safeParse(input.draft);
+    if (!draft.success) {
+      return { ok: false, message: `the in_progress publishable is not a valid text part: ${formatIssues(draft.error.issues)}` };
+    }
+    text = draft.data;
   }
 
   const media: Record<string, unknown> = {};
@@ -52,7 +64,8 @@ export function mergePublishResource(input: {
   // A media is required unless the kind lists it among its optional fields
   // (`coverUrl`, `variants`). An image or carousel needs its default media or
   // variants: one of the two, checked once below.
-  const optional: readonly string[] = OPTIONAL_PUBLISHABLE_FIELDS[declaration.kind];
+  // `metadata` is free and never required.
+  const optional: readonly string[] = [...OPTIONAL_PUBLISHABLE_FIELDS[declaration.kind], "metadata"];
   const alternative = declaration.kind === "image" || declaration.kind === "carousel";
   for (const field of MEDIA_PUBLISHABLE_FIELDS[declaration.kind]) {
     const path = resource.map?.[field] ?? field;
@@ -69,7 +82,7 @@ export function mergePublishResource(input: {
   }
   if (problems.length > 0) return { ok: false, message: problems.join("; ") };
 
-  const merged = publishableSchema.safeParse({ ...media, ...draft.data });
+  const merged = publishableSchema.safeParse({ ...media, ...text });
   if (!merged.success) return { ok: false, message: formatIssues(merged.error.issues) };
   const kindError = validatePublishableKind(merged.data, { missionType, publish: declaration });
   return kindError ? { ok: false, message: kindError } : { ok: true, publishable: merged.data };

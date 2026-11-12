@@ -299,3 +299,37 @@ describe("Publishable variants (ADR-073)", () => {
     });
   });
 });
+
+describe("article Publishable (ADR-074)", () => {
+  const ARTICLE = {
+    kind: "article",
+    markdownUrl: "https://seo.example.com/articles/a1.md",
+    coverUrl: "https://seo.example.com/articles/a1/cover.webp",
+    slug: "how-to-grow",
+    title: "How to grow",
+    description: "A short guide",
+  };
+
+  it("accepts a valid article, with an optional category and a free metadata", () => {
+    expect(publishableSchema.safeParse(ARTICLE).success).toBe(true);
+    expect(publishableSchema.safeParse({ ...ARTICLE, category: "guides", metadata: { keyword: "grow" } }).success).toBe(true);
+  });
+
+  it("names each missing or invalid field", () => {
+    const { markdownUrl: _m, title: _t, ...partial } = ARTICLE;
+    const result = publishableSchema.safeParse({ ...partial, coverUrl: "not a url" });
+    expect(result.success).toBe(false);
+    const fields = result.error!.issues.map((issue) => issue.path.join("."));
+    expect(fields).toEqual(expect.arrayContaining(["markdownUrl", "title", "coverUrl"]));
+  });
+
+  it("refuses a slug that is not a URL path segment", () => {
+    expect(publishableSchema.safeParse({ ...ARTICLE, slug: "How to/grow" }).success).toBe(false);
+  });
+
+  it("tells the Agent not to write the publishable: the MCP returns all of it", () => {
+    const md = renderPublishableSection("article");
+    expect(md).toContain("Do not write `publishable`");
+    expect(md).not.toContain("```json");
+  });
+});

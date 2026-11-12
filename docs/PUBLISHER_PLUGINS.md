@@ -48,7 +48,7 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
 
 ## The two data files
 
-- `capabilities.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: { name, video, image, carousel, reasons? } } }` with levels `supported | uncertain | unsupported`. `unsupported` is set only when the service documents it; the core refuses it server-side and the dashboard disables the channel. Unknown platforms are `uncertain`.
+- `capabilities.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: { name, video, image, carousel, article, reasons? } } }` with levels `supported | uncertain | unsupported`. `unsupported` is set only when the service documents it; the core refuses it server-side and the dashboard disables the channel. Unknown platforms are `uncertain`.
 - `channel-options.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: ChannelOption[] } }` with option types `select | boolean | text`. The dashboard renders them on the Publishers page; the chosen values arrive in `request.settings`.
 
 Expose both on the plugin object (`capabilities`, `channelOptions`); the SDK provides `parseCapabilities` to validate the first.

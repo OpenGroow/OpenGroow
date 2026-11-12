@@ -142,6 +142,52 @@ describe("mergePublishResource", () => {
   });
 });
 
+describe("mergePublishResource — article, owned by the MCP (ADR-074)", () => {
+  const ARTICLE_OUTPUT = {
+    markdownUrl: "https://seo.example.com/a1.md",
+    coverUrl: "https://seo.example.com/a1.webp",
+    slug: "how-to-grow",
+    title: "How to grow",
+    description: "A short guide",
+  };
+  const merge = (toolOutput: unknown, resource: PublishDeclaration["resource"] = { tool: "get_article" }, draft?: unknown) =>
+    mergePublishResource({
+      missionType: "write_article",
+      declaration: { kind: "article", resource } as PublishDeclaration & { resource: NonNullable<PublishDeclaration["resource"]> },
+      draft,
+      toolOutput,
+    });
+
+  it("takes the whole Publishable from the tool, with no text part from the Agent", () => {
+    expect(merge({ ...ARTICLE_OUTPUT, category: "guides", extra: "ignored" })).toEqual({
+      ok: true,
+      publishable: { kind: "article", ...ARTICLE_OUTPUT, category: "guides" },
+    });
+  });
+
+  it("reads other names through resource.map", () => {
+    const result = merge(
+      { article: { md: ARTICLE_OUTPUT.markdownUrl, ...ARTICLE_OUTPUT, markdownUrl: undefined } },
+      { tool: "get_article", map: { markdownUrl: "article.md", coverUrl: "article.coverUrl", slug: "article.slug", title: "article.title", description: "article.description" } },
+    );
+    expect(result).toEqual({ ok: true, publishable: { kind: "article", ...ARTICLE_OUTPUT } });
+  });
+
+  it("fails per missing field, never on the optional category", () => {
+    const { slug: _s, title: _t, ...partial } = ARTICLE_OUTPUT;
+    const result = merge(partial);
+    expect(result).toEqual({
+      ok: false,
+      message:
+        'publishable.slug is missing: tool "get_article" returned nothing at "slug"; publishable.title is missing: tool "get_article" returned nothing at "title"',
+    });
+  });
+
+  it("refuses a text part written by the Agent", () => {
+    expect(merge(ARTICLE_OUTPUT, { tool: "get_article" }, { kind: "article", title: "x" })).toMatchObject({ ok: false });
+  });
+});
+
 describe("decideReconciliation — in_progress with publish.resource", () => {
   const ctx = (publish?: { kind: string; resource?: unknown }) => ({
     parent: { kind: "mission" as const, missionId: "m" as Id<"missions"> },
@@ -187,6 +233,31 @@ describe("decideReconciliation — in_progress with publish.resource", () => {
       ctx({ kind: "video", resource: { tool: "get_video" } }),
     );
     expect(decision.type).not.toBe("markAwaitingJob");
+  });
+
+  const article = { kind: "article", resource: { tool: "get_article" } };
+  const ARTICLE = {
+    kind: "article",
+    markdownUrl: "https://seo.example.com/a1.md",
+    coverUrl: "https://seo.example.com/a1.webp",
+    slug: "a1",
+    title: "A1",
+    description: "d",
+  };
+
+  it("parks an article job with no publishable: the MCP owns all of it", () => {
+    const decision = decideReconciliation(snapshot(inProgress), ctx(article));
+    expect(decision).toMatchObject({ type: "markAwaitingJob", job: { jobId: "j1" } });
+    expect((decision as { job: Record<string, unknown> }).job.publishableDraft).toBeUndefined();
+  });
+
+  it.each([
+    ["an in_progress", { ...inProgress, publishable: { kind: "article", title: "From the Agent" } }],
+    ["a success", { status: "success", summary: "done", artifact: { external: { service: "seo", id: "a1" }, publishable: ARTICLE } }],
+  ])("rejects a publishable the Agent wrote in %s RunResult of an article Mission type, for a retry", (_label, body) => {
+    const decision = decideReconciliation(snapshot(body), ctx(article));
+    expect(decision).toMatchObject({ type: "markFailedRetryable" });
+    expect((decision as { error: string }).error).toContain("must not write publishable");
   });
 
   it("is unchanged for a Mission type without resource", () => {

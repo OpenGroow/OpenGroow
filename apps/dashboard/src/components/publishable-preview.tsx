@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 
 /**
  * Preview of a Publishable (ADR-069) built from its references only: media is
@@ -20,13 +22,86 @@ function httpUrl(value: unknown): string | null {
   }
 }
 
-const KIND_LABEL: Record<string, string> = { video: "Final video", image: "Final image", carousel: "Final carousel" };
+const KIND_LABEL: Record<string, string> = {
+  video: "Final video",
+  image: "Final image",
+  carousel: "Final carousel",
+  article: "Final article",
+};
+
+type MarkdownState = { status: "loading" } | { status: "loaded"; content: string } | { status: "failed" };
+
+/** The markdown of an article, read by the browser from its public URL (ADR-074). */
+function useMarkdown(url: string | null): MarkdownState {
+  const [state, setState] = useState<MarkdownState>({ status: "loading" });
+  useEffect(() => {
+    if (!url) {
+      setState({ status: "failed" });
+      return;
+    }
+    const controller = new AbortController();
+    setState({ status: "loading" });
+    fetch(url, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setState({ status: "loaded", content: await response.text() });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setState({ status: "failed" });
+      });
+    return () => controller.abort();
+  }, [url]);
+  return state;
+}
+
+function ArticlePreview({ p }: { p: Record<string, unknown> }) {
+  const markdownUrl = httpUrl(p.markdownUrl);
+  const cover = httpUrl(p.coverUrl);
+  const markdown = useMarkdown(markdownUrl);
+  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  return (
+    <Card className="grid min-w-0 gap-4 p-6" data-testid="publishable-preview">
+      <h2 className="m-0 text-lg font-semibold text-foreground">{KIND_LABEL.article}</h2>
+      {cover && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover} alt="Article cover" className="w-full rounded-xl border border-border object-cover" />
+      )}
+      <div className="grid gap-1">
+        <p className="m-0 text-xl font-semibold text-foreground">{text(p.title)}</p>
+        <p className="m-0 text-sm text-muted-foreground">{text(p.description)}</p>
+        <p className="m-0 text-xs text-muted-foreground">
+          /{text(p.slug)}
+          {text(p.category) && <> · {text(p.category)}</>}
+        </p>
+      </div>
+      <div className="border-t border-border pt-4">
+        {markdown.status === "loading" && <p className="m-0 text-sm text-muted-foreground">Loading article…</p>}
+        {markdown.status === "loaded" && <WorkspaceMarkdown content={markdown.content} />}
+        {markdown.status === "failed" && (
+          <p className="m-0 text-sm text-status-warning" data-testid="publishable-article-error">
+            The article could not be loaded
+            {markdownUrl && (
+              <>
+                {" "}from{" "}
+                <a href={markdownUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4">
+                  its URL
+                </a>
+              </>
+            )}
+            .
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export function PublishablePreview({ publishable }: PreviewProps) {
   if (!publishable || typeof publishable !== "object") return null;
   const p = publishable as Record<string, unknown>;
   const kind = typeof p.kind === "string" ? p.kind : "";
   if (!(kind in KIND_LABEL)) return null;
+  if (kind === "article") return <ArticlePreview p={p} />;
 
   const caption = typeof p.caption === "string" ? p.caption : "";
   const title = typeof p.title === "string" ? p.title : "";

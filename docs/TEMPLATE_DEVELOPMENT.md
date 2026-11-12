@@ -129,10 +129,10 @@ On the Mission type's entry in `missionTypes[]`:
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `kind` | yes | One of `video`, `image`, `carousel` (closed set owned by OpenGroow; a new kind is a product change). |
+| `kind` | yes | One of `video`, `image`, `carousel`, `article` (closed set owned by OpenGroow; a new kind is a product change). An `article` requires `resource`: its MCP owns the whole Publishable (see below). |
 | `platforms` | no | The platforms the content can go to, among the identifiers of `PLATFORM_IDS` in `@opengroow/publisher-sdk` (`instagram`, `tiktok`, `pinterest`, `youtube`, `x`, …). A channel on another platform is disabled in the picker and refused by the server; `instagram` also covers `instagram-standalone`. Absent: every channel that can carry the kind. An unknown identifier is refused by `template:validate` (ADR-073). |
 | `require` | no | Optional fields of that kind your Template **guarantees**. A RunResult without one of them is rejected with a precise per-field error and the Agent retries. It can only tighten the format, never loosen it: required fields cannot be listed, `metadata` cannot be required, duplicates and unknown names are refused. |
-| `resource` | no | Asynchronous MCP only: `{ "tool", "idArg"?, "map"? }`. `tool` is an MCP tool of the server that runs the External Job; `idArg` is the argument carrying the job id (default `runId`); `map` is an optional map from a media field (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`) to a path in the tool output (dot keys, `[n]`, `[*]`; `[*]` only for `slideUrls`) for an MCP that does not use the recommended names. Requires an `externalJobsByMissionType` entry for the Mission type. Replaces the former `publish.media`, which is now rejected. See the next section. |
+| `resource` | no | Asynchronous MCP only: `{ "tool", "idArg"?, "map"? }`. `tool` is an MCP tool of the server that runs the External Job; `idArg` is the argument carrying the job id (default `runId`); `map` is an optional map from a media field (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`, or any field of an `article`) to a path in the tool output (dot keys, `[n]`, `[*]`; `[*]` only for `slideUrls`) for an MCP that does not use the recommended names. Requires an `externalJobsByMissionType` entry for the Mission type. Replaces the former `publish.media`, which is now rejected. See the next section. |
 
 Destinations are not declared: `targets` is rejected. Where content goes is chosen on the Mission or Schedule among the channels of the Project's Publisher. `validateManifest` (`packages/agent-templates/src/publish-declaration.ts`) checks all of this at Activation and `pnpm template:validate` reports it with the manifest path.
 
@@ -144,6 +144,8 @@ A long render cannot be copied by the Agent: it stops at `in_progress` and never
 2. OpenGroow polls the status tool until the job is terminal.
 3. On `completed`, OpenGroow calls `resource.tool` **once** with `{ [idArg]: jobId }` and merges the media into the Agent's `publishable`. The Agent's text is never overwritten. OpenGroow holds no URL template: it only talks to the MCP through MCP tools.
 4. OpenGroow validates the merged `publishable` (kind, URLs, `require`). The Mission becomes `needs_human_review`, or `failed` with a per-field message (`publishable.videoUrl is missing: tool "get_video" returned nothing at "videoUrl"`) when the tool failed or a media is missing or invalid; no partial `publishable` is kept. An unreachable MCP is retried on the next tick.
+
+**`article` (ADR-074): the MCP owns the whole Publishable.** The Agent writes no `publishable` at all, neither in its `in_progress` RunResult nor in a final one (one there is rejected and the Agent retries); `resource.tool` returns every field: `markdownUrl`, `coverUrl`, `slug` (lowercase, digits, hyphens), `title`, `description`, optional `category` and `metadata`. The markdown and cover URLs are read without a key, at commit time. `video`, `image` and `carousel` keep the split above.
 
 The URL is frozen at the end of the job and must stay valid until publication. The review shows the media from the `publishable` (never from `review.path`) for a Mission type that declares `publish`. A synchronous MCP is unchanged: the Agent sees the URLs in its own tool call and writes the whole `publishable`.
 

@@ -288,6 +288,45 @@ describe("MissionReviewContent", () => {
       expect(document.body.textContent).not.toContain("No previewable media");
     });
 
+    describe("article (ADR-074)", () => {
+      const ARTICLE = {
+        kind: "article",
+        markdownUrl: "https://seo.example.com/articles/a1.md",
+        coverUrl: "https://seo.example.com/articles/a1/cover.webp",
+        slug: "how-to-grow",
+        title: "How to grow",
+        description: "A short guide",
+        category: "guides",
+      };
+      afterEach(() => {
+        vi.unstubAllGlobals();
+      });
+
+      it("renders the article from its Publishable: cover, title, description and the markdown read from markdownUrl", async () => {
+        const fetchMock = vi.fn(async () => new Response("## First step\n\nDig a hole.", { status: 200 }));
+        vi.stubGlobal("fetch", fetchMock);
+        await renderWith(ARTICLE);
+        await act(async () => {});
+        const preview = document.querySelector('[data-testid="publishable-preview"]');
+        expect(fetchMock).toHaveBeenCalledWith(ARTICLE.markdownUrl, expect.anything());
+        expect((preview?.querySelector("img") as HTMLImageElement | null)?.src).toBe(ARTICLE.coverUrl);
+        expect(preview?.textContent).toContain("How to grow");
+        expect(preview?.textContent).toContain("A short guide");
+        expect(preview?.textContent).toContain("how-to-grow");
+        expect(preview?.textContent).toContain("First step");
+        expect(preview?.textContent).toContain("Dig a hole.");
+      });
+
+      it("says when the markdown cannot be read, with a link to it", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+        await renderWith(ARTICLE);
+        await act(async () => {});
+        const failure = document.querySelector('[data-testid="publishable-article-error"]');
+        expect(failure?.textContent).toContain("could not be loaded");
+        expect(failure?.querySelector("a")?.getAttribute("href")).toBe(ARTICLE.markdownUrl);
+      });
+    });
+
     it("reviews a Mission type that declares publish from its publishable only: no review.path content is loaded or shown", async () => {
       const base = getReviewMock.getMockImplementation()!;
       getReviewMock.mockImplementation(async () => ({

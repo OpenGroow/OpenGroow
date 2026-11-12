@@ -6,13 +6,15 @@
 
 /**
  * Known platform identifiers: those of the Postiz provider (`capabilities.json`
- * of the Postiz package). A new Publisher or a new platform adds its identifier
- * here; a test pins the reference Postiz capabilities against this list.
+ * of the Postiz package) and `github` (the GitHub Publisher, ADR-074). A new
+ * Publisher or a new platform adds its identifier here; a test pins the
+ * reference Postiz capabilities against this list.
  */
 export const PLATFORM_IDS = [
   "bluesky",
   "dribbble",
   "facebook",
+  "github",
   "gmb",
   "instagram",
   "instagram-standalone",

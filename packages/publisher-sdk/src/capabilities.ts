@@ -6,7 +6,7 @@
 
 import { matchPlatform } from "./platforms";
 
-export const CAPABILITY_KINDS = ["video", "image", "carousel"] as const;
+export const CAPABILITY_KINDS = ["video", "image", "carousel", "article"] as const;
 export type CapabilityKind = (typeof CAPABILITY_KINDS)[number];
 export type CapabilityLevel = "supported" | "uncertain" | "unsupported";
 export type Capability = { level: CapabilityLevel; reason?: string };
@@ -18,6 +18,7 @@ export type PlatformCapabilities = {
   video?: CapabilityLevel;
   image?: CapabilityLevel;
   carousel?: CapabilityLevel;
+  article?: CapabilityLevel;
   reasons?: Partial<Record<CapabilityKind, string>>;
 };
 export type CapabilitiesData = {
@@ -61,7 +62,7 @@ export function capabilityIn(data: CapabilitiesData | undefined, service: string
   }
   if (level === "unsupported") {
     const detail = entry?.reasons?.[kind as CapabilityKind];
-    return { level, reason: `${name} cannot publish ${kind === "image" ? "an" : "a"} ${kind}${detail ? ` (${detail})` : ""}` };
+    return { level, reason: `${name} cannot publish ${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}${detail ? ` (${detail})` : ""}` };
   }
   return { level };
 }
