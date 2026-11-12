@@ -700,6 +700,8 @@ export function MissionReviewContent({
     <>
       {reviewBar}
       <PublishablePreview publishable={publishable} missionId={missionId} />
+      {/* A Mission type that publishes mirrors indexing from its `publish.onPublished` call (ADR-074). */}
+      {publishDriven && <IndexingBadge indexing={mission.indexing} />}
       {!reviewArtifact?.available ? null : (
         <>
           {!publishDriven && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && <IndexingBadge indexing={mission.indexing} />}

@@ -10,15 +10,17 @@ import { PublicationList } from "../src/components/publication-list";
 
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
+const resendMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useAction: () => retryMock,
+  useAction: (ref: string) => (ref === "publication_notify_node.resendPublishedNotification" ? resendMock : retryMock),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     publications: { listForMission: "publications.listForMission" },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
   },
 }));
 
@@ -29,6 +31,8 @@ describe("PublicationList", () => {
     useQueryMock.mockReset();
     retryMock.mockReset();
     retryMock.mockResolvedValue({ ok: true });
+    resendMock.mockReset();
+    resendMock.mockResolvedValue({ ok: true });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -102,5 +106,24 @@ describe("PublicationList", () => {
     const link = container.querySelector('[data-testid="publication-instagram"] a');
     expect(link?.getAttribute("href")).toBe("https://postiz.example.com/p/abc");
     expect(link?.textContent).toBe("Open in Postiz");
+  });
+
+  it("warns that the producing service was not notified, and resends the call (ADR-074)", async () => {
+    useQueryMock.mockReturnValue([
+      { id: "p1", target: "github:acme/site", status: "published", notification: { status: "failed", service: "seo-mcp", error: "Notifying seo-mcp failed: 503" } },
+      { id: "p2", target: "instagram", status: "published", notification: { status: "sent", service: "seo-mcp" } },
+    ]);
+    await act(async () => root.render(<PublicationList missionId="m1" />));
+    const warning = container.querySelector('[data-testid="publication-notification-github:acme/site"]')!;
+    expect(warning.textContent).toContain("seo-mcp was not notified");
+    expect(warning.textContent).toContain("503");
+    expect(container.querySelector('[data-testid="publication-notification-instagram"]')).toBeNull();
+    expect(container.querySelector('[data-testid="publication-errors"]')).toBeNull();
+
+    await act(async () => {
+      (warning.querySelector("button") as HTMLButtonElement).click();
+    });
+    expect(resendMock).toHaveBeenCalledWith({ publicationId: "p1" });
+    expect(retryMock).not.toHaveBeenCalled();
   });
 });

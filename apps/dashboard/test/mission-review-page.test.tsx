@@ -52,6 +52,7 @@ vi.mock("@convex/_generated/api", () => ({
       loadArticleMarkdown: "missions_node.loadArticleMarkdown",
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
     publishers: { get: "publishers.get" },
     publisher_packages: { list: "publisher_packages.list" },
     publications: {

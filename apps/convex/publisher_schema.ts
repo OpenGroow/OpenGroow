@@ -15,6 +15,15 @@ export const publicationStatusV = v.union(
 );
 export type PublicationStatus = Infer<typeof publicationStatusV>;
 
+/** The `publish.onPublished` call of a Publication: `service` is the notified MCP server. */
+export const publicationNotificationV = v.object({
+  status: v.union(v.literal("sending"), v.literal("sent"), v.literal("failed")),
+  service: v.string(),
+  error: v.optional(v.string()),
+  updatedAt: v.number(),
+});
+export type PublicationNotification = Infer<typeof publicationNotificationV>;
+
 // Publisher tables (ADR-069), kept apart from schema.ts so publishing slices
 // stay localized. One Publisher per Project (V1).
 export const publisherTables = {
@@ -58,6 +67,10 @@ export const publisherTables = {
     // The window of the last POST /posts attempt: when it started and the date it asked for.
     attemptStartedAt: v.optional(v.number()),
     attemptDate: v.optional(v.number()),
+    // The `publish.onPublished` call made once this Publication was published
+    // (ADR-074, #62): its presence is what prevents a second call on a replay.
+    // Never blocking: `failed` is a warning, the Publication stays published.
+    notification: v.optional(publicationNotificationV),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -164,3 +164,53 @@ describe("readMediaPath", () => {
     expect(readMediaPath({ s: [{ url: "a" }, {}] }, "s[*].url")).toBeUndefined();
   });
 });
+
+// Issue #62, ADR-074: `publish.onPublished` notifies the producing service once
+// a Publication is published. Refused at Activation when malformed.
+describe("validateManifest — missionTypes[].publish.onPublished", () => {
+  const withServer = (onPublished: unknown) => ({
+    ...manifestWith({ kind: "image", onPublished }),
+    mcpServers: [{ name: "mcp", transport: "streamable-http", url: "http://localhost/mcp" }],
+  });
+  const reasonOf = (onPublished: unknown) =>
+    (validateManifest(withServer(onPublished)) as { ok: boolean; reason?: string }).reason;
+
+  it("accepts a POST to a declared server with the publication placeholders", () => {
+    const result = validateManifest(
+      withServer({
+        server: "mcp",
+        method: "POST",
+        path: "/articles/{id}/published",
+        body: { url: "{publication.externalUrl}", sha: "{publication.externalId}" },
+        responseIndexingField: "indexing",
+      }),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a server the Template does not declare", () => {
+    expect(reasonOf({ server: "other", method: "POST", path: "/x" })).toContain('onPublished.server "other" is not declared in mcpServers');
+  });
+
+  it("refuses a method other than POST", () => {
+    expect(reasonOf({ server: "mcp", method: "GET", path: "/x" })).toContain("onPublished.method must be \"POST\"");
+  });
+
+  it("refuses a path that is not relative to the server", () => {
+    expect(reasonOf({ server: "mcp", method: "POST", path: "https://evil.example.com/x" })).toContain("onPublished.path must start with /");
+  });
+
+  it("refuses an unknown placeholder, in the path or the body", () => {
+    expect(reasonOf({ server: "mcp", method: "POST", path: "/a/{input.date}" })).toContain('"{input.date}"');
+    expect(reasonOf({ server: "mcp", method: "POST", path: "/a", body: { u: "{publication.status}" } })).toContain('"{publication.status}"');
+  });
+
+  it("refuses a body that is not a map of strings", () => {
+    expect(reasonOf({ server: "mcp", method: "POST", path: "/a", body: { n: 1 } })).toContain("onPublished.body");
+  });
+
+  it("refuses an unknown key and a non-string responseIndexingField", () => {
+    expect(reasonOf({ server: "mcp", method: "POST", path: "/a", retries: 3 })).toContain('unknown key "retries"');
+    expect(reasonOf({ server: "mcp", method: "POST", path: "/a", responseIndexingField: 1 })).toContain("responseIndexingField");
+  });
+});

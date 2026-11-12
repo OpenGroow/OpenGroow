@@ -15,6 +15,7 @@ import type * as auth_config from "../auth_config.js";
 import type * as auth_node from "../auth_node.js";
 import type * as auth_registration_lock from "../auth_registration_lock.js";
 import type * as auth_registration_policy from "../auth_registration_policy.js";
+import type * as bounded_http_call from "../bounded_http_call.js";
 import type * as brand_cores from "../brand_cores.js";
 import type * as command_batching from "../command_batching.js";
 import type * as command_dispatch_utils from "../command_dispatch_utils.js";
@@ -95,6 +96,8 @@ import type * as project_provider_operations from "../project_provider_operation
 import type * as project_templates from "../project_templates.js";
 import type * as project_templates_node from "../project_templates_node.js";
 import type * as projects from "../projects.js";
+import type * as publication_notifications from "../publication_notifications.js";
+import type * as publication_notify_node from "../publication_notify_node.js";
 import type * as publication_polling from "../publication_polling.js";
 import type * as publication_polling_node from "../publication_polling_node.js";
 import type * as publication_targets from "../publication_targets.js";
@@ -162,6 +165,7 @@ declare const fullApi: ApiFromModules<{
   auth_node: typeof auth_node;
   auth_registration_lock: typeof auth_registration_lock;
   auth_registration_policy: typeof auth_registration_policy;
+  bounded_http_call: typeof bounded_http_call;
   brand_cores: typeof brand_cores;
   command_batching: typeof command_batching;
   command_dispatch_utils: typeof command_dispatch_utils;
@@ -242,6 +246,8 @@ declare const fullApi: ApiFromModules<{
   project_templates: typeof project_templates;
   project_templates_node: typeof project_templates_node;
   projects: typeof projects;
+  publication_notifications: typeof publication_notifications;
+  publication_notify_node: typeof publication_notify_node;
   publication_polling: typeof publication_polling;
   publication_polling_node: typeof publication_polling_node;
   publication_targets: typeof publication_targets;

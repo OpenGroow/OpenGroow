@@ -4,6 +4,7 @@ import { internalMutation, internalQuery, mutation, query, type QueryCtx } from 
 import { publishableForPlatform } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
+import { publicNotificationOf, scheduleOnPublished } from "./publication_notifications.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
 import { renderPostUrl } from "@opengroow/publisher-sdk";
@@ -59,6 +60,7 @@ export const listForMission = query({
         : {}),
       scheduledAt: row.scheduledAt,
       error: row.error,
+      ...publicNotificationOf(row, Date.now()),
     }));
   },
 });
@@ -385,6 +387,8 @@ export const finish = internalMutation({
       ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined } : {}),
       updatedAt: Date.now(),
     });
+    const updated = await ctx.db.get(publicationId);
+    if (updated) await scheduleOnPublished(ctx, updated);
 
     const all = await ctx.db
       .query("publications")
@@ -396,3 +400,4 @@ export const finish = internalMutation({
     }
   },
 });
+
