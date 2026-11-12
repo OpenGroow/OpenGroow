@@ -690,9 +690,11 @@ export default defineSchema({
     // indexes rather than a post-read `.filter()` (`_generated/ai/guidelines.md`,
     // "Query guidelines"), so a paginated page holds only the caller's rows.
   })
-    .index("by_instance_owner_capturedAt", ["instanceId", "ownerId", "capturedAt"])
+    // The Sources page lists the most recently added first: a Source ingested
+    // late (a backlog drained after an outage) still shows at the top.
+    .index("by_instance_owner_createdAt", ["instanceId", "ownerId", "createdAt"])
     // Family-filtered list, and the distinct-family walk of `listFamilies`.
-    .index("by_instance_owner_family_capturedAt", ["instanceId", "ownerId", "family", "capturedAt"])
+    .index("by_instance_owner_family_createdAt", ["instanceId", "ownerId", "family", "createdAt"])
     .index("by_instance_template_retry", ["instanceId", "templateId", "retryRequested"])
     // The Sources of an Agent still waiting on their enrichment (`processing`).
     .index("by_instance_template_status", ["instanceId", "templateId", "status"])

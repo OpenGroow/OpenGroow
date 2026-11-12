@@ -107,7 +107,7 @@ export const getForEnrichment = internalQuery({
 const MAX_FAMILIES = 100;
 
 /**
- * Recent Sources of every Agent in a Project, most-recently-captured first,
+ * Recent Sources of every Agent in a Project, most-recently-added first,
  * paginated by cursor. Ownership-scoped like `observations.listByInstance`
  * (an empty finished page for a stranger or an unowned instance). Ownership
  * and the optional family filter are both served by indexes, never a
@@ -122,7 +122,7 @@ export const listByInstance = query({
     if (family !== undefined) {
       return await ctx.db
         .query("sources")
-        .withIndex("by_instance_owner_family_capturedAt", (q) =>
+        .withIndex("by_instance_owner_family_createdAt", (q) =>
           q.eq("instanceId", args.instanceId).eq("ownerId", ownerId).eq("family", family),
         )
         .order("desc")
@@ -130,7 +130,7 @@ export const listByInstance = query({
     }
     return await ctx.db
       .query("sources")
-      .withIndex("by_instance_owner_capturedAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
+      .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
       .order("desc")
       .paginate(args.paginationOpts);
   },
@@ -152,7 +152,7 @@ export const listFamilies = query({
       const last = families.at(-1);
       const next = await ctx.db
         .query("sources")
-        .withIndex("by_instance_owner_family_capturedAt", (q) => {
+        .withIndex("by_instance_owner_family_createdAt", (q) => {
           const owned = q.eq("instanceId", args.instanceId).eq("ownerId", ownerId);
           return last === undefined ? owned : owned.gt("family", last);
         })
