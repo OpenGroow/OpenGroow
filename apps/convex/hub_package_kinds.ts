@@ -83,6 +83,8 @@ export type PublisherMeta = {
   postUrl?: string;
   /** The logo, an image data URI (manifest `icon`). */
   icon?: string;
+  /** False when the service cannot publish later (manifest `scheduling`): a `publishAt` is refused on its channels. */
+  scheduling?: false;
   capabilities: CapabilitiesData;
   channelOptions: ChannelOptionsData;
 };
@@ -99,6 +101,7 @@ export function describe(kind: HubPackageKind, files: readonly PackageFile[]): P
         name: manifest.manifest.name,
         ...(manifest.manifest.postUrl ? { postUrl: manifest.manifest.postUrl } : {}),
         ...(manifest.manifest.icon ? { icon: manifest.manifest.icon } : {}),
+        ...(manifest.manifest.scheduling === false ? { scheduling: false as const } : {}),
         capabilities: parseCapabilities(json("data/capabilities.json")),
         channelOptions: json("data/channel-options.json") as ChannelOptionsData,
       };

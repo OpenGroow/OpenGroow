@@ -7,6 +7,7 @@ import type { QueryCtx } from "./_generated/server.js";
 import { capabilityFor } from "@opengroow/publisher-sdk";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { effectivePublishAt } from "./publish_at.js";
 
 /** The Publish targets of a Mission or Schedule payload: `payload.publishTargets`,
  * chosen by the human among the Publisher's channels. Agents never choose them,
@@ -82,4 +83,31 @@ export async function assertPayloadChannelsSupportMissionType(
     .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
     .unique();
   await assertChannelsSupportKind(ctx, publisher, targets, declaration.kind, declaration.platforms);
+}
+
+/** Refuses a `publishAt` on channels of a Publisher that cannot schedule (manifest `scheduling: false`, ADR-074:
+ * a GitHub commit is immediate). A date already past is not a schedule (it publishes now) and passes. */
+export async function assertSchedulable(
+  ctx: QueryCtx,
+  publisher: { adapter: string } | null | undefined,
+  targets: readonly string[],
+  publishAt: number | undefined,
+): Promise<void> {
+  if (!publisher || publishAt === undefined || targets.length === 0) return;
+  const meta = await publisherMetaOf(ctx, publisher.adapter);
+  if (meta?.scheduling !== false) return;
+  const channels = targets.map((t) => `"${t}"`).join(", ");
+  throw new Error(`${meta.name} cannot schedule a post: remove the publication date (channel ${channels})`);
+}
+
+/** Same check on a Mission or Schedule payload: its `publishTargets` and its `publishAt`. */
+export async function assertPayloadSchedulable(ctx: QueryCtx, instanceId: string, payload: unknown): Promise<void> {
+  const targets = effectivePublishTargets(payload);
+  const publishAt = effectivePublishAt(payload, Date.now());
+  if (targets.length === 0 || publishAt === undefined) return;
+  const publisher = await ctx.db
+    .query("publishers")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .unique();
+  await assertSchedulable(ctx, publisher, targets, publishAt);
 }

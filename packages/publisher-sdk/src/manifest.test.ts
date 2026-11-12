@@ -57,6 +57,17 @@ describe("manifest icon", () => {
   });
 });
 
+describe("manifest scheduling", () => {
+  it("keeps a service that cannot schedule, and leaves the default (can schedule) implicit", () => {
+    expect(parsePublisherManifest({ ...valid, scheduling: false })).toEqual({ ok: true, manifest: { ...valid, scheduling: false } });
+    expect(parsePublisherManifest({ ...valid, scheduling: true })).toEqual({ ok: true, manifest: valid });
+  });
+
+  it("refuses a scheduling that is not a boolean", () => {
+    expect(parsePublisherManifest({ ...valid, scheduling: "no" }).ok).toBe(false);
+  });
+});
+
 describe("renderPostUrl", () => {
   it("strips trailing slashes from the connection URL and encodes the id", () => {
     expect(renderPostUrl("{url}/p/{id}", { url: "https://postiz.example.com//" }, "a b/c")).toBe("https://postiz.example.com/p/a%20b%2Fc");

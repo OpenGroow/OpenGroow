@@ -26,6 +26,12 @@ export type PublisherPackageManifest = {
    * logo as-is, so it travels inside the manifest.
    */
   icon?: string;
+  /**
+   * False when the service cannot publish at a later date (a GitHub commit is
+   * immediate, ADR-074): the core then refuses a `publishAt` on its channels.
+   * Absent means the service can schedule.
+   */
+  scheduling?: false;
 };
 
 export type ManifestResult = { ok: true; manifest: PublisherPackageManifest } | { ok: false; error: string };
@@ -70,9 +76,19 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
   if (m.icon !== undefined && !isValidIcon(m.icon)) {
     return { ok: false, error: `The manifest \`icon\` must be a png, webp, jpeg or svg data URI of at most ${MAX_ICON_LENGTH} characters` };
   }
+  if (m.scheduling !== undefined && typeof m.scheduling !== "boolean") {
+    return { ok: false, error: "The manifest `scheduling` must be a boolean" };
+  }
   return {
     ok: true,
-    manifest: { id: m.id, name: m.name, contractVersion: m.contractVersion, ...(postUrl ? { postUrl } : {}), ...(m.icon ? { icon: m.icon } : {}) },
+    manifest: {
+      id: m.id,
+      name: m.name,
+      contractVersion: m.contractVersion,
+      ...(postUrl ? { postUrl } : {}),
+      ...(m.icon ? { icon: m.icon } : {}),
+      ...(m.scheduling === false ? { scheduling: false as const } : {}),
+    },
   };
 }
 

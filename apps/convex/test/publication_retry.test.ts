@@ -212,6 +212,21 @@ describe("retry reconciles before sending again", () => {
     expect((await ctx.owner.query(api.missions.get, { missionId: ctx.missionId }))?.status).toBe("done");
   });
 
+  it("gives findPost what was sent: the channel's service and settings, and the Publishable (ADR-074)", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const findPost = vi.spyOn(postizPlugin, "findPost");
+    const ctx = await seed();
+    const postiz = fakePostiz({ mode: "drop-after-accept" });
+    await expect(publish(ctx)).rejects.toThrow();
+    postiz.state.mode = "ok";
+    await retry(ctx);
+    expect(findPost).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ channelId: "ch-1", channelService: "instagram", publishable: PUBLISHABLE, caption: "Hello world" }),
+    );
+    findPost.mockRestore();
+  });
+
   it("attaches a scheduled post as scheduled", async () => {
     const publishAt = Date.now() + 2 * 3_600_000;
     const ctx = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt } });
