@@ -252,7 +252,7 @@ const channelWorkflow = createChannelWorkflow({
 });
 
 const workspaceWorkflow = createWorkspaceWorkflow();
-const mcpWorkflow = createMcpWorkflow();
+const mcpWorkflow = createMcpWorkflow({ log });
 const pluginsWorkflow = createPluginsWorkflow({ log });
 const openClawWorkflow = createOpenClawWorkflow({
   channelLoginTimeoutMs: CHANNEL_LOGIN_TIMEOUT_MS,
@@ -447,6 +447,13 @@ async function handleRequest(req, res) {
 async function start() {
   fs.mkdirSync(dirname(SOCKET_PATH), { recursive: true });
   await authWorkflow.load();
+  // Before the socket exists, so before entrypoint.sh starts the Gateway:
+  // MCP servers on the host must be relayed by the time OpenClaw reads them.
+  try {
+    await mcpWorkflow.start();
+  } catch (error) {
+    warn(`MCP loopback relays not started: ${toErrorMessage(error)}`);
+  }
   try {
     fs.unlinkSync(SOCKET_PATH);
   } catch (error) {

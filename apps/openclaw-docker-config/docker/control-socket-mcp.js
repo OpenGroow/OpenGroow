@@ -2,7 +2,9 @@ const fsPromises = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const MCP_KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+const { toLoopbackServers } = require("./control-socket-mcp-loopback");
+
+const MCP_KEY_RE =/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
 
 function getHomeDir(options = {}) {
   return (
@@ -80,8 +82,13 @@ function normalizeKeys(keys) {
   return Array.from(new Set(normalized));
 }
 
+/**
+ * Merges MCP servers into openclaw.json. A server on the Docker host is
+ * stored with its loopback URL (control-socket-mcp-loopback.js explains why);
+ * `relayPorts` lists the ports the caller must relay to the host.
+ */
 async function mergeMcpServers({ servers }, options = {}) {
-  const normalizedServers = normalizeServers(servers);
+  const { servers: normalizedServers, ports: relayPorts } = toLoopbackServers(normalizeServers(servers));
   const config = await readOpenClawConfig(options);
   const currentMcp =
     config.mcp && typeof config.mcp === "object" && !Array.isArray(config.mcp)
@@ -103,7 +110,25 @@ async function mergeMcpServers({ servers }, options = {}) {
   };
   await writeOpenClawConfig(config, options);
 
-  return { mergedKeys: Object.keys(normalizedServers) };
+  return { mergedKeys: Object.keys(normalizedServers), relayPorts };
+}
+
+/**
+ * Brings the MCP servers already in openclaw.json to their loopback form, for
+ * configs written before the relay existed. Rewrites the file only when a URL
+ * changed, and returns every port to relay.
+ */
+async function loopbackExistingMcpServers(options = {}) {
+  const config = await readOpenClawConfig(options);
+  const current = config.mcp?.servers;
+  if (!current || typeof current !== "object" || Array.isArray(current)) return { relayPorts: [] };
+  const { servers, ports } = toLoopbackServers(current);
+  const changed = Object.keys(servers).some((key) => servers[key] !== current[key]);
+  if (changed) {
+    config.mcp = { ...config.mcp, servers };
+    await writeOpenClawConfig(config, options);
+  }
+  return { relayPorts: ports };
 }
 
 async function removeMcpServers({ keys }, options = {}) {
@@ -138,6 +163,7 @@ async function removeMcpServers({ keys }, options = {}) {
 }
 
 module.exports = {
+  loopbackExistingMcpServers,
   mergeMcpServers,
   removeMcpServers,
   readOpenClawConfig,

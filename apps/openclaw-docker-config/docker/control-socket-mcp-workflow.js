@@ -1,13 +1,24 @@
-const { mergeMcpServers, removeMcpServers } = require("./control-socket-mcp");
+const { loopbackExistingMcpServers, mergeMcpServers, removeMcpServers } = require("./control-socket-mcp");
+const { createLoopbackRelays } = require("./control-socket-mcp-loopback");
 const { probeMcpServers } = require("./control-socket-mcp-probe");
 
 function createMcpWorkflow(options = {}) {
   const mcpOptions = { homeDir: options.homeDir };
   const probeOptions = { runProbe: options.runProbe };
+  const relays = options.relays ?? createLoopbackRelays({ log: options.log });
+
+  // Runs before the OpenClaw Gateway starts (entrypoint.sh): the config it
+  // reads already points at the relays, and they are already listening.
+  async function start() {
+    const { relayPorts } = await loopbackExistingMcpServers(mcpOptions);
+    return relays.ensure(relayPorts);
+  }
 
   async function merge(body = {}) {
     try {
-      const result = await mergeMcpServers({ servers: body.servers }, mcpOptions);
+      const { mergedKeys, relayPorts } = await mergeMcpServers({ servers: body.servers }, mcpOptions);
+      const relayed = await relays.ensure(relayPorts);
+      const result = { mergedKeys, relays: relayed };
       return { status: 200, body: { ok: true, data: result } };
     } catch (error) {
       return {
@@ -52,7 +63,7 @@ function createMcpWorkflow(options = {}) {
     }
   }
 
-  return { merge, remove, probe };
+  return { start, merge, remove, probe };
 }
 
 module.exports = { createMcpWorkflow };

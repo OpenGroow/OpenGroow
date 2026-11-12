@@ -54,6 +54,7 @@ COPY docker/control-socket-channel-workflow.js /opt/openclaw-control/control-soc
 COPY docker/control-socket-auth-workflow.js /opt/openclaw-control/control-socket-auth-workflow.js
 COPY docker/control-socket-mcp.js /opt/openclaw-control/control-socket-mcp.js
 COPY docker/control-socket-mcp-probe.js /opt/openclaw-control/control-socket-mcp-probe.js
+COPY docker/control-socket-mcp-loopback.js /opt/openclaw-control/control-socket-mcp-loopback.js
 COPY docker/control-socket-speech-to-text.js /opt/openclaw-control/control-socket-speech-to-text.js
 COPY docker/control-socket-workspaces.js /opt/openclaw-control/control-socket-workspaces.js
 COPY docker/control-socket-template-instructions.js /opt/openclaw-control/control-socket-template-instructions.js
