@@ -1,3 +1,5 @@
+import { ON_PUBLISHED_PLACEHOLDERS, type OnPublishedPlaceholder } from "./publish-declaration";
+
 /**
  * Interpolation of review-action effects (path and body). The only references
  * are `{id}`, `{input.<key>}` and `{payload.<key>}`: the external job, what the
@@ -46,4 +48,30 @@ export function interpolateReviewTemplate(
     const value = own(missionPayload, ref.slice("payload.".length));
     return encodeValue(typeof value === "string" ? value : "");
   });
+}
+
+/**
+ * Interpolation of a `publish.onPublished` path or body value (ADR-074, #62).
+ * The only references are `{id}` (the Mission's external id) and
+ * `{publication.externalUrl}` / `{publication.externalId}`; anything else is
+ * refused at Activation. Same single pass and encoding rules as
+ * `interpolateReviewTemplate`; a missing value resolves to "".
+ */
+export function interpolateOnPublishedTemplate(
+  template: string,
+  values: { id: string; externalUrl?: string; externalId?: string },
+  encode: boolean,
+): string {
+  const resolved: Record<OnPublishedPlaceholder, string | undefined> = {
+    id: values.id,
+    "publication.externalUrl": values.externalUrl,
+    "publication.externalId": values.externalId,
+  };
+  return template.replace(/\{([^}]*)\}/g, (match, ref: string) =>
+    (ON_PUBLISHED_PLACEHOLDERS as readonly string[]).includes(ref)
+      ? encode
+        ? encodeURIComponent(resolved[ref as OnPublishedPlaceholder] ?? "")
+        : (resolved[ref as OnPublishedPlaceholder] ?? "")
+      : match,
+  );
 }

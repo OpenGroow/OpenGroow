@@ -8,7 +8,7 @@ import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import type { FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { indexingOutcomeZ } from "./indexing.js";
+import { callBoundedHttpEffect } from "./bounded_http_call.js";
 import {
   enqueueCommandMutation,
   enqueueInteractiveCommand,
@@ -379,8 +379,6 @@ export const loadReviewContent = action({
 // Generic review action execution (ADR-020)
 // ---------------------------------------------------------------------------
 
-const REVIEW_ACTION_TIMEOUT_MS = 120_000;
-
 /**
  * Load a Mission and resolve its Template. Shared prologue of every
  * review-action entrypoint, so the load/resolve sequence — and its error
@@ -522,107 +520,36 @@ async function executeReviewAction(
     // At this point effect is guaranteed to be a BoundedHttpEffect (not revision_run)
     const httpEffect = effect as import("@opengroow/agent-templates").BoundedHttpEffect;
 
-    // Resolve the MCP server config
-    const server = template.manifest.mcpServers.find((s) => s.name === httpEffect.server);
-    if (!server) {
-      throw new Error(
-        `Effect server "${httpEffect.server}" not found in template "${mission.templateId}" manifest`,
-      );
-    }
-    const baseUrl = resolveMcpActivationUrl(server);
-    const origin = new URL(baseUrl).origin;
-
     const missionPayload = (mission.payload ?? {}) as Record<string, unknown>;
     // Interpolate path: {id}, {input.<key>}, {payload.<key>} — URL-encode to prevent injection
-    const pathValue = interpolateReviewTemplate(httpEffect.path, externalId, userInput, true, missionPayload);
-    if (typeof pathValue !== "string") {
+    const path = interpolateReviewTemplate(httpEffect.path, externalId, userInput, true, missionPayload);
+    if (typeof path !== "string") {
       throw new Error("Review action path interpolation must resolve to a string");
     }
-    const path = pathValue;
-    const url = `${origin}${path}`;
-
-    // Resolve the apiKey from the ProjectAgent config
-    const projectAgent = await ctx.runQuery(getProjectAgentByInstanceAndTemplateQuery, {
-      instanceId: mission.instanceId,
-      templateId: mission.templateId,
-    });
-    const apiKeyRaw = projectAgent?.config?.apiKey;
-    const apiKey =
-      typeof apiKeyRaw === "string" && apiKeyRaw.length > 0 ? apiKeyRaw : undefined;
-
-    const headers: Record<string, string> = {
-      ...(server.headers ?? {}),
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      "Content-Type": "application/json",
-    };
 
     // Interpolate and build the request body (if declared)
-    let body: string | undefined;
+    let body: Record<string, unknown> | undefined;
     if (httpEffect.body) {
-      const resolved: Record<string, unknown> = {};
+      body = {};
       for (const [k, v] of Object.entries(httpEffect.body)) {
         const interpolated = interpolateReviewTemplate(v, externalId, userInput, false, missionPayload);
         // Omit empty optional inputs rather than sending empty string
         if (interpolated !== "") {
-          resolved[k] = interpolated;
+          body[k] = interpolated;
         }
       }
-      body = JSON.stringify(resolved);
     }
 
-    // Execute the HTTP effect with a timeout
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REVIEW_ACTION_TIMEOUT_MS);
-    let responseData: Record<string, unknown> = {};
-    try {
-      const response = await fetch(url, {
-        method: httpEffect.method,
-        headers,
-        ...(body !== undefined ? { body } : {}),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        let errorDetail = "";
-        try {
-          const errBody = (await response.json()) as Record<string, unknown>;
-          const detail = errBody.details ?? errBody.error;
-          if (detail !== undefined) {
-            errorDetail = ` — ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
-          }
-        } catch {
-          // Body may not be JSON
-        }
-        throw new Error(
-          `Action "${actionKey}" effect failed: ${response.status} ${response.statusText}${errorDetail}`,
-        );
-      }
-      if (httpEffect.responseIndexingField) {
-        try {
-          responseData = (await response.json()) as Record<string, unknown>;
-        } catch {
-          // Response may not be JSON — treat as no indexing data
-        }
-      }
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    // Extract optional indexing outcome from response
-    if (httpEffect.responseIndexingField) {
-      const rawIndexing = responseData[httpEffect.responseIndexingField];
-      if (rawIndexing !== undefined) {
-        // The field is optional, but a present-but-malformed payload signals an
-        // upstream contract regression — fail loudly rather than publish with
-        // dropped indexing data.
-        const parsed = indexingOutcomeZ.safeParse(rawIndexing);
-        if (!parsed.success) {
-          throw new Error(
-            `Action "${actionKey}" effect returned an invalid indexing outcome`,
-          );
-        }
-        indexingOutcome = parsed.data;
-      }
-    }
+    indexingOutcome = await callBoundedHttpEffect(ctx, {
+      mission,
+      template,
+      server: httpEffect.server,
+      method: httpEffect.method,
+      path,
+      ...(body !== undefined ? { body } : {}),
+      ...(httpEffect.responseIndexingField ? { responseIndexingField: httpEffect.responseIndexingField } : {}),
+      label: `Action "${actionKey}" effect`,
+    });
   }
 
   // --- Record a domain event before flipping mission state (idempotent) ---

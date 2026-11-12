@@ -98,7 +98,7 @@ By default a Template publishes through its own MCP. A Mission type can instead 
 | Who | Guarantees |
 | --- | --- |
 | **MCP** | Returns public HTTPS URLs reachable by Postiz. Recommended output names: `videoUrl`, `coverUrl`, `imageUrl`, `slideUrls` (ordered array). Not mandatory. |
-| **Manifest** | `publish.kind` (strict), `publish.require` (can only tighten), `publish.resource` (asynchronous MCP only: the tool OpenGroow calls once when the job completes to get the media). |
+| **Manifest** | `publish.kind` (strict), `publish.require` (can only tighten), `publish.resource` (asynchronous MCP only: the tool OpenGroow calls once when the job completes to get the media), `publish.onPublished` (optional: the endpoint OpenGroow calls once per Publication reaching `published`, see below). |
 | **Agent** | Synchronous MCP: returns the whole `artifact.publishable` valid for the kind (copies MCP fields 1:1, or translates another shape). Asynchronous MCP: writes only the text part, in its `in_progress` RunResult, never a media URL. Never publishes. |
 | **OpenGroow** | Validates `artifact.publishable` per kind (and `require`), retries the Agent with the error, then publishes through the Publisher. Refuses channels whose platform cannot carry the kind. |
 
@@ -146,6 +146,29 @@ A long render cannot be copied by the Agent: it stops at `in_progress` and never
 4. OpenGroow validates the merged `publishable` (kind, URLs, `require`). The Mission becomes `needs_human_review`, or `failed` with a per-field message (`publishable.videoUrl is missing: tool "get_video" returned nothing at "videoUrl"`) when the tool failed or a media is missing or invalid; no partial `publishable` is kept. An unreachable MCP is retried on the next tick.
 
 **`article` (ADR-074): the MCP owns the whole Publishable.** The Agent writes no `publishable` at all, neither in its `in_progress` RunResult nor in a final one (one there is rejected and the Agent retries); `resource.tool` returns every field: `markdownUrl`, `coverUrl`, `slug` (lowercase, digits, hyphens), `title`, `description`, optional `category` and `metadata`. The markdown and cover URLs are read without a key, at commit time. `video`, `image` and `carousel` keep the split above.
+
+#### Being told when it is published (`publish.onPublished`)
+
+A Mission type that declares `publish` may ask OpenGroow to call its MCP once each Publication becomes `published` (ADR-074), for example to update its own status or submit the URL for indexing:
+
+```json
+"publish": {
+  "kind": "article",
+  "resource": { "tool": "get_article" },
+  "onPublished": {
+    "server": "seo-mcp",
+    "method": "POST",
+    "path": "/articles/{id}/published",
+    "body": { "url": "{publication.externalUrl}", "commit": "{publication.externalId}" },
+    "responseIndexingField": "indexing"
+  }
+}
+```
+
+- `server` is one of the Template's `mcpServers`; the call is a REST `POST` to its origin with the Agent's credentials, as review effects (ADR-013).
+- Placeholders: `{id}` (the Mission's external id, `artifact.external.id`), `{publication.externalUrl}`, `{publication.externalId}`. Any other one is refused at Activation; a body field whose value is empty is left out. A call that uses `{publication.externalUrl}` waits until the Publication has its link (a Publisher may report the post published before its URL).
+- `responseIndexingField`: the response field mirrored on the Mission's `indexing` (ADR-015).
+- It is called once per Publication, never on a replay. It never blocks: a failed call leaves the Publication `published` and the Mission `done`, and the review shows "<Agent name> was not notified" with a button to resend it. **Make the endpoint idempotent.**
 
 The URL is frozen at the end of the job and must stay valid until publication. The review shows the media from the `publishable` (never from `review.path`) for a Mission type that declares `publish`. A synchronous MCP is unchanged: the Agent sees the URLs in its own tool call and writes the whole `publishable`.
 
