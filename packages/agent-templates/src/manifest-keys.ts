@@ -18,6 +18,7 @@ import type {
   MachineToolInstall,
   MachineToolRequirement,
   MachineToolSource,
+  MachineToolBin,
   MachineToolStep,
   MachineToolVersionCheck,
 } from "./machine-tool";
@@ -106,10 +107,11 @@ const STATUS_CHECK = keySetOf<StatusCheckContract>({ server: true, mcpTool: true
 const OPENCLAW_PROFILE = keySetOf<OpenClawProfile>({ toolDeny: true, execNode: true });
 const MACHINE_PREREQUISITE = keySetOf<MachinePrerequisite>({ name: true, minVersion: true, instructionsUrl: true, installCommand: true, externalPrerequisites: true, install: true });
 const MACHINE_EXTERNAL_PREREQUISITE = keySetOf<MachineExternalPrerequisite>({ name: true, instructionsUrl: true });
-const MACHINE_TOOL_INSTALL = keySetOf<MachineToolInstall>({ id: true, source: true, requires: true, bootstrap: true, versionCheck: true });
+const MACHINE_TOOL_INSTALL = keySetOf<MachineToolInstall>({ id: true, source: true, requires: true, bootstrap: true, versionCheck: true, bin: true });
 const MACHINE_TOOL_SOURCE = keySetOf<MachineToolSource>({ url: true, sha256: true });
 const MACHINE_TOOL_REQUIREMENT = keySetOf<MachineToolRequirement>({ name: true, check: true, instructionsUrl: true });
 const MACHINE_TOOL_STEP = keySetOf<MachineToolStep>({ label: true, run: true });
+const MACHINE_TOOL_BIN = keySetOf<MachineToolBin>({ name: true, target: true });
 const MACHINE_TOOL_VERSION_CHECK = keySetOf<MachineToolVersionCheck>({ run: true, pattern: true });
 const RUN_CONTEXT = keySetOf<RunContextDeclaration>({ heading: true, lines: true });
 const MANIFEST = keySetOf<AgentManifest>({
@@ -127,6 +129,7 @@ function machineToolKeyProblem(install: unknown, at: string): string | undefined
     () => eachItem(install.requires, `${at}.requires`, (item, p) => unknownKeyIn(item, MACHINE_TOOL_REQUIREMENT, p)),
     () => eachItem(install.bootstrap, `${at}.bootstrap`, (item, p) => unknownKeyIn(item, MACHINE_TOOL_STEP, p)),
     () => unknownKeyIn(install.versionCheck, MACHINE_TOOL_VERSION_CHECK, `${at}.versionCheck`),
+    () => eachItem(install.bin, `${at}.bin`, (item, p) => unknownKeyIn(item, MACHINE_TOOL_BIN, p)),
   );
 }
 

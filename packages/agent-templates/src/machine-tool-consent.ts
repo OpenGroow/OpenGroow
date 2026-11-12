@@ -27,6 +27,9 @@ export function describeMachineToolPlan(plan: MachineToolInstallPlan): string {
       `  $ ${shown(plan.versionCheck.run)}`,
     );
   }
+  if (plan.bins.length > 0) {
+    lines.push("", `Commands put on the PATH of the paired node, as launchers in ${quote(plan.binDir)}:`, ...plan.bins.map((b) => `  ${b.name} -> ${quote(b.target)}`));
+  }
   lines.push("", "If anything fails or you refuse, this computer is left unchanged.");
   return lines.join("\n");
 }
@@ -38,6 +41,6 @@ export function describeMachineToolUninstall(plan: MachineToolInstallPlan): stri
     "",
     `Directory: ${quote(plan.dir)}`,
     "",
-    `This directory and everything inside it will be deleted, recursively (including any virtual environment it holds). Nothing else is touched and no command runs.`,
+    `This directory and everything inside it will be deleted, recursively (including any virtual environment it holds).${plan.bins.length > 0 ? ` The launchers ${plan.bins.map((b) => quote(b.path)).join(", ")} are deleted too, if this tool created them.` : ""} Nothing else is touched and no command runs.`,
   ].join("\n");
 }

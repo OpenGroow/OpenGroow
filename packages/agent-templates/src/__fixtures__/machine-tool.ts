@@ -21,5 +21,6 @@ export const ANDROID_TOOL_FIXTURE = {
       },
     ],
     versionCheck: { run: ["{dir}/bin/opengroow-android", "--version"] },
+    bin: [{ name: "opengroow-android", target: "{dir}/bin/opengroow-android" }],
   },
 };

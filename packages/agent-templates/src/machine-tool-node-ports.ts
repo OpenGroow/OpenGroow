@@ -3,16 +3,22 @@
  * on the user's own computer (the paired node). Node-only.
  */
 import { spawn } from "node:child_process";
-import { mkdir, rename, rm, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile, access, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { MachineToolPorts } from "./machine-tool-install";
 
 export const DEFAULT_TOOLS_ROOT = join(homedir(), ".opengroow", "tools");
 
-export function nodeMachineToolPorts(toolsRoot: string = DEFAULT_TOOLS_ROOT): MachineToolPorts {
+export const DEFAULT_BIN_ROOT = join(homedir(), ".opengroow", "bin");
+
+export function nodeMachineToolPorts(
+  toolsRoot: string = DEFAULT_TOOLS_ROOT,
+  binRoot: string = DEFAULT_BIN_ROOT,
+): MachineToolPorts {
   return {
     toolsRoot,
+    binRoot,
     async download(url) {
       const response = await fetch(url, { redirect: "follow" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -22,6 +28,11 @@ export function nodeMachineToolPorts(toolsRoot: string = DEFAULT_TOOLS_ROOT): Ma
       exists: (path) => access(path).then(() => true, () => false),
       mkdir: async (path) => void (await mkdir(path, { recursive: true })),
       write: (path, bytes) => writeFile(path, bytes),
+      readText: (path) => readFile(path, "utf8").catch(() => undefined),
+      writeExecutable: async (path, text) => {
+        await writeFile(path, text);
+        await chmod(path, 0o755);
+      },
       rename,
       remove: (path) => rm(path, { recursive: true, force: true }),
     },
