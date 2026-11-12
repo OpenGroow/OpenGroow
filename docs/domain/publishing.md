@@ -55,6 +55,8 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 
 Whether a platform can carry a Publishable `kind` (`video`, `image`, `carousel`, `article`) is a property of the publishing service, so it is owned by the adapter, as **data**: `data/capabilities.json` of the Publisher package (Postiz: `packages/publisher/postiz` in the hub), stored with the installed package and read by the pure `capabilityIn(capabilities, service, kind)` (`packages/publisher-sdk`; no network, no per-platform branch, importable from Convex and the dashboard). It answers `supported`, `uncertain` or `unsupported`, with a human reason for the last two. An unknown adapter, platform or kind is `uncertain`.
 
+- A package that predates a kind has no entry for it, so its channels are `uncertain` for that kind (allowed, with a warning) until the package is updated: Postiz declares `article: unsupported` from 1.0.6.
+
 Data shape (`schemaVersion: 1`, validated by `parseCapabilities`):
 
 ```json

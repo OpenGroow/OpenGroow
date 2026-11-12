@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAction } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { Card } from "@/components/ui/card";
 import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 
@@ -10,7 +13,11 @@ import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
  * OpenGroow (ADR-010). Only http(s) URLs are rendered.
  */
 
-type PreviewProps = { publishable: unknown };
+type PreviewProps = { publishable: unknown; missionId: string };
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
 
 function httpUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -31,34 +38,29 @@ const KIND_LABEL: Record<string, string> = {
 
 type MarkdownState = { status: "loading" } | { status: "loaded"; content: string } | { status: "failed" };
 
-/** The markdown of an article, read by the browser from its public URL (ADR-074). */
-function useMarkdown(url: string | null): MarkdownState {
+/** The markdown of an article, read by Convex from its public URL (ADR-074): the dashboard talks only to Convex. */
+function useArticleMarkdown(missionId: string, markdownUrl: string | null): MarkdownState {
+  const loadArticleMarkdown = useAction(api.missions_node.loadArticleMarkdown);
   const [state, setState] = useState<MarkdownState>({ status: "loading" });
   useEffect(() => {
-    if (!url) {
-      setState({ status: "failed" });
-      return;
-    }
-    const controller = new AbortController();
+    let current = true;
     setState({ status: "loading" });
-    fetch(url, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        setState({ status: "loaded", content: await response.text() });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setState({ status: "failed" });
-      });
-    return () => controller.abort();
-  }, [url]);
+    loadArticleMarkdown({ missionId: missionId as Id<"missions"> })
+      .then((result) => current && setState({ status: "loaded", content: result.content }))
+      .catch(() => current && setState({ status: "failed" }));
+    return () => {
+      current = false;
+    };
+    // loadArticleMarkdown is omitted: useAction returns a stable reference. A new markdownUrl reloads it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missionId, markdownUrl]);
   return state;
 }
 
-function ArticlePreview({ p }: { p: Record<string, unknown> }) {
+function ArticlePreview({ p, missionId }: { p: Record<string, unknown>; missionId: string }) {
   const markdownUrl = httpUrl(p.markdownUrl);
   const cover = httpUrl(p.coverUrl);
-  const markdown = useMarkdown(markdownUrl);
-  const text = (value: unknown) => (typeof value === "string" ? value : "");
+  const markdown = useArticleMarkdown(missionId, markdownUrl);
   return (
     <Card className="grid min-w-0 gap-4 p-6" data-testid="publishable-preview">
       <h2 className="m-0 text-lg font-semibold text-foreground">{KIND_LABEL.article}</h2>
@@ -96,15 +98,15 @@ function ArticlePreview({ p }: { p: Record<string, unknown> }) {
   );
 }
 
-export function PublishablePreview({ publishable }: PreviewProps) {
+export function PublishablePreview({ publishable, missionId }: PreviewProps) {
   if (!publishable || typeof publishable !== "object") return null;
   const p = publishable as Record<string, unknown>;
   const kind = typeof p.kind === "string" ? p.kind : "";
   if (!(kind in KIND_LABEL)) return null;
-  if (kind === "article") return <ArticlePreview p={p} />;
+  if (kind === "article") return <ArticlePreview p={p} missionId={missionId} />;
 
-  const caption = typeof p.caption === "string" ? p.caption : "";
-  const title = typeof p.title === "string" ? p.title : "";
+  const caption = text(p.caption);
+  const title = text(p.title);
 
   const imageOf = (src: string, alt: string, className: string) => (
     // eslint-disable-next-line @next/next/no-img-element

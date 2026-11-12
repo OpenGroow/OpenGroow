@@ -21,6 +21,7 @@ const useMutationMock = vi.fn();
 const routerPushMock = vi.fn();
 const getReviewMock = vi.fn();
 const loadReviewContentMock = vi.fn();
+const loadArticleMarkdownMock = vi.fn();
 const performReviewActionMock = vi.fn();
 
 vi.mock("next/link", () => ({
@@ -48,6 +49,7 @@ vi.mock("@convex/_generated/api", () => ({
       getReview: "missions_node.getReview",
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
+      loadArticleMarkdown: "missions_node.loadArticleMarkdown",
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publishers: { get: "publishers.get" },
@@ -125,6 +127,7 @@ describe("MissionReviewContent", () => {
     routerPushMock.mockReset();
     getReviewMock.mockReset();
     loadReviewContentMock.mockReset();
+    loadArticleMarkdownMock.mockReset();
     performReviewActionMock.mockReset();
 
     useActionMock.mockImplementation((action: string) => {
@@ -136,6 +139,9 @@ describe("MissionReviewContent", () => {
       }
       if (action === "missions_node.performReviewAction") {
         return performReviewActionMock;
+      }
+      if (action === "missions_node.loadArticleMarkdown") {
+        return loadArticleMarkdownMock;
       }
       return vi.fn();
     });
@@ -298,17 +304,12 @@ describe("MissionReviewContent", () => {
         description: "A short guide",
         category: "guides",
       };
-      afterEach(() => {
-        vi.unstubAllGlobals();
-      });
-
-      it("renders the article from its Publishable: cover, title, description and the markdown read from markdownUrl", async () => {
-        const fetchMock = vi.fn(async () => new Response("## First step\n\nDig a hole.", { status: 200 }));
-        vi.stubGlobal("fetch", fetchMock);
+      it("renders the article from its Publishable: cover, title, description and the markdown Convex reads from markdownUrl", async () => {
+        loadArticleMarkdownMock.mockResolvedValue({ content: "## First step\n\nDig a hole." });
         await renderWith(ARTICLE);
         await act(async () => {});
         const preview = document.querySelector('[data-testid="publishable-preview"]');
-        expect(fetchMock).toHaveBeenCalledWith(ARTICLE.markdownUrl, expect.anything());
+        expect(loadArticleMarkdownMock).toHaveBeenCalledWith({ missionId: "mission-1" });
         expect((preview?.querySelector("img") as HTMLImageElement | null)?.src).toBe(ARTICLE.coverUrl);
         expect(preview?.textContent).toContain("How to grow");
         expect(preview?.textContent).toContain("A short guide");
@@ -318,7 +319,7 @@ describe("MissionReviewContent", () => {
       });
 
       it("says when the markdown cannot be read, with a link to it", async () => {
-        vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+        loadArticleMarkdownMock.mockRejectedValue(new Error("The article markdown could not be read: HTTP 404"));
         await renderWith(ARTICLE);
         await act(async () => {});
         const failure = document.querySelector('[data-testid="publishable-article-error"]');

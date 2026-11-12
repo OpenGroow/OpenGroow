@@ -1,7 +1,7 @@
 import type { Validator } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
-import type { PublishableKind } from "@opengroow/agent-templates";
+import { isMcpOwnedKind, type PublishableKind } from "@opengroow/agent-templates";
 import { matchPlatform } from "@opengroow/publisher-sdk";
 
 // The Publishable (issue #16, ADR-069): the unified format of a deliverable,
@@ -175,12 +175,12 @@ export function renderPublishableSection(
   options: { require?: readonly string[] } = {},
 ): string {
   const required = options.require ?? [];
-  if (kind === "article") {
+  if (isMcpOwnedKind(kind)) {
     return [
       "",
       "## Publishable",
       "",
-      "This Mission type produces an `article` deliverable. Do not write `publishable` in your RunResult: OpenGroow gets the whole article (markdown, cover, slug, title, description) from the MCP when its job completes, and a RunResult carrying one is rejected. You never publish yourself: a human review or auto-publish does it. Do not call any publishing tool.",
+      `This Mission type produces an \`${kind}\` deliverable. Do not write \`publishable\` in your RunResult: OpenGroow gets the whole ${kind} (markdown, cover, slug, title, description) from the MCP when its job completes, and a RunResult carrying one is rejected. You never publish yourself: a human review or auto-publish does it. Do not call any publishing tool.`,
       "",
     ].join("\n");
   }

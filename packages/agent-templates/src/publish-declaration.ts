@@ -33,7 +33,7 @@ export function isMcpOwnedKind(kind: string): boolean {
 /** The fields of each kind `publish.resource` fetches and `publish.resource.map`
  * may map: the media, or every field of a kind the MCP owns. The Agent never
  * writes them. */
-export const MEDIA_PUBLISHABLE_FIELDS = {
+export const RESOURCE_PUBLISHABLE_FIELDS = {
   video: ["videoUrl", "coverUrl"],
   image: ["imageUrl", "variants"],
   carousel: ["slideUrls", "variants"],
@@ -157,7 +157,7 @@ function publishResourceProblem(raw: unknown, kind: PublishableKind, at: string)
     if (!resource.map || typeof resource.map !== "object" || Array.isArray(resource.map)) {
       return `${where}.map must be an object mapping a media field to a path`;
     }
-    const allowed: readonly string[] = MEDIA_PUBLISHABLE_FIELDS[kind];
+    const allowed: readonly string[] = RESOURCE_PUBLISHABLE_FIELDS[kind];
     for (const [field, path] of Object.entries(resource.map as Record<string, unknown>)) {
       if (!allowed.includes(field)) {
         return `${where}.map "${field}" is not a media field of kind "${kind}" — one of ${allowed.join(", ")}`;

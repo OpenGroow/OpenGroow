@@ -661,6 +661,44 @@ async function executeReviewAction(
  * (approve or publish) for a Mission. Validates ownership, then delegates
  * contract resolution and effect execution to `executeReviewAction`.
  */
+/** Bounds of the article markdown read for the review (ADR-074). */
+const ARTICLE_MARKDOWN_TIMEOUT_MS = 15_000;
+const ARTICLE_MARKDOWN_MAX_BYTES = 2_000_000;
+
+/**
+ * The markdown of a Mission's `article` Publishable, for its review (ADR-074).
+ * Read from the public `markdownUrl`, without any key, as the GitHub Publisher
+ * reads it at commit time: the review shows what would be published.
+ */
+export const loadArticleMarkdown = action({
+  args: { missionId: v.id("missions") },
+  handler: async (ctx, args): Promise<{ content: string }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Authentication required");
+    const mission: Doc<"missions"> | null = await ctx.runQuery(internal.missions.getByIdInternal, {
+      missionId: args.missionId,
+    });
+    if (!mission) throw new Error("Mission not found");
+    if (mission.ownerId !== (identity.subject ?? identity.tokenIdentifier)) throw new Error("Forbidden");
+
+    const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
+    const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;
+    if (publishable?.kind !== "article") throw new Error("This Mission's Publishable is not an article");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ARTICLE_MARKDOWN_TIMEOUT_MS);
+    try {
+      const response = await fetch(publishable.markdownUrl, { signal: controller.signal });
+      if (!response.ok) throw new Error(`The article markdown could not be read: HTTP ${response.status}`);
+      const content = await response.text();
+      if (content.length > ARTICLE_MARKDOWN_MAX_BYTES) throw new Error("The article markdown is too large to review");
+      return { content };
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+});
+
 export const performReviewAction = action({
   args: {
     missionId: v.id("missions"),

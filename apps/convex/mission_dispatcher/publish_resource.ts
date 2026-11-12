@@ -1,6 +1,6 @@
 import {
   isMcpOwnedKind,
-  MEDIA_PUBLISHABLE_FIELDS,
+  RESOURCE_PUBLISHABLE_FIELDS,
   OPTIONAL_PUBLISHABLE_FIELDS,
   readMediaPath,
   type PublishDeclaration,
@@ -45,8 +45,9 @@ export function mergePublishResource(input: {
   const { declaration, missionType } = input;
   const { resource } = declaration;
   const ownedByMcp = isMcpOwnedKind(declaration.kind);
-  let text: Record<string, unknown> = {};
+  let text: Record<string, unknown>;
   if (ownedByMcp) {
+    // Reconciliation already refuses it; checked again so this merge never takes an Agent's field.
     if (input.draft !== undefined) {
       return { ok: false, message: `the Agent wrote a publishable, but the MCP owns the whole ${declaration.kind}` };
     }
@@ -67,7 +68,7 @@ export function mergePublishResource(input: {
   // `metadata` is free and never required.
   const optional: readonly string[] = [...OPTIONAL_PUBLISHABLE_FIELDS[declaration.kind], "metadata"];
   const alternative = declaration.kind === "image" || declaration.kind === "carousel";
-  for (const field of MEDIA_PUBLISHABLE_FIELDS[declaration.kind]) {
+  for (const field of RESOURCE_PUBLISHABLE_FIELDS[declaration.kind]) {
     const path = resource.map?.[field] ?? field;
     const value = readMediaPath(input.toolOutput, path);
     if (value !== undefined && value !== null) media[field] = value;
@@ -76,7 +77,7 @@ export function mergePublishResource(input: {
     }
   }
   if (alternative && Object.keys(media).length === 0) {
-    const [first, second] = MEDIA_PUBLISHABLE_FIELDS[declaration.kind];
+    const [first, second] = RESOURCE_PUBLISHABLE_FIELDS[declaration.kind];
     const where = (field: string) => `"${resource.map?.[field as "variants"] ?? field}"`;
     problems.push(`publishable.${first} is missing: tool "${resource.tool}" returned nothing at ${where(first)} nor at ${where(second)}`);
   }
