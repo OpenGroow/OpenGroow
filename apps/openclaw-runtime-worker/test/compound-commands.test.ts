@@ -147,7 +147,7 @@ describe("handleAgentRegisterAndConfigure", () => {
     });
   });
 
-  it("does not add an agent the list already reports, and returns its workspace", async () => {
+  it("does not add an agent the list already reports, reapplies its profile and returns its workspace", async () => {
     const { deps, calls } = makeDeps(
       respond([{ id: "engagement", workspace: "/workspace/social" }]),
     );
@@ -156,11 +156,57 @@ describe("handleAgentRegisterAndConfigure", () => {
 
     // The existence check lives inside the command: two concurrent
     // activations can no longer both observe the agent as absent.
-    expect(calls.map((call) => call.body.commandText)).toEqual([LIST]);
+    expect(calls.map((call) => call.body.commandText)).toEqual([LIST, CONFIGURE]);
     expect(event.event.payload).toMatchObject({
       ok: true,
-      data: { alreadyRegistered: true, registered: true, workspace: "/workspace/social" },
+      data: { alreadyRegistered: true, registered: true, rebound: false, configured: true, workspace: "/workspace/social" },
     });
+  });
+
+  const REBIND = "openclaw config set agents.entries.engagement.workspace";
+
+  it("moves an agent registered on another workspace to the expected one", async () => {
+    const { deps, calls } = makeDeps(
+      respond([{ id: "engagement", workspace: "/workspace/old" }]),
+    );
+
+    const event = await handleAgentRegisterAndConfigure(
+      registerCommand({ workspace: "/workspace/new", rebindCommandText: REBIND }),
+      deps,
+    );
+
+    // A reinstalled Agent gets a new workspace: OpenClaw must follow, or the
+    // Agent keeps reading the old instructions while its run files land elsewhere.
+    expect(calls.map((call) => call.body.commandText)).toEqual([LIST, REBIND, CONFIGURE]);
+    expect(event.event.payload).toMatchObject({
+      ok: true,
+      data: { alreadyRegistered: true, rebound: true, configured: true, workspace: "/workspace/new" },
+    });
+  });
+
+  it("leaves an agent already on the expected workspace where it is", async () => {
+    const { deps, calls } = makeDeps(respond([{ id: "engagement", workspace: "/workspace/new" }]));
+
+    await handleAgentRegisterAndConfigure(registerCommand({ workspace: "/workspace/new", rebindCommandText: REBIND }), deps);
+
+    expect(calls.map((call) => call.body.commandText)).toEqual([LIST, CONFIGURE]);
+  });
+
+  it("fails when the agent cannot be moved to its workspace", async () => {
+    const { deps, calls } = makeDeps(
+      respond([{ id: "engagement", workspace: "/workspace/old" }], (text) =>
+        text === REBIND ? { output: "", success: false, error: "config locked" } : undefined,
+      ),
+    );
+
+    const event = await handleAgentRegisterAndConfigure(
+      registerCommand({ workspace: "/workspace/new", rebindCommandText: REBIND }),
+      deps,
+    );
+
+    expect(calls.map((call) => call.body.commandText)).toEqual([LIST, REBIND]);
+    expect(event.event.payload).toMatchObject({ ok: false, data: { registered: true, workspace: "/workspace/old" } });
+    expect((event.event.payload as { error: string }).error).toContain("config locked");
   });
 
   it("reports a list output that is not a top-level array", async () => {
