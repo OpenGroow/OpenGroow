@@ -696,6 +696,9 @@ export default defineSchema({
     // Family-filtered list, and the distinct-family walk of `listFamilies`.
     .index("by_instance_owner_family_createdAt", ["instanceId", "ownerId", "family", "createdAt"])
     .index("by_instance_template_retry", ["instanceId", "templateId", "retryRequested"])
+    // A Source already written from the same report entry (same post, same
+    // capture): a batch re-read after a failed execution does not add it again.
+    .index("by_instance_template_origin_capturedAt", ["instanceId", "templateId", "origin", "capturedAt"])
     // The Sources of an Agent still waiting on their enrichment (`processing`).
     .index("by_instance_template_status", ["instanceId", "templateId", "status"])
     // The daily scoring job's "ready, within the lookback window" read (#487,

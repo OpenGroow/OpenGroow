@@ -9,6 +9,9 @@ import type { SourceJobOutcome } from "../source_jobs.js";
 import { MAX_SOURCES_PER_RESULT } from "./limits.js";
 import { acceptedKey, feedbackOf, formatSourceErrors, type SourceError } from "./retry_feedback.js";
 
+/** Two captures of the same post this close are one read of the same report entry. */
+const SAME_CAPTURE_MS = 1000;
+
 /** The subset of a Run the ingestion reads: its provenance and its Template. */
 type IngestingRun = Pick<Doc<"runs">, "_id" | "ownerId" | "instanceId" | "templateId" | "resumedFromRunId"> & { jobId?: Id<"jobs"> };
 
@@ -91,6 +94,27 @@ export async function ingestSources(
         accepted.push(key);
         ids.set(index, completed.id);
       } else fail([completed.error]);
+      continue;
+    }
+
+    // Already written by an earlier execution that failed before the cursor
+    // moved (the batch is read again): the same post at the same capture is
+    // the same record. Seen at another time, it stays a new one (append-only).
+    // The Agent may round the capture time differently from one read to the next.
+    const existing = await ctx.db
+      .query("sources")
+      .withIndex("by_instance_template_origin_capturedAt", (q) =>
+        q
+          .eq("instanceId", run.instanceId)
+          .eq("templateId", run.templateId)
+          .eq("origin", common.origin)
+          .gte("capturedAt", common.capturedAt - SAME_CAPTURE_MS)
+          .lte("capturedAt", common.capturedAt + SAME_CAPTURE_MS),
+      )
+      .first();
+    if (existing) {
+      accepted.push(key);
+      ids.set(index, existing._id);
       continue;
     }
 
