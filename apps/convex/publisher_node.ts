@@ -61,6 +61,8 @@ export async function publishThroughPublisher(
     });
   };
   for (const item of prepared.publications) {
+    // The media of this channel's service (ADR-073); none = nothing to send, a clear error (after reconciliation).
+    const forChannel = publishableForPlatform(prepared.publishable, item.channelService);
     // A previous attempt may have reached the service: look for its post first
     // and never send again if it is there (the service has no idempotency key).
     if (item.reconcile) {
@@ -69,6 +71,9 @@ export async function publishThroughPublisher(
         caption,
         attemptStartedAt: item.reconcile.attemptStartedAt,
         attemptDate: item.reconcile.attemptDate,
+        ...(item.channelService ? { channelService: item.channelService } : {}),
+        ...(item.settings ? { settings: item.settings } : {}),
+        publishable: forChannel.ok ? forChannel.publishable : prepared.publishable,
       });
       if (!found.ok) {
         await ctx.runMutation(internal.publications.finish, {
@@ -91,8 +96,6 @@ export async function publishThroughPublisher(
         continue;
       }
     }
-    // The media of this channel's service (ADR-073); none = nothing to send, a clear error.
-    const forChannel = publishableForPlatform(prepared.publishable, item.channelService);
     if (!forChannel.ok) {
       await ctx.runMutation(internal.publications.finish, {
         publicationId: item.publicationId,

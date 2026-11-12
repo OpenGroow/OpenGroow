@@ -57,7 +57,19 @@ export type FindPostQuery = {
   attemptStartedAt: number;
   /** The date the post was asked for (epoch ms): the schedule date, or the attempt time for "now". */
   attemptDate: number;
+  /** The channel's service, when known from the mapping. */
+  channelService?: string;
+  /** The settings stored on the Publish target, as `publish` received them. */
+  settings?: Record<string, unknown>;
+  /**
+   * The Publishable that was sent. A service that finds a post by what it
+   * carries rather than by its caption (a GitHub file at `<contentBase>/<slug>.md`) reads it here.
+   */
+  publishable?: Record<string, unknown>;
 };
+
+/** The channel a post was published on, for `getStatus` when the post's id alone does not locate it. */
+export type PostTarget = { channelId: string; settings?: Record<string, unknown> };
 
 export type PublishOutcome = {
   externalId: string;
@@ -98,9 +110,15 @@ export interface PublisherPlugin {
   /**
    * Where a post stands at the service. `around` (epoch ms) is the date the post
    * was scheduled for; plugins whose API can only list posts by date use it as
-   * the search window. A post the service no longer knows is reported `failed`.
+   * the search window. `target` is the channel the post went to (a GitHub
+   * commit sha needs its repository). A post the service no longer knows is reported `failed`.
    */
-  getStatus(conn: PublisherConnection, externalId: string, around?: number): Promise<PublisherResult<{ post: PostStatus }>>;
+  getStatus(
+    conn: PublisherConnection,
+    externalId: string,
+    around?: number,
+    target?: PostTarget,
+  ): Promise<PublisherResult<{ post: PostStatus }>>;
   /**
    * Template of a URL that opens the post in the service itself (its own UI),
    * distinct from the post's public URL on the network; see `renderPostUrl`.

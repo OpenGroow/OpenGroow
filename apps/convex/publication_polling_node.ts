@@ -20,6 +20,7 @@ export const pollScheduled = internalAction({
       scheduledAt?: number;
       /** Already published: only its link is missing. */
       linkOnly: boolean;
+      target?: { channelId: string; settings?: Record<string, unknown> };
       connection: { adapter: string; url: string; apiKey: string };
     }> = await ctx.runQuery(internal.publication_polling.dueScheduled, { now: Date.now() });
     // One load per adapter and tick, not one per Publication.
@@ -33,7 +34,7 @@ export const pollScheduled = internalAction({
           plugin = loadPlugin(ctx, item.connection.adapter);
           plugins.set(item.connection.adapter, plugin);
         }
-        result = await (await plugin).getStatus(item.connection, item.externalId, item.scheduledAt);
+        result = await (await plugin).getStatus(item.connection, item.externalId, item.scheduledAt, item.target);
       } catch (error) {
         console.error(`Polling Publication ${item.publicationId} (${item.connection.adapter}) failed: ${error instanceof Error ? error.message : String(error)}`);
         continue;

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
 import { publishableForPlatform } from "./publishable.js";
-import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
+import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { publicNotificationOf, scheduleOnPublished } from "./publication_notifications.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
@@ -93,6 +93,7 @@ export const setTargets = mutation({
       payload: { publishTargets: targets },
     });
     const payload = mission.payload && typeof mission.payload === "object" ? mission.payload : {};
+    await assertPayloadSchedulable(ctx, mission.instanceId, { ...(payload as Record<string, unknown>), publishTargets: targets });
     await ctx.db.patch(args.missionId, {
       payload: { ...(payload as Record<string, unknown>), publishTargets: targets },
       updatedAt: Date.now(),
@@ -118,6 +119,9 @@ export const setPublishAt = mutation({
     }
     if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
     if (args.publishAt !== null) assertValidPublishAt({ publishAt: args.publishAt });
+    if (args.publishAt !== null) {
+      await assertPayloadSchedulable(ctx, mission.instanceId, { publishTargets: effectivePublishTargets(mission.payload), publishAt: args.publishAt });
+    }
     const { publishAt: _previous, ...rest } = (
       mission.payload && typeof mission.payload === "object" ? mission.payload : {}
     ) as Record<string, unknown>;
@@ -236,6 +240,7 @@ export const beginAll = internalMutation({
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
+    await assertSchedulable(ctx, publisher, targets, effectivePublishAt(mission.payload, Date.now()));
     if (typeof publishable.kind === "string") {
       const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
       const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;

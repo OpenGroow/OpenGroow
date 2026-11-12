@@ -32,7 +32,10 @@ export const dueScheduled = internalQuery({
         .withIndex("by_instance", (q) => q.eq("instanceId", publication.instanceId))
         .unique();
       if (!publisher?.apiKey) continue;
+      // The channel the post went to: a service whose post id alone does not locate it (a GitHub commit) needs it.
+      const channel = publisher.targets.find((t) => t.target === publication.target);
       due.push({
+        ...(channel?.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
         publicationId: publication._id,
         externalId: publication.externalId,
         scheduledAt: publication.scheduledAt,

@@ -319,6 +319,17 @@ describe("polling a scheduled Publication", () => {
     expect((await owner.query(api.missions.get, { missionId }))?.status).toBe("done");
   });
 
+  it("tells getStatus the channel the post went to (a GitHub commit needs its repository, ADR-074)", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const getStatus = vi.spyOn(postizPlugin, "getStatus");
+    const { t } = await scheduled();
+    await makeDue(t);
+    stubPostizListing("QUEUE");
+    await t.action(internal.publication_polling_node.pollScheduled, {});
+    expect(getStatus).toHaveBeenCalledWith(expect.anything(), "post-1", expect.any(Number), { channelId: "ch-1" });
+    getStatus.mockRestore();
+  });
+
   it("leaves it scheduled while Postiz still has the post queued", async () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);
