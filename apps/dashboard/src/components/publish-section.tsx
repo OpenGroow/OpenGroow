@@ -150,6 +150,7 @@ export function PublishSection({
               <div key={target} data-testid={`publish-row-${target}`} className="flex items-center gap-3 border-b border-border pb-2 last:border-0">
                 <PlatformLogo
                   baseUrl={channel?.publisherUrl ?? ""}
+                  adapter={channel?.adapter}
                   service={channel?.mapped ? channel.channelService : undefined}
                   className="size-8"
                 />

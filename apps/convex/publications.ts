@@ -51,7 +51,7 @@ export const listForMission = query({
       id: row._id,
       target: row.target,
       // For the platform logo and name (the Publisher serves the logo).
-      ...(publisher ? { publisherUrl: publisher.url } : {}),
+      ...(publisher ? { publisherUrl: publisher.url, publisherAdapter: publisher.adapter } : {}),
       ...channelInfo(found?.channel),
       status: row.status,
       externalId: row.externalId,

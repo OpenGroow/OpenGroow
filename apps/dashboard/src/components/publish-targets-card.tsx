@@ -35,7 +35,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const updateSettings = useMutation(api.publishers.updateSettings);
   const removeTarget = useMutation(api.publishers.removeTarget);
   const listChannels = useAction(api.publishers_node.listChannels);
-  const channelOptions = useInstalledPublisher(publisher.adapter)?.channelOptions;
+  const installedPackage = useInstalledPublisher(publisher.adapter);
+  const channelOptions = installedPackage?.channelOptions;
+  const serviceName = installedPackage?.name ?? publisher.adapter;
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -132,12 +134,12 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add a channel</DialogTitle>
-            <DialogDescription>Choose the channel of your Postiz account to add.</DialogDescription>
+            <DialogDescription>Choose the channel of your {serviceName} account to add.</DialogDescription>
           </DialogHeader>
           {error ? <StatusBadge tone="error" label={error} /> : null}
           <div className="grid max-h-96 gap-2 overflow-y-auto">
             {available.length === 0 ? (
-              <p className="m-0 text-sm text-muted-foreground">Every channel of your Postiz account is already added.</p>
+              <p className="m-0 text-sm text-muted-foreground">Every channel of your {serviceName} account is already added.</p>
             ) : (
               available.map((c) => (
                 <button
@@ -147,7 +149,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   disabled={!c.profile}
                   onClick={() => void handleAdd(c)}
                 >
-                  <PlatformLogo baseUrl={publisher.url} service={c.service} />
+                  <PlatformLogo baseUrl={publisher.url} service={c.service} adapter={publisher.adapter} />
                   <span className="grid">
                     <span className="font-medium">{platformName(c.service)}</span>
                     <span className="text-sm text-muted-foreground">
@@ -174,7 +176,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
             const expanded = expandable && open === t.target;
             const header = (
               <>
-                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} />
+                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} />
                 <span className="grid flex-1 gap-1">
                   <span className="text-base font-medium">
                     {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
