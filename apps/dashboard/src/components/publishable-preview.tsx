@@ -40,7 +40,7 @@ type MarkdownState = { status: "loading" } | { status: "loaded"; content: string
 
 /** The markdown of an article, read by Convex from its public URL (ADR-074): the dashboard talks only to Convex. */
 function useArticleMarkdown(missionId: string, markdownUrl: string | null): MarkdownState {
-  const loadArticleMarkdown = useAction(api.missions_node.loadArticleMarkdown);
+  const loadArticleMarkdown = useAction(api.mission_articles.loadMarkdown);
   const [state, setState] = useState<MarkdownState>({ status: "loading" });
   useEffect(() => {
     let current = true;

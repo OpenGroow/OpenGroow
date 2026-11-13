@@ -53,8 +53,8 @@ vi.mock("@convex/_generated/api", () => ({
       getReview: "missions_node.getReview",
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
-      loadArticleMarkdown: "missions_node.loadArticleMarkdown",
     },
+    mission_articles: { loadMarkdown: "mission_articles.loadMarkdown" },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
     publishers: { list: "publishers.list" },
@@ -145,7 +145,7 @@ describe("MissionReviewContent", () => {
       if (action === "missions_node.performReviewAction") {
         return performReviewActionMock;
       }
-      if (action === "missions_node.loadArticleMarkdown") {
+      if (action === "mission_articles.loadMarkdown") {
         return loadArticleMarkdownMock;
       }
       return vi.fn();

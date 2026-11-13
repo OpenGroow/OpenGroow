@@ -53,6 +53,7 @@ import type * as mcp_endpoint from "../mcp_endpoint.js";
 import type * as mcp_node from "../mcp_node.js";
 import type * as mcp_url_override from "../mcp_url_override.js";
 import type * as migrations from "../migrations.js";
+import type * as mission_articles from "../mission_articles.js";
 import type * as mission_dispatcher from "../mission_dispatcher.js";
 import type * as mission_dispatcher_blocker_codes from "../mission_dispatcher/blocker_codes.js";
 import type * as mission_dispatcher_compose_agents_md from "../mission_dispatcher/compose_agents_md.js";
@@ -204,6 +205,7 @@ declare const fullApi: ApiFromModules<{
   mcp_node: typeof mcp_node;
   mcp_url_override: typeof mcp_url_override;
   migrations: typeof migrations;
+  mission_articles: typeof mission_articles;
   mission_dispatcher: typeof mission_dispatcher;
   "mission_dispatcher/blocker_codes": typeof mission_dispatcher_blocker_codes;
   "mission_dispatcher/compose_agents_md": typeof mission_dispatcher_compose_agents_md;
