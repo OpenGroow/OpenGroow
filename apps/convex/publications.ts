@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
 import { publishableForPlatform } from "./publishable.js";
-import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
+import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, notConfiguredTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
 import { allChannels, channelOf, projectPublishers, publishersOf, type PublisherChannelEntry } from "./project_publishers.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { publicNotificationOf, scheduleOnPublished } from "./publication_notifications.js";
@@ -153,7 +153,9 @@ export const reviewState = internalQuery({
     if (!mission) throw new Error("Mission not found");
     const targets = effectivePublishTargets(mission.payload);
     const publishers = await projectPublishers(ctx, mission.instanceId);
-    const unmappedTargets = targets.filter((name) => !channelOf(publishers, name)?.channel.channelId);
+    // Not on a Publisher, not mapped, or missing a required channel option (ADR-075): publishing is disabled.
+    const incomplete = new Set((await notConfiguredTargets(ctx, publishers, targets)).map((t) => t.target));
+    const unmappedTargets = targets.filter((name) => !channelOf(publishers, name)?.channel.channelId || incomplete.has(name));
     const publications = await ctx.db
       .query("publications")
       .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
@@ -231,6 +233,8 @@ export const beginAll = internalMutation({
     if (unmapped.length > 0) {
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
+    const incomplete = await notConfiguredTargets(ctx, publishers, targets);
+    if (incomplete.length > 0) throw new Error(incomplete.map(({ target, reason }) => `Channel "${target}": ${reason}`).join("; "));
     const withoutKey = publishersOf(publishers, targets).find((p) => !p.apiKey);
     if (withoutKey) {
       const name = (await publisherMetaOf(ctx, withoutKey.adapter))?.name ?? withoutKey.adapter;

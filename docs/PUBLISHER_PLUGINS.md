@@ -58,6 +58,7 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
   - **`platforms` lists what OpenGroow offers** (ADR-075): a channel whose service is not a key of it is not shown in Add a channel, and `publishers.addChannel` refuses it. Declare only the platforms you have tried.
   - **`icon`** is the platform's logo, shipped in the package (a png, webp, jpeg or svg data URI, same limit as the manifest `icon`). The dashboard shows it for the platform's channels with no request; without it, the package icon. A Publisher with a single platform that is the service itself (GitHub) leaves it out.
 - `channel-options.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: ChannelOption[] } }` with option types `select | boolean | text`. The dashboard renders them on the Publishers page; the chosen values arrive in `request.settings`.
+  - A `text` option may be `required: true` when the plugin cannot publish without it (ADR-075). Until it has a value the channel shows "Not configured" on the Publishers page, cannot be chosen for a Mission, and the core refuses to publish to it before creating any Publication. Its `placeholder` is only an example, never a value the plugin falls back to: a default belongs in the plugin, and the option is then not required.
 
 Expose both on the plugin object (`capabilities`, `channelOptions`); the SDK provides `parseCapabilities` to validate the first.
 

@@ -27,3 +27,24 @@ describe("platform icons and served platforms (ADR-075)", () => {
     expect(servesPlatform(undefined, "tiktok")).toBe(false);
   });
 });
+
+describe("required channel options (ADR-075)", async () => {
+  const { missingOptions, notConfiguredReason } = await import("./channel-options");
+  const OPTIONS = {
+    schemaVersion: 1,
+    adapter: "github",
+    platforms: {
+      github: [
+        { key: "branch", label: "Branch", type: "text" as const },
+        { key: "articleBaseUrl", label: "URL of the articles", type: "text" as const, required: true },
+      ],
+    },
+  };
+
+  it("names the required options a channel has no value for", () => {
+    expect(missingOptions(OPTIONS, "github", { articleBaseUrl: "  " }).map((o) => o.key)).toEqual(["articleBaseUrl"]);
+    expect(missingOptions(OPTIONS, "github", { articleBaseUrl: "https://a.example/blog" })).toEqual([]);
+    expect(missingOptions(undefined, "github", {})).toEqual([]);
+    expect(notConfiguredReason(missingOptions(OPTIONS, "github", undefined))).toBe("Set URL of the articles on the Publishers page");
+  });
+});

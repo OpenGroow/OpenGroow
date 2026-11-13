@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { optionsOfPlatform, servesPlatform } from "@opengroow/publisher-sdk";
+import { missingOptions, optionsOfPlatform, servesPlatform } from "@opengroow/publisher-sdk";
 import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
@@ -174,6 +174,8 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
           {publisher.targets.map((t) => {
             const options = t.mapped && channelOptions ? optionsOfPlatform(channelOptions, t.channelService) : [];
             const expandable = options.length > 0;
+            // Required options without a value (ADR-075): the channel cannot be published to yet.
+            const missing = t.mapped ? missingOptions(channelOptions, t.channelService, t.settings) : [];
             const expanded = expandable && open === t.target;
             const header = (
               <>
@@ -190,6 +192,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     <StatusBadge tone="warning" label="Not mapped" />
                   )}
                 </span>
+                {missing.length > 0 ? <StatusBadge tone="warning" label="Not configured" /> : null}
                 {expandable ? (
                   <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
                 ) : null}
@@ -256,12 +259,21 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                       }
                       return (
                         <div key={option.key} className="grid gap-2">
-                          <Label htmlFor={fieldId}>{option.label}</Label>
+                          <Label htmlFor={fieldId}>
+                            {option.label}
+                            {option.required ? (
+                              <span className="text-destructive" aria-label="required">
+                                {" "}*
+                              </span>
+                            ) : null}
+                          </Label>
                           <Input
                             id={fieldId}
                             key={String(stored ?? "")}
                             autoComplete="off"
                             placeholder={option.placeholder}
+                            required={option.required}
+                            aria-invalid={missing.some((m) => m.key === option.key) || undefined}
                             defaultValue={typeof stored === "string" ? stored : ""}
                             onBlur={(event) => void handleOption(t, option.key, event.target.value.trim())}
                           />

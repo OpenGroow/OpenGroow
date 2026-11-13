@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { capabilityFor, matchPlatform, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
+import { capabilityFor, matchPlatform, missingOptions, notConfiguredReason, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { useProjectChannels, type ProjectChannel, type ProjectPublisher } from "@/src/hooks/use-project-channels";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
@@ -119,8 +119,14 @@ export function ChannelSelect({
   const installed = useInstalledPublishers();
   // Each channel's capabilities are those of its own Publisher's package (ADR-075).
   const capabilityOf = useMemo(() => {
-    const byAdapter = new Map((installed ?? []).map((p) => [p.adapter, p.capabilities]));
-    return (channel: ProjectChannel) => channelCapability(byAdapter.get(channel.adapter), channel, kind, platforms, madeFor);
+    const byAdapter = new Map((installed ?? []).map((p) => [p.adapter, p]));
+    return (channel: ProjectChannel): Capability => {
+      const pkg = byAdapter.get(channel.adapter);
+      // A channel missing a required option of its package cannot be published to yet (ADR-075).
+      const notConfigured = channel.mapped ? notConfiguredReason(missingOptions(pkg?.channelOptions, channel.channelService, channel.settings)) : undefined;
+      if (notConfigured) return { level: "unsupported", reason: `Not configured: ${notConfigured}` };
+      return channelCapability(pkg?.capabilities, channel, kind, platforms, madeFor);
+    };
   }, [installed, kind, platforms, madeFor]);
   const [open, setOpen] = useState(false);
   // Stable between renders: the Combobox filters on the identity of `items`.

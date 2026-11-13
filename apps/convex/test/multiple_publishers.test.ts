@@ -103,6 +103,45 @@ describe("several Publishers per Project", () => {
     await expect(owner.mutation(api.publishers.addChannel, IG)).rejects.toThrow("No Publisher configured");
   });
 
+  it("refuses to publish to a channel missing a required option of its package, before anything is created", async () => {
+    const { t, owner } = await seed();
+    await t.run(async (ctx) => {
+      const pkg = (await ctx.db.query("hubPackages").collect()).find((p) => p.provides === "github")!;
+      await ctx.db.patch(pkg._id, {
+        meta: {
+          ...GITHUB_META,
+          channelOptions: { schemaVersion: 1, adapter: "github", platforms: { github: [{ key: "articleBaseUrl", label: "URL of the articles", type: "text", required: true }] } },
+        },
+      });
+    });
+    await owner.mutation(api.publishers.addChannel, REPO);
+    const missionId = await t.run(async (ctx) =>
+      ctx.db.insert("missions", {
+        ownerId: OWNER.subject,
+        instanceId: INSTANCE_ID,
+        templateId: "@test/any",
+        type: "make_article",
+        payload: { publishTargets: ["github:acme/site"] },
+        status: "approved",
+        lastResult: {
+          status: "needs_human_review",
+          summary: "Ready",
+          reviewQuestions: [],
+          artifact: { external: { service: "articles", id: "a1" }, publishable: { kind: "image", caption: "x", imageUrl: "https://cdn.example.com/a.png" } },
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as never),
+    );
+    await expect(t.mutation(internal.publications.beginAll, { missionId })).rejects.toThrow(
+      'Channel "github:acme/site": Set URL of the articles on the Publishers page',
+    );
+    expect(await t.run(async (ctx) => ctx.db.query("publications").collect())).toEqual([]);
+    expect((await t.query(internal.publications.reviewState, { missionId })).unmappedTargets).toEqual(["github:acme/site"]);
+    await owner.mutation(api.publishers.updateSettings, { instanceId: INSTANCE_ID, adapter: "github", target: "github:acme/site", settings: { articleBaseUrl: "https://acme.example/blog" } });
+    expect((await t.query(internal.publications.reviewState, { missionId })).unmappedTargets).toEqual([]);
+  });
+
   it("sends and polls each channel through the Publisher that carries it", async () => {
     const { t, owner } = await seed();
     await owner.mutation(api.publishers.addChannel, IG);

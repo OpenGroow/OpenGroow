@@ -5,7 +5,7 @@
 
 import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { QueryCtx } from "./_generated/server.js";
-import { capabilityFor } from "@opengroow/publisher-sdk";
+import { capabilityFor, missingOptions, notConfiguredReason } from "@opengroow/publisher-sdk";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { effectivePublishAt } from "./publish_at.js";
@@ -30,6 +30,26 @@ export function unusableTargets(
     unknown: targets.filter((k) => !entries.some((t) => t.target === k)),
     unmapped: targets.filter((k) => entries.some((t) => t.target === k && !t.channelId)),
   };
+}
+
+/**
+ * The targets whose channel lacks a required option of its Publisher's package
+ * (`channel-options.json`, `required: true`, ADR-075): they cannot be published to yet.
+ */
+export async function notConfiguredTargets(
+  ctx: QueryCtx,
+  publishers: readonly ProjectPublisher[],
+  targets: readonly string[],
+): Promise<Array<{ target: string; reason: string }>> {
+  const result = [];
+  for (const target of targets) {
+    const found = channelOf(publishers, target);
+    if (!found) continue;
+    const options = (await publisherMetaOf(ctx, found.publisher.adapter))?.channelOptions;
+    const reason = notConfiguredReason(missingOptions(options, found.channel.channelService, found.channel.settings));
+    if (reason) result.push({ target, reason });
+  }
+  return result;
 }
 
 /** Rejects a payload whose `publishTargets` name a channel that is on none of
