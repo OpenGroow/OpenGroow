@@ -14,5 +14,6 @@ export function useInstalledPublishers(): InstalledPublisher[] | undefined {
 
 /** The installed package providing `adapter`, if any. */
 export function useInstalledPublisher(adapter: string | undefined): InstalledPublisher | undefined {
-  return useInstalledPublishers()?.find((p) => p.adapter === adapter);
+  const installed = useInstalledPublishers();
+  return adapter ? installed?.find((p) => p.adapter === adapter) : undefined;
 }

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
 
 /** How long after publishing the link of a post is looked for (the service posts it asynchronously). */
 const LINK_WINDOW_MS = 60 * 60_000;
@@ -27,23 +28,23 @@ export const dueScheduled = internalQuery({
     for (const publication of [...scheduled, ...awaitingLink]) {
       if (publication.externalId === undefined) continue;
       if (publication.status === "scheduled" && publication.scheduledAt !== undefined && publication.scheduledAt > args.now) continue;
-      const publisher = await ctx.db
-        .query("publishers")
-        .withIndex("by_instance", (q) => q.eq("instanceId", publication.instanceId))
-        .unique();
-      if (!publisher?.apiKey) continue;
-      // The channel the post went to: a service whose post id alone does not locate it (a GitHub commit) needs it.
+      const publishers = await projectPublishers(ctx, publication.instanceId);
       const context = publication.attemptContext;
-      // Use the current key only for the original service, never a replacement connection.
-      if (context && (context.adapter !== publisher.adapter || context.url !== publisher.url)) continue;
-      const channel = context ?? publisher.targets.find((t) => t.target === publication.target);
+      const found = channelOf(publishers, publication.target);
+      // A reused channel key must not route an older Publication through a replacement Publisher.
+      const publisher = context
+        ? publishers.find((p) => p.adapter === context.adapter && p.url === context.url)
+        : found?.publisher;
+      const apiKey = publisher?.apiKey;
+      if (!publisher || !apiKey) continue;
+      const channel = context ?? found?.channel;
       due.push({
         ...(channel?.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
         publicationId: publication._id,
         externalId: publication.externalId,
         scheduledAt: publication.scheduledAt,
         linkOnly: publication.status === "published",
-        connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
+        connection: { adapter: publisher.adapter, url: publisher.url, apiKey },
       });
     }
     return due;

@@ -35,7 +35,7 @@ export const publicationAttemptContextV = v.object({
 });
 
 // Publisher tables (ADR-069), kept apart from schema.ts so publishing slices
-// stay localized. One Publisher per Project (V1).
+// stay localized. Several Publishers per Project, at most one per adapter (ADR-075).
 export const publisherTables = {
   publishers: defineTable({
     instanceId: v.string(),
@@ -57,7 +57,9 @@ export const publisherTables = {
       }),
     ),
     updatedAt: v.number(),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_and_adapter", ["instanceId", "adapter"]),
 
   // One row per (Mission, Publish target) (ADR-069). Later slices extend it
   // without a migration: multi-target (#18) adds rows, `scheduledAt` and

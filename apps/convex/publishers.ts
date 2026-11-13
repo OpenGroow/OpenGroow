@@ -8,9 +8,12 @@ import {
 import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { requirePublisherMeta } from "./publisher_packages.js";
+import { servesPlatform } from "@opengroow/publisher-sdk";
+import { allChannels, MAX_PUBLISHERS_PER_PROJECT, projectPublisher, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 
-// Project-level Publisher (ADR-069): one configuration per Project, backed by a
-// Publisher plugin (ADR-070). The API key is write-only from the dashboard's point of view.
+// Project-level Publishers (ADR-069, ADR-075): several per Project, at most one
+// per adapter, each backed by a Publisher plugin (ADR-070). A channel key is
+// unique across them. The API key is write-only from the dashboard's point of view.
 
 export const NO_PUBLISHER = "No Publisher configured";
 
@@ -32,43 +35,41 @@ export function generateTargetKey(channel: { channelService: string; channelProf
   return `${platform}:${handle}`;
 }
 
-async function requirePublisher(ctx: MutationCtx, instanceId: string) {
+async function requirePublisher(ctx: MutationCtx, instanceId: string, adapter: string) {
   await ownerIdFor(ctx, instanceId);
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, instanceId, adapter);
   if (!publisher) throw new Error(NO_PUBLISHER);
   return publisher;
 }
 
-export const get = query({
+/** What the dashboard sees of a Publisher: never its API key. */
+function view(publisher: ProjectPublisher) {
+  return {
+    adapter: publisher.adapter,
+    url: publisher.url,
+    hasApiKey: Boolean(publisher.apiKey),
+    targets: publisher.targets.map((t) =>
+      t.channelId
+        ? {
+            target: t.target,
+            mapped: true as const,
+            channelId: t.channelId,
+            channelName: t.channelName,
+            channelService: t.channelService,
+            channelProfile: t.channelProfile,
+            settings: t.settings,
+          }
+        : { target: t.target, mapped: false as const },
+    ),
+  };
+}
+
+/** The Project's Publishers, oldest first. */
+export const list = query({
   args: { instanceId: v.string() },
   handler: async (ctx, args) => {
-    if (!(await readOwnerId(ctx, args.instanceId))) return null;
-    const publisher = await ctx.db
-      .query("publishers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .unique();
-    if (!publisher) return null;
-    return {
-      adapter: publisher.adapter,
-      url: publisher.url,
-      hasApiKey: Boolean(publisher.apiKey),
-      targets: publisher.targets.map((t) =>
-        t.channelId
-          ? {
-              target: t.target,
-              mapped: true as const,
-              channelId: t.channelId,
-              channelName: t.channelName,
-              channelService: t.channelService,
-              channelProfile: t.channelProfile,
-              settings: t.settings,
-            }
-          : { target: t.target, mapped: false as const },
-      ),
-    };
+    if (!(await readOwnerId(ctx, args.instanceId))) return [];
+    return (await projectPublishers(ctx, args.instanceId)).map(view);
   },
 });
 
@@ -86,19 +87,18 @@ export const save = mutation({
     const url = args.url.trim().replace(/\/+$/, "");
     if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid Publisher URL");
     const apiKey = args.apiKey?.trim() || undefined;
-    const existing = await ctx.db
-      .query("publishers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .unique();
+    const existing = await projectPublisher(ctx, args.instanceId, args.adapter);
     const now = Date.now();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        adapter: args.adapter,
         url,
         ...(apiKey ? { apiKey } : {}),
         updatedAt: now,
       });
       return existing._id;
+    }
+    if ((await projectPublishers(ctx, args.instanceId)).length >= MAX_PUBLISHERS_PER_PROJECT) {
+      throw new Error(`A Project has at most ${MAX_PUBLISHERS_PER_PROJECT} Publishers`);
     }
     return await ctx.db.insert("publishers", {
       instanceId: args.instanceId,
@@ -115,6 +115,7 @@ export const save = mutation({
 export const addChannel = mutation({
   args: {
     instanceId: v.string(),
+    adapter: v.string(),
     channelId: v.string(),
     channelName: v.string(),
     channelService: v.string(),
@@ -122,14 +123,20 @@ export const addChannel = mutation({
     settings: v.optional(v.record(v.string(), v.any())),
   },
   handler: async (ctx, args): Promise<string> => {
-    const publisher = await requirePublisher(ctx, args.instanceId);
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     const existing = publisher.targets.find((t) => t.channelId === args.channelId);
     if (existing) return existing.target;
-    const target = generateTargetKey(args);
-    if (publisher.targets.some((t) => t.target === target)) {
-      throw new Error("A channel with this handle is already added");
+    // Only the platforms the package declares are offered (ADR-075): the others were never tried.
+    const meta = await requirePublisherMeta(ctx, args.adapter);
+    if (!servesPlatform(meta.capabilities, args.channelService)) {
+      throw new Error(`${meta.name} does not publish to "${args.channelService}" in OpenGroow`);
     }
-    const { instanceId: _instanceId, ...channel } = args;
+    const target = generateTargetKey(args);
+    // The key alone names the channel in Missions and Schedules: it must be unique across the Project's Publishers.
+    if (allChannels(await projectPublishers(ctx, args.instanceId)).some((t) => t.target === target)) {
+      throw new Error(`A channel "${target}" is already added to this Project`);
+    }
+    const { instanceId: _instanceId, adapter: _adapter, ...channel } = args;
     await ctx.db.patch(publisher._id, {
       targets: [...publisher.targets, { target, ...channel }],
       updatedAt: Date.now(),
@@ -139,9 +146,9 @@ export const addChannel = mutation({
 });
 
 export const updateSettings = mutation({
-  args: { instanceId: v.string(), target: v.string(), settings: v.record(v.string(), v.any()) },
+  args: { instanceId: v.string(), adapter: v.string(), target: v.string(), settings: v.record(v.string(), v.any()) },
   handler: async (ctx, args) => {
-    const publisher = await requirePublisher(ctx, args.instanceId);
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     if (!publisher.targets.some((t) => t.target === args.target)) {
       throw new Error(`Unknown channel "${args.target}"`);
     }
@@ -161,10 +168,11 @@ export const updateSettings = mutation({
 export const setChannelProfiles = mutation({
   args: {
     instanceId: v.string(),
+    adapter: v.string(),
     profiles: v.array(v.object({ target: v.string(), channelProfile: v.string() })),
   },
   handler: async (ctx, args) => {
-    const publisher = await requirePublisher(ctx, args.instanceId);
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     const byTarget = new Map(args.profiles.filter((p) => p.channelProfile.trim()).map((p) => [p.target, p.channelProfile]));
     let changed = false;
     const targets = publisher.targets.map((t) => {
@@ -178,9 +186,9 @@ export const setChannelProfiles = mutation({
 });
 
 export const removeTarget = mutation({
-  args: { instanceId: v.string(), target: v.string() },
+  args: { instanceId: v.string(), adapter: v.string(), target: v.string() },
   handler: async (ctx, args) => {
-    const publisher = await requirePublisher(ctx, args.instanceId);
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     await ctx.db.patch(publisher._id, {
       targets: publisher.targets.filter((t) => t.target !== args.target),
       updatedAt: Date.now(),
@@ -188,15 +196,25 @@ export const removeTarget = mutation({
   },
 });
 
+/**
+ * Removes a Publisher from the Project, with its connection and channels. Its
+ * Publications stay (history); a Mission or Schedule still naming one of its
+ * channels is refused at publish time ("Unknown channel") until it is changed.
+ */
+export const remove = mutation({
+  args: { instanceId: v.string(), adapter: v.string() },
+  handler: async (ctx, args) => {
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
+    await ctx.db.delete(publisher._id);
+  },
+});
+
 /** Server-side only: the connection including the secret, after an ownership check. */
 export const loadConnection = internalQuery({
-  args: { instanceId: v.string() },
+  args: { instanceId: v.string(), adapter: v.string() },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    const publisher = await ctx.db
-      .query("publishers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .unique();
+    const publisher = await projectPublisher(ctx, args.instanceId, args.adapter);
     if (!publisher) return null;
     return { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey ?? "" };
   },

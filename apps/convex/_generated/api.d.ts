@@ -93,6 +93,7 @@ import type * as project_channel_operations from "../project_channel_operations.
 import type * as project_node_operations from "../project_node_operations.js";
 import type * as project_overview from "../project_overview.js";
 import type * as project_provider_operations from "../project_provider_operations.js";
+import type * as project_publishers from "../project_publishers.js";
 import type * as project_templates from "../project_templates.js";
 import type * as project_templates_node from "../project_templates_node.js";
 import type * as projects from "../projects.js";
@@ -243,6 +244,7 @@ declare const fullApi: ApiFromModules<{
   project_node_operations: typeof project_node_operations;
   project_overview: typeof project_overview;
   project_provider_operations: typeof project_provider_operations;
+  project_publishers: typeof project_publishers;
   project_templates: typeof project_templates;
   project_templates_node: typeof project_templates_node;
   projects: typeof projects;

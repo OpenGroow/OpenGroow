@@ -63,8 +63,8 @@ const plainTemplate = fixtureTemplate("@test/plain", {
 } as never);
 useTemplateRegistry([INSTANCE_ID], [imageTemplate, plainTemplate]);
 
-const IG = { instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "love_youmake" };
-const PIN = { instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My Pin", channelService: "pinterest", channelProfile: "pins", settings: { board: "b1" } };
+const IG = { instanceId: INSTANCE_ID, adapter: "postiz", channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "love_youmake" };
+const PIN = { instanceId: INSTANCE_ID, adapter: "postiz", channelId: "ch-2", channelName: "My Pin", channelService: "pinterest", channelProfile: "pins", settings: { board: "b1" } };
 
 const PUBLISHABLE = { kind: "image", imageUrl: "https://cdn.example.com/i.png", caption: "Hello world" };
 
@@ -254,8 +254,8 @@ describe("Publish target", () => {
 });
 
 describe("channel capabilities for the Mission type's kind", () => {
-  const YT = { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "My YT", channelService: "youtube", channelProfile: "yt" };
-  const MASTO = { instanceId: INSTANCE_ID, channelId: "ch-4", channelName: "My Masto", channelService: "mastodon", channelProfile: "m" };
+  const YT = { instanceId: INSTANCE_ID, adapter: "postiz", channelId: "ch-3", channelName: "My YT", channelService: "youtube", channelProfile: "yt" };
+  const MASTO = { instanceId: INSTANCE_ID, adapter: "postiz", channelId: "ch-4", channelName: "My Masto", channelService: "mastodon", channelProfile: "m" };
 
   it("refuses a channel that cannot publish the kind when the human chooses targets", async () => {
     const { owner, missionId } = await seed({ payload: {} });
@@ -266,7 +266,15 @@ describe("channel capabilities for the Mission type's kind", () => {
   });
 
   it("allows an uncertain channel", async () => {
-    const { owner, missionId } = await seed({ payload: {} });
+    const { t, owner, missionId } = await seed({ payload: {} });
+    // A platform the package declares without saying whether it takes an image: `uncertain`.
+    await t.run(async (ctx) => {
+      const pkg = (await ctx.db.query("hubPackages").collect()).find((p) => p.provides === "postiz")!;
+      const meta = pkg.meta as { capabilities: { platforms: Record<string, unknown> } };
+      await ctx.db.patch(pkg._id, {
+        meta: { ...meta, capabilities: { ...meta.capabilities, platforms: { ...meta.capabilities.platforms, mastodon: { name: "Mastodon" } } } },
+      });
+    });
     await owner.mutation(api.publishers.addChannel, MASTO);
     await expect(
       owner.mutation(api.publications.setTargets, { missionId, targets: ["mastodon:m"] }),
@@ -404,6 +412,7 @@ describe("publish a video Mission", () => {
       publishable: { ...VIDEO, metadata: { privacy_level: "PUBLIC" } },
     });
     await owner.mutation(api.publishers.updateSettings, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       target: "instagram:love_youmake",
       settings: { privacy_level: "SELF_ONLY" },
@@ -552,7 +561,7 @@ describe("retrying one failed Publication", () => {
       publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "Hi" },
       payload: { publishTargets: ["tiktok:tok"] },
     });
-    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "Tik", channelService: "tiktok", channelProfile: "tok" });
+    await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-3", channelName: "Tik", channelService: "tiktok", channelProfile: "tok" });
     const postiz = stubPostiz();
     await owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" });
     expect(postedBody(postiz).posts[0].settings).toMatchObject({
@@ -567,7 +576,7 @@ describe("retrying one failed Publication", () => {
 
   it("asks for a board when a Pinterest channel has none", async () => {
     const { owner, missionId } = await seed({ payload: { publishTargets: ["pinterest:pins"] } });
-    await owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId: "ch-9", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" });
+    await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-9", channelName: "Pins", channelService: "pinterest", channelProfile: "pins" });
     stubPostiz();
     await expect(
       owner.action(api.missions_node.performReviewAction, { missionId, actionKey: "publish" }),

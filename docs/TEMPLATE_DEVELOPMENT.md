@@ -134,7 +134,7 @@ On the Mission type's entry in `missionTypes[]`:
 | `require` | no | Optional fields of that kind your Template **guarantees**. A RunResult without one of them is rejected with a precise per-field error and the Agent retries. It can only tighten the format, never loosen it: required fields cannot be listed, `metadata` cannot be required, duplicates and unknown names are refused. |
 | `resource` | no | Asynchronous MCP only: `{ "tool", "idArg"?, "map"? }`. `tool` is an MCP tool of the server that runs the External Job; `idArg` is the argument carrying the job id (default `runId`); `map` is an optional map from a media field (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`, or any field of an `article`) to a path in the tool output (dot keys, `[n]`, `[*]`; `[*]` only for `slideUrls`) for an MCP that does not use the recommended names. Requires an `externalJobsByMissionType` entry for the Mission type. Replaces the former `publish.media`, which is now rejected. See the next section. |
 
-Destinations are not declared: `targets` is rejected. Where content goes is chosen on the Mission or Schedule among the channels of the Project's Publisher. `validateManifest` (`packages/agent-templates/src/publish-declaration.ts`) checks all of this at Activation and `pnpm template:validate` reports it with the manifest path.
+Destinations are not declared: `targets` is rejected. Where content goes is chosen on the Mission or Schedule among the channels of the Project's Publishers. `validateManifest` (`packages/agent-templates/src/publish-declaration.ts`) checks all of this at Activation and `pnpm template:validate` reports it with the manifest path.
 
 #### Asynchronous MCP: produce, poll, fetch
 

@@ -2,17 +2,16 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { api } from "@convex/_generated/api";
-import type { FunctionReturnType } from "convex/server";
-import { capabilityFor, matchPlatform, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
-import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
+import { capabilityFor, matchPlatform, missingOptions, notConfiguredReason, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
+import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { unschedulablePublisherName, useProjectChannels, type ProjectChannel, type ProjectPublisher } from "@/src/hooks/use-project-channels";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
+import { StoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 import { DateTimePicker } from "@/src/components/date-time-picker";
+import { UnschedulableDate } from "@/src/components/unschedulable-date";
 import {
   Combobox,
   ComboboxChip,
@@ -29,8 +28,8 @@ import {
 } from "@/components/ui/combobox";
 import { AutoPublishToggle } from "@/src/components/auto-publish-toggle";
 
-type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
-export type PublisherChannel = Publisher["targets"][number];
+/** A channel of one of the Project's Publishers (ADR-075). */
+export type PublisherChannel = ProjectPublisher["targets"][number];
 
 /**
  * What the installed Publisher package says about a channel carrying a
@@ -48,10 +47,10 @@ export function channelCapability(
   return capabilityFor(capabilities, channel.channelService, kind, platforms, madeFor);
 }
 
-/** The platforms a Mission type publishes to that no channel of the Publisher is on (empty when it is not limited). */
-export function platformsWithoutChannel(publisher: Publisher, platforms: readonly string[] | undefined): string[] {
+/** The platforms a Mission type publishes to that no channel of the Project is on (empty when it is not limited). */
+export function platformsWithoutChannel(channels: readonly PublisherChannel[], platforms: readonly string[] | undefined): string[] {
   return (platforms ?? []).filter(
-    (platform) => !publisher.targets.some((channel) => channel.mapped && matchPlatform([platform], channel.channelService)),
+    (platform) => !channels.some((channel) => channel.mapped && matchPlatform([platform], channel.channelService)),
   );
 }
 
@@ -98,7 +97,7 @@ export function CapabilityWarning({ capability, testId }: { capability: Capabili
  * that cannot carry the kind are disabled with their reason, uncertain ones warn.
  */
 export function ChannelSelect({
-  publisher,
+  channels,
   kind,
   platforms,
   madeFor,
@@ -106,7 +105,8 @@ export function ChannelSelect({
   disabled,
   onChange,
 }: {
-  publisher: Publisher;
+  /** The channels of all the Project's Publishers (`useProjectChannels`). */
+  channels: ProjectChannel[];
   kind: string | undefined;
   /** The platforms the Mission type publishes to: channels on another platform are disabled. */
   platforms?: readonly string[];
@@ -117,34 +117,44 @@ export function ChannelSelect({
   onChange: (targets: string[]) => void;
 }) {
   const anchor = useComboboxAnchor();
-  const capabilities = useInstalledPublisher(publisher.adapter)?.capabilities;
+  const installed = useInstalledPublishers();
+  // Each channel's capabilities are those of its own Publisher's package (ADR-075).
+  const capabilityOf = useMemo(() => {
+    const byAdapter = new Map((installed ?? []).map((p) => [p.adapter, p]));
+    return (channel: ProjectChannel): Capability => {
+      const pkg = byAdapter.get(channel.adapter);
+      // A channel missing a required option of its package cannot be published to yet (ADR-075).
+      const notConfigured = channel.mapped ? notConfiguredReason(missingOptions(pkg?.channelOptions, channel.channelService, channel.settings)) : undefined;
+      if (notConfigured) return { level: "unsupported", reason: `Not configured: ${notConfigured}` };
+      return channelCapability(pkg?.capabilities, channel, kind, platforms, madeFor);
+    };
+  }, [installed, kind, platforms, madeFor]);
   const [open, setOpen] = useState(false);
   // Stable between renders: the Combobox filters on the identity of `items`.
   // Channels that cannot be used (not configured, or on a platform or a kind the Mission cannot go to) come last,
-  // in the Publisher's order otherwise.
+  // in the Publishers' order otherwise.
   const { byTarget, items } = useMemo(() => {
-    const unusable = (channel: PublisherChannel) =>
-      !channel.mapped || channelCapability(capabilities, channel, kind, platforms, madeFor).level === "unsupported";
+    const unusable = (channel: ProjectChannel) => !channel.mapped || capabilityOf(channel).level === "unsupported";
     return {
-      byTarget: new Map(publisher.targets.map((channel) => [channel.target, channel])),
-      items: [...publisher.targets]
+      byTarget: new Map(channels.map((channel) => [channel.target, channel])),
+      items: [...channels]
         .sort((a, b) => Number(unusable(a)) - Number(unusable(b)))
         .map((channel) => channel.target),
     };
-  }, [publisher.targets, capabilities, kind, platforms, madeFor]);
+  }, [channels, capabilityOf]);
   const labelOf = (target: string) => {
     const channel = byTarget.get(target);
     if (!channel) return target;
     return `${channel.mapped && channel.channelService ? platformName(channel.channelService) : ""} ${accountLabel(channel)}`.trim();
   };
 
-  const missing = platformsWithoutChannel(publisher, platforms);
+  const missing = platformsWithoutChannel(channels, platforms);
 
   return (
     <>
     {missing.length > 0 ? (
       <p data-testid="publish-missing-platforms" className="m-0 text-xs text-amber-600">
-        This Mission type publishes to {missing.map(platformName).join(" and ")}, but this Publisher has no such channel.
+        This Mission type publishes to {missing.map(platformName).join(" and ")}, but no Publisher of the Project has such a channel.
       </p>
     ) : null}
     <Combobox
@@ -166,7 +176,7 @@ export function ChannelSelect({
                 return (
                   <ComboboxChip key={target} data-testid={`publish-chip-${target}`}>
                     <PlatformLogo
-                      baseUrl={publisher.url}
+                      adapter={channel?.adapter}
                       service={channel?.mapped ? channel.channelService : undefined}
                       className="size-4"
                     />
@@ -188,7 +198,7 @@ export function ChannelSelect({
           {(target: string) => {
             const channel = byTarget.get(target);
             if (!channel) return null;
-            const capability = channelCapability(capabilities, channel, kind, platforms, madeFor);
+            const capability = capabilityOf(channel);
             const unsupported = capability.level === "unsupported";
             const isSelected = selected.includes(target);
             return (
@@ -199,7 +209,7 @@ export function ChannelSelect({
                 data-testid={`publish-target-${target}`}
               >
                 <ComboboxItemCheck />
-                <PlatformLogo baseUrl={publisher.url} service={channel.mapped ? channel.channelService : undefined} className="size-8" />
+                <PlatformLogo adapter={channel.adapter} service={channel.mapped ? channel.channelService : undefined} className="size-8" />
                 <span className="grid flex-1">
                   <span className="font-medium">
                     {channel.mapped && channel.channelService ? platformName(channel.channelService) : channel.target}
@@ -243,7 +253,7 @@ function parsePayload(text: string): Record<string, unknown> | null {
 
 /**
  * Where a Mission type that declares `publish` sends its content (ADR-069):
- * one or several channels of the Project's Publisher and an optional date.
+ * one or several channels of the Project's Publishers and an optional date.
  * Reads and writes `publishTargets` / `publishAt` of the payload JSON, so it
  * works for any form that edits a payload as text.
  */
@@ -265,8 +275,8 @@ export function PublishChannelPicker({
   platforms?: readonly string[];
   onChange: (payloadText: string) => void;
 }) {
-  const publisher = useQuery(api.publishers.get, { instanceId });
-  useStoreMissingHandles(instanceId, publisher);
+  const project = useProjectChannels(instanceId);
+  const installed = useInstalledPublishers();
   const [dateError, setDateError] = useState<string | null>(null);
   const payload = parsePayload(payloadText);
   const selected = Array.isArray(payload?.publishTargets)
@@ -282,14 +292,17 @@ export function PublishChannelPicker({
     onChange(Object.keys(next).length === 0 ? "" : JSON.stringify(next, null, 2));
   }
 
-  if (publisher === undefined) return null;
+  if (project === undefined) return null;
+  // A chosen channel on a Publisher that cannot schedule (ADR-074): no date to pick.
+  const unschedulable = unschedulablePublisherName(project.channels, installed, selected);
   const publishersHref = `/projects/${encodeURIComponent(instanceId)}/publishers`;
 
   return (
     <fieldset className="grid gap-3 rounded-xl border border-border p-4" data-testid="publish-channel-picker">
       <legend className="px-1 text-sm font-semibold text-muted-foreground">Publish</legend>
+      <StoreMissingHandles instanceId={instanceId} publishers={project.publishers} />
       <p className="m-0 text-xs text-muted-foreground">Channels</p>
-      {!publisher || publisher.targets.length === 0 ? (
+      {project.channels.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">
           No channel yet.{" "}
           <Link href={publishersHref} className="underline">
@@ -298,7 +311,7 @@ export function PublishChannelPicker({
         </p>
       ) : (
         <ChannelSelect
-          publisher={publisher}
+          channels={project.channels}
           kind={kind}
           platforms={platforms}
           selected={selected}
@@ -315,12 +328,25 @@ export function PublishChannelPicker({
         )}
         <div className="grid gap-1.5">
           <span className="text-sm font-semibold text-muted-foreground">Publish at</span>
-          <DateTimePicker
-            value={publishAt}
-            disabled={!payload}
-            onError={setDateError}
-            onChange={(at) => write({ publishAt: at })}
-          />
+          {unschedulable && publishAt === undefined ? (
+            <UnschedulableDate publisher={unschedulable}>
+              <DateTimePicker value={undefined} disabled onChange={() => {}} onError={setDateError} />
+            </UnschedulableDate>
+          ) : (
+            <>
+              <DateTimePicker
+                value={publishAt}
+                disabled={!payload}
+                onError={setDateError}
+                onChange={(at) => write({ publishAt: at })}
+              />
+              {unschedulable ? (
+                <p data-testid="publish-at-unschedulable" className="m-0 text-sm text-destructive">
+                  {unschedulable} cannot schedule a post: clear the date to publish.
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
       {dateError && <p data-testid="publish-at-error" className="m-0 text-sm text-destructive">{dateError}</p>}

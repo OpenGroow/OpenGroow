@@ -293,7 +293,10 @@ async function attachPublishResource(
     message: `The Publishable could not be fetched with "${resource.tool}": ${message}`,
   });
 
-  const call = publishResourceCall(resource, opts.jobId);
+  // The id of what the job produced (`resultIdField`, else the job id): the Mission's external id, the one the
+  // review and `onPublished` use too. A tool reading an article takes the article's id, not the run's.
+  const resultId = "artifact" in decision.result && decision.result.artifact?.external ? decision.result.artifact.external.id : opts.jobId;
+  const call = publishResourceCall(resource, resultId);
   // Loaded only now: most polls never reach a completed job with a resource.
   const apiKey = await loadProjectAgentApiKey(opts.ctx, opts.run.instanceId, opts.run.templateId);
   const endpoint = resolveTemplateMcpEndpoint(opts.template, opts.contract.server, apiKey);

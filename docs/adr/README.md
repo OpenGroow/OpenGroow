@@ -76,3 +76,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 072 | Hub packages have a `kind`; Publishers are the first code kind, run in Node actions | Accepted | no | [072-publisher-packages-installed-from-the-hub.md](072-publisher-packages-installed-from-the-hub.md) |
 | 073 | A Publishable image or carousel may carry one variant per platform, and a Mission type may limit its platforms | Accepted | no | [073-publishable-variants-per-platform.md](073-publishable-variants-per-platform.md) |
 | 074 | A GitHub Publisher publishes site articles; `article` joins the Publishable kinds | Proposed | no | [074-article-publishing-moves-to-a-github-publisher.md](074-article-publishing-moves-to-a-github-publisher.md) |
+| 075 | A Project has several Publishers, at most one per adapter | Proposed | no | [075-several-publishers-per-project.md](075-several-publishers-per-project.md) |

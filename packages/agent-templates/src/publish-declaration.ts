@@ -97,7 +97,8 @@ export type OnPublishedPlaceholder = (typeof ON_PUBLISHED_PLACEHOLDERS)[number];
 export type PublishResource = {
   /** An MCP tool of the server that ran the External Job. */
   tool: string;
-  /** Argument carrying the job id. Default `runId`. */
+  /** Argument carrying the id of what the job produced: its `resultIdField` when the job declares one (the
+   * Mission's external id), else the job id. Default `runId`. */
   idArg?: string;
   /** Media field -> path in the tool output, when it does not use the
    * recommended names (`videoUrl`, `coverUrl`, `imageUrl`, `slideUrls`). */

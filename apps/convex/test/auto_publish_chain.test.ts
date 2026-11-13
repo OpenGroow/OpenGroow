@@ -398,6 +398,7 @@ describe("auto-publish chain (issue #329)", () => {
       });
       if (opts.map) {
         await owner.mutation(api.publishers.addChannel, {
+          adapter: "postiz",
           instanceId: INSTANCE_ID,
           channelId: "ch-1",
           channelName: "My IG",

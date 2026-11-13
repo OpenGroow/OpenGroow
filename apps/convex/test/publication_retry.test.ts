@@ -88,6 +88,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
   });
   if (opts.map !== false) {
     await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "ch-1",
       channelName: "My IG",
@@ -234,12 +235,12 @@ describe("retry reconciles before sending again", () => {
       const ctx = await seed();
       const original = { branch: "main", contentBase: "articles" };
       await ctx.owner.mutation(api.publishers.updateSettings, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: original,
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: original,
       });
       const service = fakePostiz({ mode: "drop-after-accept" });
       await expect(publish(ctx)).rejects.toThrow();
       await ctx.owner.mutation(api.publishers.updateSettings, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake",
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake",
         settings: { branch: "release", contentBase: "new-articles" },
       });
       await ctx.t.run(async (c) => {
@@ -270,7 +271,7 @@ describe("retry reconciles before sending again", () => {
       const service = fakePostiz({ mode: "drop-after-accept" });
       await expect(publish(ctx)).rejects.toThrow();
       await ctx.owner.mutation(api.publishers.updateSettings, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: { branch: "release" },
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: { branch: "release" },
       });
       service.state.mode = "ok";
       await retry(ctx);
@@ -287,7 +288,7 @@ describe("retry reconciles before sending again", () => {
     await expect(publish(ctx)).rejects.toThrow();
     const settings = { branch: "release" };
     await ctx.owner.mutation(api.publishers.updateSettings, {
-      instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings,
+      instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings,
     });
     service.state.mode = "ok";
     await retry(ctx);
@@ -305,10 +306,10 @@ describe("retry reconciles before sending again", () => {
       const service = fakePostiz({ mode: "drop-after-accept" });
       await expect(publish(ctx)).rejects.toThrow();
       await ctx.owner.mutation(api.publishers.removeTarget, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake",
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake",
       });
       await ctx.owner.mutation(api.publishers.addChannel, {
-        instanceId: INSTANCE_ID, channelId: "replacement", channelName: "Replacement",
+        instanceId: INSTANCE_ID, adapter: "postiz", channelId: "replacement", channelName: "Replacement",
         channelService: "instagram", channelProfile: "love_youmake",
       });
       service.state.mode = "ok";

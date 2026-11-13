@@ -99,7 +99,7 @@ export function PublicationList({ missionId, title }: { missionId: string; title
               className="grid gap-4 py-1"
             >
               <div className="flex items-center gap-3">
-                <PlatformLogo baseUrl={publication.publisherUrl ?? ""} service={publication.channelService} className="size-8" />
+                <PlatformLogo adapter={publication.publisherAdapter} service={publication.channelService} className="size-8" />
                 <div className="grid min-w-0 flex-1 gap-0.5">
                   <span className="truncate font-semibold text-foreground">
                     {publication.channelService ? platformName(publication.channelService) : publication.target}

@@ -97,6 +97,42 @@ describe("PublishTargetsCard", () => {
     expect(option("Nameless").disabled).toBe(true);
   });
 
+  it("marks the required options and says a channel is Not configured until they are set (ADR-075)", async () => {
+    const github = {
+      ...INSTALLED_PUBLISHERS[0],
+      adapter: "github",
+      name: "Blog Utils (GitHub)",
+      packageId: "@opengroow/publisher-github",
+      capabilities: { schemaVersion: 1, adapter: "github", platforms: { github: { name: "GitHub" } } },
+      channelOptions: {
+        schemaVersion: 1,
+        adapter: "github",
+        platforms: { github: [{ key: "articleBaseUrl", label: "URL of the articles", type: "text" as const, required: true }] },
+      },
+    };
+    INSTALLED_PUBLISHERS.push(github as never);
+    try {
+      listChannels.mockResolvedValue({ ok: true, channels: [] });
+      const repo = { ...target("github", "acme/site"), channelProfile: "acme/site" };
+      await act(async () => {
+        root.render(<PublishTargetsCard instanceId="inst-1" publisher={{ ...publisher([repo]), adapter: "github" }} />);
+      });
+      expect(text()).toContain("Not configured");
+      await click(byText("@acme/site"));
+      const field = document.getElementById("articleBaseUrl-github:acme/site") as HTMLInputElement;
+      expect(field.required).toBe(true);
+      expect(field.getAttribute("aria-invalid")).toBe("true");
+      expect(document.querySelector('label[for="articleBaseUrl-github:acme/site"]')?.textContent).toContain("*");
+
+      await act(async () => {
+        root.render(<PublishTargetsCard instanceId="inst-1" publisher={{ ...publisher([{ ...repo, settings: { articleBaseUrl: "https://acme.example/blog" } }]), adapter: "github" }} />);
+      });
+      expect(text()).not.toContain("Not configured");
+    } finally {
+      INSTALLED_PUBLISHERS.pop();
+    }
+  });
+
   it("adds a clicked channel with its data and closes the modal", async () => {
     listChannels.mockResolvedValue({
       ok: true,
@@ -108,6 +144,7 @@ describe("PublishTargetsCard", () => {
     await click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes("@fresh")));
     expect(mutations["publishers.addChannel"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       channelId: "c9",
       channelName: "Fresh",
       channelService: "linkedin",
@@ -129,6 +166,7 @@ describe("PublishTargetsCard", () => {
     });
     expect(mutations["publishers.updateSettings"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       target: "pinterest:pins",
       settings: { title: "T", board: "987" },
     });
@@ -147,6 +185,7 @@ describe("PublishTargetsCard", () => {
     await change(visibility, "SELF_ONLY");
     expect(mutations["publishers.updateSettings"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       target: "tiktok:tt",
       settings: { comment: false, privacy_level: "SELF_ONLY" },
     });
@@ -166,6 +205,7 @@ describe("PublishTargetsCard", () => {
     expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledTimes(1);
     expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       profiles: [{ target: "instagram", channelProfile: "love_youmake" }],
     });
   });

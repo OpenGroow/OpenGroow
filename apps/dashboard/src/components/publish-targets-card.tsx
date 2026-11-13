@@ -11,14 +11,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { optionsOfPlatform } from "@opengroow/publisher-sdk";
+import { missingOptions, optionsOfPlatform, servesPlatform } from "@opengroow/publisher-sdk";
 import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 
 type Channel = { id: string; name: string; service: string; profile?: string; disabled?: boolean };
-type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
+type Publisher = FunctionReturnType<typeof api.publishers.list>[number];
 type Target = Publisher["targets"][number];
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -26,7 +26,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * The channels of the Project's Publisher (ADR-069). Adding a channel gives it
+ * The channels of one of the Project's Publishers (ADR-069, ADR-075). Adding a channel gives it
  * a generated key; Missions and Schedules pick channels from this list. The
  * service-specific settings of each channel are editable.
  */
@@ -35,7 +35,9 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const updateSettings = useMutation(api.publishers.updateSettings);
   const removeTarget = useMutation(api.publishers.removeTarget);
   const listChannels = useAction(api.publishers_node.listChannels);
-  const channelOptions = useInstalledPublisher(publisher.adapter)?.channelOptions;
+  const installedPackage = useInstalledPublisher(publisher.adapter);
+  const channelOptions = installedPackage?.channelOptions;
+  const serviceName = installedPackage?.name ?? publisher.adapter;
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     setLoading(true);
     setMessage(null);
     try {
-      const result = await listChannels({ instanceId: id });
+      const result = await listChannels({ instanceId: id, adapter: publisher.adapter });
       if (result.ok) setChannels(result.channels);
       else setMessage(result.error);
     } catch (e) {
@@ -56,7 +58,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     } finally {
       setLoading(false);
     }
-  }, [id, listChannels]);
+  }, [id, publisher.adapter, listChannels]);
 
   useEffect(() => {
     if (publisher.hasApiKey) void loadChannels();
@@ -67,6 +69,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     try {
       const key = await addChannel({
         instanceId: id,
+        adapter: publisher.adapter,
         channelId: channel.id,
         channelName: channel.name,
         channelService: channel.service,
@@ -86,6 +89,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     try {
       await updateSettings({
         instanceId: id,
+        adapter: publisher.adapter,
         target: current.target,
         settings: empty ? others : { ...others, [key]: value },
       });
@@ -102,7 +106,8 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   useStoreMissingHandles(id, publisher, channels);
 
   const taken = new Set(publisher.targets.flatMap((t) => (t.mapped ? [t.channelId] : [])));
-  const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled);
+  // Only the platforms the package declares are offered (ADR-075).
+  const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled && servesPlatform(installedPackage?.capabilities, c.service));
 
   return (
     <Card className="gap-4 p-5">
@@ -130,12 +135,12 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add a channel</DialogTitle>
-            <DialogDescription>Choose the channel of your Postiz account to add.</DialogDescription>
+            <DialogDescription>Choose the channel of your {serviceName} account to add.</DialogDescription>
           </DialogHeader>
           {error ? <StatusBadge tone="error" label={error} /> : null}
           <div className="grid max-h-96 gap-2 overflow-y-auto">
             {available.length === 0 ? (
-              <p className="m-0 text-sm text-muted-foreground">Every channel of your Postiz account is already added.</p>
+              <p className="m-0 text-sm text-muted-foreground">Every channel of your {serviceName} account is already added.</p>
             ) : (
               available.map((c) => (
                 <button
@@ -145,7 +150,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   disabled={!c.profile}
                   onClick={() => void handleAdd(c)}
                 >
-                  <PlatformLogo baseUrl={publisher.url} service={c.service} />
+                  <PlatformLogo service={c.service} adapter={publisher.adapter} />
                   <span className="grid">
                     <span className="font-medium">{platformName(c.service)}</span>
                     <span className="text-sm text-muted-foreground">
@@ -169,10 +174,12 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
           {publisher.targets.map((t) => {
             const options = t.mapped && channelOptions ? optionsOfPlatform(channelOptions, t.channelService) : [];
             const expandable = options.length > 0;
+            // Required options without a value (ADR-075): the channel cannot be published to yet.
+            const missing = t.mapped ? missingOptions(channelOptions, t.channelService, t.settings) : [];
             const expanded = expandable && open === t.target;
             const header = (
               <>
-                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} />
+                <PlatformLogo service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} />
                 <span className="grid flex-1 gap-1">
                   <span className="text-base font-medium">
                     {t.mapped && t.channelService ? platformName(t.channelService) : t.target}
@@ -185,6 +192,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     <StatusBadge tone="warning" label="Not mapped" />
                   )}
                 </span>
+                {missing.length > 0 ? <StatusBadge tone="warning" label="Not configured" /> : null}
                 {expandable ? (
                   <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} aria-hidden="true" />
                 ) : null}
@@ -209,7 +217,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     type="button"
                     variant="ghost"
                     aria-label={`Remove ${t.mapped && t.channelName ? t.channelName : t.target}`}
-                    onClick={() => void removeTarget({ instanceId: id, target: t.target })}
+                    onClick={() => void removeTarget({ instanceId: id, adapter: publisher.adapter, target: t.target })}
                   >
                     <Trash2 aria-hidden="true" />
                   </Button>
@@ -251,12 +259,21 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                       }
                       return (
                         <div key={option.key} className="grid gap-2">
-                          <Label htmlFor={fieldId}>{option.label}</Label>
+                          <Label htmlFor={fieldId}>
+                            {option.label}
+                            {option.required ? (
+                              <span className="text-destructive" aria-label="required">
+                                {" "}*
+                              </span>
+                            ) : null}
+                          </Label>
                           <Input
                             id={fieldId}
                             key={String(stored ?? "")}
                             autoComplete="off"
                             placeholder={option.placeholder}
+                            required={option.required}
+                            aria-invalid={missing.some((m) => m.key === option.key) || undefined}
                             defaultValue={typeof stored === "string" ? stored : ""}
                             onBlur={(event) => void handleOption(t, option.key, event.target.value.trim())}
                           />

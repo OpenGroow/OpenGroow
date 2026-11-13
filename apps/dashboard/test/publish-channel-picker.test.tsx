@@ -23,13 +23,16 @@ vi.mock("next/link", () => ({
 }));
 const listChannelsMock = vi.fn();
 const setChannelProfileMock = vi.fn();
+// `publishers.list`: a test's single Publisher (or null for none) is the Project's only one (ADR-075).
+const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : useQueryMock(...args)),
+  useQuery: (...args: unknown[]) =>
+    args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useAction: () => listChannelsMock,
   useMutation: () => setChannelProfileMock,
 }));
 vi.mock("@convex/_generated/api", () => ({
-  api: { publishers: { get: "publishers.get", setChannelProfiles: "publishers.setChannelProfiles" }, publishers_node: { listChannels: "publishers_node.listChannels" }, publisher_packages: { list: "publisher_packages.list" } },
+  api: { publishers: { list: "publishers.list", setChannelProfiles: "publishers.setChannelProfiles" }, publishers_node: { listChannels: "publishers_node.listChannels" }, publisher_packages: { list: "publisher_packages.list" } },
 }));
 
 const PUBLISHER = {
@@ -64,6 +67,30 @@ describe("PublishChannelPicker", () => {
     });
     return onChange;
   }
+
+  it("offers no date when a chosen channel is on a Publisher that cannot schedule (ADR-074)", async () => {
+    INSTALLED_PUBLISHERS.push({ ...INSTALLED_PUBLISHERS[0], adapter: "github", name: "Blog Utils (GitHub)", packageId: "@opengroow/publisher-github", scheduling: false } as never);
+    try {
+      useQueryMock.mockReturnValue([
+        PUBLISHER,
+        { adapter: "github", url: "https://api.github.com", hasApiKey: true, targets: [{ target: "github:acme/site", mapped: true, channelId: "acme/site", channelName: "acme/site", channelService: "github", channelProfile: "acme/site" }] },
+      ]);
+      await render(JSON.stringify({ publishTargets: ["instagram:myinsta"] }));
+      expect(container.querySelector('[data-testid="publish-at-immediate"]')).toBeNull();
+
+      await render(JSON.stringify({ publishTargets: ["github:acme/site"] }));
+      const immediate = container.querySelector('[data-testid="publish-at-immediate"]');
+      expect(immediate?.getAttribute("aria-label")).toBe("Blog Utils (GitHub) cannot schedule a post: it is published immediately");
+      // The calendar stays, disabled: the reason is on hover.
+      expect(immediate?.querySelector("button")?.disabled).toBe(true);
+
+      // A date already there stays clearable, with the reason it must go.
+      await render(JSON.stringify({ publishTargets: ["github:acme/site"], publishAt: Date.now() + 3_600_000 }));
+      expect(container.querySelector('[data-testid="publish-at-unschedulable"]')?.textContent).toContain("clear the date");
+    } finally {
+      INSTALLED_PUBLISHERS.pop();
+    }
+  });
 
   const openList = async () => {
     await act(async () => {
@@ -221,6 +248,7 @@ describe("PublishChannelPicker", () => {
     expect(setChannelProfileMock).toHaveBeenCalledTimes(1);
     expect(setChannelProfileMock).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       profiles: [{ target: "instagram", channelProfile: "love_youmake" }],
     });
   });

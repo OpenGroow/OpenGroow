@@ -13,12 +13,13 @@ const retryMock = vi.fn();
 const resendMock = vi.fn();
 
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useQuery: (...args: unknown[]) => (args[0] === "publisher_packages.list" ? [] : useQueryMock(...args)),
   useAction: (ref: string) => (ref === "publication_notify_node.resendPublishedNotification" ? resendMock : retryMock),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     publications: { listForMission: "publications.listForMission" },
+    publisher_packages: { list: "publisher_packages.list" },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
   },

@@ -89,6 +89,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
   });
   if (opts.map !== false) {
     await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "ch-1",
       channelName: "My IG",
@@ -337,12 +338,12 @@ describe("polling a scheduled Publication", () => {
       const ctx = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt: Date.now() + 2 * HOUR } });
       const original = { branch: "main", contentBase: "articles" };
       await ctx.owner.mutation(api.publishers.updateSettings, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: original,
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: original,
       });
       stubPostiz();
       await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
       await ctx.owner.mutation(api.publishers.updateSettings, {
-        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: { branch: "release" },
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: { branch: "release" },
       });
       await makeDue(ctx.t);
       stubPostizListing("QUEUE");
