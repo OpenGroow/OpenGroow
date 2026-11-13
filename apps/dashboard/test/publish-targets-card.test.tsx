@@ -34,7 +34,7 @@ vi.mock("@convex/_generated/api", () => ({
 
 type Target = {
   target: string; mapped: true; channelId: string; channelName: string; channelService: string; channelProfile: string;
-  settings: Record<string, unknown> | undefined;
+  settings?: Record<string, unknown>;
 };
 const target = (service: string, id: string, settings?: Record<string, unknown>): Target => ({
   target: `${service}:${id}`, mapped: true, channelId: id, channelName: `${service} name`, channelService: service, channelProfile: id, settings,
@@ -100,7 +100,7 @@ describe("PublishTargetsCard", () => {
   it("adds a clicked channel with its data and closes the modal", async () => {
     listChannels.mockResolvedValue({
       ok: true,
-      channels: [{ id: "c9", name: "Fresh", service: "linkedin", profile: "fresh", picture: "https://cdn.example.com/fresh.png" }],
+      channels: [{ id: "c9", name: "Fresh", service: "linkedin", profile: "fresh" }],
     });
     await render([]);
     await click(byText("Add channel"));
@@ -113,7 +113,6 @@ describe("PublishTargetsCard", () => {
       channelName: "Fresh",
       channelService: "linkedin",
       channelProfile: "fresh",
-      channelPicture: "https://cdn.example.com/fresh.png",
     });
     expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });

@@ -50,7 +50,6 @@ function view(publisher: ProjectPublisher) {
     targets: publisher.targets.map((t) =>
       t.channelId
         ? {
-            ...(t.channelPicture ? { channelPicture: t.channelPicture } : {}),
             target: t.target,
             mapped: true as const,
             channelId: t.channelId,
@@ -120,7 +119,6 @@ export const addChannel = mutation({
     channelName: v.string(),
     channelService: v.string(),
     channelProfile: v.optional(v.string()),
-    channelPicture: v.optional(v.string()),
     settings: v.optional(v.record(v.string(), v.any())),
   },
   handler: async (ctx, args): Promise<string> => {

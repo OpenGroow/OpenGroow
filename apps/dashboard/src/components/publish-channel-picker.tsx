@@ -171,7 +171,6 @@ export function ChannelSelect({
                     <PlatformLogo
                       baseUrl={channel?.publisherUrl ?? ""}
                       adapter={channel?.adapter}
-                      picture={channel?.mapped ? channel.channelPicture : undefined}
                       service={channel?.mapped ? channel.channelService : undefined}
                       className="size-4"
                     />
@@ -204,7 +203,7 @@ export function ChannelSelect({
                 data-testid={`publish-target-${target}`}
               >
                 <ComboboxItemCheck />
-                <PlatformLogo baseUrl={channel.publisherUrl} adapter={channel.adapter} picture={channel.mapped ? channel.channelPicture : undefined} service={channel.mapped ? channel.channelService : undefined} className="size-8" />
+                <PlatformLogo baseUrl={channel.publisherUrl} adapter={channel.adapter} service={channel.mapped ? channel.channelService : undefined} className="size-8" />
                 <span className="grid flex-1">
                   <span className="font-medium">
                     {channel.mapped && channel.channelService ? platformName(channel.channelService) : channel.target}

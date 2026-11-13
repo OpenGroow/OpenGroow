@@ -17,7 +17,7 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 
-type Channel = { id: string; name: string; service: string; profile?: string; picture?: string; disabled?: boolean };
+type Channel = { id: string; name: string; service: string; profile?: string; disabled?: boolean };
 type Publisher = FunctionReturnType<typeof api.publishers.list>[number];
 type Target = Publisher["targets"][number];
 
@@ -74,7 +74,6 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
         channelName: channel.name,
         channelService: channel.service,
         ...(channel.profile ? { channelProfile: channel.profile } : {}),
-        ...(channel.picture ? { channelPicture: channel.picture } : {}),
       });
       setPicking(false);
       setOpen(key);
@@ -150,7 +149,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   disabled={!c.profile}
                   onClick={() => void handleAdd(c)}
                 >
-                  <PlatformLogo baseUrl={publisher.url} service={c.service} adapter={publisher.adapter} picture={c.picture} />
+                  <PlatformLogo baseUrl={publisher.url} service={c.service} adapter={publisher.adapter} />
                   <span className="grid">
                     <span className="font-medium">{platformName(c.service)}</span>
                     <span className="text-sm text-muted-foreground">
@@ -177,7 +176,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
             const expanded = expandable && open === t.target;
             const header = (
               <>
-                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} picture={t.mapped ? t.channelPicture : undefined} />
+                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} />
                 <span className="grid flex-1 gap-1">
                   <span className="text-base font-medium">
                     {t.mapped && t.channelService ? platformName(t.channelService) : t.target}

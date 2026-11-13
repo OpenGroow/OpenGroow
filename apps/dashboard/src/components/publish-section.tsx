@@ -151,7 +151,6 @@ export function PublishSection({
                 <PlatformLogo
                   baseUrl={channel?.publisherUrl ?? ""}
                   adapter={channel?.adapter}
-                  picture={channel?.mapped ? channel.channelPicture : undefined}
                   service={channel?.mapped ? channel.channelService : undefined}
                   className="size-8"
                 />

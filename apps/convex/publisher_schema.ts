@@ -43,8 +43,6 @@ export const publisherTables = {
         channelName: v.optional(v.string()),
         channelService: v.optional(v.string()),
         channelProfile: v.optional(v.string()),
-        // The account's or repository's picture as the service gives it (`PublisherChannel.picture`), shown before the platform logo.
-        channelPicture: v.optional(v.string()),
         settings: v.optional(v.record(v.string(), v.any())),
       }),
     ),
