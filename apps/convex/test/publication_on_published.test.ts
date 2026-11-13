@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
+import { createInMemoryTemplateRegistry } from "@opengroow/agent-templates/registry";
+import { setTemplateRegistryForTests } from "../template_registry";
+import { NOTIFICATION_ABANDONED_AFTER_MS } from "../publication_notifications";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
@@ -90,7 +93,7 @@ async function seed(opts: { templateId?: string } = {}) {
       createdAt: now,
       openclawId: INSTANCE_ID,
       updatedAt: now,
-      userId: OWNER.subject,
+      userId: OWNER.tokenIdentifier,
     });
     await ctx.db.insert("projectAgents", {
       instanceId: INSTANCE_ID,
@@ -183,9 +186,14 @@ afterEach(() => {
 });
 
 type Seeded = Awaited<ReturnType<typeof seed>>;
+// Run immediate notifications before advancing to their five-minute watchdogs.
+async function finishImmediateNotifications(ctx: Seeded) {
+  vi.advanceTimersByTime(0);
+  await ctx.t.finishInProgressScheduledFunctions();
+}
 const publish = async (ctx: Seeded) => {
   await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
-  await ctx.t.finishAllScheduledFunctions(vi.runAllTimers);
+  await finishImmediateNotifications(ctx);
 };
 const listed = async (ctx: Seeded) =>
   (await ctx.owner.query(api.publications.listForMission, { missionId: ctx.missionId }))[0];
@@ -229,7 +237,7 @@ describe("a Publication reaching published", () => {
       status: "published",
       externalUrl: "https://instagram.com/p/x",
     });
-    await ctx.t.finishAllScheduledFunctions(vi.runAllTimers);
+    await finishImmediateNotifications(ctx);
 
     expect(mcp.calls).toHaveLength(1);
   });
@@ -245,13 +253,27 @@ describe("a Publication reaching published", () => {
     const linkArrives = () =>
       ctx.t.mutation(internal.publications.finish, { publicationId, status: "published", externalUrl: "https://instagram.com/p/x" });
     await linkArrives();
-    await ctx.t.finishAllScheduledFunctions(vi.runAllTimers);
+    await finishImmediateNotifications(ctx);
     await linkArrives();
-    await ctx.t.finishAllScheduledFunctions(vi.runAllTimers);
+    await finishImmediateNotifications(ctx);
 
     expect(mcp.calls).toHaveLength(1);
     expect(mcp.calls[0].body).toEqual({ url: "https://instagram.com/p/x" });
     expect((await listed(ctx)).notification).toMatchObject({ status: "sent", service: "Site Writer" });
+  });
+
+  it.each([true, false])("uses the pinned notification declaration after a Template update (V1 notifies: %s)", async (notifies) => {
+    const ctx = await seed();
+    const mcp = fakeServices();
+    const silentVersion = { ...silentTemplate, manifest: { ...silentTemplate.manifest, id: TEMPLATE_ID } };
+    setTemplateRegistryForTests(createInMemoryTemplateRegistry([
+      { projectId: INSTANCE_ID, template: notifies ? notifyingTemplate : silentVersion, version: "1.0.0" },
+      { projectId: INSTANCE_ID, template: notifies ? silentVersion : notifyingTemplate, version: "2.0.0" },
+    ]));
+    await ctx.t.run(async (c) => c.db.patch(ctx.missionId, { templateVersion: "1.0.0" }));
+    await publish(ctx);
+    expect(mcp.calls).toHaveLength(notifies ? 1 : 0);
+    expect((await missionOf(ctx))?.status).toBe("done");
   });
 
   it("calls nothing for a Mission type without onPublished", async () => {
@@ -305,6 +327,65 @@ describe("a failed onPublished call", () => {
       ctx.t.withIdentity(OTHER).action(api.publication_notify_node.resendPublishedNotification, { publicationId }),
     ).rejects.toThrow(/Forbidden/);
     expect(mcp.calls).toHaveLength(1);
+  });
+
+  it.each([OWNER.subject, OWNER.tokenIdentifier])("refuses the same subject from a different issuer (owner: %s)", async (ownerId) => {
+    const ctx = await seed();
+    const mcp = fakeServices();
+    mcp.answer = () => json({}, 503);
+    await publish(ctx);
+    await ctx.t.run(async (c) => c.db.patch(ctx.missionId, { ownerId }));
+    const impostor = { ...OWNER, tokenIdentifier: "different-issuer|onp" };
+    await expect(ctx.t.withIdentity(impostor).action(api.publication_notify_node.resendPublishedNotification, {
+      publicationId: (await listed(ctx)).id,
+    })).rejects.toThrow(/Forbidden/);
+    expect(mcp.calls).toHaveLength(1);
+  });
+
+  it("accepts a canonical token owner on resend", async () => {
+    const ctx = await seed();
+    const mcp = fakeServices();
+    mcp.answer = () => json({}, 503);
+    await publish(ctx);
+    const publicationId = (await listed(ctx)).id;
+    await ctx.t.run(async (c) => c.db.patch(ctx.missionId, { ownerId: OWNER.tokenIdentifier }));
+    mcp.answer = () => json({});
+    await expect(ctx.owner.action(api.publication_notify_node.resendPublishedNotification, { publicationId }))
+      .resolves.toEqual({ ok: true });
+    expect(mcp.calls).toHaveLength(2);
+  });
+
+  it("persists an interrupted resend as failed at its deadline", async () => {
+    const ctx = await seed();
+    const mcp = fakeServices();
+    mcp.answer = () => json({}, 503);
+    await publish(ctx);
+    const publicationId = (await listed(ctx)).id;
+    await ctx.owner.mutation(internal.publication_notifications.claimResend, { publicationId });
+    vi.advanceTimersByTime(NOTIFICATION_ABANDONED_AFTER_MS);
+    await ctx.t.finishInProgressScheduledFunctions();
+    const publication = await ctx.t.query(internal.publications.getInternal, { publicationId });
+    expect(publication?.notification).toMatchObject({ status: "failed", error: "The call did not finish" });
+    expect((await missionOf(ctx))?.status).toBe("done");
+  });
+
+  it("ignores an expired attempt's watchdog and late result after a newer resend", async () => {
+    const ctx = await seed();
+    const mcp = fakeServices();
+    mcp.answer = () => json({}, 503);
+    await publish(ctx);
+    const publicationId = (await listed(ctx)).id;
+    await ctx.owner.mutation(internal.publication_notifications.claimResend, { publicationId });
+    const old = await ctx.t.query(internal.publications.getInternal, { publicationId });
+    const startedAt = old!.notification!.updatedAt;
+    vi.advanceTimersByTime(NOTIFICATION_ABANDONED_AFTER_MS);
+    await ctx.owner.mutation(internal.publication_notifications.claimResend, { publicationId });
+    await ctx.t.mutation(internal.publication_notifications.expire, { publicationId, startedAt });
+    await ctx.t.mutation(internal.publication_notifications.record, { publicationId, startedAt, error: "stale error" });
+    const current = await ctx.t.query(internal.publications.getInternal, { publicationId });
+    expect(current?.notification).toMatchObject({ status: "sending" });
+    expect(current?.notification?.error).toBeUndefined();
+    await finishImmediateNotifications(ctx);
   });
 
   it("shows a call that never finished as failed, and lets it be resent", async () => {
