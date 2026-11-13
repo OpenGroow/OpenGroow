@@ -131,6 +131,16 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     }
   }
 
+  // What can be added: the hub's packages, plus installed ones the hub does not list (hub unreachable, or removed
+  // from it), without the services already on the Project (one Publisher per adapter, each on its own card).
+  const choices = catalogue
+    ? [
+        ...catalogue.entries,
+        ...(installed ?? [])
+          .filter((p) => !catalogue.entries.some((e) => e.packageId === p.packageId))
+          .map((p) => ({ packageId: p.packageId, name: p.name, description: "", icon: p.icon })),
+      ].filter((entry) => !configured.has(installed?.find((p) => p.packageId === entry.packageId)?.adapter ?? adapterOf(entry.packageId)))
+    : [];
   const showAdding = adding !== null && !configured.has(adding);
   const empty = (publishers ?? []).length === 0 && !showAdding;
 
@@ -161,21 +171,13 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           ) : (
             <div className="grid gap-2">
               {catalogue.error ? <p className="m-0 text-sm text-destructive">The hub could not be read: {catalogue.error}</p> : null}
-              {[
-                ...catalogue.entries,
-                // Installed packages the hub does not list (hub unreachable, or removed from it) stay usable.
-                ...(installed ?? [])
-                  .filter((p) => !catalogue.entries.some((e) => e.packageId === p.packageId))
-                  .map((p) => ({ packageId: p.packageId, name: p.name, description: "", icon: p.icon })),
-              ].map((entry) => {
+              {choices.map((entry) => {
                 const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
-                // One Publisher per adapter: a service already on the Project is configured on its own card.
-                const isAdded = configured.has(installed?.find((p) => p.packageId === entry.packageId)?.adapter ?? adapterOf(entry.packageId));
                 return (
                   <button
                     key={entry.packageId}
                     type="button"
-                    disabled={installing !== null || isAdded}
+                    disabled={installing !== null}
                     className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                     onClick={() => void choose(entry.packageId)}
                   >
@@ -186,16 +188,16 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                     </span>
                     {installing === entry.packageId ? (
                       <Loader2 className="size-4 animate-spin" aria-label="Installing" />
-                    ) : isAdded ? (
-                      <span className="text-xs text-muted-foreground">Added</span>
                     ) : isInstalled ? null : (
                       <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
                     )}
                   </button>
                 );
               })}
-              {catalogue.entries.length === 0 && !catalogue.error && (installed ?? []).length === 0 ? (
-                <p className="m-0 text-sm text-muted-foreground">The hub lists no publisher.</p>
+              {choices.length === 0 && !catalogue.error ? (
+                <p className="m-0 text-sm text-muted-foreground">
+                  {catalogue.entries.length === 0 && (installed ?? []).length === 0 ? "The hub lists no publisher." : "Every publisher of the hub is already added."}
+                </p>
               ) : null}
             </div>
           )}

@@ -159,7 +159,7 @@ describe("Publishers page", () => {
     expect((document.getElementById("publisher-api-key-postiz") as HTMLInputElement).type).toBe("password");
   });
 
-  it("still offers Add publisher once a Publisher exists, the service already added being greyed out (ADR-075)", async () => {
+  it("still offers Add publisher once a Publisher exists, listing only the services not added yet (ADR-075)", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
       entries: [
@@ -170,11 +170,17 @@ describe("Publishers page", () => {
     await render();
     expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
     await click(byText("Add publisher"));
-    const option = (name: string) =>
-      [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent?.includes(name)) as HTMLButtonElement;
-    expect(option("Postiz").disabled).toBe(true);
-    expect(option("Postiz").textContent).toContain("Added");
-    expect(option("GitHub").disabled).toBe(false);
+    const options = [...document.querySelectorAll('[role="dialog"] button')].map((b) => b.textContent ?? "");
+    expect(options.some((o) => o.includes("GitHub"))).toBe(true);
+    expect(options.some((o) => o.includes("Postiz"))).toBe(false);
+  });
+
+  it("says so when every publisher of the hub is already added", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
+    await render();
+    await click(byText("Add publisher"));
+    expect(text()).toContain("Every publisher of the hub is already added.");
   });
 
   it("shows one card per Publisher of the Project, each with its own connection", async () => {
