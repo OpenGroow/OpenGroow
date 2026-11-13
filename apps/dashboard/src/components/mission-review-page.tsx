@@ -699,7 +699,7 @@ export function MissionReviewContent({
   const main = (
     <>
       {reviewBar}
-      <PublishablePreview publishable={publishable} />
+      <PublishablePreview publishable={publishable} missionId={missionId} />
       {!reviewArtifact?.available ? null : (
         <>
           {!publishDriven && !isVideoMission && !isCarouselMission && !isWorkspaceArtifact && <IndexingBadge indexing={mission.indexing} />}

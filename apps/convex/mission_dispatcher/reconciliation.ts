@@ -1,4 +1,5 @@
 import { decideBoundedRetry, isRetryDecision, isTerminalDecision } from "@opengroow/reliability";
+import { isMcpOwnedKind } from "@opengroow/agent-templates";
 import type { Id } from "../_generated/dataModel.js";
 import {
   runResultSchema,
@@ -158,6 +159,13 @@ export function validateDeclaredPublishable(
   const publishable = (result.status === "success" || result.status === "needs_human_review" || result.status === "failed")
     ? result.artifact?.publishable
     : undefined;
+  if (isMcpOwnedKind(ctx.publish.kind)) {
+    if (publishable !== undefined) return mcpOwnedPublishableError(ctx.missionType, ctx.publish.kind);
+    // Only the MCP's resource gives the Publishable, after its job: a deliverable without a job has none.
+    return result.status === "success" || result.status === "needs_human_review"
+      ? `Mission type "${ctx.missionType}" publishes an ${ctx.publish.kind} that its MCP returns: return an in_progress RunResult with the job, OpenGroow fetches the publishable when it completes`
+      : undefined;
+  }
   if (publishable === undefined) {
     // A deliverable that reaches the review (success, or needs_human_review
     // which moves the Mission to `to_validate`) has to be publishable: the
@@ -167,6 +175,11 @@ export function validateDeclaredPublishable(
       : undefined;
   }
   return validatePublishableKind(publishable, { ...ctx, publish: ctx.publish });
+}
+
+/** The Agent wrote a Publishable for a kind the MCP owns (ADR-074). */
+function mcpOwnedPublishableError(missionType: string, kind: string): string {
+  return `You must not write publishable: Mission type "${missionType}" publishes an ${kind}, and its MCP returns the whole publishable through publish.resource when the job completes. Remove publishable from your RunResult.`;
 }
 
 /**
@@ -426,7 +439,11 @@ export function decideReconciliation(
     // A Mission type that fetches its media from the MCP when the job ends
     // (`publish.resource`) needs the Agent's text part now: nobody runs the
     // Agent again once the job completes.
-    if (ctx.publish?.resource !== undefined) {
+    if (ctx.publish !== undefined && isMcpOwnedKind(ctx.publish.kind)) {
+      if (validation.data.publishable !== undefined) {
+        return decideInvalidOutput(mcpOwnedPublishableError(ctx.missionType, ctx.publish.kind), ctx);
+      }
+    } else if (ctx.publish?.resource !== undefined) {
       const draft = validation.data.publishable;
       if (draft === undefined) {
         return decideInvalidOutput(

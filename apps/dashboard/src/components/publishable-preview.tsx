@@ -1,6 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useAction } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { Card } from "@/components/ui/card";
+import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 
 /**
  * Preview of a Publishable (ADR-069) built from its references only: media is
@@ -8,7 +13,11 @@ import { Card } from "@/components/ui/card";
  * OpenGroow (ADR-010). Only http(s) URLs are rendered.
  */
 
-type PreviewProps = { publishable: unknown };
+type PreviewProps = { publishable: unknown; missionId: string };
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
 
 function httpUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -20,16 +29,84 @@ function httpUrl(value: unknown): string | null {
   }
 }
 
-const KIND_LABEL: Record<string, string> = { video: "Final video", image: "Final image", carousel: "Final carousel" };
+const KIND_LABEL: Record<string, string> = {
+  video: "Final video",
+  image: "Final image",
+  carousel: "Final carousel",
+  article: "Final article",
+};
 
-export function PublishablePreview({ publishable }: PreviewProps) {
+type MarkdownState = { status: "loading" } | { status: "loaded"; content: string } | { status: "failed" };
+
+/** The markdown of an article, read by Convex from its public URL (ADR-074): the dashboard talks only to Convex. */
+function useArticleMarkdown(missionId: string, markdownUrl: string | null): MarkdownState {
+  const loadArticleMarkdown = useAction(api.missions_node.loadArticleMarkdown);
+  const [state, setState] = useState<MarkdownState>({ status: "loading" });
+  useEffect(() => {
+    let current = true;
+    setState({ status: "loading" });
+    loadArticleMarkdown({ missionId: missionId as Id<"missions"> })
+      .then((result) => current && setState({ status: "loaded", content: result.content }))
+      .catch(() => current && setState({ status: "failed" }));
+    return () => {
+      current = false;
+    };
+    // loadArticleMarkdown is omitted: useAction returns a stable reference. A new markdownUrl reloads it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missionId, markdownUrl]);
+  return state;
+}
+
+function ArticlePreview({ p, missionId }: { p: Record<string, unknown>; missionId: string }) {
+  const markdownUrl = httpUrl(p.markdownUrl);
+  const cover = httpUrl(p.coverUrl);
+  const markdown = useArticleMarkdown(missionId, markdownUrl);
+  return (
+    <Card className="grid min-w-0 gap-4 p-6" data-testid="publishable-preview">
+      <h2 className="m-0 text-lg font-semibold text-foreground">{KIND_LABEL.article}</h2>
+      {cover && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover} alt="Article cover" className="w-full rounded-xl border border-border object-cover" />
+      )}
+      <div className="grid gap-1">
+        <p className="m-0 text-xl font-semibold text-foreground">{text(p.title)}</p>
+        <p className="m-0 text-sm text-muted-foreground">{text(p.description)}</p>
+        <p className="m-0 text-xs text-muted-foreground">
+          /{text(p.slug)}
+          {text(p.category) && <> · {text(p.category)}</>}
+        </p>
+      </div>
+      <div className="border-t border-border pt-4">
+        {markdown.status === "loading" && <p className="m-0 text-sm text-muted-foreground">Loading article…</p>}
+        {markdown.status === "loaded" && <WorkspaceMarkdown content={markdown.content} />}
+        {markdown.status === "failed" && (
+          <p className="m-0 text-sm text-status-warning" data-testid="publishable-article-error">
+            The article could not be loaded
+            {markdownUrl && (
+              <>
+                {" "}from{" "}
+                <a href={markdownUrl} target="_blank" rel="noreferrer" className="underline underline-offset-4">
+                  its URL
+                </a>
+              </>
+            )}
+            .
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+export function PublishablePreview({ publishable, missionId }: PreviewProps) {
   if (!publishable || typeof publishable !== "object") return null;
   const p = publishable as Record<string, unknown>;
   const kind = typeof p.kind === "string" ? p.kind : "";
   if (!(kind in KIND_LABEL)) return null;
+  if (kind === "article") return <ArticlePreview p={p} missionId={missionId} />;
 
-  const caption = typeof p.caption === "string" ? p.caption : "";
-  const title = typeof p.title === "string" ? p.title : "";
+  const caption = text(p.caption);
+  const title = text(p.title);
 
   const imageOf = (src: string, alt: string, className: string) => (
     // eslint-disable-next-line @next/next/no-img-element

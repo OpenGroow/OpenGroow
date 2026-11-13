@@ -28,6 +28,7 @@ useTemplateRegistry([INSTANCE_ID], [
     missionTypes: [
       { type: "make_image", publish: { kind: "image" } },
       { type: "make_carousel", publish: { kind: "carousel", platforms: ["instagram", "tiktok"] } },
+      { type: "write_article", publish: { kind: "article", resource: { tool: "get_article" } } },
     ],
   } as never),
 ]);
@@ -95,5 +96,12 @@ describe("channel capabilities on creation and edit", () => {
     expect(await failure(owner.mutation(api.missions.create, { ...carousel, payload: { publishTargets: ["instagram:ig"] } }))).not.toMatch(/publishes to/);
     // A Mission type that declares no platforms is open to every channel that can carry its kind.
     expect(await failure(owner.mutation(api.missions.create, { ...base, payload: { publishTargets: ["pinterest:pin"] } }))).not.toMatch(/publishes to/);
+  });
+
+  it("refuses a Postiz channel for a Mission type that publishes an article, with Postiz's reason", async () => {
+    const owner = await seed();
+    await expect(
+      owner.mutation(api.missions.create, { ...base, type: "write_article", payload: { publishTargets: ["instagram:ig"] } }),
+    ).rejects.toThrow(/Instagram cannot publish an article \(Postiz publishes social posts, not site articles\)/);
   });
 });

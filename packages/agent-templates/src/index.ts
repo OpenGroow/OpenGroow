@@ -63,10 +63,12 @@ export {
 } from "./claw-package";
 export {
   PUBLISHABLE_KINDS,
+  MCP_OWNED_PUBLISHABLE_KINDS,
+  isMcpOwnedKind,
   OPTIONAL_PUBLISHABLE_FIELDS,
   publishDeclarationFor,
   DEFAULT_RESOURCE_ID_ARG,
-  MEDIA_PUBLISHABLE_FIELDS,
+  RESOURCE_PUBLISHABLE_FIELDS,
   readMediaPath,
   type PublishDeclaration,
   type PublishResource,

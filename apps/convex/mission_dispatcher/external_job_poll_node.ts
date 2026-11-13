@@ -290,7 +290,7 @@ async function attachPublishResource(
   const fail = (message: string): PollDecision => ({
     type: "markFailed",
     code: "external_job_poll_failed",
-    message: `Publishable media could not be fetched with "${resource.tool}": ${message}`,
+    message: `The Publishable could not be fetched with "${resource.tool}": ${message}`,
   });
 
   const call = publishResourceCall(resource, opts.jobId);

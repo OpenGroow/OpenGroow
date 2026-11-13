@@ -43,9 +43,9 @@ describe("validateManifest — missionTypes[].publish", () => {
   });
 
   it("rejects an unknown kind", () => {
-    const result = validateManifest(manifestWith({ kind: "article" }));
+    const result = validateManifest(manifestWith({ kind: "podcast" }));
     expect(result.ok).toBe(false);
-    expect((result as { reason: string }).reason).toContain('"article"');
+    expect((result as { reason: string }).reason).toContain('"podcast"');
   });
 
   it("rejects targets: destinations are not declared by Templates", () => {
@@ -121,6 +121,19 @@ describe("validateManifest — missionTypes[].publish", () => {
     const result = validateManifest(withJob(publish));
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toContain(fragment);
+  });
+
+  it("accepts an article whose resource returns the whole Publishable, any field mapped", () => {
+    expect(validateManifest(withJob({ kind: "article", resource: { tool: "get_article" } })).ok).toBe(true);
+    expect(
+      validateManifest(withJob({ kind: "article", resource: { tool: "get_article", map: { markdownUrl: "article.md", slug: "article.slug" } } })).ok,
+    ).toBe(true);
+  });
+
+  it("rejects an article without resource: the MCP owns its whole Publishable", () => {
+    const result = validateManifest(withJob({ kind: "article" }));
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toContain("publish.resource is required");
   });
 
   it("rejects the removed publish.media with a migration message", () => {

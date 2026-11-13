@@ -1,7 +1,7 @@
 import type { Validator } from "convex/values";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
-import type { PublishableKind } from "@opengroow/agent-templates";
+import { isMcpOwnedKind, type PublishableKind } from "@opengroow/agent-templates";
 import { matchPlatform } from "@opengroow/publisher-sdk";
 
 // The Publishable (issue #16, ADR-069): the unified format of a deliverable,
@@ -80,10 +80,30 @@ export const carouselPublishableSchema = carouselBase.refine(
   { message: `a carousel ${NO_MEDIA} (slideUrls or variants)`, path: ["slideUrls"] },
 );
 
+// A site article (ADR-074): a markdown page and its cover, committed by a
+// GitHub Publisher. The MCP that produced it owns the whole Publishable: it
+// comes from `publish.resource`, the Agent writes none of it.
+const slug = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "must be lowercase letters, digits and single hyphens (a URL path segment)");
+export const articlePublishableSchema = z.strictObject({
+  kind: z.literal("article"),
+  markdownUrl: url,
+  coverUrl: url,
+  slug,
+  title: z.string().min(1).max(500),
+  description: z.string().min(1).max(1000),
+  category: z.string().min(1).max(100).optional(),
+  metadata,
+});
+
 export const publishableSchema = z.discriminatedUnion("kind", [
   videoPublishableSchema,
   imagePublishableSchema,
   carouselPublishableSchema,
+  articlePublishableSchema,
 ]);
 
 export type Publishable = z.output<typeof publishableSchema>;
@@ -98,6 +118,9 @@ export const publishableDraftSchema = z.discriminatedUnion("kind", [
   videoPublishableSchema.omit({ videoUrl: true, coverUrl: true }),
   imageBase.omit({ imageUrl: true, variants: true }),
   carouselBase.omit({ slideUrls: true, variants: true }),
+  // An `article` has no text part (the MCP owns all of it, ADR-074). Accepted
+  // here only so the reconciliation refuses it with the rule, not a schema error.
+  z.looseObject({ kind: z.literal("article") }),
 ]);
 
 export type PublishableDraft = z.output<typeof publishableDraftSchema>;
@@ -116,6 +139,7 @@ const SCHEMA_BY_KIND = {
   video: videoPublishableSchema,
   image: imageBase,
   carousel: carouselBase,
+  article: articlePublishableSchema,
 } satisfies Record<PublishableKind, z.ZodType>;
 
 /**
@@ -151,6 +175,15 @@ export function renderPublishableSection(
   options: { require?: readonly string[] } = {},
 ): string {
   const required = options.require ?? [];
+  if (isMcpOwnedKind(kind)) {
+    return [
+      "",
+      "## Publishable",
+      "",
+      `This Mission type produces an \`${kind}\` deliverable. Do not write \`publishable\` in your RunResult: OpenGroow gets the whole ${kind} (markdown, cover, slug, title, description) from the MCP when its job completes, and a RunResult carrying one is rejected. You never publish yourself: a human review or auto-publish does it. Do not call any publishing tool.`,
+      "",
+    ].join("\n");
+  }
   return [
     "",
     "## Publishable",

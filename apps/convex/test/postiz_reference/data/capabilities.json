@@ -3,52 +3,112 @@
   "adapter": "postiz",
   "source": "https://docs.postiz.com/general/platforms/overview",
   "platforms": {
-    "x": { "name": "X", "video": "supported", "image": "supported", "carousel": "supported" },
-    "linkedin": { "name": "LinkedIn", "video": "supported", "image": "supported", "carousel": "supported" },
-    "linkedin-page": { "name": "LinkedIn Page", "video": "supported", "image": "supported", "carousel": "supported" },
+    "x": {
+      "name": "X",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
+    "linkedin": {
+      "name": "LinkedIn",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
+    "linkedin-page": {
+      "name": "LinkedIn Page",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
     "reddit": {
       "name": "Reddit",
       "video": "unsupported",
       "image": "unsupported",
       "carousel": "unsupported",
+      "article": "unsupported",
       "reasons": {
         "video": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post",
         "image": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post",
-        "carousel": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post"
+        "carousel": "OpenGroow does not set the subreddit, title and post type that Postiz requires on a Reddit post",
+        "article": "Postiz publishes social posts, not site articles"
       }
     },
-    "instagram": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
-    "instagram-standalone": { "name": "Instagram", "video": "supported", "image": "supported", "carousel": "supported" },
+    "instagram": {
+      "name": "Instagram",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
+    "instagram-standalone": {
+      "name": "Instagram",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
     "facebook": {
       "name": "Facebook Page",
       "video": "supported",
       "image": "supported",
       "carousel": "uncertain",
-      "reasons": { "carousel": "The Postiz docs do not say whether Facebook feed posts take several images" }
+      "article": "unsupported",
+      "reasons": {
+        "carousel": "The Postiz docs do not say whether Facebook feed posts take several images",
+        "article": "Postiz publishes social posts, not site articles"
+      }
     },
     "youtube": {
       "name": "YouTube",
       "video": "supported",
       "image": "unsupported",
       "carousel": "unsupported",
-      "reasons": { "image": "YouTube only takes a video", "carousel": "YouTube only takes a video" }
+      "article": "unsupported",
+      "reasons": {
+        "image": "YouTube only takes a video",
+        "carousel": "YouTube only takes a video",
+        "article": "Postiz publishes social posts, not site articles"
+      }
     },
     "gmb": {
       "name": "Google Business Profile",
       "video": "unsupported",
       "image": "supported",
       "carousel": "unsupported",
-      "reasons": { "video": "Google Business Profile posts take exactly one image", "carousel": "Google Business Profile posts take exactly one image" }
+      "article": "unsupported",
+      "reasons": {
+        "video": "Google Business Profile posts take exactly one image",
+        "carousel": "Google Business Profile posts take exactly one image",
+        "article": "Postiz publishes social posts, not site articles"
+      }
     },
-    "tiktok": { "name": "TikTok", "video": "supported", "image": "supported", "carousel": "supported" },
+    "tiktok": {
+      "name": "TikTok",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
     "pinterest": {
       "name": "Pinterest",
       "video": "uncertain",
       "image": "supported",
       "carousel": "uncertain",
+      "article": "unsupported",
       "reasons": {
         "video": "A Pinterest video pin needs a cover image; the Postiz provider page does not document it",
-        "carousel": "Pinterest takes up to 5 images, but the Postiz provider page does not document it"
+        "carousel": "Pinterest takes up to 5 images, but the Postiz provider page does not document it",
+        "article": "Postiz publishes social posts, not site articles"
       }
     },
     "dribbble": {
@@ -56,16 +116,40 @@
       "video": "unsupported",
       "image": "supported",
       "carousel": "unsupported",
-      "reasons": { "video": "Dribbble shots take exactly one image", "carousel": "Dribbble shots take exactly one image" }
+      "article": "unsupported",
+      "reasons": {
+        "video": "Dribbble shots take exactly one image",
+        "carousel": "Dribbble shots take exactly one image",
+        "article": "Postiz publishes social posts, not site articles"
+      }
     },
-    "bluesky": { "name": "Bluesky", "video": "supported", "image": "supported", "carousel": "supported" },
+    "bluesky": {
+      "name": "Bluesky",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    },
     "wrapcast": {
       "name": "Farcaster",
       "video": "unsupported",
       "image": "supported",
       "carousel": "uncertain",
-      "reasons": { "video": "Farcaster does not take videos through Postiz", "carousel": "The Postiz docs do not say whether Farcaster takes several images" }
+      "article": "unsupported",
+      "reasons": {
+        "video": "Farcaster does not take videos through Postiz",
+        "carousel": "The Postiz docs do not say whether Farcaster takes several images",
+        "article": "Postiz publishes social posts, not site articles"
+      }
     },
-    "tumblr": { "name": "Tumblr", "video": "supported", "image": "supported", "carousel": "supported" }
+    "tumblr": {
+      "name": "Tumblr",
+      "video": "supported",
+      "image": "supported",
+      "carousel": "supported",
+      "article": "unsupported",
+      "reasons": { "article": "Postiz publishes social posts, not site articles" }
+    }
   }
 }

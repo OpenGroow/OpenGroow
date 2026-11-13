@@ -21,6 +21,7 @@ const useMutationMock = vi.fn();
 const routerPushMock = vi.fn();
 const getReviewMock = vi.fn();
 const loadReviewContentMock = vi.fn();
+const loadArticleMarkdownMock = vi.fn();
 const performReviewActionMock = vi.fn();
 
 vi.mock("next/link", () => ({
@@ -48,6 +49,7 @@ vi.mock("@convex/_generated/api", () => ({
       getReview: "missions_node.getReview",
       performReviewAction: "missions_node.performReviewAction",
       loadReviewContent: "missions_node.loadReviewContent",
+      loadArticleMarkdown: "missions_node.loadArticleMarkdown",
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publishers: { get: "publishers.get" },
@@ -125,6 +127,7 @@ describe("MissionReviewContent", () => {
     routerPushMock.mockReset();
     getReviewMock.mockReset();
     loadReviewContentMock.mockReset();
+    loadArticleMarkdownMock.mockReset();
     performReviewActionMock.mockReset();
 
     useActionMock.mockImplementation((action: string) => {
@@ -136,6 +139,9 @@ describe("MissionReviewContent", () => {
       }
       if (action === "missions_node.performReviewAction") {
         return performReviewActionMock;
+      }
+      if (action === "missions_node.loadArticleMarkdown") {
+        return loadArticleMarkdownMock;
       }
       return vi.fn();
     });
@@ -286,6 +292,40 @@ describe("MissionReviewContent", () => {
       expect((pinterest?.querySelector("img") as HTMLImageElement).src).toBe("https://cdn.example.com/pin-1.png");
       expect(document.querySelector('[data-testid="publishable-variant-instagram"] img')).not.toBeNull();
       expect(document.body.textContent).not.toContain("No previewable media");
+    });
+
+    describe("article (ADR-074)", () => {
+      const ARTICLE = {
+        kind: "article",
+        markdownUrl: "https://seo.example.com/articles/a1.md",
+        coverUrl: "https://seo.example.com/articles/a1/cover.webp",
+        slug: "how-to-grow",
+        title: "How to grow",
+        description: "A short guide",
+        category: "guides",
+      };
+      it("renders the article from its Publishable: cover, title, description and the markdown Convex reads from markdownUrl", async () => {
+        loadArticleMarkdownMock.mockResolvedValue({ content: "## First step\n\nDig a hole." });
+        await renderWith(ARTICLE);
+        await act(async () => {});
+        const preview = document.querySelector('[data-testid="publishable-preview"]');
+        expect(loadArticleMarkdownMock).toHaveBeenCalledWith({ missionId: "mission-1" });
+        expect((preview?.querySelector("img") as HTMLImageElement | null)?.src).toBe(ARTICLE.coverUrl);
+        expect(preview?.textContent).toContain("How to grow");
+        expect(preview?.textContent).toContain("A short guide");
+        expect(preview?.textContent).toContain("how-to-grow");
+        expect(preview?.textContent).toContain("First step");
+        expect(preview?.textContent).toContain("Dig a hole.");
+      });
+
+      it("says when the markdown cannot be read, with a link to it", async () => {
+        loadArticleMarkdownMock.mockRejectedValue(new Error("The article markdown could not be read: HTTP 404"));
+        await renderWith(ARTICLE);
+        await act(async () => {});
+        const failure = document.querySelector('[data-testid="publishable-article-error"]');
+        expect(failure?.textContent).toContain("could not be loaded");
+        expect(failure?.querySelector("a")?.getAttribute("href")).toBe(ARTICLE.markdownUrl);
+      });
     });
 
     it("reviews a Mission type that declares publish from its publishable only: no review.path content is loaded or shown", async () => {
