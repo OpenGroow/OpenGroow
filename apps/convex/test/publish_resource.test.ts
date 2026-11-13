@@ -457,3 +457,102 @@ describe("pollExternalJobs — publish.resource", () => {
     });
   });
 });
+
+describe("pollExternalJobs — publish.resource reads what the job produced (resultIdField)", () => {
+  const ARTICLE_TEMPLATE_ID = `${TEMPLATE_ID}-article`;
+  const manifest = {
+    mcpServers: [{ name: "mcp", transport: "streamable-http" as const, url: "http://localhost:4300/mcp" }],
+    missionTypes: [
+      {
+        type: "create_article",
+        label: "Create article",
+        payload: "{}",
+        agentsMd: "create_article.md",
+        publish: { kind: "article" as const, resource: { tool: "get_article", idArg: "articleId" } },
+      },
+    ],
+    externalJobsByMissionType: {
+      create_article: {
+        generate_article: {
+          server: "mcp",
+          mcpTool: "get_article_status",
+          statusField: "status",
+          resultIdField: "articleId",
+          terminalStates: { completed: ["completed"], failed: ["failed"] },
+          resultStatus: "needs_human_review" as const,
+          artifactKind: "markdown" as const,
+          onComplete: "terminal" as const,
+        },
+      },
+    },
+  };
+  useTemplateRegistry([INSTANCE_ID], [fixtureTemplate(ARTICLE_TEMPLATE_ID, manifest)]);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the tool with the article id the job returned, not the run id", async () => {
+    const t = convexTest(schema, modules);
+    const runId = await t.run(async (ctx) => {
+      const now = Date.now();
+      const missionId = await ctx.db.insert("missions", {
+        ownerId: OWNER_ID,
+        instanceId: INSTANCE_ID,
+        templateId: ARTICLE_TEMPLATE_ID,
+        type: "create_article",
+        payload: {},
+        status: "doing",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return await ctx.db.insert("runs", {
+        missionId,
+        ownerId: OWNER_ID,
+        instanceId: INSTANCE_ID,
+        templateId: ARTICLE_TEMPLATE_ID,
+        agentName: "seo",
+        sessionKey: `mega-mission-${missionId}`,
+        status: "awaiting_job",
+        mcpJob: { serverName: "mcp", jobId: "run-7", summary: "Article ready.", reviewQuestions: [], jobType: "generate_article", missionType: "create_article" },
+        dispatchedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+    const answers: Record<string, unknown> = {
+      get_article_status: { status: "completed", output: { articleId: "art-42" } },
+      get_article: {
+        markdownUrl: "https://seo.example.com/articles/art-42/markdown",
+        coverUrl: "https://seo.example.com/images/art-42/cover",
+        slug: "a42",
+        title: "A42",
+        description: "d",
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const { params } = JSON.parse(init.body as string) as { params: { name: string; arguments: Record<string, unknown> } };
+        calls.push({ tool: params.name, args: params.arguments });
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          headers: { get: () => "application/json" },
+          json: async () => ({ result: { content: [{ type: "text", text: JSON.stringify(answers[params.name]) }], isError: false } }),
+        };
+      }),
+    );
+
+    await t.action(internal.mission_dispatcher_node.pollExternalJobs, {});
+
+    expect(calls.filter((c) => c.tool === "get_article")).toEqual([{ tool: "get_article", args: { articleId: "art-42" } }]);
+    await t.run(async (ctx) => {
+      const run = await ctx.db.get(runId);
+      const artifact = run?.result && "artifact" in run.result ? run.result.artifact : undefined;
+      expect(artifact?.external).toEqual({ service: "mcp", id: "art-42" });
+      expect(artifact?.publishable).toMatchObject({ kind: "article", slug: "a42" });
+    });
+  });
+});
