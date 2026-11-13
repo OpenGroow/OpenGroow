@@ -331,6 +331,31 @@ describe("polling a scheduled Publication", () => {
     getStatus.mockRestore();
   });
 
+  it("polls the destination settings used to schedule the original post", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const getStatus = vi.spyOn(postizPlugin, "getStatus");
+    try {
+      const ctx = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt: Date.now() + 2 * HOUR } });
+      const original = { branch: "main", contentBase: "articles" };
+      await ctx.owner.mutation(api.publishers.updateSettings, {
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: original,
+      });
+      stubPostiz();
+      await ctx.owner.action(api.missions_node.performReviewAction, { missionId: ctx.missionId, actionKey: "publish" });
+      await ctx.owner.mutation(api.publishers.updateSettings, {
+        instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", settings: { branch: "release" },
+      });
+      await makeDue(ctx.t);
+      stubPostizListing("QUEUE");
+      await ctx.t.action(internal.publication_polling_node.pollScheduled, {});
+      expect(getStatus).toHaveBeenCalledWith(expect.anything(), "post-1", expect.any(Number), {
+        channelId: "ch-1", settings: original,
+      });
+    } finally {
+      getStatus.mockRestore();
+    }
+  });
+
   it("leaves it scheduled while Postiz still has the post queued", async () => {
     const { t, owner, missionId } = await scheduled();
     await makeDue(t);

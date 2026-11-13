@@ -15,7 +15,7 @@ import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry
 // the outcome is only recorded on the Publication (a warning when it failed).
 
 /** Calls the Mission type's onPublished effect for one Publication; the error message, if it failed. */
-async function callOnPublished(ctx: ActionCtx, publication: Doc<"publications">): Promise<string | undefined> {
+async function callOnPublished(ctx: ActionCtx, publication: Doc<"publications">, startedAt: number): Promise<string | undefined> {
   try {
     const mission: Doc<"missions"> | null = await ctx.runQuery(internal.missions.getByIdInternal, {
       missionId: publication.missionId,
@@ -57,12 +57,13 @@ async function callOnPublished(ctx: ActionCtx, publication: Doc<"publications">)
     });
     await ctx.runMutation(internal.publication_notifications.record, {
       publicationId: publication._id,
+      startedAt,
       ...(indexing ? { indexing } : {}),
     });
     return undefined;
   } catch (error) {
     const message = errorMessage(error);
-    await ctx.runMutation(internal.publication_notifications.record, { publicationId: publication._id, error: message });
+    await ctx.runMutation(internal.publication_notifications.record, { publicationId: publication._id, startedAt, error: message });
     return message;
   }
 }
@@ -75,7 +76,7 @@ export const notifyPublished = internalAction({
       publicationId: args.publicationId,
     });
     if (publication?.notification?.status !== "sending") return;
-    const error = await callOnPublished(ctx, publication);
+    const error = await callOnPublished(ctx, publication, publication.notification.updatedAt);
     if (error) console.warn(`onPublished for Publication ${args.publicationId} failed: ${error}`);
   },
 });
@@ -87,21 +88,12 @@ export const notifyPublished = internalAction({
 export const resendPublishedNotification = action({
   args: { publicationId: v.id("publications") },
   handler: async (ctx, args): Promise<{ ok: true } | { ok: false; error: string }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Authentication required");
-    const publication: Doc<"publications"> | null = await ctx.runQuery(internal.publications.getInternal, {
-      publicationId: args.publicationId,
-    });
-    if (!publication) throw new Error("Publication not found");
-    const mission: Doc<"missions"> | null = await ctx.runQuery(internal.missions.getByIdInternal, {
-      missionId: publication.missionId,
-    });
-    if (!mission) throw new Error("Mission not found");
-    if (mission.ownerId !== (identity.subject ?? identity.tokenIdentifier)) throw new Error("Forbidden");
-    const claimed = await ctx.runMutation(internal.publication_notifications.claimResend, { publicationId: args.publicationId });
+    const claimed = await ctx.runMutation(internal.publication_notifications.claimResend, args);
     if (!claimed) throw new Error("This call is already being sent, or it went through");
+    const publication: Doc<"publications"> | null = await ctx.runQuery(internal.publications.getInternal, args);
+    if (!publication?.notification) throw new Error("Publication notification not found");
     // A failed call is recorded on the Publication (its warning shows the error), not thrown.
-    const error = await callOnPublished(ctx, publication);
+    const error = await callOnPublished(ctx, publication, publication.notification.updatedAt);
     return error === undefined ? { ok: true } : { ok: false, error };
   },
 });

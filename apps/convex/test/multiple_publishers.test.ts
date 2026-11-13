@@ -182,3 +182,67 @@ describe("several Publishers per Project", () => {
     ]);
   });
 });
+
+
+describe("completion after replacing a removed Publisher", () => {
+  it.each(["failed", "uncertain", "scheduled"] as const)("keeps an old %s Publication as history while completing the new targets", async (status) => {
+    const { t, owner } = await seed();
+    const oldTarget = await owner.mutation(api.publishers.addChannel, REPO);
+    const missionId = await t.run(async (ctx) => {
+      const missionId = await ctx.db.insert("missions", {
+        ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@test/any", type: "make_article",
+        payload: { publishTargets: [oldTarget] }, status: "approved",
+        lastResult: { status: "needs_human_review", summary: "Ready", reviewQuestions: [], artifact: {
+          external: { service: "articles", id: "article-1" }, publishable: {
+            kind: "article", markdownUrl: "https://cdn.example.com/a.md", coverUrl: "https://cdn.example.com/a.webp",
+            slug: "hello", title: "Hello", description: "An article",
+          },
+        } }, createdAt: Date.now(), updatedAt: Date.now(),
+      });
+      await ctx.db.insert("publications", { missionId, instanceId: INSTANCE_ID, target: oldTarget,
+        status, error: "Original send did not finish", createdAt: Date.now(), updatedAt: Date.now() });
+      return missionId;
+    });
+    await owner.mutation(api.publishers.remove, { instanceId: INSTANCE_ID, adapter: "github" });
+    await owner.mutation(api.publishers.save, GITHUB);
+    const replacements = [];
+    for (const name of ["new-site", "second-site"]) {
+      replacements.push(await owner.mutation(api.publishers.addChannel, {
+        ...REPO, channelId: `acme/${name}`, channelProfile: `acme/${name}`,
+      }));
+    }
+    await owner.mutation(api.publications.setTargets, { missionId, targets: replacements });
+    const prepared = await t.mutation(internal.publications.beginAll, { missionId });
+    await t.mutation(internal.publications.finish, {
+      publicationId: prepared.publications[0].publicationId, status: "published", externalId: "first-commit",
+    });
+    expect((await t.run((ctx) => ctx.db.get(missionId)))?.status).toBe("approved");
+    await t.mutation(internal.publications.finish, {
+      publicationId: prepared.publications[1].publicationId, status: "published", externalId: "second-commit",
+    });
+    expect((await t.run((ctx) => ctx.db.get(missionId)))?.status).toBe("done");
+    const history = await owner.query(api.publications.listForMission, { missionId });
+    expect(history).toHaveLength(3);
+    expect(history.find((p) => p.target === oldTarget)).toMatchObject({ status, error: "Original send did not finish" });
+  });
+
+  it("completes when the last failed destination is deselected and the remaining one is already published", async () => {
+    const { t, owner } = await seed();
+    const first = await owner.mutation(api.publishers.addChannel, REPO);
+    const second = await owner.mutation(api.publishers.addChannel, { ...REPO, channelId: "acme/second", channelProfile: "acme/second" });
+    const missionId = await t.run(async (ctx) => {
+      const missionId = await ctx.db.insert("missions", {
+        ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@test/any", type: "make_article",
+        payload: { publishTargets: [first, second] }, status: "approved", createdAt: Date.now(), updatedAt: Date.now(),
+      });
+      for (const [target, status] of [[first, "failed"], [second, "published"]] as const) {
+        await ctx.db.insert("publications", { missionId, instanceId: INSTANCE_ID, target,
+          status, createdAt: Date.now(), updatedAt: Date.now() });
+      }
+      return missionId;
+    });
+    await owner.mutation(api.publications.setTargets, { missionId, targets: [second] });
+    expect((await t.run((ctx) => ctx.db.get(missionId)))?.status).toBe("done");
+    expect(await owner.query(api.publications.listForMission, { missionId })).toHaveLength(2);
+  });
+});

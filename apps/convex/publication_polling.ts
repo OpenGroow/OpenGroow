@@ -28,14 +28,18 @@ export const dueScheduled = internalQuery({
     for (const publication of [...scheduled, ...awaitingLink]) {
       if (publication.externalId === undefined) continue;
       if (publication.status === "scheduled" && publication.scheduledAt !== undefined && publication.scheduledAt > args.now) continue;
-      // The Publisher carrying the channel the post went to (ADR-075); the channel itself is needed by a service
-      // whose post id alone does not locate it (a GitHub commit).
-      const found = channelOf(await projectPublishers(ctx, publication.instanceId), publication.target);
-      const apiKey = found?.publisher.apiKey;
-      if (!found || !apiKey) continue;
-      const { publisher, channel } = found;
+      const publishers = await projectPublishers(ctx, publication.instanceId);
+      const context = publication.attemptContext;
+      const found = channelOf(publishers, publication.target);
+      // A reused channel key must not route an older Publication through a replacement Publisher.
+      const publisher = context
+        ? publishers.find((p) => p.adapter === context.adapter && p.url === context.url)
+        : found?.publisher;
+      const apiKey = publisher?.apiKey;
+      if (!publisher || !apiKey) continue;
+      const channel = context ?? found?.channel;
       due.push({
-        ...(channel.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
+        ...(channel?.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
         publicationId: publication._id,
         externalId: publication.externalId,
         scheduledAt: publication.scheduledAt,

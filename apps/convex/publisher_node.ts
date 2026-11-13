@@ -46,7 +46,6 @@ export async function publishThroughPublisher(
     }
     return plugin;
   };
-  const caption = typeof prepared.publishable.caption === "string" ? prepared.publishable.caption : "";
   const emitPublished = async (publicationId: Id<"publications">) => {
     await ctx.runMutation(internal.events.store, {
       instanceId: mission.instanceId,
@@ -76,14 +75,21 @@ export async function publishThroughPublisher(
     // A previous attempt may have reached the service: look for its post first
     // and never send again if it is there (the service has no idempotency key).
     if (item.reconcile) {
-      const found = await adapter.findPost(item.connection, {
+      // Old Publications predate the snapshot; new attempts always retain it at beforePost.
+      const previous = item.reconcile.context ?? {
         channelId: item.channelId,
-        caption,
+        channelService: item.channelService,
+        settings: item.settings,
+        publishable: forChannel.ok ? forChannel.publishable : prepared.publishable,
+      };
+      const found = await adapter.findPost(item.connection, {
+        channelId: previous.channelId,
+        caption: typeof previous.publishable.caption === "string" ? previous.publishable.caption : "",
         attemptStartedAt: item.reconcile.attemptStartedAt,
         attemptDate: item.reconcile.attemptDate,
-        ...(item.channelService ? { channelService: item.channelService } : {}),
-        ...(item.settings ? { settings: item.settings } : {}),
-        publishable: forChannel.ok ? forChannel.publishable : prepared.publishable,
+        ...(previous.channelService ? { channelService: previous.channelService } : {}),
+        ...(previous.settings ? { settings: previous.settings } : {}),
+        publishable: previous.publishable,
       });
       if (!found.ok) {
         await ctx.runMutation(internal.publications.finish, {
@@ -129,6 +135,14 @@ export async function publishThroughPublisher(
           publicationId: item.publicationId,
           media,
           attemptDate: prepared.publishAt ?? Date.now(),
+          context: {
+            adapter: item.connection.adapter,
+            url: item.connection.url,
+            channelId: item.channelId,
+            ...(item.channelService ? { channelService: item.channelService } : {}),
+            ...(item.settings ? { settings: item.settings } : {}),
+            publishable: forChannel.publishable,
+          },
         });
         return claimed;
       },
