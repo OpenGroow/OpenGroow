@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Button } from "@/components/ui/button";
 import { StoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 import { DateTimePicker } from "@/src/components/date-time-picker";
+import { UnschedulableDate } from "@/src/components/unschedulable-date";
 import {
   Combobox,
   ComboboxChip,
@@ -328,9 +329,9 @@ export function PublishChannelPicker({
         <div className="grid gap-1.5">
           <span className="text-sm font-semibold text-muted-foreground">Publish at</span>
           {unschedulable && publishAt === undefined ? (
-            <p data-testid="publish-at-immediate" className="m-0 text-sm text-muted-foreground">
-              Published immediately: {unschedulable} cannot schedule a post.
-            </p>
+            <UnschedulableDate publisher={unschedulable}>
+              <DateTimePicker value={undefined} disabled onChange={() => {}} onError={setDateError} />
+            </UnschedulableDate>
           ) : (
             <>
               <DateTimePicker

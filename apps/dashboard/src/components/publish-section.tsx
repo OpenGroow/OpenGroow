@@ -14,6 +14,7 @@ import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { unschedulablePublisherName, useProjectChannels } from "@/src/hooks/use-project-channels";
 import { CapabilityWarning, ChannelSelect, accountLabel, channelCapability } from "@/src/components/publish-channel-picker";
 import { DateTimePicker, formatDateTime } from "@/src/components/date-time-picker";
+import { UnschedulableDate } from "@/src/components/unschedulable-date";
 
 /**
  * Where a Mission will be published (ADR-069): the channels of the Project's
@@ -141,9 +142,9 @@ export function PublishSection({
           </p>
           <span className="mt-2 text-sm font-semibold text-muted-foreground">Publish at</span>
           {unschedulable && !hasDate ? (
-            <p data-testid="publish-at-immediate" className="m-0 text-sm text-muted-foreground">
-              Published immediately: {unschedulable} cannot schedule a post.
-            </p>
+            <UnschedulableDate publisher={unschedulable}>
+              <DateTimePicker value={undefined} disabled onChange={() => {}} onError={setError} />
+            </UnschedulableDate>
           ) : (
             <>
               <DateTimePicker value={publishAtMs} onChange={(at) => { void changePublishAt(at); }} onError={setError} />

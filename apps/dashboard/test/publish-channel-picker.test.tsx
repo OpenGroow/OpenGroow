@@ -79,9 +79,10 @@ describe("PublishChannelPicker", () => {
       expect(container.querySelector('[data-testid="publish-at-immediate"]')).toBeNull();
 
       await render(JSON.stringify({ publishTargets: ["github:acme/site"] }));
-      expect(container.querySelector('[data-testid="publish-at-immediate"]')?.textContent).toBe(
-        "Published immediately: Blog Utils (GitHub) cannot schedule a post.",
-      );
+      const immediate = container.querySelector('[data-testid="publish-at-immediate"]');
+      expect(immediate?.getAttribute("aria-label")).toBe("Blog Utils (GitHub) cannot schedule a post: it is published immediately");
+      // The calendar stays, disabled: the reason is on hover.
+      expect(immediate?.querySelector("button")?.disabled).toBe(true);
 
       // A date already there stays clearable, with the reason it must go.
       await render(JSON.stringify({ publishTargets: ["github:acme/site"], publishAt: Date.now() + 3_600_000 }));
