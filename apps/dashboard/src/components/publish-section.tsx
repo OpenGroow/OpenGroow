@@ -166,7 +166,7 @@ export function PublishSection({
           {targets.length === 0 && <p className="m-0 text-muted-foreground">No channel chosen.</p>}
         </dl>
       )}
-      <div className="grid gap-2 border-t border-border pt-4 text-sm">
+      <div className="grid gap-4 border-t border-border pt-4 text-sm">
         {autoPublish && (
           <div className="flex items-center gap-3">
             <Zap aria-hidden="true" className="size-4 text-muted-foreground" />
