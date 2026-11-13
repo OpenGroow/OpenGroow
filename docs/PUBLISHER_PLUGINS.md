@@ -54,7 +54,9 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
 
 ## The two data files
 
-- `capabilities.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: { name, video, image, carousel, article, reasons? } } }` with levels `supported | uncertain | unsupported`. `unsupported` is set only when the service documents it; the core refuses it server-side and the dashboard disables the channel. Unknown platforms are `uncertain`.
+- `capabilities.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: { name, icon?, video, image, carousel, article, reasons? } } }` with levels `supported | uncertain | unsupported`. `unsupported` is set only when the service documents it; the core refuses it server-side and the dashboard disables the channel. A kind a platform does not mention is `uncertain`.
+  - **`platforms` lists what OpenGroow offers** (ADR-075): a channel whose service is not a key of it is not shown in Add a channel, and `publishers.addChannel` refuses it. Declare only the platforms you have tried.
+  - **`icon`** is the platform's logo, shipped in the package (a png, webp, jpeg or svg data URI, same limit as the manifest `icon`). The dashboard shows it for the platform's channels with no request; without it, the package icon. A Publisher with a single platform that is the service itself (GitHub) leaves it out.
 - `channel-options.json`: `{ schemaVersion: 1, adapter, platforms: { <service>: ChannelOption[] } }` with option types `select | boolean | text`. The dashboard renders them on the Publishers page; the chosen values arrive in `request.settings`.
 
 Expose both on the plugin object (`capabilities`, `channelOptions`); the SDK provides `parseCapabilities` to validate the first.
