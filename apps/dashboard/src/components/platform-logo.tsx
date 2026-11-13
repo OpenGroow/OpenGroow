@@ -10,36 +10,44 @@ export function platformName(service: string): string {
 }
 
 /**
- * The logo of a channel's platform. Postiz serves one per platform next to its API
- * (`<host>/icons/platforms/<service>.png`); a Publisher that serves none (GitHub: one
- * platform, the service itself) shows its package's icon instead (ADR-075).
+ * The image of a channel, first that loads of: the channel's own picture (the
+ * account's avatar, a repository owner's avatar), the platform logo its Publisher
+ * serves (Postiz: `<host>/icons/platforms/<service>.png`), the icon of its
+ * Publisher's package (GitHub serves no platform logo, ADR-075). An empty tile otherwise.
  */
 export function PlatformLogo({
   baseUrl,
   service,
   adapter,
+  picture,
   className = "size-10",
 }: {
   baseUrl: string;
   service?: string;
-  /** The adapter of the channel's Publisher: its package icon is the fallback. */
+  /** The adapter of the channel's Publisher: its package icon is the last fallback. */
   adapter?: string;
+  /** The channel's own picture, when the service gives one. */
+  picture?: string;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
   const packageIcon = useInstalledPublisher(adapter)?.icon;
-  if (service && broken && packageIcon) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={packageIcon} alt="" className={`${className} shrink-0 rounded-lg object-contain`} />;
-  }
-  if (!service || broken) return <span className={`${className} shrink-0 rounded-lg bg-muted`} aria-hidden="true" />;
+  const candidates = service
+    ? [picture, `${baseUrl.replace(/\/+$/, "")}/icons/platforms/${encodeURIComponent(service)}.png`, packageIcon].filter(
+        (src): src is string => Boolean(src),
+      )
+    : [];
+  // The sources that failed to load, so a new candidate (the package icon arriving) is still tried.
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
+  const src = candidates.find((candidate) => !failed.has(candidate));
+  if (!src) return <span className={`${className} shrink-0 rounded-lg bg-muted`} aria-hidden="true" />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`${baseUrl.replace(/\/+$/, "")}/icons/platforms/${encodeURIComponent(service)}.png`}
+      key={src}
+      src={src}
       alt=""
       className={`${className} shrink-0 rounded-lg object-contain`}
-      onError={() => setBroken(true)}
+      onError={() => setFailed((previous) => new Set(previous).add(src))}
     />
   );
 }

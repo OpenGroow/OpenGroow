@@ -21,12 +21,13 @@ import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 /** The platform and account of a target, as its Publisher knows them (for the Publications list). */
 function channelInfo(
   channel: PublisherChannelEntry | undefined,
-): { channelService?: string; channelProfile?: string; channelName?: string } {
+): { channelService?: string; channelProfile?: string; channelName?: string; channelPicture?: string } {
   if (!channel) return {};
   return {
     channelService: channel.channelService,
     ...(channel.channelProfile ? { channelProfile: channel.channelProfile } : {}),
     ...(channel.channelName ? { channelName: channel.channelName } : {}),
+    ...(channel.channelPicture ? { channelPicture: channel.channelPicture } : {}),
   };
 }
 

@@ -31,7 +31,15 @@ const GITHUB_META = {
 const POSTIZ = { instanceId: INSTANCE_ID, adapter: "postiz", url: "https://postiz.example.com", apiKey: "postiz-key" };
 const GITHUB = { instanceId: INSTANCE_ID, adapter: "github", url: "https://api.github.com", apiKey: "ghp_token" };
 const IG = { instanceId: INSTANCE_ID, adapter: "postiz", channelId: "ig-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" };
-const REPO = { instanceId: INSTANCE_ID, adapter: "github", channelId: "acme/site", channelName: "acme/site", channelService: "github", channelProfile: "acme/site" };
+const REPO = {
+  instanceId: INSTANCE_ID,
+  adapter: "github",
+  channelId: "acme/site",
+  channelName: "acme/site",
+  channelService: "github",
+  channelProfile: "acme/site",
+  channelPicture: "https://avatars.githubusercontent.com/u/1?v=4",
+};
 
 async function seed() {
   const t = convexTest(schema, modules);
@@ -71,6 +79,8 @@ describe("several Publishers per Project", () => {
       { adapter: "github", url: "https://github.com", targets: ["github:acme/site"] },
     ]);
     expect(JSON.stringify(all)).not.toContain("key");
+    // The channel's picture (a repository owner's avatar) is kept and shown before the platform logo.
+    expect(all[1].targets[0]).toMatchObject({ channelPicture: "https://avatars.githubusercontent.com/u/1?v=4" });
   });
 
   it("refuses a channel key another Publisher of the Project already has", async () => {

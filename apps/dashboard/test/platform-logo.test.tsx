@@ -36,6 +36,16 @@ describe("PlatformLogo", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toBe(GITHUB_ICON);
   });
 
+  it("shows the channel's own picture first, then the platform logo, then the package icon", async () => {
+    const AVATAR = "https://avatars.githubusercontent.com/u/1?v=4";
+    await act(async () => root.render(<PlatformLogo baseUrl="https://api.github.com" service="github" adapter="github" picture={AVATAR} />));
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(AVATAR);
+    await act(async () => container.querySelector("img")!.dispatchEvent(new Event("error")));
+    expect(container.querySelector("img")?.getAttribute("src")).toBe("https://api.github.com/icons/platforms/github.png");
+    await act(async () => container.querySelector("img")!.dispatchEvent(new Event("error")));
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(GITHUB_ICON);
+  });
+
   it("shows an empty tile when there is neither", async () => {
     await act(async () => root.render(<PlatformLogo baseUrl="https://p.example.com" service="mastodon" adapter="postiz" />));
     await act(async () => container.querySelector("img")!.dispatchEvent(new Event("error")));
