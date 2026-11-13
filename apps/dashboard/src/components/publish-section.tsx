@@ -6,7 +6,7 @@ import { useMutation } from "convex/react";
 import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Calendar, Send, Zap } from "lucide-react";
+import { Calendar, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AutoPublishToggle, type AutoPublishControl } from "@/src/components/auto-publish-toggle";
@@ -169,7 +169,6 @@ export function PublishSection({
       <div className="grid gap-4 border-t border-border pt-4 text-sm">
         {autoPublish && (
           <div className="flex items-center gap-3">
-            <Zap aria-hidden="true" className="size-4 text-muted-foreground" />
             {autoPublish.editable ? (
               <AutoPublishToggle checked={autoPublish.checked} onChange={autoPublish.onChange} hint={autoPublish.hint} />
             ) : (
