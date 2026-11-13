@@ -266,7 +266,15 @@ describe("channel capabilities for the Mission type's kind", () => {
   });
 
   it("allows an uncertain channel", async () => {
-    const { owner, missionId } = await seed({ payload: {} });
+    const { t, owner, missionId } = await seed({ payload: {} });
+    // A platform the package declares without saying whether it takes an image: `uncertain`.
+    await t.run(async (ctx) => {
+      const pkg = (await ctx.db.query("hubPackages").collect()).find((p) => p.provides === "postiz")!;
+      const meta = pkg.meta as { capabilities: { platforms: Record<string, unknown> } };
+      await ctx.db.patch(pkg._id, {
+        meta: { ...meta, capabilities: { ...meta.capabilities, platforms: { ...meta.capabilities.platforms, mastodon: { name: "Mastodon" } } } },
+      });
+    });
     await owner.mutation(api.publishers.addChannel, MASTO);
     await expect(
       owner.mutation(api.publications.setTargets, { missionId, targets: ["mastodon:m"] }),

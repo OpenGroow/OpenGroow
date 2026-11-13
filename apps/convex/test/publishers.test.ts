@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
+import { generateTargetKey } from "../publishers";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
@@ -257,29 +258,22 @@ describe("publishers", () => {
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:love_youmake"]);
   });
 
-  it("slugs a handle with uppercase or special characters into a valid key", async () => {
-    const t = await seed();
-    const owner = t.withIdentity(OWNER);
-    await owner.mutation(api.publishers.save, CONNECTION);
-    const key = await owner.mutation(api.publishers.addChannel, {
-      adapter: "postiz",
-      instanceId: INSTANCE_ID,
-      channelId: "c1",
-      channelName: "Cafe",
-      channelService: "Instagram",
-      channelProfile: "@Café.Du Coin!",
-    });
-    expect(key).toBe("instagram:caf-du-coin");
+  it("slugs a handle with uppercase or special characters into a valid key", () => {
+    expect(generateTargetKey({ channelService: "Instagram", channelProfile: "@Café.Du Coin!" })).toBe("instagram:caf-du-coin");
   });
 
-  it("keeps the slash of an owner/repo handle (a GitHub repository, ADR-074)", async () => {
+  it("keeps the slash of an owner/repo handle (a GitHub repository, ADR-074)", () => {
+    expect(generateTargetKey({ channelService: "github", channelProfile: "Acme/Site" })).toBe("github:acme/site");
+    expect(generateTargetKey({ channelService: "github", channelProfile: "/acme//my.site/" })).toBe("github:acme/my-site");
+  });
+
+  it("refuses a channel on a platform the package does not declare (ADR-075)", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, CONNECTION);
-    const add = (channelId: string, channelProfile: string) =>
-      owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId, channelName: channelProfile, channelService: "github", channelProfile });
-    expect(await add("Acme/Site", "Acme/Site")).toBe("github:acme/site");
-    expect(await add("acme/my.site", "/acme//my.site/")).toBe("github:acme/my-site");
+    await expect(
+      owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "x1", channelName: "Me", channelService: "mastodon", channelProfile: "me" }),
+    ).rejects.toThrow('Postiz does not publish to "mastodon" in OpenGroow');
   });
 
   it("rejects adding a channel without a Publisher", async () => {

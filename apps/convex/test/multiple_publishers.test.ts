@@ -74,9 +74,24 @@ describe("several Publishers per Project", () => {
   });
 
   it("refuses a channel key another Publisher of the Project already has", async () => {
-    const { owner } = await seed();
+    const { t, owner } = await seed();
+    // A second package publishing to the same platform: the only way two Publishers can produce the same key.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("hubPackages", {
+        packageId: "@opengroow/publisher-mirror",
+        kind: "publisher",
+        version: "1.0.0",
+        tag: "publisher-mirror@1.0.0",
+        digest: `sha256:${"1".repeat(64)}`,
+        verification: "official",
+        meta: { ...GITHUB_META, adapter: "mirror", name: "Mirror" },
+        provides: "mirror",
+        installedAt: Date.now(),
+      });
+    });
+    await owner.mutation(api.publishers.save, { ...GITHUB, adapter: "mirror" });
     await owner.mutation(api.publishers.addChannel, REPO);
-    await expect(owner.mutation(api.publishers.addChannel, { ...REPO, adapter: "postiz", channelId: "other-id" })).rejects.toThrow(
+    await expect(owner.mutation(api.publishers.addChannel, { ...REPO, adapter: "mirror", channelId: "other-id" })).rejects.toThrow(
       'A channel "github:acme/site" is already added to this Project',
     );
   });

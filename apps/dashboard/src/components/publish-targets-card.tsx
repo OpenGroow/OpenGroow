@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { optionsOfPlatform } from "@opengroow/publisher-sdk";
+import { optionsOfPlatform, servesPlatform } from "@opengroow/publisher-sdk";
 import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
@@ -106,7 +106,8 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   useStoreMissingHandles(id, publisher, channels);
 
   const taken = new Set(publisher.targets.flatMap((t) => (t.mapped ? [t.channelId] : [])));
-  const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled);
+  // Only the platforms the package declares are offered (ADR-075).
+  const available = (channels ?? []).filter((c) => !taken.has(c.id) && !c.disabled && servesPlatform(installedPackage?.capabilities, c.service));
 
   return (
     <Card className="gap-4 p-5">
@@ -149,7 +150,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                   disabled={!c.profile}
                   onClick={() => void handleAdd(c)}
                 >
-                  <PlatformLogo baseUrl={publisher.url} service={c.service} adapter={publisher.adapter} />
+                  <PlatformLogo service={c.service} adapter={publisher.adapter} />
                   <span className="grid">
                     <span className="font-medium">{platformName(c.service)}</span>
                     <span className="text-sm text-muted-foreground">
@@ -176,7 +177,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
             const expanded = expandable && open === t.target;
             const header = (
               <>
-                <PlatformLogo baseUrl={publisher.url} service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} />
+                <PlatformLogo service={t.mapped ? t.channelService : undefined} adapter={publisher.adapter} />
                 <span className="grid flex-1 gap-1">
                   <span className="text-base font-medium">
                     {t.mapped && t.channelService ? platformName(t.channelService) : t.target}

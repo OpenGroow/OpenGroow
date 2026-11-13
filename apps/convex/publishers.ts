@@ -8,6 +8,7 @@ import {
 import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { requirePublisherMeta } from "./publisher_packages.js";
+import { servesPlatform } from "@opengroow/publisher-sdk";
 import { allChannels, MAX_PUBLISHERS_PER_PROJECT, projectPublisher, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 
 // Project-level Publishers (ADR-069, ADR-075): several per Project, at most one
@@ -125,6 +126,11 @@ export const addChannel = mutation({
     const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     const existing = publisher.targets.find((t) => t.channelId === args.channelId);
     if (existing) return existing.target;
+    // Only the platforms the package declares are offered (ADR-075): the others were never tried.
+    const meta = await requirePublisherMeta(ctx, args.adapter);
+    if (!servesPlatform(meta.capabilities, args.channelService)) {
+      throw new Error(`${meta.name} does not publish to "${args.channelService}" in OpenGroow`);
+    }
     const target = generateTargetKey(args);
     // The key alone names the channel in Missions and Schedules: it must be unique across the Project's Publishers.
     if (allChannels(await projectPublishers(ctx, args.instanceId)).some((t) => t.target === target)) {

@@ -4,6 +4,7 @@
 // through this pure module: no network, no per-platform branch in code.
 // Importable from Convex functions and from the dashboard.
 
+import { isValidIcon, MAX_ICON_LENGTH } from "./manifest";
 import { matchPlatform } from "./platforms";
 
 export const CAPABILITY_KINDS = ["video", "image", "carousel", "article"] as const;
@@ -15,6 +16,9 @@ export const CAPABILITIES_SCHEMA_VERSION = 1;
 
 export type PlatformCapabilities = {
   name?: string;
+  /** The platform's logo, shipped with the package (a data URI, same rule as the manifest `icon`): the dashboard
+   * shows it for the channels of this platform, with no request. Absent: the package icon. */
+  icon?: string;
   video?: CapabilityLevel;
   image?: CapabilityLevel;
   carousel?: CapabilityLevel;
@@ -42,6 +46,9 @@ export function parseCapabilities(raw: unknown): CapabilitiesData {
   if (!platforms || typeof platforms !== "object" || Array.isArray(platforms)) throw new Error("capabilities.platforms must be an object");
   for (const [service, entry] of Object.entries(platforms)) {
     if (!entry || typeof entry !== "object") throw new Error(`capabilities.platforms.${service} must be an object`);
+    if (entry.icon !== undefined && !isValidIcon(entry.icon)) {
+      throw new Error(`capabilities.platforms.${service}.icon must be a png, webp, jpeg or svg data URI of at most ${MAX_ICON_LENGTH} characters`);
+    }
     for (const kind of CAPABILITY_KINDS) {
       const level = entry[kind];
       if (level !== undefined && !LEVELS.includes(level as string)) {
@@ -50,6 +57,19 @@ export function parseCapabilities(raw: unknown): CapabilitiesData {
     }
   }
   return obj as unknown as CapabilitiesData;
+}
+
+/**
+ * Whether the package publishes to `service` at all. A channel of a platform the
+ * package does not declare is not offered, and cannot be added (ADR-075).
+ */
+export function servesPlatform(data: CapabilitiesData | undefined, service: string | undefined): boolean {
+  return Boolean(service && data?.platforms[service]);
+}
+
+/** The logo of a channel's platform: the one the package ships for it, else the package's own icon. No request. */
+export function platformIcon(data: CapabilitiesData | undefined, service: string | undefined, packageIcon?: string): string | undefined {
+  return (service ? data?.platforms[service]?.icon : undefined) ?? packageIcon;
 }
 
 /** Capability of a channel's service for a Publishable kind. Unknown service or kind: `uncertain`. */

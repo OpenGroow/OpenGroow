@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import { platformIcon } from "@opengroow/publisher-sdk";
 import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -430,7 +431,7 @@ describe("MissionReviewContent", () => {
         if (key === "missions.get") {
           return { ...MISSION_WITH_ARTIFACT, status, lastArtifact: { external: { service: "media", id: "42" }, publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Watch" } } };
         }
-        if (key === "publishers.list") return { adapter: "postiz", ...PUBLISHER };
+        if (key === "publishers.list") return PUBLISHER;
         return undefined;
       });
 
@@ -541,6 +542,7 @@ describe("MissionReviewContent", () => {
   });
 
   const PUBLISHER = {
+    adapter: "postiz",
     url: "https://postiz.example.com",
     hasApiKey: true,
     targets: [
@@ -639,8 +641,9 @@ describe("MissionReviewContent", () => {
       await act(async () => {});
       expect(channelChip("instagram:myinsta")?.textContent).toContain("@myinsta");
       expect(channelChip("pinterest:pins")).toBeNull();
+      // The platform logo comes from the installed package, with no request (ADR-075).
       expect(document.querySelector('[data-testid="publish-section"] img')?.getAttribute("src")).toBe(
-        "https://postiz.example.com/icons/platforms/instagram.png",
+        platformIcon(INSTALLED_PUBLISHERS[0].capabilities, "instagram", INSTALLED_PUBLISHERS[0].icon),
       );
       await openChannelList();
       expect(channelItem("pinterest:pins")?.textContent).toContain("@pins");
