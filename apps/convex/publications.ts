@@ -2,8 +2,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
 import { publishableForPlatform } from "./publishable.js";
-import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
-import { publicationStatusV } from "./publisher_schema.js";
+import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
+import { publicationAttemptContextV, publicationStatusV } from "./publisher_schema.js";
 import { publicNotificationOf, scheduleOnPublished } from "./publication_notifications.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { markMissionDone } from "./missions.js";
@@ -93,6 +93,7 @@ export const setTargets = mutation({
       payload: { publishTargets: targets },
     });
     const payload = mission.payload && typeof mission.payload === "object" ? mission.payload : {};
+    await assertPayloadSchedulable(ctx, mission.instanceId, { ...(payload as Record<string, unknown>), publishTargets: targets });
     await ctx.db.patch(args.missionId, {
       payload: { ...(payload as Record<string, unknown>), publishTargets: targets },
       updatedAt: Date.now(),
@@ -117,7 +118,10 @@ export const setPublishAt = mutation({
       throw new Error(`The publication date can only be changed during review, got: "${mission.status}"`);
     }
     if (args.publishAt !== null && !Number.isFinite(args.publishAt)) throw new Error("publishAt must be a timestamp in milliseconds");
-    if (args.publishAt !== null) assertValidPublishAt({ publishAt: args.publishAt });
+    if (args.publishAt !== null) {
+      assertValidPublishAt({ publishAt: args.publishAt });
+      await assertPayloadSchedulable(ctx, mission.instanceId, { publishTargets: effectivePublishTargets(mission.payload), publishAt: args.publishAt });
+    }
     const { publishAt: _previous, ...rest } = (
       mission.payload && typeof mission.payload === "object" ? mission.payload : {}
     ) as Record<string, unknown>;
@@ -236,6 +240,7 @@ export const beginAll = internalMutation({
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
     if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
+    await assertSchedulable(ctx, publisher, targets, effectivePublishAt(mission.payload, Date.now()));
     if (typeof publishable.kind === "string") {
       const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
       const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;
@@ -262,6 +267,13 @@ export const beginAll = internalMutation({
         skipped.push(`"${target}" is already ${existing.status}`);
         continue;
       }
+      const previous = existing?.attemptContext;
+      if (
+        existing?.attemptStartedAt !== undefined && existing.externalId === undefined && previous &&
+        (previous.adapter !== publisher.adapter || previous.url !== publisher.url)
+      ) {
+        throw new Error("The Publisher connection changed since this send: restore it before retrying the Publication");
+      }
       let publicationId = existing?._id;
       if (existing) {
         await ctx.db.patch(existing._id, { status: "pending", error: undefined, updatedAt: now });
@@ -282,7 +294,11 @@ export const beginAll = internalMutation({
         // A previous POST may have reached the service: look for it before sending again.
         reconcile:
           existing && existing.attemptStartedAt !== undefined && existing.externalId === undefined
-            ? { attemptStartedAt: existing.attemptStartedAt, attemptDate: existing.attemptDate ?? existing.attemptStartedAt }
+            ? {
+                attemptStartedAt: existing.attemptStartedAt,
+                attemptDate: existing.attemptDate ?? existing.attemptStartedAt,
+                context: existing.attemptContext,
+              }
             : undefined,
         channelId: mapping.channelId!,
         channelService: mapping.channelService,
@@ -350,6 +366,7 @@ export const markSubmitting = internalMutation({
     publicationId: v.id("publications"),
     media: v.array(v.object({ url: v.string(), id: v.string(), path: v.string() })),
     attemptDate: v.number(),
+    context: publicationAttemptContextV,
   },
   handler: async (ctx, args): Promise<boolean> => {
     const publication = await ctx.db.get(args.publicationId);
@@ -360,6 +377,7 @@ export const markSubmitting = internalMutation({
       media: args.media,
       attemptStartedAt: now,
       attemptDate: args.attemptDate,
+      attemptContext: args.context,
       updatedAt: now,
     });
     return true;
@@ -384,7 +402,7 @@ export const finish = internalMutation({
     if (!publication) throw new Error("Publication not found");
     await ctx.db.patch(publicationId, {
       ...fields,
-      ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined } : {}),
+      ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined, attemptContext: undefined } : {}),
       updatedAt: Date.now(),
     });
     const updated = await ctx.db.get(publicationId);

@@ -267,6 +267,16 @@ describe("publishers", () => {
     expect(key).toBe("instagram:caf-du-coin");
   });
 
+  it("keeps the slash of an owner/repo handle (a GitHub repository, ADR-074)", async () => {
+    const t = await seed();
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, CONNECTION);
+    const add = (channelId: string, channelProfile: string) =>
+      owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId, channelName: channelProfile, channelService: "github", channelProfile });
+    expect(await add("Acme/Site", "Acme/Site")).toBe("github:acme/site");
+    expect(await add("acme/my.site", "/acme//my.site/")).toBe("github:acme/my-site");
+  });
+
   it("rejects adding a channel without a Publisher", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);

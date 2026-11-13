@@ -29,6 +29,10 @@ The plugin must not import from `apps/*`. It receives everything through argumen
 | `getStatus(conn, externalId, around?)` | Where a post stands (`pending`, `scheduled`, `published`, `failed`). A post the service no longer knows is `failed`. |
 | `postUrl?` | Optional template (data, not a function), from `manifest.json`: `{url}` is the connection URL, `{id}` the post's external id. A URL that opens the post in the service's own UI (Postiz: `{url}/p/{id}`, its public preview page), shown as "open in <name>" next to the post's network URL. Rendered with the SDK's `renderPostUrl`. |
 
+`findPost` receives, besides the caption and the attempt window, the channel's `channelService`, its `settings` and the `publishable` that was sent: a service that finds a post by what it carries (the GitHub Publisher looks for the file `<contentBase>/<slug>.md`) reads them. `getStatus` receives the channel (`target`: `channelId`, `settings`) when the post's id alone does not locate it (a commit sha needs its repository).
+
+The core records the connection origin, channel, settings and Publishable when `beforePost` claims the send. Reconciliation and status polling use that saved destination even if the channel settings later change. If the Publisher connection changes while an attempt is uncertain, restore the original connection before retrying; credentials are read from the current configuration and are never copied into the attempt context. Publications created before this context was recorded keep their previous lookup behavior.
+
 Every function returns `PublisherResult`: `{ ok: true, ... }` or `{ ok: false, error, uncertain? }`.
 
 ### Error classification: `uncertain`
@@ -44,7 +48,11 @@ Set `uncertain: true` whenever the failure does not prove the service rejected t
 
 ## The manifest
 
-`manifest.json` is `{ id, name, contractVersion, postUrl? }`, read by the SDK's `parsePublisherManifest`, which refuses a package built for another contract version with a message naming both versions. It is the single source of the plugin's identity: `postiz.ts` builds `id`, `name`, `contractVersion` and `postUrl` from it, so a malformed manifest fails at load. It is also the data the core will store when packages are installed from the hub (ADR-072, proposed).
+`manifest.json` is `{ id, name, contractVersion, postUrl?, icon?, scheduling? }`, read by the SDK's `parsePublisherManifest`, which refuses a package built for another contract version with a message naming both versions. A service that cannot publish at a later date declares `"scheduling": false`: the core then refuses a `publishAt` on its channels (Mission and Schedule create and edit, review, publish), and the plugin should refuse one too. It is the single source of the plugin's identity: `postiz.ts` builds `id`, `name`, `contractVersion` and `postUrl` from it, so a malformed manifest fails at load. It is also the data the core will store when packages are installed from the hub (ADR-072, proposed).
+
+## The GitHub Publisher
+
+`packages/publisher/github` in the hub (ADR-074) publishes `article` Publishables to a site repository. Its connection URL is the REST API (`https://api.github.com`; `https://github.com` is read as it) and its key a GitHub token. A channel is a repository the token can push to (key `github:<owner>/<repo>`); its options are `branch` (empty: the default branch), `contentBase`, `coverBase`, `publicBase` and `articleBaseUrl`. `publish` fetches the markdown and the cover without a key, then makes one commit with `<contentBase>/<slug>.md` (fixed frontmatter `title`, `description`, `publishedAt`, `cover` = `<publicBase>/<slug>.webp`, `category`; a frontmatter the markdown brings is replaced) and `<coverBase>/<slug>.webp`. It never overwrites a file at the content path, fails with "cover not ready" when the cover cannot be fetched, and returns the commit sha with `<articleBaseUrl>/<slug>`. `publishedAt` is the commit's date (author and committer: the token's account, under its GitHub noreply address). `findPost` attaches the file at the content path only when its latest commit is not older than the attempt; an older file is someone else's, so the re-send fails on it instead. Its manifest declares `scheduling: false`.
 
 ## The two data files
 

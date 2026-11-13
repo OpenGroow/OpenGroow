@@ -212,6 +212,129 @@ describe("retry reconciles before sending again", () => {
     expect((await ctx.owner.query(api.missions.get, { missionId: ctx.missionId }))?.status).toBe("done");
   });
 
+  it("gives findPost what was sent: the channel's service and settings, and the Publishable (ADR-074)", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const findPost = vi.spyOn(postizPlugin, "findPost");
+    const ctx = await seed();
+    const postiz = fakePostiz({ mode: "drop-after-accept" });
+    await expect(publish(ctx)).rejects.toThrow();
+    postiz.state.mode = "ok";
+    await retry(ctx);
+    expect(findPost).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ channelId: "ch-1", channelService: "instagram", publishable: PUBLISHABLE, caption: "Hello world" }),
+    );
+    findPost.mockRestore();
+  });
+
+  it("reconciles with the original settings and Publishable after the channel is edited", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const findPost = vi.spyOn(postizPlugin, "findPost");
+    try {
+      const ctx = await seed();
+      const original = { branch: "main", contentBase: "articles" };
+      await ctx.owner.mutation(api.publishers.updateSettings, {
+        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: original,
+      });
+      const service = fakePostiz({ mode: "drop-after-accept" });
+      await expect(publish(ctx)).rejects.toThrow();
+      await ctx.owner.mutation(api.publishers.updateSettings, {
+        instanceId: INSTANCE_ID, target: "instagram:love_youmake",
+        settings: { branch: "release", contentBase: "new-articles" },
+      });
+      await ctx.t.run(async (c) => {
+        const mission = await c.db.get(ctx.missionId);
+        if (mission?.lastResult?.status !== "needs_human_review" || !mission.lastResult.artifact) throw new Error("Missing fixture artifact");
+        await c.db.patch(ctx.missionId, { lastResult: {
+          ...mission.lastResult,
+          artifact: { ...mission.lastResult.artifact, publishable: { ...PUBLISHABLE, kind: "image", caption: "Changed caption" } },
+        } });
+      });
+      service.state.mode = "ok";
+      await retry(ctx);
+      expect(findPost).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        settings: original, publishable: PUBLISHABLE, caption: PUBLISHABLE.caption,
+      }));
+      expect(service.posts).toHaveLength(1);
+      expect((await listed(ctx)).status).toBe("published");
+    } finally {
+      findPost.mockRestore();
+    }
+  });
+
+  it("does not use newly added settings for an attempt that had none", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const findPost = vi.spyOn(postizPlugin, "findPost");
+    try {
+      const ctx = await seed();
+      const service = fakePostiz({ mode: "drop-after-accept" });
+      await expect(publish(ctx)).rejects.toThrow();
+      await ctx.owner.mutation(api.publishers.updateSettings, {
+        instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings: { branch: "release" },
+      });
+      service.state.mode = "ok";
+      await retry(ctx);
+      expect(findPost.mock.calls[0][1]).not.toHaveProperty("settings");
+      expect(service.posts).toHaveLength(1);
+    } finally {
+      findPost.mockRestore();
+    }
+  });
+
+  it("records the new settings when reconciliation confirms there was no earlier post", async () => {
+    const ctx = await seed();
+    const service = fakePostiz({ mode: "drop-before-accept" });
+    await expect(publish(ctx)).rejects.toThrow();
+    const settings = { branch: "release" };
+    await ctx.owner.mutation(api.publishers.updateSettings, {
+      instanceId: INSTANCE_ID, target: "instagram:love_youmake", settings,
+    });
+    service.state.mode = "ok";
+    await retry(ctx);
+    const publicationId = (await listed(ctx)).id;
+    const publication = await ctx.t.run((c) => c.db.get(publicationId));
+    expect(publication?.attemptContext?.settings).toEqual(settings);
+    expect(service.posts).toHaveLength(1);
+  });
+
+  it("looks in the original channel after a channel mapping is replaced", async () => {
+    const { postizPlugin } = await import("./postiz_reference/src/index");
+    const findPost = vi.spyOn(postizPlugin, "findPost");
+    try {
+      const ctx = await seed();
+      const service = fakePostiz({ mode: "drop-after-accept" });
+      await expect(publish(ctx)).rejects.toThrow();
+      await ctx.owner.mutation(api.publishers.removeTarget, {
+        instanceId: INSTANCE_ID, target: "instagram:love_youmake",
+      });
+      await ctx.owner.mutation(api.publishers.addChannel, {
+        instanceId: INSTANCE_ID, channelId: "replacement", channelName: "Replacement",
+        channelService: "instagram", channelProfile: "love_youmake",
+      });
+      service.state.mode = "ok";
+      await retry(ctx);
+      expect(findPost).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ channelId: "ch-1" }));
+      expect(service.posts).toHaveLength(1);
+    } finally {
+      findPost.mockRestore();
+    }
+  });
+
+  it("does not reconcile an uncertain send against a different Publisher connection", async () => {
+    const ctx = await seed();
+    const service = fakePostiz({ mode: "drop-after-accept" });
+    await expect(publish(ctx)).rejects.toThrow();
+    await ctx.owner.mutation(api.publishers.save, {
+      instanceId: INSTANCE_ID, adapter: "postiz", url: "https://replacement.example.com", apiKey: "new-key",
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(retry(ctx)).rejects.toThrow(/connection changed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(service.posts).toHaveLength(1);
+    expect((await listed(ctx)).status).toBe("uncertain");
+  });
+
   it("attaches a scheduled post as scheduled", async () => {
     const publishAt = Date.now() + 2 * 3_600_000;
     const ctx = await seed({ payload: { publishTargets: ["instagram:love_youmake"], publishAt } });

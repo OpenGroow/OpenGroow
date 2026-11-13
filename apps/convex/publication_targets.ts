@@ -7,6 +7,7 @@ import type { QueryCtx } from "./_generated/server.js";
 import { capabilityFor } from "@opengroow/publisher-sdk";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { effectivePublishAt } from "./publish_at.js";
 
 /** The Publish targets of a Mission or Schedule payload: `payload.publishTargets`,
  * chosen by the human among the Publisher's channels. Agents never choose them,
@@ -15,6 +16,14 @@ export function effectivePublishTargets(payload: unknown): string[] {
   const many = (payload as { publishTargets?: unknown } | null | undefined)?.publishTargets;
   if (!Array.isArray(many)) return [];
   return [...new Set(many.filter((t): t is string => typeof t === "string" && t !== ""))];
+}
+
+/** The Project's Publisher, or null when none is configured. */
+async function projectPublisher(ctx: QueryCtx, instanceId: string) {
+  return await ctx.db
+    .query("publishers")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .unique();
 }
 
 /** Names the keys of `targets` that are not (mapped) channels of the Publisher. */
@@ -35,10 +44,7 @@ export function unusableTargets(
 export async function assertKnownPublishTargets(ctx: QueryCtx, instanceId: string, payload: unknown): Promise<void> {
   const targets = effectivePublishTargets(payload);
   if (targets.length === 0) return;
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, instanceId);
   const { unknown } = unusableTargets(publisher?.targets, targets);
   if (unknown.length > 0) {
     throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
@@ -77,9 +83,30 @@ export async function assertPayloadChannelsSupportMissionType(
   const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId);
   const declaration = publishDeclarationFor(template?.manifest, args.type);
   if (!declaration) return;
-  const publisher = await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-    .unique();
+  const publisher = await projectPublisher(ctx, args.instanceId);
   await assertChannelsSupportKind(ctx, publisher, targets, declaration.kind, declaration.platforms);
+}
+
+/** Refuses a `publishAt` on channels of a Publisher that cannot schedule (manifest `scheduling: false`, ADR-074:
+ * a GitHub commit is immediate). A date already past is not a schedule (it publishes now) and passes. */
+export async function assertSchedulable(
+  ctx: QueryCtx,
+  publisher: { adapter: string } | null | undefined,
+  targets: readonly string[],
+  publishAt: number | undefined,
+): Promise<void> {
+  if (!publisher || publishAt === undefined || targets.length === 0) return;
+  const meta = await publisherMetaOf(ctx, publisher.adapter);
+  if (meta?.scheduling !== false) return;
+  const channels = targets.map((t) => `"${t}"`).join(", ");
+  throw new Error(`${meta.name} cannot schedule a post: remove the publication date (channel ${channels})`);
+}
+
+/** Same check on a Mission or Schedule payload: its `publishTargets` and its `publishAt`. */
+export async function assertPayloadSchedulable(ctx: QueryCtx, instanceId: string, payload: unknown): Promise<void> {
+  const targets = effectivePublishTargets(payload);
+  const publishAt = effectivePublishAt(payload, Date.now());
+  if (targets.length === 0 || publishAt === undefined) return;
+  const publisher = await projectPublisher(ctx, instanceId);
+  await assertSchedulable(ctx, publisher, targets, publishAt);
 }

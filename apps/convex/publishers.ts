@@ -26,7 +26,8 @@ function slug(value: string): string {
  */
 export function generateTargetKey(channel: { channelService: string; channelProfile?: string }): string {
   const platform = slug(channel.channelService) || "channel";
-  const handle = slug(channel.channelProfile ?? "");
+  // A handle may name an owner and a repository (`acme/site`, a GitHub channel): its slash is kept between slugged parts.
+  const handle = (channel.channelProfile ?? "").split("/").map(slug).filter(Boolean).join("/");
   if (!handle) throw new Error("This channel has no handle, so it cannot be added");
   return `${platform}:${handle}`;
 }
