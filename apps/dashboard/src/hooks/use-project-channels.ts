@@ -26,3 +26,22 @@ export function useProjectChannels(instanceId: string): { publishers: ProjectPub
   if (publishers === undefined) return undefined;
   return { publishers, channels: channelsOf(publishers) };
 }
+
+/**
+ * The name of a Publisher, among those of the chosen `targets`, that cannot
+ * schedule a post (manifest `scheduling: false`, ADR-074: a GitHub commit is
+ * immediate), or undefined when every one can. The date picker is then hidden:
+ * the core would refuse a `publishAt`.
+ */
+export function unschedulablePublisherName(
+  channels: readonly ProjectChannel[],
+  installed: ReadonlyArray<{ adapter: string; name: string; scheduling?: false }> | undefined,
+  targets: readonly string[],
+): string | undefined {
+  for (const target of targets) {
+    const adapter = channels.find((c) => c.target === target)?.adapter;
+    const pkg = installed?.find((p) => p.adapter === adapter);
+    if (pkg?.scheduling === false) return pkg.name;
+  }
+  return undefined;
+}

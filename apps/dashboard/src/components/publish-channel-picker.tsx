@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { capabilityFor, matchPlatform, missingOptions, notConfiguredReason, type CapabilitiesData, type Capability } from "@opengroow/publisher-sdk";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
-import { useProjectChannels, type ProjectChannel, type ProjectPublisher } from "@/src/hooks/use-project-channels";
+import { unschedulablePublisherName, useProjectChannels, type ProjectChannel, type ProjectPublisher } from "@/src/hooks/use-project-channels";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -275,6 +275,7 @@ export function PublishChannelPicker({
   onChange: (payloadText: string) => void;
 }) {
   const project = useProjectChannels(instanceId);
+  const installed = useInstalledPublishers();
   const [dateError, setDateError] = useState<string | null>(null);
   const payload = parsePayload(payloadText);
   const selected = Array.isArray(payload?.publishTargets)
@@ -291,6 +292,8 @@ export function PublishChannelPicker({
   }
 
   if (project === undefined) return null;
+  // A chosen channel on a Publisher that cannot schedule (ADR-074): no date to pick.
+  const unschedulable = unschedulablePublisherName(project.channels, installed, selected);
   const publishersHref = `/projects/${encodeURIComponent(instanceId)}/publishers`;
 
   return (
@@ -324,12 +327,25 @@ export function PublishChannelPicker({
         )}
         <div className="grid gap-1.5">
           <span className="text-sm font-semibold text-muted-foreground">Publish at</span>
-          <DateTimePicker
-            value={publishAt}
-            disabled={!payload}
-            onError={setDateError}
-            onChange={(at) => write({ publishAt: at })}
-          />
+          {unschedulable && publishAt === undefined ? (
+            <p data-testid="publish-at-immediate" className="m-0 text-sm text-muted-foreground">
+              Published immediately: {unschedulable} cannot schedule a post.
+            </p>
+          ) : (
+            <>
+              <DateTimePicker
+                value={publishAt}
+                disabled={!payload}
+                onError={setDateError}
+                onChange={(at) => write({ publishAt: at })}
+              />
+              {unschedulable ? (
+                <p data-testid="publish-at-unschedulable" className="m-0 text-sm text-destructive">
+                  {unschedulable} cannot schedule a post: clear the date to publish.
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
       {dateError && <p data-testid="publish-at-error" className="m-0 text-sm text-destructive">{dateError}</p>}

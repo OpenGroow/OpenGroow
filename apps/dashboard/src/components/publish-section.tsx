@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AutoPublishToggle, type AutoPublishControl } from "@/src/components/auto-publish-toggle";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
-import { useProjectChannels } from "@/src/hooks/use-project-channels";
+import { unschedulablePublisherName, useProjectChannels } from "@/src/hooks/use-project-channels";
 import { CapabilityWarning, ChannelSelect, accountLabel, channelCapability } from "@/src/components/publish-channel-picker";
 import { DateTimePicker, formatDateTime } from "@/src/components/date-time-picker";
 
@@ -111,6 +111,8 @@ export function PublishSection({
   if (done && publish.publications.length > 0) return <PublicationList missionId={missionId} title="Publications" />;
 
   const hasDate = publishAtMs !== undefined && Number.isFinite(publishAtMs);
+  // A chosen channel on a Publisher that cannot schedule (ADR-074): no date to pick.
+  const unschedulable = project ? unschedulablePublisherName(project.channels, installed, targets) : undefined;
   const formattedDate = hasDate ? formatDateTime(publishAtMs) : "Immediately";
 
   return (
@@ -138,7 +140,20 @@ export function PublishSection({
             {hasDate ? `on ${formattedDate}` : "immediately"}.
           </p>
           <span className="mt-2 text-sm font-semibold text-muted-foreground">Publish at</span>
-          <DateTimePicker value={publishAtMs} onChange={(at) => { void changePublishAt(at); }} onError={setError} />
+          {unschedulable && !hasDate ? (
+            <p data-testid="publish-at-immediate" className="m-0 text-sm text-muted-foreground">
+              Published immediately: {unschedulable} cannot schedule a post.
+            </p>
+          ) : (
+            <>
+              <DateTimePicker value={publishAtMs} onChange={(at) => { void changePublishAt(at); }} onError={setError} />
+              {unschedulable ? (
+                <p data-testid="publish-at-unschedulable" className="m-0 text-sm text-destructive">
+                  {unschedulable} cannot schedule a post: clear the date to publish.
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       ) : (
         <dl data-testid="publish-readonly" className="m-0 grid gap-2 text-sm">

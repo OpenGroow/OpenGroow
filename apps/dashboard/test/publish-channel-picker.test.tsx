@@ -68,6 +68,29 @@ describe("PublishChannelPicker", () => {
     return onChange;
   }
 
+  it("offers no date when a chosen channel is on a Publisher that cannot schedule (ADR-074)", async () => {
+    INSTALLED_PUBLISHERS.push({ ...INSTALLED_PUBLISHERS[0], adapter: "github", name: "Blog Utils (GitHub)", packageId: "@opengroow/publisher-github", scheduling: false } as never);
+    try {
+      useQueryMock.mockReturnValue([
+        PUBLISHER,
+        { adapter: "github", url: "https://api.github.com", hasApiKey: true, targets: [{ target: "github:acme/site", mapped: true, channelId: "acme/site", channelName: "acme/site", channelService: "github", channelProfile: "acme/site" }] },
+      ]);
+      await render(JSON.stringify({ publishTargets: ["instagram:myinsta"] }));
+      expect(container.querySelector('[data-testid="publish-at-immediate"]')).toBeNull();
+
+      await render(JSON.stringify({ publishTargets: ["github:acme/site"] }));
+      expect(container.querySelector('[data-testid="publish-at-immediate"]')?.textContent).toBe(
+        "Published immediately: Blog Utils (GitHub) cannot schedule a post.",
+      );
+
+      // A date already there stays clearable, with the reason it must go.
+      await render(JSON.stringify({ publishTargets: ["github:acme/site"], publishAt: Date.now() + 3_600_000 }));
+      expect(container.querySelector('[data-testid="publish-at-unschedulable"]')?.textContent).toContain("clear the date");
+    } finally {
+      INSTALLED_PUBLISHERS.pop();
+    }
+  });
+
   const openList = async () => {
     await act(async () => {
       (container.querySelector('[aria-label="Show channels"]') as HTMLElement).click();
