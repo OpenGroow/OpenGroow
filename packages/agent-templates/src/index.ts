@@ -72,6 +72,9 @@ export {
   readMediaPath,
   type PublishDeclaration,
   type PublishResource,
+  type OnPublishedEffect,
+  ON_PUBLISHED_PLACEHOLDERS,
+  type OnPublishedPlaceholder,
   type PublishableKind,
 } from "./publish-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
@@ -93,7 +96,7 @@ export {
 export { renderRunContext, singleLine, type RunContextInputs } from "./run-context";
 export { outboundUrlProblem } from "./outbound-url";
 export { scopeReservationProblem, type InstallOrigin } from "./scope-reservation";
-export { interpolateReviewTemplate } from "./review-interpolation";
+export { interpolateOnPublishedTemplate, interpolateReviewTemplate } from "./review-interpolation";
 export { exclusiveResourcesOf } from "./exclusive-resources";
 export {
   resolveBlocker,
@@ -504,7 +507,11 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
       };
     }
     for (const entry of validatedMissionTypes) {
-      const problem = publishDeclarationProblem(entry.publish, `missionTypes[${JSON.stringify(entry.type)}]`);
+      const problem = publishDeclarationProblem(
+        entry.publish,
+        `missionTypes[${JSON.stringify(entry.type)}]`,
+        (m.mcpServers as McpServerConfig[]).map((server) => server.name),
+      );
       if (problem) return { ok: false, reason: problem };
       const jobs = (m as { externalJobsByMissionType?: Record<string, unknown> }).externalJobsByMissionType;
       if ((entry.publish as { resource?: unknown } | undefined)?.resource !== undefined && !jobs?.[entry.type as string]) {

@@ -89,3 +89,23 @@ export async function requireOwnerOfInstance(ctx: ActionCtx, instanceId: string)
     throw new Error("Forbidden");
   }
 }
+
+/** Canonical authorization, with Project-bound attribution for historical rows. */
+export async function requireCanonicalOwnedRow(
+  ctx: QueryCtx,
+  row: { instanceId: string; ownerId: string },
+): Promise<void> {
+  const identity = await requireIdentity(ctx);
+  if (row.ownerId === identity.tokenIdentifier) return;
+  const instance = await ctx.db
+    .query("instances")
+    .withIndex("by_openclaw_id", (q) => q.eq("openclawId", row.instanceId))
+    .unique();
+  if (
+    row.ownerId !== identity.subject ||
+    !instance ||
+    (await ownerOfInstance(ctx, instance)) !== identity.tokenIdentifier
+  ) {
+    throw new Error("Forbidden");
+  }
+}

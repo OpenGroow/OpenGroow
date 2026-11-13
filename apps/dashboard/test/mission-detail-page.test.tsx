@@ -63,6 +63,7 @@ vi.mock("@convex/_generated/api", () => ({
       performReviewAction: "missions_node.performReviewAction",
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
+    publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
     publications: { listForMission: "publications.listForMission" },
     runs: { listByMission: "runs.listByMission" },
     project_agents: { get: "project_agents.get" },

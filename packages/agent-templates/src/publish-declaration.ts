@@ -66,7 +66,33 @@ export type PublishDeclaration = {
    * `in_progress` RunResult; the media returned by the tool is merged into it.
    */
   resource?: PublishResource;
+  /**
+   * Called once when a Publication of the Mission becomes `published`, so the
+   * producing service can follow up (ADR-074, issue #62). Never blocking: a
+   * failure leaves the Mission `done` with a warning and a resend button, so
+   * the receiving endpoint must be idempotent.
+   */
+  onPublished?: OnPublishedEffect;
 };
+
+/**
+ * A bounded HTTP call to one of the Template's `mcpServers`, with the Agent's
+ * credentials (as review effects). Placeholders in `path` and `body`: `{id}`
+ * (the Mission's external id), `{publication.externalUrl}`,
+ * `{publication.externalId}`. `responseIndexingField` names the response
+ * field mirrored on `mission.indexing` (ADR-015).
+ */
+export type OnPublishedEffect = {
+  server: string;
+  method: "POST";
+  path: string;
+  body?: Record<string, string>;
+  responseIndexingField?: string;
+};
+
+/** The only references an `onPublished` path or body may use. */
+export const ON_PUBLISHED_PLACEHOLDERS = ["id", "publication.externalUrl", "publication.externalId"] as const;
+export type OnPublishedPlaceholder = (typeof ON_PUBLISHED_PLACEHOLDERS)[number];
 
 export type PublishResource = {
   /** An MCP tool of the server that ran the External Job. */
@@ -90,15 +116,16 @@ export function publishDeclarationFor(
   return manifest?.missionTypes?.find((entry) => entry.type === missionType)?.publish;
 }
 
-/** Returns an actionable reason, or undefined when `publish` is absent or valid. */
-export function publishDeclarationProblem(raw: unknown, at: string): string | undefined {
+/** Returns an actionable reason, or undefined when `publish` is absent or valid.
+ * `servers` are the Template's `mcpServers` names (`onPublished.server` must be one). */
+export function publishDeclarationProblem(raw: unknown, at: string, servers: readonly string[] = []): string | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return `${at}.publish must be an object { kind, platforms?, require?, resource? }`;
+    return `${at}.publish must be an object { kind, platforms?, require?, resource?, onPublished? }`;
   }
   const publish = raw as Record<string, unknown>;
   for (const key of Object.keys(publish)) {
-    if (key !== "kind" && key !== "platforms" && key !== "require" && key !== "media" && key !== "resource") return `${at}.publish has unknown key "${key}"`;
+    if (key !== "kind" && key !== "platforms" && key !== "require" && key !== "media" && key !== "resource" && key !== "onPublished") return `${at}.publish has unknown key "${key}"`;
   }
   if (!(PUBLISHABLE_KINDS as readonly unknown[]).includes(publish.kind)) {
     return `${at}.publish.kind ${JSON.stringify(publish.kind)} is not a known Publishable kind — one of ${PUBLISHABLE_KINDS.join(", ")}`;
@@ -131,9 +158,56 @@ export function publishDeclarationProblem(raw: unknown, at: string): string | un
   if (publish.media !== undefined) {
     return `${at}.publish.media was replaced by publish.resource: { tool, idArg?, map? } — OpenGroow now calls the MCP tool \`resource.tool\` when the External Job completes (move your paths to resource.map)`;
   }
+  if (publish.onPublished !== undefined) {
+    const problem = onPublishedProblem(publish.onPublished, `${at}.publish.onPublished`, servers);
+    if (problem) return problem;
+  }
   if (publish.resource !== undefined) return publishResourceProblem(publish.resource, publish.kind as PublishableKind, at);
   if (isMcpOwnedKind(publish.kind as string)) {
     return `${at}.publish.resource is required for kind "${String(publish.kind)}": the MCP returns the whole Publishable, the Agent writes none of it`;
+  }
+  return undefined;
+}
+
+const ON_PUBLISHED_KEYS = new Set(["server", "method", "path", "body", "responseIndexingField"]);
+
+/** The first reference of `template` outside `ON_PUBLISHED_PLACEHOLDERS`, as `{ref}`. */
+function unknownPlaceholderIn(template: string): string | undefined {
+  for (const match of template.matchAll(/\{([^}]*)\}/g)) {
+    if (!(ON_PUBLISHED_PLACEHOLDERS as readonly string[]).includes(match[1])) return match[0];
+  }
+  return undefined;
+}
+
+function onPublishedProblem(raw: unknown, where: string, servers: readonly string[]): string | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return `${where} must be an object { server, method, path, body?, responseIndexingField? }`;
+  }
+  const effect = raw as Record<string, unknown>;
+  for (const key of Object.keys(effect)) {
+    if (!ON_PUBLISHED_KEYS.has(key)) return `${where} has unknown key "${key}"`;
+  }
+  if (typeof effect.server !== "string" || effect.server.length === 0) return `${where}.server must name one of mcpServers`;
+  if (!servers.includes(effect.server)) return `${where}.server "${effect.server}" is not declared in mcpServers`;
+  if (effect.method !== "POST") return `${where}.method must be "POST": ${JSON.stringify(effect.method)}`;
+  if (typeof effect.path !== "string" || !effect.path.startsWith("/")) {
+    return `${where}.path must start with / (relative to the server): ${JSON.stringify(effect.path)}`;
+  }
+  const allowed = ON_PUBLISHED_PLACEHOLDERS.map((ref) => `{${ref}}`).join(", ");
+  const inPath = unknownPlaceholderIn(effect.path);
+  if (inPath) return `${where}.path uses ${JSON.stringify(inPath)} — the only placeholders are ${allowed}`;
+  if (effect.body !== undefined) {
+    if (!effect.body || typeof effect.body !== "object" || Array.isArray(effect.body)) {
+      return `${where}.body must be an object of strings`;
+    }
+    for (const [key, value] of Object.entries(effect.body as Record<string, unknown>)) {
+      if (typeof value !== "string") return `${where}.body.${key} must be a string`;
+      const inBody = unknownPlaceholderIn(value);
+      if (inBody) return `${where}.body.${key} uses ${JSON.stringify(inBody)} — the only placeholders are ${allowed}`;
+    }
+  }
+  if (effect.responseIndexingField !== undefined && (typeof effect.responseIndexingField !== "string" || effect.responseIndexingField.length === 0)) {
+    return `${where}.responseIndexingField must be the name of a response field`;
   }
   return undefined;
 }

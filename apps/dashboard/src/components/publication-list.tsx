@@ -33,12 +33,16 @@ function accountOf(p: { target: string; channelProfile?: string; channelName?: s
  * Every Publication of a Mission (ADR-069): the channel, its status, the link
  * to the post (on the network, and in the Publisher's UI), the scheduled date.
  * The errors are listed apart, and a `failed` one can be retried on its own.
+ * A failed `publish.onPublished` call is a warning with a resend button.
  */
 export function PublicationList({ missionId, title }: { missionId: string; title?: string }) {
   const publications = useQuery(api.publications.listForMission, { missionId: missionId as Id<"missions"> });
   const retryPublication = useAction(api.publisher_node.retryPublication);
+  const resendNotification = useAction(api.publication_notify_node.resendPublishedNotification);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resendError, setResendError] = useState<string | null>(null);
 
   if (!publications || publications.length === 0) return null;
 
@@ -56,7 +60,24 @@ export function PublicationList({ missionId, title }: { missionId: string; title
     }
   }
 
+  async function resend(publicationId: Id<"publications">) {
+    setResendError(null);
+    setResending(publicationId);
+    try {
+      await resendNotification({ publicationId });
+    } catch (err) {
+      // A call that fails is recorded on the Publication (its warning shows it); this is anything else.
+      setResendError(extractConvexErrorMessage(err, "Could not resend the call"));
+    } finally {
+      setResending(null);
+    }
+  }
+
   const problems = publications.filter((p) => p.status === "failed" || p.status === "uncertain" || p.error);
+  // A published Publication whose `publish.onPublished` call failed (ADR-074): a warning, never an error.
+  const unnotified = publications.flatMap((p) =>
+    p.status === "published" && p.notification?.status === "failed" ? [{ ...p, notification: p.notification }] : [],
+  );
 
   const body = (
     <div className={title ? "grid gap-4" : "grid gap-4 border-t border-border pt-4"} data-testid="publications">
@@ -119,6 +140,32 @@ export function PublicationList({ missionId, title }: { missionId: string; title
           );
         })}
       </ul>
+      {unnotified.length > 0 && (
+        <section data-testid="publication-notifications" className="grid gap-3 border-t border-border pt-4">
+          <ul className="m-0 grid list-none gap-3 p-0 text-sm">
+            {unnotified.map((publication) => (
+              <li key={publication.id} className="grid gap-2" data-testid={`publication-notification-${publication.target}`}>
+                <StatusBadge tone="warning" label={`${publication.notification.service} was not notified`} className="justify-self-start" />
+                {publication.notification.error && (
+                  <p className="m-0 text-muted-foreground">{publication.notification.error}</p>
+                )}
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={resending !== null}
+                    onClick={() => void resend(publication.id)}
+                  >
+                    {resending === publication.id ? "Resending…" : `Notify ${publication.notification.service} again`}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {resendError && <p className="m-0 text-sm text-destructive">{resendError}</p>}
+        </section>
+      )}
       {problems.length > 0 && (
         <section data-testid="publication-errors" className="grid gap-3 border-t border-border pt-4">
           <h3 className="m-0 text-sm font-semibold text-destructive">Errors</h3>
