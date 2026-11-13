@@ -36,8 +36,11 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPushMock }),
 }));
 
+// `publishers.list`: a test's single Publisher (or null for none) is the Project's only one (ADR-075).
+const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : useQueryMock(...args)),
+  useQuery: (...args: unknown[]) =>
+    args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useAction: (...args: unknown[]) => useActionMock(...args),
   useMutation: (...args: unknown[]) => useMutationMock(...args),
 }));
@@ -53,7 +56,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     publisher_node: { retryPublication: "publisher_node.retryPublication" },
     publication_notify_node: { resendPublishedNotification: "publication_notify_node.resendPublishedNotification" },
-    publishers: { get: "publishers.get" },
+    publishers: { list: "publishers.list" },
     publisher_packages: { list: "publisher_packages.list" },
     publications: {
       setPublishAt: "publications.setPublishAt",
@@ -427,7 +430,7 @@ describe("MissionReviewContent", () => {
         if (key === "missions.get") {
           return { ...MISSION_WITH_ARTIFACT, status, lastArtifact: { external: { service: "media", id: "42" }, publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "Watch" } } };
         }
-        if (key === "publishers.get") return { adapter: "postiz", ...PUBLISHER };
+        if (key === "publishers.list") return { adapter: "postiz", ...PUBLISHER };
         return undefined;
       });
 
@@ -564,7 +567,7 @@ describe("MissionReviewContent", () => {
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return TO_PUBLISH;
-        if (key === "publishers.get") return PUBLISHER;
+        if (key === "publishers.list") return PUBLISHER;
         if (key === "publications.listForMission") {
           return [{ id: "p1", target: "instagram:myinsta", status: "failed", error: "Postiz responded 500" }];
         }
@@ -596,7 +599,7 @@ describe("MissionReviewContent", () => {
       };
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return withKind;
-        if (key === "publishers.get") return publisher;
+        if (key === "publishers.list") return publisher;
         return undefined;
       });
       await render();
@@ -612,7 +615,7 @@ describe("MissionReviewContent", () => {
       withPublish(true);
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return MISSION_WITH_ARTIFACT;
-        if (key === "publishers.get") return PUBLISHER;
+        if (key === "publishers.list") return PUBLISHER;
         return undefined;
       });
       await render();
@@ -732,7 +735,7 @@ describe("MissionReviewContent", () => {
       }));
       useQueryMock.mockImplementation((key: string) => {
         if (key === "missions.get") return TO_PUBLISH;
-        if (key === "publishers.get") return PUBLISHER;
+        if (key === "publishers.list") return PUBLISHER;
         if (key === "publications.listForMission") {
           return [{ id: "p1", target: "instagram:myinsta", status: "scheduled", scheduledAt: new Date("2030-01-02T09:30").getTime() }];
         }

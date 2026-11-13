@@ -89,6 +89,7 @@ async function seed(opts: { map?: boolean; payload?: Record<string, unknown>; te
   });
   if (opts.map !== false) {
     await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "ch-1",
       channelName: "My IG",

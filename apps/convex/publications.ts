@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
 import { publishableForPlatform } from "./publishable.js";
-import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, unusableTargets } from "./publication_targets.js";
+import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
+import { allChannels, channelOf, projectPublishers, publishersOf, type PublisherChannelEntry } from "./project_publishers.js";
 import { publicationStatusV } from "./publisher_schema.js";
 import { publicNotificationOf, scheduleOnPublished } from "./publication_notifications.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
@@ -17,12 +18,10 @@ import { assertValidPublishAt, effectivePublishAt } from "./publish_at.js";
 // sending one Publishable to one Publish target. One row per (Mission, target).
 // A Mission is `done` when all its Publications are `published`.
 
-/** The platform and account of a target, as the Publisher knows them (for the Publications list). */
+/** The platform and account of a target, as its Publisher knows them (for the Publications list). */
 function channelInfo(
-  publisher: Doc<"publishers"> | null,
-  target: string,
+  channel: PublisherChannelEntry | undefined,
 ): { channelService?: string; channelProfile?: string; channelName?: string } {
-  const channel = publisher?.targets.find((t) => t.target === target);
   if (!channel) return {};
   return {
     channelService: channel.channelService,
@@ -40,17 +39,20 @@ export const listForMission = query({
       .query("publications")
       .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
       .collect();
-    const publisher = await ctx.db
-      .query("publishers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", mission.instanceId))
-      .unique();
-    const plugin = publisher ? await publisherMetaOf(ctx, publisher.adapter) : null;
-    return rows.map((row) => ({
+    const publishers = await projectPublishers(ctx, mission.instanceId);
+    const plugins = new Map<string, Awaited<ReturnType<typeof publisherMetaOf>>>();
+    for (const p of publishers) plugins.set(p.adapter, await publisherMetaOf(ctx, p.adapter));
+    return rows.map((row) => {
+      // The Publisher carrying this channel (ADR-075); none once the channel or its Publisher was removed.
+      const found = channelOf(publishers, row.target);
+      const publisher = found?.publisher;
+      const plugin = publisher ? plugins.get(publisher.adapter) : null;
+      return {
       id: row._id,
       target: row.target,
       // For the platform logo and name (the Publisher serves the logo).
       ...(publisher ? { publisherUrl: publisher.url } : {}),
-      ...channelInfo(publisher, row.target),
+      ...channelInfo(found?.channel),
       status: row.status,
       externalId: row.externalId,
       externalUrl: row.externalUrl,
@@ -61,13 +63,14 @@ export const listForMission = query({
       scheduledAt: row.scheduledAt,
       error: row.error,
       ...publicNotificationOf(row, Date.now()),
-    }));
+      };
+    });
   },
 });
 
 /**
  * The human chooses the Publish targets of a Mission during review: one or
- * several channels of the Project's Publisher (one Publication each).
+ * several channels of the Project's Publishers (one Publication each).
  */
 export const setTargets = mutation({
   args: { missionId: v.id("missions"), targets: v.array(v.string()) },
@@ -81,11 +84,8 @@ export const setTargets = mutation({
     }
     const targets = [...new Set(args.targets)];
     if (targets.length === 0) throw new Error("Choose at least one channel");
-    const publisher = await publisherOf(ctx, mission.instanceId);
-    const { unknown } = unusableTargets(publisher?.targets, targets);
-    if (unknown.length > 0) {
-      throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
-    }
+    const { unknown } = unusableTargets(allChannels(await projectPublishers(ctx, mission.instanceId)), targets);
+    if (unknown.length > 0) throw new Error(unknownChannelsMessage(unknown));
     await assertPayloadChannelsSupportMissionType(ctx, {
       instanceId: mission.instanceId,
       templateId: mission.templateId,
@@ -132,13 +132,6 @@ export const setPublishAt = mutation({
   },
 });
 
-async function publisherOf(ctx: QueryCtx, instanceId: string) {
-  return await ctx.db
-    .query("publishers")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .unique();
-}
-
 /** The Publishable the Mission's latest result (or last Artifact) carries. */
 function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
@@ -159,10 +152,8 @@ export const reviewState = internalQuery({
     const mission = await ctx.db.get(args.missionId);
     if (!mission) throw new Error("Mission not found");
     const targets = effectivePublishTargets(mission.payload);
-    const publisher = await publisherOf(ctx, mission.instanceId);
-    const unmappedTargets = targets.filter(
-      (name) => !publisher?.targets.some((t) => t.target === name && t.channelId),
-    );
+    const publishers = await projectPublishers(ctx, mission.instanceId);
+    const unmappedTargets = targets.filter((name) => !channelOf(publishers, name)?.channel.channelId);
     const publications = await ctx.db
       .query("publications")
       .withIndex("by_mission", (q) => q.eq("missionId", args.missionId))
@@ -174,8 +165,7 @@ export const reviewState = internalQuery({
     const publishable = publishableOf(mission);
     const unserved = publishable
       ? targets.flatMap((target) => {
-          const channel = publisher?.targets.find((t) => t.target === target);
-          const result = publishableForPlatform(publishable, channel?.channelService);
+          const result = publishableForPlatform(publishable, channelOf(publishers, target)?.channel.channelService);
           return result.ok ? [] : [{ target, reason: result.error }];
         })
       : [];
@@ -192,7 +182,11 @@ export const reviewState = internalQuery({
       targets,
       mapped: targets.length > 0 && unmappedTargets.length === 0,
       unmappedTargets,
-      publisherReady: Boolean(publisher?.apiKey),
+      // Every Publisher the chosen channels are on has its API key (with no channel chosen yet: one of them has).
+      publisherReady:
+        targets.length > 0
+          ? publishersOf(publishers, targets).every((p) => Boolean(p.apiKey))
+          : publishers.some((p) => Boolean(p.apiKey)),
       ...optionalPublishAt(mission.payload),
       publications: publications.map((p) => ({
         target: p.target,
@@ -230,25 +224,27 @@ export const beginAll = internalMutation({
     const publishable = publishableOf(mission);
     if (!publishable) throw new Error("No Publishable available for this mission");
 
-    const publisher = await publisherOf(ctx, mission.instanceId);
-    if (!publisher) throw new Error("No Publisher is configured: set one up on the Publishers page");
-    const { unknown, unmapped } = unusableTargets(publisher.targets, targets);
-    if (unknown.length > 0) {
-      throw new Error(`Unknown channel ${unknown.map((t) => `"${t}"`).join(", ")}: it is not on the Project's Publisher`);
-    }
+    const publishers = await projectPublishers(ctx, mission.instanceId);
+    if (publishers.length === 0) throw new Error("No Publisher is configured: set one up on the Publishers page");
+    const { unknown, unmapped } = unusableTargets(allChannels(publishers), targets);
+    if (unknown.length > 0) throw new Error(unknownChannelsMessage(unknown));
     if (unmapped.length > 0) {
       throw new Error(`Channel ${unmapped.map((t) => `"${t}"`).join(", ")} is not configured on the Publishers page`);
     }
-    if (!publisher.apiKey) throw new Error("The Publisher has no API key: set it on the Publishers page");
-    await assertSchedulable(ctx, publisher, targets, effectivePublishAt(mission.payload, Date.now()));
+    const withoutKey = publishersOf(publishers, targets).find((p) => !p.apiKey);
+    if (withoutKey) {
+      const name = (await publisherMetaOf(ctx, withoutKey.adapter))?.name ?? withoutKey.adapter;
+      throw new Error(`The ${name} Publisher has no API key: set it on the Publishers page`);
+    }
+    await assertSchedulable(ctx, publishers, targets, effectivePublishAt(mission.payload, Date.now()));
     if (typeof publishable.kind === "string") {
       const template = await getTemplateRegistry(ctx).resolve(mission.instanceId, mission.templateId);
       const platforms = publishDeclarationFor(template?.manifest, mission.type)?.platforms;
-      await assertChannelsSupportKind(ctx, publisher, targets, publishable.kind, platforms);
+      await assertChannelsSupportKind(ctx, publishers, targets, publishable.kind, platforms);
     }
     // A Publishable made of variants only serves those services: refuse the others before any row exists.
     for (const target of targets) {
-      const forChannel = publishableForPlatform(publishable, publisher.targets.find((t) => t.target === target)?.channelService);
+      const forChannel = publishableForPlatform(publishable, channelOf(publishers, target)?.channel.channelService);
       if (!forChannel.ok) throw new Error(`Channel "${target}": ${forChannel.error}`);
     }
 
@@ -256,7 +252,7 @@ export const beginAll = internalMutation({
     const toSend = [];
     const skipped: string[] = [];
     for (const target of targets) {
-      const mapping = publisher.targets.find((t) => t.target === target)!;
+      const { publisher, channel: mapping } = channelOf(publishers, target)!;
       const existing = await publicationFor(ctx, args.missionId, target);
       // Only one caller can move a row out of failed/uncertain (mutations are
       // serialized): the next one sees `pending` and is refused. A `pending` or
@@ -292,11 +288,12 @@ export const beginAll = internalMutation({
         channelId: mapping.channelId!,
         channelService: mapping.channelService,
         settings: mapping.settings,
+        // Each channel goes through its own Publisher (ADR-075).
+        connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey! },
       });
     }
     if (toSend.length === 0) throw new Error(`Publication to ${skipped.join(", ")}`);
     return {
-      connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
       publishable,
       publications: toSend,
       publishAt: effectivePublishAt(mission.payload, now),

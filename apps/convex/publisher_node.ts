@@ -11,13 +11,14 @@ import { errorMessage } from "./mission_dispatcher_node.js";
 import { getTemplateRegistry, resolveMissionTemplate } from "./template_registry.js";
 
 // Publisher orchestration (ADR-069, docs/domain/publishing.md): sending a
-// Mission's Publishable through the Project's Publisher, and the retry of a failed Publication.
+// Mission's Publishable through the Project's Publishers (each channel through
+// its own, ADR-075), and the retry of a failed Publication.
 
 const uncertainMessage = (service: string) => `${service} may have received this post; it will be checked before any new attempt`;
 
 /**
- * Sends the Publishable of a Mission to its Publish target(s) through the
- * Project's Publisher. Each Publication is `pending` first, then `published`
+ * Sends the Publishable of a Mission to its Publish target(s), each through
+ * the Project's Publisher that carries its channel. Each Publication is `pending` first, then `published`
  * (or `failed`, leaving the Mission `approved`); the Mission becomes `done`
  * once all its Publications are `published`.
  */
@@ -33,21 +34,18 @@ export async function publishThroughPublisher(
   // One Publication per target, independent: a failing target does not stop
   // the others, and the action fails at the end so the human can retry it.
   const failures: string[] = [];
-  // The Publications already exist: when the package cannot be loaded, record
-  // the error on each of them instead of leaving them without a trace.
-  let adapter;
-  try {
-    adapter = await loadPlugin(ctx, prepared.connection.adapter);
-  } catch (error) {
-    for (const item of prepared.publications) {
-      await ctx.runMutation(internal.publications.finish, {
-        publicationId: item.publicationId,
-        status: "failed",
-        error: errorMessage(error),
-      });
+  // One plugin per Publisher, loaded once. The Publications already exist: when a
+  // package cannot be loaded, its Publications record the error instead of
+  // being left without a trace, and the other Publishers' channels still go.
+  const plugins = new Map<string, Promise<Awaited<ReturnType<typeof loadPlugin>>>>();
+  const pluginFor = (adapterId: string) => {
+    let plugin = plugins.get(adapterId);
+    if (!plugin) {
+      plugin = loadPlugin(ctx, adapterId);
+      plugins.set(adapterId, plugin);
     }
-    throw error;
-  }
+    return plugin;
+  };
   const caption = typeof prepared.publishable.caption === "string" ? prepared.publishable.caption : "";
   const emitPublished = async (publicationId: Id<"publications">) => {
     await ctx.runMutation(internal.events.store, {
@@ -61,12 +59,24 @@ export async function publishThroughPublisher(
     });
   };
   for (const item of prepared.publications) {
+    let adapter;
+    try {
+      adapter = await pluginFor(item.connection.adapter);
+    } catch (error) {
+      await ctx.runMutation(internal.publications.finish, {
+        publicationId: item.publicationId,
+        status: "failed",
+        error: errorMessage(error),
+      });
+      failures.push(`${item.target}: ${errorMessage(error)}`);
+      continue;
+    }
     // The media of this channel's service (ADR-073); none = nothing to send, a clear error (after reconciliation).
     const forChannel = publishableForPlatform(prepared.publishable, item.channelService);
     // A previous attempt may have reached the service: look for its post first
     // and never send again if it is there (the service has no idempotency key).
     if (item.reconcile) {
-      const found = await adapter.findPost(prepared.connection, {
+      const found = await adapter.findPost(item.connection, {
         channelId: item.channelId,
         caption,
         attemptStartedAt: item.reconcile.attemptStartedAt,
@@ -107,7 +117,7 @@ export async function publishThroughPublisher(
       continue;
     }
     let claimed = false;
-    const result = await adapter.publish(prepared.connection, {
+    const result = await adapter.publish(item.connection, {
       channelId: item.channelId,
       ...(item.channelService ? { channelService: item.channelService } : {}),
       settings: item.settings,

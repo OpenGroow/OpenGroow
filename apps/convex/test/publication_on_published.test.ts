@@ -110,6 +110,7 @@ async function seed(opts: { templateId?: string } = {}) {
     apiKey: "secret",
   });
   await owner.mutation(api.publishers.addChannel, {
+    adapter: "postiz",
     instanceId: INSTANCE_ID,
     channelId: "ch-1",
     channelName: "My IG",

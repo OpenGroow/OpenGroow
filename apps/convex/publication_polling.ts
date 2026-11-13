@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
 
 /** How long after publishing the link of a post is looked for (the service posts it asynchronously). */
 const LINK_WINDOW_MS = 60 * 60_000;
@@ -27,20 +28,19 @@ export const dueScheduled = internalQuery({
     for (const publication of [...scheduled, ...awaitingLink]) {
       if (publication.externalId === undefined) continue;
       if (publication.status === "scheduled" && publication.scheduledAt !== undefined && publication.scheduledAt > args.now) continue;
-      const publisher = await ctx.db
-        .query("publishers")
-        .withIndex("by_instance", (q) => q.eq("instanceId", publication.instanceId))
-        .unique();
-      if (!publisher?.apiKey) continue;
-      // The channel the post went to: a service whose post id alone does not locate it (a GitHub commit) needs it.
-      const channel = publisher.targets.find((t) => t.target === publication.target);
+      // The Publisher carrying the channel the post went to (ADR-075); the channel itself is needed by a service
+      // whose post id alone does not locate it (a GitHub commit).
+      const found = channelOf(await projectPublishers(ctx, publication.instanceId), publication.target);
+      const apiKey = found?.publisher.apiKey;
+      if (!found || !apiKey) continue;
+      const { publisher, channel } = found;
       due.push({
-        ...(channel?.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
+        ...(channel.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
         publicationId: publication._id,
         externalId: publication.externalId,
         scheduledAt: publication.scheduledAt,
         linkOnly: publication.status === "published",
-        connection: { adapter: publisher.adapter, url: publisher.url, apiKey: publisher.apiKey },
+        connection: { adapter: publisher.adapter, url: publisher.url, apiKey },
       });
     }
     return due;

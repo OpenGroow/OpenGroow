@@ -108,6 +108,7 @@ describe("PublishTargetsCard", () => {
     await click(Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent?.includes("@fresh")));
     expect(mutations["publishers.addChannel"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       channelId: "c9",
       channelName: "Fresh",
       channelService: "linkedin",
@@ -129,6 +130,7 @@ describe("PublishTargetsCard", () => {
     });
     expect(mutations["publishers.updateSettings"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       target: "pinterest:pins",
       settings: { title: "T", board: "987" },
     });
@@ -147,6 +149,7 @@ describe("PublishTargetsCard", () => {
     await change(visibility, "SELF_ONLY");
     expect(mutations["publishers.updateSettings"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       target: "tiktok:tt",
       settings: { comment: false, privacy_level: "SELF_ONLY" },
     });
@@ -166,6 +169,7 @@ describe("PublishTargetsCard", () => {
     expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledTimes(1);
     expect(mutations["publishers.setChannelProfiles"]).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       profiles: [{ target: "instagram", channelProfile: "love_youmake" }],
     });
   });

@@ -64,10 +64,10 @@ describe("publishers", () => {
   it("has no Publisher until configured, and never returns the API key", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
-    await expect(owner.query(api.publishers.get, { instanceId: INSTANCE_ID })).resolves.toBeNull();
+    await expect(owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null)).resolves.toBeNull();
 
     await owner.mutation(api.publishers.save, CONNECTION);
-    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    const publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher).toMatchObject({
       adapter: "postiz",
       url: "https://postiz.example.com/api",
@@ -87,7 +87,7 @@ describe("publishers", () => {
       url: "https://other.example.com",
     });
     const fetchMock = stubFetch(() => json({ connected: true }));
-    await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
+    await owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID });
     expect(fetchMock.mock.calls).toHaveLength(1);
     expect(fetchMock.mock.calls[0][0]).toBe("https://other.example.com/api/public/v1/is-connected");
     expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({ Authorization: "secret-key" });
@@ -98,32 +98,32 @@ describe("publishers", () => {
     await t.withIdentity(OWNER).mutation(api.publishers.save, CONNECTION);
     await expect(t.withIdentity(STRANGER).mutation(api.publishers.save, CONNECTION)).rejects.toThrow("Forbidden");
     await expect(
-      t.withIdentity(STRANGER).action(api.publishers_node.listChannels, { instanceId: INSTANCE_ID }),
+      t.withIdentity(STRANGER).action(api.publishers_node.listChannels, { adapter: "postiz", instanceId: INSTANCE_ID }),
     ).rejects.toThrow("Forbidden");
   });
 
   it("test connection reports success or a clear error", async () => {
     const t = await seed();
     const owner = t.withIdentity(OWNER);
-    await expect(owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: false,
       error: "No Publisher configured",
     });
     await owner.mutation(api.publishers.save, CONNECTION);
 
     stubFetch(() => json({ connected: true }));
-    await expect(owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: true,
     });
 
     stubFetch(() => new Response("nope", { status: 401 }));
-    const bad = await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
+    const bad = await owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID });
     expect(bad).toMatchObject({ ok: false, error: expect.stringContaining("401") });
 
     stubFetch(() => {
       throw new Error("getaddrinfo ENOTFOUND");
     });
-    const down = await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
+    const down = await owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID });
     expect(down).toMatchObject({ ok: false, error: expect.stringContaining("ENOTFOUND") });
   });
 
@@ -132,7 +132,7 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, { ...CONNECTION, url: "https://postiz.example.com///" });
     const fetchMock = stubFetch(() => json({ connected: true }));
-    await owner.action(api.publishers_node.testConnection, { instanceId: INSTANCE_ID });
+    await owner.action(api.publishers_node.testConnection, { adapter: "postiz", instanceId: INSTANCE_ID });
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(["https://postiz.example.com/api/public/v1/is-connected"]);
   });
 
@@ -146,7 +146,7 @@ describe("publishers", () => {
         { id: "c2", name: "Pins", identifier: "pinterest", disabled: true },
       ]),
     );
-    await expect(owner.action(api.publishers_node.listChannels, { instanceId: INSTANCE_ID })).resolves.toEqual({
+    await expect(owner.action(api.publishers_node.listChannels, { adapter: "postiz", instanceId: INSTANCE_ID })).resolves.toEqual({
       ok: true,
       channels: [
         { id: "c1", name: "My Insta", service: "instagram", picture: "https://img/1.png", disabled: false },
@@ -161,6 +161,7 @@ describe("publishers", () => {
     await owner.mutation(api.publishers.save, CONNECTION);
 
     const insta = await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "c1",
       channelName: "My Insta",
@@ -168,6 +169,7 @@ describe("publishers", () => {
       channelProfile: "myinsta",
     });
     const second = await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "c2",
       channelName: "Other Insta",
@@ -180,6 +182,7 @@ describe("publishers", () => {
     // Adding the same channel again is idempotent.
     await expect(
       owner.mutation(api.publishers.addChannel, {
+        adapter: "postiz",
         instanceId: INSTANCE_ID,
         channelId: "c1",
         channelName: "My Insta",
@@ -187,8 +190,8 @@ describe("publishers", () => {
       }),
     ).resolves.toBe("instagram:myinsta");
 
-    await owner.mutation(api.publishers.updateSettings, { instanceId: INSTANCE_ID, target: second, settings: { board: "recipes" } });
-    let publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    await owner.mutation(api.publishers.updateSettings, { adapter: "postiz", instanceId: INSTANCE_ID, target: second, settings: { board: "recipes" } });
+    let publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher?.targets).toEqual([
       { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta" },
       {
@@ -202,8 +205,8 @@ describe("publishers", () => {
       },
     ]);
 
-    await owner.mutation(api.publishers.removeTarget, { instanceId: INSTANCE_ID, target: "instagram:myinsta" });
-    publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    await owner.mutation(api.publishers.removeTarget, { adapter: "postiz", instanceId: INSTANCE_ID, target: "instagram:myinsta" });
+    publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:other-insta"]);
   });
 
@@ -221,6 +224,7 @@ describe("publishers", () => {
       });
     });
     await owner.mutation(api.publishers.setChannelProfiles, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       profiles: [
         { target: "instagram", channelProfile: "love_youmake" },
@@ -229,7 +233,7 @@ describe("publishers", () => {
         { target: "nope", channelProfile: "x" },
       ],
     });
-    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    const publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher?.targets).toMatchObject([
       { target: "instagram", channelProfile: "love_youmake" },
       { target: "tiktok", channelProfile: "kept" },
@@ -241,15 +245,15 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, CONNECTION);
     const add = (channelId: string, channelName: string, channelService: string, channelProfile?: string) =>
-      owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId, channelName, channelService, channelProfile });
+      owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId, channelName, channelService, channelProfile });
 
     expect(await add("c1", "My IG", "instagram", "love_youmake")).toBe("instagram:love_youmake");
     // Adding the same channel twice returns the same key.
     expect(await add("c1", "My IG", "instagram", "love_youmake")).toBe("instagram:love_youmake");
     await expect(add("c2", "My Pins", "pinterest")).rejects.toThrow("This channel has no handle, so it cannot be added");
     await expect(add("c2", "My Pins", "pinterest", "")).rejects.toThrow("no handle");
-    await expect(add("c3", "Other", "instagram", "Love_YouMake")).rejects.toThrow("A channel with this handle is already added");
-    const publisher = await owner.query(api.publishers.get, { instanceId: INSTANCE_ID });
+    await expect(add("c3", "Other", "instagram", "Love_YouMake")).rejects.toThrow("is already added to this Project");
+    const publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher?.targets.map((x) => x.target)).toEqual(["instagram:love_youmake"]);
   });
 
@@ -258,6 +262,7 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, CONNECTION);
     const key = await owner.mutation(api.publishers.addChannel, {
+      adapter: "postiz",
       instanceId: INSTANCE_ID,
       channelId: "c1",
       channelName: "Cafe",
@@ -272,7 +277,7 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await owner.mutation(api.publishers.save, CONNECTION);
     const add = (channelId: string, channelProfile: string) =>
-      owner.mutation(api.publishers.addChannel, { instanceId: INSTANCE_ID, channelId, channelName: channelProfile, channelService: "github", channelProfile });
+      owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId, channelName: channelProfile, channelService: "github", channelProfile });
     expect(await add("Acme/Site", "Acme/Site")).toBe("github:acme/site");
     expect(await add("acme/my.site", "/acme//my.site/")).toBe("github:acme/my-site");
   });
@@ -282,6 +287,7 @@ describe("publishers", () => {
     const owner = t.withIdentity(OWNER);
     await expect(
       owner.mutation(api.publishers.addChannel, {
+        adapter: "postiz",
         instanceId: INSTANCE_ID,
         channelId: "c1",
         channelName: "x",

@@ -94,6 +94,7 @@ async function seed(payload: Record<string, unknown> = { publishTargets: [TARGET
   await owner.mutation(api.publishers.save, { instanceId: INSTANCE_ID, adapter: "github", url: "https://api.github.com", apiKey: "ghp_token" });
   expect(
     await owner.mutation(api.publishers.addChannel, {
+      adapter: "github",
       instanceId: INSTANCE_ID,
       channelId: "acme/site",
       channelName: "acme/site",

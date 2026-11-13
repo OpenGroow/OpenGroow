@@ -60,7 +60,7 @@ export type MissionPublishProjection = {
   target: string | null;
   /** Every target the Mission goes to (one Publication each). */
   targets: string[];
-  /** Every target is mapped to a channel on the Project's Publisher. */
+  /** Every target is mapped to a channel on one of the Project's Publishers. */
   mapped: boolean;
   /** The targets that have no channel yet (empty when `mapped`). */
   unmappedTargets: string[];
@@ -212,7 +212,7 @@ function publishBlockedReason(publish: MissionPublishProjection): string | undef
   }
   if (publish.unmappedTargets.length > 0) {
     const names = publish.unmappedTargets.map((t) => `"${t}"`).join(", ");
-    return `Channel ${names} is not on the Project's Publisher (or not configured): check the Publishers page`;
+    return `Channel ${names} is not on the Project's Publishers (or not configured): check the Publishers page`;
   }
   if (publish.unserved && publish.unserved.length > 0) {
     return `${publish.unserved.map(({ target, reason }) => `Channel "${target}": ${reason}`).join("; ")}. Remove it, or create the content again with that platform enabled`;

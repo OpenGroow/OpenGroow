@@ -18,7 +18,7 @@ import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { useStoreMissingHandles } from "@/src/hooks/use-store-missing-handles";
 
 type Channel = { id: string; name: string; service: string; profile?: string; disabled?: boolean };
-type Publisher = NonNullable<FunctionReturnType<typeof api.publishers.get>>;
+type Publisher = FunctionReturnType<typeof api.publishers.list>[number];
 type Target = Publisher["targets"][number];
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -26,7 +26,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * The channels of the Project's Publisher (ADR-069). Adding a channel gives it
+ * The channels of one of the Project's Publishers (ADR-069, ADR-075). Adding a channel gives it
  * a generated key; Missions and Schedules pick channels from this list. The
  * service-specific settings of each channel are editable.
  */
@@ -48,7 +48,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     setLoading(true);
     setMessage(null);
     try {
-      const result = await listChannels({ instanceId: id });
+      const result = await listChannels({ instanceId: id, adapter: publisher.adapter });
       if (result.ok) setChannels(result.channels);
       else setMessage(result.error);
     } catch (e) {
@@ -56,7 +56,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     } finally {
       setLoading(false);
     }
-  }, [id, listChannels]);
+  }, [id, publisher.adapter, listChannels]);
 
   useEffect(() => {
     if (publisher.hasApiKey) void loadChannels();
@@ -67,6 +67,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     try {
       const key = await addChannel({
         instanceId: id,
+        adapter: publisher.adapter,
         channelId: channel.id,
         channelName: channel.name,
         channelService: channel.service,
@@ -86,6 +87,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
     try {
       await updateSettings({
         instanceId: id,
+        adapter: publisher.adapter,
         target: current.target,
         settings: empty ? others : { ...others, [key]: value },
       });
@@ -209,7 +211,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     type="button"
                     variant="ghost"
                     aria-label={`Remove ${t.mapped && t.channelName ? t.channelName : t.target}`}
-                    onClick={() => void removeTarget({ instanceId: id, target: t.target })}
+                    onClick={() => void removeTarget({ instanceId: id, adapter: publisher.adapter, target: t.target })}
                   >
                     <Trash2 aria-hidden="true" />
                   </Button>

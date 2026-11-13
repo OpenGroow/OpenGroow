@@ -12,7 +12,7 @@ import { messageOf } from "./error_message.js";
 // They run the plugin's code, so they are Node actions (ADR-072).
 
 export const testConnection = action({
-  args: { instanceId: v.string() },
+  args: { instanceId: v.string(), adapter: v.string() },
   handler: async (ctx, args): Promise<{ ok: true } | { ok: false; error: string }> => {
     const conn = await ctx.runQuery(internal.publishers.loadConnection, args);
     if (!conn) return { ok: false, error: NO_PUBLISHER };
@@ -26,7 +26,7 @@ export const testConnection = action({
 });
 
 export const listChannels = action({
-  args: { instanceId: v.string() },
+  args: { instanceId: v.string(), adapter: v.string() },
   handler: async (
     ctx,
     args,

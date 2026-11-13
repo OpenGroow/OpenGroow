@@ -23,13 +23,16 @@ vi.mock("next/link", () => ({
 }));
 const listChannelsMock = vi.fn();
 const setChannelProfileMock = vi.fn();
+// `publishers.list`: a test's single Publisher (or null for none) is the Project's only one (ADR-075).
+const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : useQueryMock(...args)),
+  useQuery: (...args: unknown[]) =>
+    args[0] === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useAction: () => listChannelsMock,
   useMutation: () => setChannelProfileMock,
 }));
 vi.mock("@convex/_generated/api", () => ({
-  api: { publishers: { get: "publishers.get", setChannelProfiles: "publishers.setChannelProfiles" }, publishers_node: { listChannels: "publishers_node.listChannels" }, publisher_packages: { list: "publisher_packages.list" } },
+  api: { publishers: { list: "publishers.list", setChannelProfiles: "publishers.setChannelProfiles" }, publishers_node: { listChannels: "publishers_node.listChannels" }, publisher_packages: { list: "publisher_packages.list" } },
 }));
 
 const PUBLISHER = {
@@ -221,6 +224,7 @@ describe("PublishChannelPicker", () => {
     expect(setChannelProfileMock).toHaveBeenCalledTimes(1);
     expect(setChannelProfileMock).toHaveBeenCalledWith({
       instanceId: "inst-1",
+      adapter: "postiz",
       profiles: [{ target: "instagram", channelProfile: "love_youmake" }],
     });
   });

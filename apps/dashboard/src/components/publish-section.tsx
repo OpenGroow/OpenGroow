@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { PublicationList } from "@/src/components/publication-list";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -10,13 +10,14 @@ import { Calendar, Send, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { AutoPublishToggle, type AutoPublishControl } from "@/src/components/auto-publish-toggle";
-import { useInstalledPublisher } from "@/src/hooks/use-installed-publishers";
+import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { useProjectChannels } from "@/src/hooks/use-project-channels";
 import { CapabilityWarning, ChannelSelect, accountLabel, channelCapability } from "@/src/components/publish-channel-picker";
 import { DateTimePicker, formatDateTime } from "@/src/components/date-time-picker";
 
 /**
  * Where a Mission will be published (ADR-069): the channels of the Project's
- * Publisher (editable by the reviewer), a pointer to the Publishers page when
+ * Publishers (editable by the reviewer), a pointer to the Publishers page when
  * one is not configured, and the status of each Publication.
  */
 
@@ -26,7 +27,7 @@ export type PublishProjection = {
   /** Every target is mapped to a channel. */
   mapped: boolean;
   unmappedTargets: string[];
-  /** The Project has a Publisher with an API key. */
+  /** Every Publisher the chosen channels are on has an API key. */
   publisherReady: boolean;
   /** The platforms the Mission type publishes to; absent = every channel. */
   platforms?: string[];
@@ -66,8 +67,8 @@ export function PublishSection({
   autoPublish?: AutoPublishControl;
 }) {
   const setPublishTargets = useMutation(api.publications.setTargets);
-  const publisher = useQuery(api.publishers.get, { instanceId });
-  const capabilities = useInstalledPublisher(publisher?.adapter)?.capabilities;
+  const project = useProjectChannels(instanceId);
+  const installed = useInstalledPublishers();
   const setPublishAt = useMutation(api.publications.setPublishAt);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,9 +122,9 @@ export function PublishSection({
       {editable ? (
         <div className="grid gap-2">
           <span className="text-sm font-semibold text-muted-foreground">Channels</span>
-          {publisher ? (
+          {project ? (
             <ChannelSelect
-              publisher={publisher}
+              channels={project.channels}
               kind={kind}
               platforms={publish.platforms}
               madeFor={publish.madeFor}
@@ -142,12 +143,13 @@ export function PublishSection({
       ) : (
         <dl data-testid="publish-readonly" className="m-0 grid gap-2 text-sm">
           {targets.map((target) => {
-            const channel = publisher?.targets.find((c) => c.target === target);
-            const capability = channel && publisher ? channelCapability(capabilities, channel, kind, publish.platforms, publish.madeFor) : undefined;
+            const channel = project?.channels.find((c) => c.target === target);
+            const capabilities = installed?.find((p) => p.adapter === channel?.adapter)?.capabilities;
+            const capability = channel ? channelCapability(capabilities, channel, kind, publish.platforms, publish.madeFor) : undefined;
             return (
               <div key={target} data-testid={`publish-row-${target}`} className="flex items-center gap-3 border-b border-border pb-2 last:border-0">
                 <PlatformLogo
-                  baseUrl={publisher?.url ?? ""}
+                  baseUrl={channel?.publisherUrl ?? ""}
                   service={channel?.mapped ? channel.channelService : undefined}
                   className="size-8"
                 />
@@ -190,8 +192,8 @@ export function PublishSection({
       {(unmapped.length > 0 || !publish.publisherReady) && (
         <p data-testid="publish-unmapped" className="m-0 text-sm text-destructive">
           {!publish.publisherReady
-            ? "The Publisher has no API key, so publishing is disabled."
-            : `Not on the Publisher or not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
+            ? "A Publisher of these channels has no API key, so publishing is disabled."
+            : `Not on the Project's Publishers or not configured: ${unmapped.join(", ")}. Publishing is disabled.`}{" "}
           <Link href={`/projects/${encodeURIComponent(instanceId)}/publishers`} className="underline">
             Open the Publishers page
           </Link>

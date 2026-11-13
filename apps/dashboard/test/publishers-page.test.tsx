@@ -15,8 +15,11 @@ let installedPublishers: typeof INSTALLED_PUBLISHERS = INSTALLED_PUBLISHERS;
 const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 
+// `publishers.list`: a test's single Publisher (or null for none) is the Project's only one (ADR-075).
+const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => (args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : useQueryMock(...args)),
+  useQuery: (...args: unknown[]) =>
+    args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useMutation: (name: string) => (mutations[name] ??= vi.fn(async () => "key")),
   useAction: (name: string) => (actions[name] ??= vi.fn(async () => ({ ok: true, channels: [] }))),
 }));
@@ -25,7 +28,7 @@ vi.mock("@convex/_generated/api", () => {
     Object.fromEntries(fns.map((f) => [f, `${group}.${f}`]));
   return {
     api: {
-      publishers: names("publishers", ["get", "save", "addChannel", "updateSettings", "removeTarget"]),
+      publishers: names("publishers", ["list", "save", "remove", "addChannel", "updateSettings", "removeTarget"]),
       publishers_node: names("publishers_node", ["testConnection", "listChannels"]),
       hub_packages_node: names("hub_packages_node", ["catalogue", "install"]),
       publisher_packages: names("publisher_packages", ["list"]),
@@ -148,18 +151,52 @@ describe("Publishers page", () => {
   it("shows what is typed in the API key field only after toggling visibility", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     await render();
-    const input = document.getElementById("publisher-api-key") as HTMLInputElement;
+    const input = document.getElementById("publisher-api-key-postiz") as HTMLInputElement;
     expect(input.type).toBe("password");
     await click(document.querySelector('[aria-label="Show API key"]') ?? undefined);
-    expect((document.getElementById("publisher-api-key") as HTMLInputElement).type).toBe("text");
+    expect((document.getElementById("publisher-api-key-postiz") as HTMLInputElement).type).toBe("text");
     await click(document.querySelector('[aria-label="Hide API key"]') ?? undefined);
-    expect((document.getElementById("publisher-api-key") as HTMLInputElement).type).toBe("password");
+    expect((document.getElementById("publisher-api-key-postiz") as HTMLInputElement).type).toBe("password");
   });
 
-  it("disables Add publisher once a Publisher exists", async () => {
+  it("still offers Add publisher once a Publisher exists, the service already added being greyed out (ADR-075)", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [
+        { packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" },
+        { packageId: "@opengroow/publisher-github", name: "GitHub", description: "" },
+      ],
+    }));
+    await render();
+    expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
+    await click(byText("Add publisher"));
+    const option = (name: string) =>
+      [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent?.includes(name)) as HTMLButtonElement;
+    expect(option("Postiz").disabled).toBe(true);
+    expect(option("Postiz").textContent).toContain("Added");
+    expect(option("GitHub").disabled).toBe(false);
+  });
+
+  it("shows one card per Publisher of the Project, each with its own connection", async () => {
+    useQueryMock.mockReturnValue([
+      PUBLISHER,
+      { adapter: "github", url: "https://api.github.com", hasApiKey: false, targets: [] },
+    ]);
+    await render();
+    expect(document.querySelector('[data-testid="publisher-postiz"]')).not.toBeNull();
+    expect(document.querySelector('[data-testid="publisher-github"]')?.textContent).toContain("API key missing");
+    expect((document.getElementById("publisher-url-github") as HTMLInputElement).value).toBe("https://api.github.com");
+    expect((document.getElementById("publisher-url-postiz") as HTMLInputElement).value).toBe("https://postiz.example.com");
+  });
+
+  it("removes a Publisher after confirming", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     await render();
-    expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(true);
+    await click(byText("Remove"));
+    expect(text()).toContain("Remove Postiz?");
+    const confirm = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === "Remove");
+    await click(confirm);
+    expect(mutations["publishers.remove"]).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz" });
   });
 
   it("offers the hub's Publisher in the Add publisher modal when there is no Publisher", async () => {
@@ -239,7 +276,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     await click(byText("Postiz"));
     expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: HUB_ENTRY.packageId });
     expect(text()).toContain("Postiz URL");
-    expect(document.getElementById("publisher-url")).not.toBeNull();
+    expect(document.getElementById("publisher-url-postiz")).not.toBeNull();
   });
 
   it("does not install again a package that is already installed", async () => {
@@ -258,7 +295,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     await openDialog();
     await click(byText("Postiz"));
     expect(text()).toContain("Digest mismatch");
-    expect(document.getElementById("publisher-url")).toBeNull();
+    expect(document.getElementById("publisher-url-postiz")).toBeNull();
   });
 
   it("says when the hub cannot be read, and still offers what is installed", async () => {
