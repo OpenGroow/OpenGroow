@@ -31,6 +31,8 @@ The plugin must not import from `apps/*`. It receives everything through argumen
 
 `findPost` receives, besides the caption and the attempt window, the channel's `channelService`, its `settings` and the `publishable` that was sent: a service that finds a post by what it carries (the GitHub Publisher looks for the file `<contentBase>/<slug>.md`) reads them. `getStatus` receives the channel (`target`: `channelId`, `settings`) when the post's id alone does not locate it (a commit sha needs its repository).
 
+The core records the connection origin, channel, settings and Publishable when `beforePost` claims the send. Reconciliation and status polling use that saved destination even if the channel settings later change. If the Publisher connection changes while an attempt is uncertain, restore the original connection before retrying; credentials are read from the current configuration and are never copied into the attempt context. Publications created before this context was recorded keep their previous lookup behavior.
+
 Every function returns `PublisherResult`: `{ ok: true, ... }` or `{ ok: false, error, uncertain? }`.
 
 ### Error classification: `uncertain`

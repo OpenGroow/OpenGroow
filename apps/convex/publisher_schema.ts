@@ -24,6 +24,16 @@ export const publicationNotificationV = v.object({
 });
 export type PublicationNotification = Infer<typeof publicationNotificationV>;
 
+/** References and destination used by one send, retained for reconciliation (ADR-074). */
+export const publicationAttemptContextV = v.object({
+  adapter: v.string(),
+  url: v.string(),
+  channelId: v.string(),
+  channelService: v.optional(v.string()),
+  settings: v.optional(v.record(v.string(), v.any())),
+  publishable: v.record(v.string(), v.any()),
+});
+
 // Publisher tables (ADR-069), kept apart from schema.ts so publishing slices
 // stay localized. One Publisher per Project (V1).
 export const publisherTables = {
@@ -67,6 +77,7 @@ export const publisherTables = {
     // The window of the last POST /posts attempt: when it started and the date it asked for.
     attemptStartedAt: v.optional(v.number()),
     attemptDate: v.optional(v.number()),
+    attemptContext: v.optional(publicationAttemptContextV),
     // The `publish.onPublished` call made once this Publication was published
     // (ADR-074, #62): its presence is what prevents a second call on a replay.
     // Never blocking: `failed` is a warning, the Publication stays published.

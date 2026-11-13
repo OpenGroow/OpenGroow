@@ -33,7 +33,10 @@ export const dueScheduled = internalQuery({
         .unique();
       if (!publisher?.apiKey) continue;
       // The channel the post went to: a service whose post id alone does not locate it (a GitHub commit) needs it.
-      const channel = publisher.targets.find((t) => t.target === publication.target);
+      const context = publication.attemptContext;
+      // Use the current key only for the original service, never a replacement connection.
+      if (context && (context.adapter !== publisher.adapter || context.url !== publisher.url)) continue;
+      const channel = context ?? publisher.targets.find((t) => t.target === publication.target);
       due.push({
         ...(channel?.channelId ? { target: { channelId: channel.channelId, ...(channel.settings ? { settings: channel.settings } : {}) } } : {}),
         publicationId: publication._id,
