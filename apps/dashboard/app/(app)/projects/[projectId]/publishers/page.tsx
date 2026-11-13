@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2 } from "lucide-react";
+import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -11,8 +11,9 @@ import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { isNewerVersion, versionOfHubTag } from "@convex/template_manifest_contract";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardContent } from "@/components/ui/card";
+import { PanelIcon } from "@/components/opengroow/settings-panel";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
@@ -252,6 +253,7 @@ function PublisherPanel({
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "active" | "error"; text: string } | null>(null);
 
   const checkConnection = useCallback(async () => {
@@ -380,8 +382,7 @@ function PublisherPanel({
       await remove({ instanceId: id, adapter: adapterId });
       setConfirmRemove(false);
     } catch (error) {
-      setConfirmRemove(false);
-      setMessage({ tone: "error", text: errorMessage(error, "The publisher could not be removed") });
+      setRemoveError(errorMessage(error, "The publisher could not be removed"));
     } finally {
       setBusy(null);
     }
@@ -405,12 +406,7 @@ function PublisherPanel({
               {publisher && !publisher.hasApiKey ? <StatusBadge tone="warning" label="API key missing" /> : null}
             </div>
           </div>
-          {publisher ? (
-            <Button type="button" variant="outline" size="lg" disabled={busy !== null} onClick={() => setConfirmRemove(true)}>
-              <Trash2 aria-hidden="true" />
-              Remove
-            </Button>
-          ) : onCancel ? (
+          {!publisher && onCancel ? (
             <Button type="button" variant="outline" size="lg" disabled={busy !== null} onClick={onCancel}>
               Cancel
             </Button>
@@ -428,26 +424,6 @@ function PublisherPanel({
         </div>
       </header>
 
-      <Dialog open={confirmRemove} onOpenChange={setConfirmRemove}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove {serviceName}?</DialogTitle>
-            <DialogDescription>
-              Its connection and its {publisher?.targets.length ?? 0} channel(s) are removed from this Project. Missions and Schedules that publish to
-              them will be refused until you choose other channels. Past publications are kept.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setConfirmRemove(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" disabled={busy !== null} onClick={() => void handleRemove()}>
-              {busy === "remove" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
-              Remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       {packageMissing ? (
         <Card className="gap-3 border-amber-500/40 p-5" data-testid="package-missing">
           <h2 className="m-0 text-base font-semibold">{missing?.entry?.name ?? serviceName} is not installed</h2>
@@ -566,6 +542,21 @@ function PublisherPanel({
             {update && installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
           </Card>
         ) : null}
+        {publisher ? (
+          <PublisherDangerZone
+            name={serviceName}
+            channelCount={publisher.targets.length}
+            removing={busy === "remove"}
+            disabled={busy !== null}
+            error={removeError}
+            confirming={confirmRemove}
+            onConfirming={(open) => {
+              setRemoveError(null);
+              setConfirmRemove(open);
+            }}
+            onRemove={() => void handleRemove()}
+          />
+        ) : null}
         </>
       ) : publisher ? (
         <PublishTargetsCard instanceId={id} publisher={publisher} />
@@ -573,5 +564,74 @@ function PublisherPanel({
         <Card className="p-5 text-sm text-muted-foreground">Save the connection first to list your channels.</Card>
       )}
       </section>
+  );
+}
+
+/**
+ * Removing the Publisher from the Project, as the Agent page's Danger zone does:
+ * the last card of the settings, confirmed in a dialog that says what it does.
+ */
+function PublisherDangerZone({
+  name,
+  channelCount,
+  removing,
+  disabled,
+  error,
+  confirming,
+  onConfirming,
+  onRemove,
+}: {
+  name: string;
+  channelCount: number;
+  removing: boolean;
+  disabled: boolean;
+  error: string | null;
+  confirming: boolean;
+  onConfirming: (open: boolean) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <Card data-slot="settings-panel" aria-label="Danger zone">
+      <CardContent className="grid gap-6">
+        <div className="flex items-start gap-4">
+          <PanelIcon icon={TriangleAlert} tone="danger" />
+          <div className="grid gap-1">
+            <h2 className="m-0 text-lg font-semibold text-foreground">Danger zone</h2>
+            <p className="m-0 text-sm text-muted-foreground">Remove this publisher from the Project, with its connection and its channels.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Button className="w-32" variant="outline" size="lg" type="button" disabled={disabled} onClick={() => onConfirming(true)}>
+            <Trash2 />
+            Remove
+          </Button>
+        </div>
+        <Dialog open={confirming} onOpenChange={(open) => !open && !removing && onConfirming(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Remove {name}?</DialogTitle>
+              <DialogDescription>
+                Its connection and its {channelCount} channel(s) are removed from this Project. Missions and Schedules that publish to them will be
+                refused until you choose other channels. Past publications are kept.
+              </DialogDescription>
+            </DialogHeader>
+            {error ? (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button variant="outline" type="button" disabled={removing} onClick={() => onConfirming(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" type="button" loading={removing} onClick={onRemove}>
+                {removing ? null : <Trash2 />}
+                {removing ? "Removing…" : `Remove ${name}`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }

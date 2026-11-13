@@ -189,12 +189,13 @@ describe("Publishers page", () => {
     expect((document.getElementById("publisher-url-postiz") as HTMLInputElement).value).toBe("https://postiz.example.com");
   });
 
-  it("removes a Publisher after confirming", async () => {
+  it("removes a Publisher from its Danger zone, after confirming", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     await render();
     await click(byText("Remove"));
     expect(text()).toContain("Remove Postiz?");
-    const confirm = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === "Remove");
+    expect(document.querySelector('[aria-label="Danger zone"]')?.textContent).toContain("Remove this publisher");
+    const confirm = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === "Remove Postiz");
     await click(confirm);
     expect(mutations["publishers.remove"]).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz" });
   });
