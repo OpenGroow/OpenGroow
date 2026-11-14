@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 
@@ -63,6 +63,36 @@ function requestLog() {
 }
 
 describe("commands.enqueue → Broker retry and fallback", () => {
+  it("waits past 15 seconds for verified provider activation", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
+    const t = convexTest(schema, modules);
+    let settled = false;
+    const pending = t.action(api.project_provider_operations.configureAiProvider, {
+      instanceId: INSTANCE_ID,
+      provider: "openrouter",
+      model: "openrouter/deepseek/deepseek-chat",
+    }).then((result) => { settled = true; return result; });
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(16_000);
+    expect(settled).toBe(false);
+
+    const commandId = requestLog()[0].body.command!.id;
+    await t.mutation(internal.events.storeCommandResult, {
+      instanceId: INSTANCE_ID,
+      commandId,
+      type: "runtime.ai.config.set.result",
+      payload: {
+        commandId,
+        instanceId: INSTANCE_ID,
+        ok: true,
+        data: { output: "Activated", provider: "openrouter", model: "openrouter/deepseek/deepseek-chat" },
+      },
+      ts: Date.now(),
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await pending).toMatchObject({ ok: true, provider: "openrouter" });
+  });
+
   it("dispatches an interactive runtime action before the scheduler runs", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
     const t = convexTest(schema, modules);

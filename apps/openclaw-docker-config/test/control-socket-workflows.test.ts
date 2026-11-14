@@ -250,6 +250,7 @@ describe("channel workflow", () => {
     const runCommandCapture = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
     const workflow = createChannelWorkflow({
       runCommandCapture,
+      readGatewayDefaultModel: vi.fn().mockResolvedValue({ provider: "openai", model: "gpt-5.5" }),
       readOpenClawConfigValue: vi.fn().mockResolvedValue(""),
       configTimeoutMs: 60_000,
       log: vi.fn(),
@@ -259,7 +260,11 @@ describe("channel workflow", () => {
     expect(result.body.data.provider).toBe("openai");
     expect(runCommandCapture).toHaveBeenCalledWith(
       "openclaw",
-      ["config", "set", "--json", "agents.defaults.model", JSON.stringify({ primary: "openai/gpt-5.5" })],
+      ["config", "set", "--merge", "--batch-json", JSON.stringify([
+        { path: "env.vars", value: { OPENAI_API_KEY: "sk-test" } },
+        { path: "agents.defaults.model", value: { primary: "openai/gpt-5.5" } },
+        { path: "auth.profiles", value: { "openai:default": { provider: "openai", mode: "api_key" } } },
+      ])],
       60_000,
     );
   });

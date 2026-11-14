@@ -2,49 +2,17 @@ const {
   handleSpeechToTextConfigRequest,
 } = require("./control-socket-speech-to-text");
 
-const PROVIDER_ENV_KEYS = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  xiaomi: "XIAOMI_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-};
+const { createAiWorkflow } = require("./control-socket-ai-workflow");
 
-function createChannelWorkflow({
-  runCommandCapture,
-  configTimeoutMs,
-  readOpenClawConfigValue,
-  log,
-  scheduleGatewayContainerRestart,
-}) {
-  function modelIdFromRef(modelRef) {
-    const normalized = typeof modelRef === "string" ? modelRef.trim() : "";
-    if (!normalized) {
-      return "";
-    }
-    const withoutParams = normalized.split(":", 1)[0] || normalized;
-    const parts = withoutParams.split("/").filter(Boolean);
-    return parts[parts.length - 1] || withoutParams;
-  }
-
-  function xiaomiModelConfigFor(modelRef) {
-    const modelId = modelIdFromRef(modelRef);
-    if (modelId !== "mimo-v2.5" && modelId !== "mimo-v2.5-pro") {
-      return null;
-    }
-    return {
-      id: modelId,
-      name: modelId === "mimo-v2.5" ? "Xiaomi MiMo V2.5" : "Xiaomi MiMo V2.5 Pro",
-      input: ["text"],
-      reasoning: true,
-      contextWindow: 1048576,
-      maxTokens: 32000,
-      compat: {
-        supportsReasoningEffort: false,
-        thinkingFormat: "openai",
-        requiresReasoningContentOnAssistantMessages: false,
-      },
-    };
-  }
+function createChannelWorkflow(options) {
+  const {
+    runCommandCapture,
+    configTimeoutMs,
+    readOpenClawConfigValue,
+    log,
+    scheduleGatewayContainerRestart,
+  } = options;
+  const { configureAi } = createAiWorkflow(options);
 
   async function configureWhatsApp(body = {}) {
     const phoneNumber =
@@ -152,102 +120,6 @@ function createChannelWorkflow({
     return {
       status: 200,
       body: { ok: true, data: { output: "Telegram configured." } },
-    };
-  }
-
-  async function configureAi(body = {}) {
-    const provider =
-      typeof body.provider === "string" ? body.provider.trim() : "";
-    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-    const model = typeof body.model === "string" ? body.model.trim() : "";
-    const baseUrl =
-      typeof body.baseUrl === "string" ? body.baseUrl.trim() : "";
-    if (!provider || !model) {
-      return {
-        status: 400,
-        body: { ok: false, error: "provider and model are required" },
-      };
-    }
-    const envKey = PROVIDER_ENV_KEYS[provider];
-    if (!envKey) {
-      return {
-        status: 400,
-        body: {
-          ok: false,
-          error: `Unsupported provider: ${provider}. Supported: ${Object.keys(PROVIDER_ENV_KEYS).join(", ")}`,
-        },
-      };
-    }
-
-    const needsAuthProfile = provider === "anthropic" || provider === "openai";
-    const profileKey = `${provider}:default`;
-    log(
-      `ai config: setting ${provider} model ${model}${
-        baseUrl ? ` baseUrl=${baseUrl}` : ""
-      }${apiKey ? "" : " (keeping existing apiKey)"}`,
-    );
-    if (apiKey) {
-      await runCommandCapture(
-        "openclaw",
-        ["config", "set", "--json", `env.vars.${envKey}`, JSON.stringify(apiKey)],
-        configTimeoutMs,
-      );
-    }
-    await runCommandCapture(
-      "openclaw",
-      [
-        "config",
-        "set",
-        "--json",
-        "agents.defaults.model",
-        JSON.stringify({ primary: model }),
-      ],
-      configTimeoutMs,
-    );
-    if (needsAuthProfile) {
-      await runCommandCapture(
-        "openclaw",
-        [
-          "config",
-          "set",
-          "--json",
-          "auth.profiles",
-          JSON.stringify({ [profileKey]: { provider, mode: "api-key" } }),
-        ],
-        configTimeoutMs,
-      );
-    }
-    if (baseUrl || !needsAuthProfile) {
-      const modelConfig = xiaomiModelConfigFor(model);
-      await runCommandCapture(
-        "openclaw",
-        [
-          "config",
-          "set",
-          "--merge",
-          "--json",
-          `models.providers.${provider}`,
-          JSON.stringify({
-            ...(baseUrl ? { baseUrl } : {}),
-            apiKey: envKey,
-            api: "openai-completions",
-            ...(modelConfig ? { models: [modelConfig] } : {}),
-          }),
-        ],
-        configTimeoutMs,
-      );
-    }
-    log("ai config: applied");
-    return {
-      status: 200,
-      body: {
-        ok: true,
-        data: {
-          output: `${provider} configured with model ${model}.`,
-          provider,
-          model,
-        },
-      },
     };
   }
 

@@ -74,7 +74,9 @@ export const configureAiProvider = action({
     const payload: Record<string, string> = { provider, model };
     if (args.apiKey?.trim()) payload.apiKey = args.apiKey.trim();
     if (args.baseUrl?.trim()) payload.baseUrl = args.baseUrl.trim();
-    const result = await readRuntimeResult(ctx, instanceId, RUNTIME_AI_CONFIG_SET, payload);
+    // The runtime can spend 60s writing config and 60s waiting for activation.
+    // Keep the UI waiting for that verified result rather than timing out at 15s.
+    const result = await readRuntimeResult(ctx, instanceId, RUNTIME_AI_CONFIG_SET, payload, 150_000);
     const parsed = parseRuntimeAiConfigPayload(result.type, result.payload);
     if (!parsed) {
       return { ok: false, output: "", error: result.error ?? "Unexpected AI provider result" };

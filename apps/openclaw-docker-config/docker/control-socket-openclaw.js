@@ -123,8 +123,24 @@ async function approveGatewayDevicePairing(requestId, options = {}) {
   });
 }
 
+async function readGatewayDefaultModel(options = {}) {
+  const callGateway = await loadGatewayCaller();
+  const result = await callGateway({
+    url: options.url ?? process.env.OPENCLAW_GATEWAY_INTERNAL_URL ?? DEFAULT_GATEWAY_URL,
+    token: process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || undefined,
+    method: "sessions.list",
+    params: { limit: 1 },
+    timeoutMs: options.timeoutMs ?? DEFAULT_GATEWAY_CALL_TIMEOUT_MS,
+    clientName: "gateway-client",
+    mode: "backend",
+    scopes: ["operator.read"],
+  });
+  return { provider: result.defaults?.modelProvider, model: result.defaults?.model };
+}
+
 module.exports = {
   approveGatewayDevicePairing,
+  readGatewayDefaultModel,
   withGatewayToken,
   resolveOpenClawBinaryAndEnv,
   resolveOpenClawPackageDir,
