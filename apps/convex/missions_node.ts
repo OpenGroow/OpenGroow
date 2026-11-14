@@ -778,8 +778,11 @@ export const autoPublishChain = internalAction({
       try {
         await executeReviewAction(ctx, { mission: approvedMission, template, actionKey: "publish" });
       } catch (err) {
-        const recorded = await recordAutoPublishFailure(ctx, args.missionId, err);
-        if (!recorded) await failMission(`publish step failed — ${errorMessage(err)}`);
+        // No channel to attach the failure to: the Mission stays `approved` instead of
+        // `failed`. `failed` would make the Publishing card read-only, leaving an approved
+        // Mission with no way to choose a channel; `approved` shows "Ready to publish" with
+        // the channel picker, so a human picks one and publishes.
+        await recordAutoPublishFailure(ctx, args.missionId, err);
       }
       return;
     }
