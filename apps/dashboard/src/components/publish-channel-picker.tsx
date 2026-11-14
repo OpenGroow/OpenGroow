@@ -326,7 +326,7 @@ export function PublishChannelPicker({
           className="m-0 flex items-start gap-2 text-sm text-status-warning"
         >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Auto-publish is on: choose at least one channel, or the publish step will fail once the content is ready.
+          Auto-publish is on but no channel is chosen: nothing will be published automatically. Choose at least one channel, or you will have to pick one yourself once the content is ready.
         </p>
       )}
       <div
