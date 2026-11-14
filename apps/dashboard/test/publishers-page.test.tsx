@@ -11,7 +11,7 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 
 const useQueryMock = vi.fn();
 // What `publisher_packages.list` returns: reassigned by a test to simulate an install.
-let installedPublishers: typeof INSTALLED_PUBLISHERS = INSTALLED_PUBLISHERS;
+let installedPublishers: Array<(typeof INSTALLED_PUBLISHERS)[number] & { connectionUrlLabel?: string }> = INSTALLED_PUBLISHERS;
 const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 
@@ -96,6 +96,14 @@ describe("Publishers page", () => {
     expect(text()).not.toContain("My IG");
     await click(byText("Configuration"));
     expect(text()).toContain("Postiz URL");
+  });
+
+  it("uses the package's connection label while keeping its publisher title", async () => {
+    installedPublishers = [{ ...INSTALLED_PUBLISHERS[0], adapter: "github", name: "Blog Utils (GitHub)", connectionUrlLabel: "GitHub account URL" }];
+    useQueryMock.mockReturnValue({ ...PUBLISHER, adapter: "github" });
+    await render();
+    expect(text()).toContain("Blog Utils (GitHub)");
+    expect(document.querySelector('label[for="publisher-url-github"]')?.textContent).toBe("GitHub account URL");
   });
 
   it("reads the hub only on Check for updates, then offers the newer version and installs it on Update", async () => {

@@ -4,6 +4,12 @@ import { MAX_ICON_LENGTH, PUBLISHER_CONTRACT_VERSION, checkPublisherPlugin, isVa
 const valid = { id: "postiz", name: "Postiz", contractVersion: PUBLISHER_CONTRACT_VERSION, postUrl: "{url}/p/{id}" };
 
 describe("parsePublisherManifest", () => {
+  it("keeps the connection URL label separate from the publisher name", () => {
+    const manifest = { ...valid, name: "Blog Utils (GitHub)", connectionUrlLabel: "GitHub account URL" };
+    expect(parsePublisherManifest(manifest)).toEqual({ ok: true, manifest });
+    expect(parsePublisherManifest({ ...manifest, connectionUrlLabel: " " }).ok).toBe(false);
+    expect(parsePublisherManifest({ ...manifest, connectionUrlLabel: 42 }).ok).toBe(false);
+  });
   it("accepts a valid manifest, with or without postUrl", () => {
     expect(parsePublisherManifest(valid)).toEqual({ ok: true, manifest: valid });
     const { postUrl: _omit, ...bare } = valid;

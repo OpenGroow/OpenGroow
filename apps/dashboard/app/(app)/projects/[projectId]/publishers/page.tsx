@@ -455,7 +455,7 @@ function PublisherPanel({
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor={`publisher-url-${adapterId}`}>{serviceName} URL</Label>
+              <Label htmlFor={`publisher-url-${adapterId}`}>{installedPackage?.connectionUrlLabel ?? `${serviceName} URL`}</Label>
               <div className={FIELD_CLASS}>
                 <Link2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <input

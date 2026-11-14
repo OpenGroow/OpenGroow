@@ -111,7 +111,7 @@ describe("hub_packages_node.install", () => {
     t.withIdentity(USER).action(api.hub_packages_node.install, { kind: "publisher", packageId: "@opengroow/publisher-postiz" });
 
   it("verifies the digest, stores the package and its files, and reports the version", async () => {
-    const archive = tgz(publisherFiles());
+    const archive = tgz(publisherFiles({ "manifest.json": JSON.stringify({ ...MANIFEST, connectionUrlLabel: "Postiz server URL" }) }));
     stubNetwork([entry(archive)], { [assetUrl()]: archive });
     const t = convexTest(schema, modules);
 
@@ -124,7 +124,7 @@ describe("hub_packages_node.install", () => {
     );
     expect(stored!.files.find((f) => f.path === "dist/plugin.mjs")!.content).toBe("export const postizPlugin = {};");
     // The label and icon the dashboard shows come from the package's manifest.
-    expect(stored!.meta).toMatchObject({ adapter: "postiz", name: "Postiz", icon: ICON });
+    expect(stored!.meta).toMatchObject({ adapter: "postiz", name: "Postiz", icon: ICON, connectionUrlLabel: "Postiz server URL" });
     expect(await t.withIdentity(USER).query(api.hub_packages.installed, { kind: "publisher" })).toEqual([
       expect.objectContaining({ packageId: "@opengroow/publisher-postiz", version: "1.0.0" }),
     ]);
