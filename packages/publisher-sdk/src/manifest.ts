@@ -11,6 +11,8 @@ export type PublisherPackageManifest = {
   id: string;
   /** Service name shown in user-facing messages. */
   name: string;
+  /** Label of the connection URL field, independently of the service name. */
+  connectionUrlLabel?: string;
   /** The contract version the package was built for. */
   contractVersion: number;
   /**
@@ -51,6 +53,9 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
   const m = raw as Record<string, unknown>;
   if (typeof m.id !== "string" || !ID_PATTERN.test(m.id)) return { ok: false, error: "The manifest `id` must be lowercase letters, digits and dashes" };
   if (typeof m.name !== "string" || m.name.trim() === "") return { ok: false, error: "The manifest `name` must be a non-empty string" };
+  if (m.connectionUrlLabel !== undefined && (typeof m.connectionUrlLabel !== "string" || m.connectionUrlLabel.trim() === "")) {
+    return { ok: false, error: "The manifest `connectionUrlLabel` must be a non-empty string" };
+  }
   if (typeof m.contractVersion !== "number" || !Number.isInteger(m.contractVersion)) {
     return { ok: false, error: "The manifest `contractVersion` must be an integer" };
   }
@@ -84,6 +89,7 @@ export function parsePublisherManifest(raw: unknown): ManifestResult {
     manifest: {
       id: m.id,
       name: m.name,
+      ...(typeof m.connectionUrlLabel === "string" ? { connectionUrlLabel: m.connectionUrlLabel.trim() } : {}),
       contractVersion: m.contractVersion,
       ...(postUrl ? { postUrl } : {}),
       ...(m.icon ? { icon: m.icon } : {}),

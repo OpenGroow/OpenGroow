@@ -80,6 +80,7 @@ export type PublisherMeta = {
   /** The value stored as a Publisher's `adapter`. */
   adapter: string;
   name: string;
+  connectionUrlLabel?: string;
   postUrl?: string;
   /** The logo, an image data URI (manifest `icon`). */
   icon?: string;
@@ -99,6 +100,7 @@ export function describe(kind: HubPackageKind, files: readonly PackageFile[]): P
       return {
         adapter: manifest.manifest.id,
         name: manifest.manifest.name,
+        ...(manifest.manifest.connectionUrlLabel ? { connectionUrlLabel: manifest.manifest.connectionUrlLabel } : {}),
         ...(manifest.manifest.postUrl ? { postUrl: manifest.manifest.postUrl } : {}),
         ...(manifest.manifest.icon ? { icon: manifest.manifest.icon } : {}),
         ...(manifest.manifest.scheduling === false ? { scheduling: false as const } : {}),
