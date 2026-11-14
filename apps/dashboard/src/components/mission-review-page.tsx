@@ -281,15 +281,17 @@ function ReviewActionsSection({
   const isLoading = activeAction !== null;
 
   return (
-    <section className="grid gap-3">
+    <section className="grid gap-2">
       {/* A failed publish is already listed per channel in the Publications "Errors" section. */}
       {actionError && !actionError.includes("Publishing failed:") && (
         <p className="text-sm text-destructive">{actionError}</p>
       )}
 
+      {/* Inputs and the action share one row: the bar stays compact. */}
+      <div className="flex flex-wrap items-end gap-3">
       {/* Render declared input fields */}
       {(eligibleAction.inputs ?? []).map((inputDef) => (
-        <div key={inputDef.key} className="grid gap-2">
+        <div key={inputDef.key} className="grid gap-1">
           <label
             htmlFor={`action-input-${inputDef.key}`}
             className="text-xs font-semibold text-muted-foreground"
@@ -315,7 +317,6 @@ function ReviewActionsSection({
         </div>
       ))}
 
-      <div className="flex gap-4">
         <Button
           size="lg"
           type="button"
