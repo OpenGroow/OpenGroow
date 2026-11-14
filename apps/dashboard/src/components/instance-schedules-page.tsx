@@ -127,6 +127,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const resumeSchedule = useMutation(api.schedules.resume);
   const removeSchedule = useMutation(api.schedules.remove);
   const updateSchedulePayload = useMutation(api.schedules.updatePayload);
+  const setScheduleAutoPublish = useMutation(api.schedules.setAutoPublish);
 
   const activeAgents = agents?.filter((a) => a.status === "active") ?? [];
 
@@ -719,21 +720,42 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                       <span className="font-semibold text-muted-foreground">Timezone</span>
                                       <span>{schedule.timezone}</span>
                                     </div>
-                                    {manifests
-                                      .find((m) => m.id === schedule.templateId)
-                                      ?.missionTypes?.find((t) => t.type === schedule.type)?.publish ? (
-                                      <PublishChannelPicker
-                                        instanceId={instanceId}
-                                        kind={manifests
-                                          .find((m) => m.id === schedule.templateId)
-                                          ?.missionTypes?.find((t) => t.type === schedule.type)?.publish?.kind}
-                                        payloadText={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
-                                        onChange={(text) => {
-                                          setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: text }));
-                                          void savePayloadDraft(schedule._id, text);
-                                        }}
-                                      />
-                                    ) : null}
+                                    {(() => {
+                                      const rowAutoPublishAllowed = supportsAutoPublish(manifests, schedule.templateId, schedule.type);
+                                      const rowAutoPublish = rowAutoPublishAllowed
+                                        ? {
+                                            checked: schedule.autoPublish === true,
+                                            onChange: (next: boolean) => {
+                                              void setScheduleAutoPublish({ scheduleId: schedule._id, autoPublish: next });
+                                            },
+                                            hint: AUTO_PUBLISH_SCHEDULE_HINT,
+                                          }
+                                        : undefined;
+                                      const rowPublishDecl = manifests
+                                        .find((m) => m.id === schedule.templateId)
+                                        ?.missionTypes?.find((t) => t.type === schedule.type)?.publish;
+                                      if (rowPublishDecl) {
+                                        return (
+                                          <PublishChannelPicker
+                                            instanceId={instanceId}
+                                            kind={rowPublishDecl.kind}
+                                            payloadText={payloadDrafts[schedule._id] ?? JSON.stringify(schedule.payload, null, 2)}
+                                            onChange={(text) => {
+                                              setPayloadDrafts((prev) => ({ ...prev, [schedule._id]: text }));
+                                              void savePayloadDraft(schedule._id, text);
+                                            }}
+                                            autoPublish={rowAutoPublish}
+                                          />
+                                        );
+                                      }
+                                      return rowAutoPublish ? (
+                                        <AutoPublishToggle
+                                          checked={rowAutoPublish.checked}
+                                          onChange={rowAutoPublish.onChange}
+                                          hint={rowAutoPublish.hint}
+                                        />
+                                      ) : null;
+                                    })()}
                                     <div className="grid gap-1">
                                       <span className="font-semibold text-muted-foreground">Payload</span>
                                       <Textarea

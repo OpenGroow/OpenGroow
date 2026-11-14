@@ -112,6 +112,21 @@ export const updatePayload = mutation({
   },
 });
 
+// Toggles the `autoPublish` default of an existing Schedule. It only affects the
+// Missions created from now on (the tick copies it onto each new Mission); Missions
+// already spawned keep their own value. Allowed whatever the Schedule's status,
+// so a paused Schedule can be fixed before it is resumed.
+export const setAutoPublish = mutation({
+  args: { scheduleId: v.id("schedules"), autoPublish: v.boolean() },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    await ctx.db.patch(args.scheduleId, { autoPublish: args.autoPublish, updatedAt: Date.now() });
+  },
+});
+
 export const remove = mutation({
   args: { scheduleId: v.id("schedules") },
   handler: async (ctx, args) => {
