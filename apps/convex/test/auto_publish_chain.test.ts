@@ -475,13 +475,13 @@ describe("auto-publish chain (issue #329)", () => {
       expect(postiz).not.toHaveBeenCalled();
     });
 
-    it("no channel chosen: the Mission fails with an explicit message and nothing is published", async () => {
+    it("no channel chosen: the Mission stays approved (channels still editable) and nothing is published", async () => {
       const postiz = stubPostiz();
       const { t, owner, missionId, runId } = await setup({ map: true, payload: {} });
       await markCompletedAndFlush(t, { runId, result: imageResult });
       const mission = await owner.query(api.missions.get, { missionId });
-      expect(mission?.status).toBe("failed");
-      expect(mission?.errorMessage).toMatch(/Choose a channel/);
+      expect(mission?.status).toBe("approved");
+      expect(await owner.query(api.publications.listForMission, { missionId })).toEqual([]);
       expect(postiz).not.toHaveBeenCalled();
     });
 

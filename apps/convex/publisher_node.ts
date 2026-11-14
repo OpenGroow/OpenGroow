@@ -176,7 +176,8 @@ export async function publishThroughPublisher(
 /**
  * `autoPublish` could not publish: keeps the error on the Mission's
  * Publications (the Mission stays `approved`, retryable). Returns false when
- * no channel was chosen to attach it to, so the caller fails the Mission.
+ * no channel was chosen to attach it to: nothing is recorded and the Mission
+ * stays `approved`, so a human can still choose a channel and publish.
  */
 export async function recordAutoPublishFailure(
   ctx: ActionCtx,
