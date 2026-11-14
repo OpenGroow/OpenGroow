@@ -51,6 +51,7 @@ COPY docker/control-socket-openclaw-workflow.js /opt/openclaw-control/control-so
 COPY docker/control-socket-node-workflow.js /opt/openclaw-control/control-socket-node-workflow.js
 COPY docker/control-socket-whatsapp-workflow.js /opt/openclaw-control/control-socket-whatsapp-workflow.js
 COPY docker/control-socket-channel-workflow.js /opt/openclaw-control/control-socket-channel-workflow.js
+COPY docker/control-socket-ai-workflow.js /opt/openclaw-control/control-socket-ai-workflow.js
 COPY docker/control-socket-auth-workflow.js /opt/openclaw-control/control-socket-auth-workflow.js
 COPY docker/control-socket-mcp.js /opt/openclaw-control/control-socket-mcp.js
 COPY docker/control-socket-mcp-probe.js /opt/openclaw-control/control-socket-mcp-probe.js
