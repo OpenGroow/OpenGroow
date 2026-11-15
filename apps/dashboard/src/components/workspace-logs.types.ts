@@ -23,4 +23,5 @@ export type JobSummary = {
   lastOutcome?: string;
   lastRunAt?: number;
   lastError?: string;
+  running?: boolean;
 };

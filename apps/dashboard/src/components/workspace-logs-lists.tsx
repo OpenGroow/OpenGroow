@@ -157,11 +157,12 @@ function JobRow({
     <ParentCard title={`${job.agentName} job`} expanded={expanded} onToggle={onToggle}>
       {/* The job's last outcome stays readable while the card is collapsed —
           it is the first thing a founder debugging a job looks for. */}
+      {/* While a Run is in flight the last outcome is about an earlier execution: showing "failed" would read as an error of this one. */}
       <p className="m-0 text-sm text-muted-foreground">
-        Last outcome: {job.lastOutcome ?? "none yet"}
-        {job.lastRunAt !== undefined ? ` · ${new Date(job.lastRunAt).toLocaleString()}` : ""}
+        {job.running ? "Running…" : `Last outcome: ${job.lastOutcome ?? "none yet"}`}
+        {!job.running && job.lastRunAt !== undefined ? ` · ${new Date(job.lastRunAt).toLocaleString()}` : ""}
       </p>
-      {job.lastError ? (
+      {job.lastError && !job.running ? (
         <p role="alert" className="m-0 break-words text-sm text-destructive">
           {job.lastError}
         </p>

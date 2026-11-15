@@ -208,6 +208,8 @@ const FALLBACK_ICON = { icon: Workflow, tone: "bg-tone-slate-soft text-tone-slat
 
 // `skipped` is not an error: the previous execution was still running.
 function Outcome({ job }: { job: JobRow }) {
+  // The status badge already says "Running": the last outcome is about an earlier execution.
+  if (job.running) return null;
   if (job.lastOutcome === undefined) {
     return <p className="m-0 text-sm text-muted-foreground">Last outcome: none yet</p>;
   }
