@@ -26,6 +26,8 @@ export type EnrichmentResumption = {
 };
 
 export type SourceJobContextInput = {
+  /** The Template of the Agent running the job: the only `templateId` its Sources may carry. */
+  templateId?: string;
   declarations: SourceDeclaration[];
   /** Runs of the Agent's Missions completed after the cursor, up to the bound. */
   batchRunIds: string[];
@@ -155,6 +157,9 @@ export function buildSourceJobRunFile(input: SourceJobContextInput): string {
     "",
     "## Declared Sources",
     "",
+    ...(input.templateId
+      ? [`Every entry of \`sources\` carries \`"templateId": "${input.templateId}"\`, the Template of this Agent: never the platform, the URL or any other value.`, ""]
+      : []),
     "Each Source has its own instruction file; normalize every Source with the schema below and put it in the `sources` of your result file (see run.md). OpenGroow validates and stores them; you never call anything to write a Source.",
   );
   for (const declaration of input.declarations) {
@@ -165,7 +170,7 @@ export function buildSourceJobRunFile(input: SourceJobContextInput): string {
       `Instruction file: ${declaration.agentsMd}`,
       "",
       "```json",
-      JSON.stringify(buildSourceJsonSchema(declaration), null, 2),
+      JSON.stringify(buildSourceJsonSchema(declaration, input.templateId), null, 2),
       "```",
     );
   }
@@ -177,12 +182,12 @@ export function buildSourceJobRunFile(input: SourceJobContextInput): string {
     "On completion, write the RunResult to the outputs file you were given: one JSON object with exactly the fields shown, nothing else (extra fields make the file invalid).",
     "",
     `- Everything went as expected (\`sources\` is empty when there was nothing to write; at most ${MAX_SOURCES_PER_RESULT} Sources per result, the rest is left to the next execution). Each entry of \`sources\` has exactly \`templateId\`, \`sourceId\`, \`common\`, \`analysis\` (and \`id\` only to complete a \`processing\` Source), as in the schemas above; owner, label, family, status and provenance are set by OpenGroow and rejected if you write them:`,
-    '  `{ "status": "success", "summary": "<what you did>", "sources": [ { "templateId": "...", "sourceId": "...", "common": {}, "analysis": {} } ] }`',
+    `  \`{ "status": "success", "summary": "<what you did>", "sources": [ { "templateId": "${input.templateId ?? "<your Template id>"}", "sourceId": "...", "common": {}, "analysis": {} } ] }\``,
     "- You could not do the work (a tool is unavailable):",
     '  `{ "status": "failed", "summary": "<what happened>", "error": { "code": "<short_code>", "message": "<why>" } }`',
     "",
     "- Handing a Source off to enrichment (one per session; all your Sources are stored, the enriched one stays `processing`). `job.sourcePosition` is the position in `sources` of the Source being enriched; for a Source already stored, write `job.sourceRef` (its id) instead, exactly one of the two:",
-    '  `{ "status": "in_progress", "summary": "<what you did>", "sources": [ { "templateId": "...", "sourceId": "...", "common": {}, "analysis": {} } ], "job": { "mcpServer": "<server>", "jobId": "<id>", "jobType": "<tool>", "sourcePosition": 0 } }`',
+    `  \`{ "status": "in_progress", "summary": "<what you did>", "sources": [ { "templateId": "${input.templateId ?? "<your Template id>"}", "sourceId": "...", "common": {}, "analysis": {} } ], "job": { "mcpServer": "<server>", "jobId": "<id>", "jobType": "<tool>", "sourcePosition": 0 } }\``,
     "",
     "No other `status` exists: `blocked` or `partial` are rejected. Report counts and blockers inside `summary`.",
     "",

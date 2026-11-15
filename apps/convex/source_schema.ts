@@ -144,13 +144,13 @@ export function validateSourceWrite(declaration: SourceDeclaration, body: unknow
  * declared Source, describing the whole payload an Agent posts. Meant for
  * injection into the Agent's context.
  */
-export function buildSourceJsonSchema(declaration: SourceDeclaration): Record<string, unknown> {
+export function buildSourceJsonSchema(declaration: SourceDeclaration, templateId?: string): Record<string, unknown> {
   const common = z.toJSONSchema(commonSchema, { io: "input" }) as Record<string, unknown>;
   delete common.$schema;
   return {
     type: "object",
     properties: {
-      templateId: { type: "string" },
+      templateId: templateId ? { const: templateId } : { type: "string" },
       sourceId: { const: declaration.type },
       // Only when completing a `processing` Source (enrichment phase): the id its first write returned.
       id: { type: "string" },

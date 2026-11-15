@@ -554,6 +554,7 @@ async function dispatchSourceJobRun(
     const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
     const declarations = template?.manifest.sources ?? [];
     const runMd = buildSourceJobRunFile({
+      templateId: inputs.templateId,
       declarations,
       batchRunIds: inputs.batch.runIds,
       batchRunMissionIds: inputs.batch.runMissionIds,

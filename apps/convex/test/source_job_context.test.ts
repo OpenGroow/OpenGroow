@@ -57,3 +57,11 @@ describe("buildSourceJobRunFile: resumed after an enrichment", () => {
     expect(file).toContain('"status": "completed"');
   });
 });
+
+describe("buildSourceJobRunFile: templateId", () => {
+  it("tells the Agent which templateId its Sources carry", () => {
+    const file = buildSourceJobRunFile({ templateId: "@opengroow/social-engagement", declarations: [], batchRunIds: [], retrySources: [], cursorAt: 0, boundAt: 1 });
+    expect(file).toContain('"templateId": "@opengroow/social-engagement"');
+    expect(file).not.toContain('"templateId": "..."');
+  });
+});
