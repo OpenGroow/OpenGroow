@@ -34,6 +34,7 @@ import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
+import { ensureAgentWorkspace } from "./project_agents/workspace_compound_commands.js";
 import { enqueueCommandMutation } from "./mission_dispatcher/enqueue_command.js";
 import {
   pollExternalJobRun,
@@ -506,6 +507,7 @@ export const dispatchPendingRuns = internalAction({
           outputsFilePath: outputsPath,
           timeoutMs: execTimeoutMs,
         });
+        await ensureAgentWorkspace(ctx, mission.instanceId, run.agentName, workspaceKey);
         const execResult = await ctx.runMutation(enqueueCommandMutation, {
           instanceId: mission.instanceId,
           type: RUNTIME_OPENCLAW_EXEC,
@@ -572,6 +574,7 @@ async function dispatchSourceJobRun(
       { filePath: runPath, content: runMd },
       ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
     ];
+    await ensureAgentWorkspace(ctx, inputs.instanceId, inputs.run.agentName, inputs.workspaceKey);
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,
@@ -621,6 +624,7 @@ async function dispatchSourceScoringRun(
     const runPath = jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    await ensureAgentWorkspace(ctx, inputs.instanceId, inputs.run.agentName, inputs.workspaceKey);
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,
@@ -669,6 +673,7 @@ async function dispatchSourceRoutingRun(
     const runPath = jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    await ensureAgentWorkspace(ctx, inputs.instanceId, inputs.run.agentName, inputs.workspaceKey);
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,

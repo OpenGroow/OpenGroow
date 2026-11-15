@@ -17,6 +17,13 @@ import type { AgentTemplate } from "@opengroow/agent-templates";
 import { setTemplateRegistryForTests } from "../template_registry";
 import { officialFixtureTemplate, fixtureTemplate, inMemoryRegistry, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
+// The workspace check sends its own `openclaw agents list` exec; these tests are about the Run's exec.
+vi.mock("../project_agents/workspace_compound_commands", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../project_agents/workspace_compound_commands")>()),
+  ensureAgentWorkspace: vi.fn(async () => undefined),
+}));
+
+
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
   "../commands.ts": () => import("../commands.js"),

@@ -12,6 +12,13 @@ import { internal } from "../_generated/api";
 import schema from "../schema";
 import { useTemplateRegistry } from "./helpers/template_registry.helpers";
 
+// The workspace check sends its own `openclaw agents list` exec; this test is about the Run's exec.
+vi.mock("../project_agents/workspace_compound_commands", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../project_agents/workspace_compound_commands")>()),
+  ensureAgentWorkspace: vi.fn(async () => undefined),
+}));
+
+
 process.env.DASHBOARD_URL = "http://localhost:3001";
 process.env.BETTER_AUTH_SECRET = "test-better-auth-secret";
 process.env.BROKER_URL = "http://localhost:4000";

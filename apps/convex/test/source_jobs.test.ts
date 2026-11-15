@@ -16,6 +16,13 @@ import {
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
 import { MAX_BACKLOG_BATCHES, SOURCE_JOB_BATCH_SIZE } from "../source_jobs";
 
+// The workspace check sends its own `openclaw agents list` exec; these tests are about the Run's exec.
+vi.mock("../project_agents/workspace_compound_commands", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../project_agents/workspace_compound_commands")>()),
+  ensureAgentWorkspace: vi.fn(async () => undefined),
+}));
+
+
 let restoreRegistry: () => void;
 
 const modules = {

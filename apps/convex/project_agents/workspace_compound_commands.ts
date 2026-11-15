@@ -205,6 +205,43 @@ async function registerNativeOpenClawAgentIndividually(
   if (configureCommandText) await applyAgentToolRestrictions(ctx, instanceId, agentId, configureCommandText);
 }
 
+/**
+ * Before a Run: makes sure the OpenClaw agent works in the workspace OpenGroow
+ * writes its run files to (`workspace-<workspaceKey>`). Registration only
+ * follows a new workspace when an activation or a refresh runs on a Runtime
+ * that knows how to rebind, so an Agent can be left reading another workspace
+ * than the one it is given files in: it then writes its result where nobody
+ * reads it (`file_missing`). Best effort: a failed check never blocks the Run.
+ * Returns the workspace the agent was moved from, when it was moved.
+ */
+export async function ensureAgentWorkspace(
+  ctx: ActionCtx,
+  instanceId: string,
+  agentName: string,
+  workspaceKey: string,
+): Promise<string | undefined> {
+  try {
+    const agents = await listNativeOpenClawAgents(ctx, instanceId);
+    const registered = agents.find((agent) => agent.id === agentName)?.workspace;
+    if (!registered) return undefined;
+    const expectedName = `workspace-${workspaceKey}`;
+    const slash = registered.lastIndexOf("/");
+    if (registered.slice(slash + 1) === expectedName) return undefined;
+    const expected = `${registered.slice(0, slash + 1)}${expectedName}`;
+    const rebind = await sendAndAwait(ctx, instanceId, RUNTIME_OPENCLAW_EXEC, {
+      commandText: openClawWorkspaceRebindCommand(agentName, expected),
+    });
+    parseOpenClawExecResult(rebind, `OpenClaw agent ${agentName} could not be moved to ${expected}`);
+    console.warn(`[project_agents/workspace] OpenClaw agent ${agentName} was on ${registered}; moved to ${expected}`);
+    return registered;
+  } catch (error) {
+    console.warn(
+      `[project_agents/workspace] Could not check the workspace of ${agentName}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+}
+
 function warnOnWorkspaceMismatch(
   agentId: string,
   registeredWorkspace: string | undefined,
