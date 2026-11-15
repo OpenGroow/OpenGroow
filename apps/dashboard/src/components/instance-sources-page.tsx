@@ -2,11 +2,13 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, LoaderCircle, Music2, Video } from "lucide-react";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
 import { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
@@ -77,6 +79,13 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [stage, setStage] = useState("all");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
+  // Select mode: checkboxes on every row, then one permanent deletion.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const removeMany = useMutation(api.sources.removeMany);
   const {
     results: sources,
     status,
@@ -97,6 +106,47 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const count = (predicate: (source: SourceRow) => boolean) => sources.filter(predicate).length;
   const agents = [...new Set(sources.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
+  // Only what is on screen can be deleted: a filter never hides a selected row from the count.
+  const selectedVisible = visible.filter((source) => selected.has(source._id));
+  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
+
+  function toggleSelecting(): void {
+    setSelecting((on) => !on);
+    setSelected(new Set());
+    setDeleteError(null);
+  }
+
+  function toggleOne(id: string): void {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible(): void {
+    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((source) => source._id)));
+  }
+
+  async function deleteSelected(): Promise<void> {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const ids = selectedVisible.map((source) => source._id as Id<"sources">);
+      // One call per chunk: the server caps how many Sources a single deletion takes.
+      for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+        await removeMany({ sourceIds: ids.slice(i, i + DELETE_CHUNK) });
+      }
+      setConfirming(false);
+      setSelected(new Set());
+      setSelecting(false);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete the Sources.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="grid gap-8">
@@ -152,8 +202,38 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" />
+                <Button type="button" variant={selecting ? "secondary" : "outline"} className="h-11" onClick={toggleSelecting}>
+                  <ListChecks />
+                  {selecting ? "Done" : "Select"}
+                </Button>
               </div>
             </div>
+
+            {selecting ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
+                <label className="flex items-center gap-3 text-sm text-foreground">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
+                    onCheckedChange={toggleAllVisible}
+                    aria-label="Select all shown sources"
+                  />
+                  {selectedVisible.length === 0 ? "Select all shown" : `${selectedVisible.length} selected`}
+                </label>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={selectedVisible.length === 0}
+                  onClick={() => {
+                    setDeleteError(null);
+                    setConfirming(true);
+                  }}
+                >
+                  <Trash2 />
+                  Delete{selectedVisible.length > 0 ? ` (${selectedVisible.length})` : ""}
+                </Button>
+              </div>
+            ) : null}
 
             {visible.length === 0 ? (
               <p className="text-sm text-muted-foreground">No Sources match these filters.</p>
@@ -161,8 +241,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               <div className="grid gap-3">
                 <div
                   aria-hidden="true"
-                  className={cn(ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
+                  className={cn(selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
                 >
+                  {selecting ? <span /> : null}
                   <span>Source</span>
                   <span>Status</span>
                   <span>Agent</span>
@@ -173,7 +254,14 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                 </div>
                 <ul className="grid gap-3">
                   {visible.map((source) => (
-                    <SourceRowItem key={source._id} source={source} instanceId={instanceId} />
+                    <SourceRowItem
+                      key={source._id}
+                      source={source}
+                      instanceId={instanceId}
+                      selecting={selecting}
+                      selected={selected.has(source._id)}
+                      onToggle={() => toggleOne(source._id)}
+                    />
                   ))}
                 </ul>
               </div>
@@ -197,9 +285,45 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
           </section>
         </>
       )}
+
+      <Dialog
+        open={confirming}
+        onOpenChange={(open) => {
+          if (!deleting) setConfirming(open);
+        }}
+        disablePointerDismissal={deleting}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selectedVisible.length} {selectedVisible.length === 1 ? "Source" : "Sources"}?
+            </DialogTitle>
+            <DialogDescription>
+              This is permanent. Missions already created from these Sources are kept. The same post can show up again as a
+              new Source if an Agent captures it again.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? (
+            <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={deleting} onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" disabled={deleting} onClick={() => void deleteSelected()}>
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+/** Matches the server's `MAX_SOURCES_PER_REMOVAL`. */
+const DELETE_CHUNK = 100;
 
 const ROW_GRID =
   "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
@@ -246,7 +370,23 @@ function SourceGlyph({ family }: { family: string }) {
   );
 }
 
-function SourceRowItem({ source, instanceId }: { source: SourceRow; instanceId: string }) {
+// Select mode adds a leading checkbox column.
+const SELECT_ROW_GRID =
+  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
+
+function SourceRowItem({
+  source,
+  instanceId,
+  selecting,
+  selected,
+  onToggle,
+}: {
+  source: SourceRow;
+  instanceId: string;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   // What the Source teaches is the most readable title; the origin is the
   // fallback, and is then only repeated below as provenance when it is not
   // already the title.
@@ -256,16 +396,28 @@ function SourceRowItem({ source, instanceId }: { source: SourceRow; instanceId: 
     <li>
       <Card
         className={cn(
-          ROW_GRID,
-          "relative min-h-24 cursor-pointer gap-y-3 px-5 py-6 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring"
+          selecting ? SELECT_ROW_GRID : ROW_GRID,
+          "relative min-h-24 cursor-pointer gap-y-3 px-5 py-6 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+          selected && "ring-2 ring-primary"
         )}
       >
+        {selecting ? (
+          <div className="relative z-10">
+            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
+          </div>
+        ) : null}
         <div className="flex min-w-0 items-center gap-4">
           <SourceGlyph family={source.family} />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
               className="m-0 w-fit max-w-full truncate text-base font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+              onClick={(event) => {
+                // In select mode the whole row toggles; it never opens the Source.
+                if (!selecting) return;
+                event.preventDefault();
+                onToggle();
+              }}
             >
               {title}
             </Link>

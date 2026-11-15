@@ -213,3 +213,36 @@ export const retry = mutation({
     await ctx.db.patch(args.sourceId, { status: "processing", retryRequested: true });
   },
 });
+
+/** Upper bound of one `removeMany` call: a single mutation stays well inside Convex's limits. */
+export const MAX_SOURCES_PER_REMOVAL = 100;
+
+/**
+ * Permanently deletes Sources the caller owns (the Sources page's select mode).
+ * Anything that points at a deleted Source keeps working: a Mission created
+ * from it keeps its `sourceObservationId` but nothing reads it back. A Source
+ * still `processing` may have an enrichment in flight; its result is then
+ * rejected as "Source not found" instead of resurrecting the row. The same
+ * post can be ingested again later as a new Source.
+ *
+ * Ids that no longer exist are skipped (a double click, two tabs); an id the
+ * caller does not own rejects the whole call before anything is deleted.
+ */
+export const removeMany = mutation({
+  args: { sourceIds: v.array(v.id("sources")) },
+  handler: async (ctx, args) => {
+    const ids = [...new Set(args.sourceIds)];
+    if (ids.length > MAX_SOURCES_PER_REMOVAL) {
+      throw new Error(`At most ${MAX_SOURCES_PER_REMOVAL} Sources can be deleted at once`);
+    }
+    const owned: Id<"sources">[] = [];
+    for (const id of ids) {
+      const source = await ctx.db.get(id);
+      if (!source) continue;
+      await requireOwnedRow(ctx, source);
+      owned.push(id);
+    }
+    for (const id of owned) await ctx.db.delete(id);
+    return { removed: owned.length };
+  },
+});
