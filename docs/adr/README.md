@@ -77,3 +77,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 073 | A Publishable image or carousel may carry one variant per platform, and a Mission type may limit its platforms | Accepted | no | [073-publishable-variants-per-platform.md](073-publishable-variants-per-platform.md) |
 | 074 | A GitHub Publisher publishes site articles; `article` joins the Publishable kinds | Proposed | no | [074-article-publishing-moves-to-a-github-publisher.md](074-article-publishing-moves-to-a-github-publisher.md) |
 | 075 | A Project has several Publishers, at most one per adapter | Proposed | no | [075-several-publishers-per-project.md](075-several-publishers-per-project.md) |
+| 076 | The routing decision is stored on the Source and can wait for human approval | Proposed | no | [076-routing-decision-is-stored-and-can-wait-for-approval.md](076-routing-decision-is-stored-and-can-wait-for-approval.md) |

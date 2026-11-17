@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v, type ObjectType } from "convex/values";
 import { resolveSource } from "./source_enrichment.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { sourceMarketingV } from "./source_schema.js";
@@ -133,6 +133,73 @@ export const listByInstance = query({
       .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
       .order("desc")
       .paginate(args.paginationOpts);
+  },
+});
+
+/** Ideas shown on the board; the rest stays on the Sources page. */
+export const BOARD_IDEAS_LIMIT = 20;
+const BOARD_IDEAS_SCAN = 200;
+const BOARD_PROPOSALS_LIMIT = 50;
+
+function boardScore(source: Doc<"sources">): number | undefined {
+  const scoring = source.scoring;
+  if (!scoring) return undefined;
+  const { replicationScore, productFit, replicability, creativeStrength } = scoring;
+  if (replicationScore !== undefined) return replicationScore;
+  return productFit !== undefined && replicability !== undefined && creativeStrength !== undefined
+    ? (productFit + replicability + creativeStrength) / 3
+    : undefined;
+}
+
+function boardCard(source: Doc<"sources">) {
+  return {
+    _id: source._id,
+    label: source.label,
+    family: source.family,
+    origin: source.origin,
+    summary: source.marketing.summary,
+    score: boardScore(source),
+    capturedAt: source.capturedAt,
+    routing: source.routing,
+  };
+}
+
+/**
+ * The two upstream columns of the Missions board (ADR-076): `ideas` are scored
+ * Sources nobody has picked yet, best score first, and `toRoute` are the
+ * routing decisions waiting for approval. Both are bounded; the Sources page
+ * remains the exhaustive view. `reviewRouting` tells the board whether the
+ * routing Job currently waits for approval.
+ */
+export const listBoard = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    const ownerId = await readOwnerId(ctx, args.instanceId);
+    if (ownerId === null) return { ideas: [], toRoute: [], reviewRouting: false };
+    const recent = await ctx.db
+      .query("sources")
+      .withIndex("by_instance_status_capturedAt", (q) => q.eq("instanceId", args.instanceId).eq("status", "ready"))
+      .order("desc")
+      .take(BOARD_IDEAS_SCAN);
+    const ideas = recent
+      .filter((source) => source.ownerId === ownerId && source.selectedAt === undefined && source.excluded !== true && source.productionMissionId === undefined)
+      .map(boardCard)
+      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+      .slice(0, BOARD_IDEAS_LIMIT);
+    const proposed = await ctx.db
+      .query("sources")
+      .withIndex("by_instance_routing_state", (q) => q.eq("instanceId", args.instanceId).eq("routing.state", "proposed"))
+      .order("desc")
+      .take(BOARD_PROPOSALS_LIMIT);
+    const job = await ctx.db
+      .query("jobs")
+      .withIndex("by_instance_type_template", (q) => q.eq("instanceId", args.instanceId).eq("type", "source_routing"))
+      .first();
+    return {
+      ideas,
+      toRoute: proposed.filter((source) => source.ownerId === ownerId).map(boardCard),
+      reviewRouting: job?.config?.reviewRouting === true,
+    };
   },
 });
 

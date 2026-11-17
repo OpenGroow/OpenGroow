@@ -133,6 +133,7 @@ import type * as source_jobs_retry_feedback from "../source_jobs/retry_feedback.
 import type * as source_jobs_source_job_context from "../source_jobs/source_job_context.js";
 import type * as source_jobs_source_run_result from "../source_jobs/source_run_result.js";
 import type * as source_routing from "../source_routing.js";
+import type * as source_routing_decision from "../source_routing_decision.js";
 import type * as source_schema from "../source_schema.js";
 import type * as source_scoring from "../source_scoring.js";
 import type * as sources from "../sources.js";
@@ -285,6 +286,7 @@ declare const fullApi: ApiFromModules<{
   "source_jobs/source_job_context": typeof source_jobs_source_job_context;
   "source_jobs/source_run_result": typeof source_jobs_source_run_result;
   source_routing: typeof source_routing;
+  source_routing_decision: typeof source_routing_decision;
   source_schema: typeof source_schema;
   source_scoring: typeof source_scoring;
   sources: typeof sources;

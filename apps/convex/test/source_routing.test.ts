@@ -482,4 +482,81 @@ describe("Source routing Job", () => {
     expect(result.runs).toHaveLength(1);
     expect(result.job).toMatchObject({ lastOutcome: "failed" });
   });
+
+  describe("review mode (ADR-076)", () => {
+    const publish = { platforms: ["instagram"], title: "Title", description: "Description" };
+
+    async function routeReel(t: ReturnType<typeof convexTest>, review: boolean) {
+      await seedInstance(t);
+      await activateAgent(t, "@opengroow/source");
+      await activateAgent(t, "@opengroow/openmontage-agent");
+      await t.run((ctx) => ctx.db.insert("brandCores", { instanceId: INSTANCE, audience: "Audience", offer: "Offer", updatedAt: NOW }));
+      const sourceId = await source(t);
+      const job = await routingJob(t);
+      if (review) await t.withIdentity(OWNER).mutation(api.source_routing.setReviewMode, { jobId: job._id, review: true });
+      await t.mutation(internal.source_routing.reserveWinner, { jobId: job._id, sourceId });
+      const run = await t.run((ctx) => ctx.db.query("runs").unique());
+      await t.run((ctx) => ctx.db.patch(run!._id, { status: "running" }));
+      await t.mutation(internal.runs.markCompleted, {
+        runId: run!._id,
+        result: { status: "success", summary: "Hook fits a reel", additionalDetails: { route: { templateId: "@opengroow/openmontage-agent", missionType: "create_reel", payload: { publish } } } },
+      });
+      return { sourceId, job };
+    }
+
+    it("keeps the decision on the Source and creates no Mission", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId, job } = await routeReel(t, true);
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), job: await ctx.db.get(job._id), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(0);
+      expect(state.source?.productionMissionId).toBeUndefined();
+      expect(state.source?.routing).toMatchObject({
+        state: "proposed",
+        decidedBy: "agent",
+        templateId: "@opengroow/openmontage-agent",
+        missionType: "create_reel",
+        rationale: "Hook fits a reel",
+        payload: { publish, observationId: sourceId },
+      });
+      expect(state.source?.routing?.candidates.length).toBeGreaterThan(0);
+      expect(state.job).toMatchObject({ lastOutcome: "succeeded" });
+    });
+
+    it("approving creates the Mission, with an edited publication text", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, true);
+
+      await t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId, publish: { title: "Edited" } });
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(1);
+      expect(state.missions[0]).toMatchObject({ type: "create_reel", payload: { publish: { ...publish, title: "Edited" }, observationId: sourceId } });
+      expect(state.source?.productionMissionId).toBe(state.missions[0]!._id);
+      expect(state.source?.routing).toMatchObject({ state: "approved", decidedBy: "user" });
+      await expect(t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId })).rejects.toThrow("No routing proposal");
+    });
+
+    it("rejecting creates no Mission and keeps the Source out of the pool", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, true);
+
+      await t.withIdentity(OWNER).mutation(api.source_routing.rejectRouting, { sourceId });
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(0);
+      expect(state.source?.selectedAt).toBe(NOW);
+      expect(state.source?.routing).toMatchObject({ state: "rejected", decidedBy: "user" });
+      await expect(t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId })).rejects.toThrow("No routing proposal");
+    });
+
+    it("auto mode still records the decision as approved by the agent", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, false);
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(1);
+      expect(state.source?.routing).toMatchObject({ state: "approved", decidedBy: "agent", rationale: "Hook fits a reel" });
+    });
+  });
 });
