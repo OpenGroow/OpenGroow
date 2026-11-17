@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Trash2, Video } from "lucide-react";
@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/opengroow/page-header";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
+import { UpstreamColumns } from "@/src/components/source-board-columns";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -86,6 +87,12 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const removeMany = useMutation(api.sources.removeMany);
+  // The two steps before a Mission exists (ADR-076): once a Source is routed and
+  // approved, its production Mission lands in "To do" on the Missions board.
+  const board = useQuery(api.sources.listBoard, { instanceId });
+  const forceProduction = useMutation(api.source_routing.forceProduction);
+  const approveRouting = useMutation(api.source_routing.approveRouting);
+  const rejectRouting = useMutation(api.source_routing.rejectRouting);
   const {
     results: sources,
     status,
@@ -167,6 +174,21 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             <StatTile icon={CircleX} label="Failed" value={count((s) => s.status === "failed")} tone="error" />
             <StatTile icon={Ban} label="Unavailable" value={count((s) => s.status === "unavailable")} />
           </section>
+
+          {board !== undefined && (board.ideas.length > 0 || board.toRoute.length > 0 || board.reviewRouting) ? (
+            <section aria-label="Production queue" className="grid gap-4 md:grid-cols-2">
+              <UpstreamColumns
+                projectId={instanceId}
+                query={needle}
+                ideas={board.ideas}
+                toRoute={board.toRoute}
+                reviewRouting={board.reviewRouting}
+                onProduce={async (sourceId) => { await forceProduction({ sourceId: sourceId as Id<"sources"> }); }}
+                onApprove={async (sourceId) => { await approveRouting({ sourceId: sourceId as Id<"sources"> }); }}
+                onReject={async (sourceId) => { await rejectRouting({ sourceId: sourceId as Id<"sources"> }); }}
+              />
+            </section>
+          ) : null}
 
           <section className="grid gap-5">
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">

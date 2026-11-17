@@ -54,10 +54,6 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     loadMore: loadMoreDone,
   } = usePaginatedQuery(api.missions.listDoneByInstance, { instanceId }, { initialNumItems: DONE_PAGE_SIZE });
   const createMission = useMutation(api.missions.create);
-  const board = useQuery(api.sources.listBoard, { instanceId });
-  const forceProduction = useMutation(api.source_routing.forceProduction);
-  const approveRouting = useMutation(api.source_routing.approveRouting);
-  const rejectRouting = useMutation(api.source_routing.rejectRouting);
 
   // Agents that only run Jobs (e.g. `source`) declare `jobTypes` but no
   // `missionTypes`: there is nothing to create a Mission for.
@@ -367,18 +363,6 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
             onLoadMoreDone={() => loadMoreDone(DONE_PAGE_SIZE)}
             query={query}
             sort={sort}
-            upstream={
-              board === undefined
-                ? undefined
-                : {
-                    ideas: board.ideas,
-                    toRoute: board.toRoute,
-                    reviewRouting: board.reviewRouting,
-                    onProduce: async (sourceId) => { await forceProduction({ sourceId: sourceId as Id<"sources"> }); },
-                    onApprove: async (sourceId) => { await approveRouting({ sourceId: sourceId as Id<"sources"> }); },
-                    onReject: async (sourceId) => { await rejectRouting({ sourceId: sourceId as Id<"sources"> }); },
-                  }
-            }
           />
         )}
       </section>

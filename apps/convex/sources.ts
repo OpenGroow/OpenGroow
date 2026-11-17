@@ -165,7 +165,7 @@ function boardCard(source: Doc<"sources">) {
 }
 
 /**
- * The two upstream columns of the Missions board (ADR-076): `ideas` are scored
+ * The two production-queue columns of the Sources page (ADR-076): `ideas` are scored
  * Sources nobody has picked yet, best score first, and `toRoute` are the
  * routing decisions waiting for approval. Both are bounded; the Sources page
  * remains the exhaustive view. `reviewRouting` tells the board whether the

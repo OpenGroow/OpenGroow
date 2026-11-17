@@ -253,7 +253,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
     }
   }
 
-  // Source routing only (ADR-076): wait for approval on the Missions board
+  // Source routing only (ADR-076): wait for approval on the Sources page
   // instead of creating the production Mission right away.
   const reviewRouting = job.type === "source_routing" && (job.config as { reviewRouting?: boolean } | undefined)?.reviewRouting === true;
   async function toggleReview(): Promise<void> {
@@ -315,7 +315,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
               </p>
               {reviewRouting ? (
                 <p className="m-0 text-sm text-muted-foreground">
-                  Each routing choice waits for your approval in the Missions board before production starts.
+                  Each routing choice waits for your approval in the Sources page before production starts.
                 </p>
               ) : null}
               <Outcome job={job} />
