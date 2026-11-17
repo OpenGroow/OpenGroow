@@ -19,6 +19,8 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { titleCase } from "@/src/lib/mission-type";
+import { ColumnShell } from "./board-column";
+import { UpstreamColumns, type UpstreamProps } from "./source-board-columns";
 
 // Drift-prone fields (the status union, the run-result shape, names, etc.) are
 // derived from the schema so they stay in sync and callers can pass query
@@ -53,6 +55,9 @@ type Props = {
   // summary of a Mission. Empty shows everything.
   query?: string;
   sort?: "newest" | "oldest";
+  // The two columns before "To do" (ADR-076): Sources, not Missions. Omitted
+  // where the board only shows Missions.
+  upstream?: UpstreamProps;
 };
 
 // `dot` is the column's colour marker (a label always sits next to it); the
@@ -149,6 +154,7 @@ export function MissionKanbanBoard({
   onLoadMoreDone,
   query = "",
   sort = "newest",
+  upstream,
 }: Props) {
   const [visibleCount, setVisibleCount] = useState<Partial<Record<ColumnId, number>>>({});
   const byColumn: Record<ColumnId, Mission[]> = {
@@ -180,24 +186,9 @@ export function MissionKanbanBoard({
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-2">
+      {upstream ? <UpstreamColumns projectId={projectId} query={needle} {...upstream} /> : null}
       {COLUMNS.map((col) => (
-        <section
-          key={col.id}
-          data-column={col.id}
-          aria-label={col.label}
-          className="flex min-w-60 flex-1 flex-col rounded-2xl border border-border bg-card/50"
-        >
-          <header className="flex items-center gap-2.5 border-b border-border px-4 py-3.5">
-            <span aria-hidden="true" className={cn("size-2.5 shrink-0 rounded-full", col.dot)} />
-            <h3 className="m-0 min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-              {col.label}
-            </h3>
-            <Badge variant="outline" size="xs" className="tabular-nums">
-              {byColumn[col.id].length}
-            </Badge>
-          </header>
-
-          <div className="flex flex-1 flex-col gap-3 p-3">
+        <ColumnShell key={col.id} id={col.id} label={col.label} dot={col.dot} count={byColumn[col.id].length}>
             {byColumn[col.id].length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-3 py-10 text-center">
                 <col.icon aria-hidden="true" className="mb-1 size-8 text-muted-foreground" />
@@ -243,8 +234,7 @@ export function MissionKanbanBoard({
                 {doneStatus === "LoadingMore" ? "Loading…" : "Load more"}
               </Button>
             )}
-          </div>
-        </section>
+        </ColumnShell>
       ))}
     </div>
   );

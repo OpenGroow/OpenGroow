@@ -45,6 +45,12 @@ vi.mock("@convex/_generated/api", () => ({
       listDoneByInstance: "missions.listDoneByInstance",
       create: "missions.create",
     },
+    sources: { listBoard: "sources.listBoard" },
+    source_routing: {
+      forceProduction: "source_routing.forceProduction",
+      approveRouting: "source_routing.approveRouting",
+      rejectRouting: "source_routing.rejectRouting",
+    },
   },
 }));
 
