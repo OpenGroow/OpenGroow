@@ -6,7 +6,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Id } from "@convex/_generated/dataModel";
 import { MissionKanbanBoard } from "../src/components/mission-kanban-board";
-import type { BoardSource } from "../src/components/source-board-columns";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -365,53 +364,4 @@ describe("MissionKanbanBoard", () => {
       expect(document.body.querySelector('[aria-label="Delete mission"]')).toBeNull();
     },
   );
-
-  describe("upstream columns (ADR-076)", () => {
-    const idea = { _id: "s-idea" as Id<"sources">, routing: undefined, label: "TikTok post", family: "social", origin: "https://example.com/a", summary: "A strong hook", score: 0.82, capturedAt: 1 };
-    const proposed: BoardSource = {
-      _id: "s-route" as Id<"sources">, label: "TikTok post", family: "social", origin: "https://example.com/b", summary: "Another hook", score: 0.7, capturedAt: 2,
-      routing: {
-        state: "proposed" as const, decidedBy: "agent" as const, templateId: "@x/video", agentName: "video", missionType: "create_reel", label: "Create reel",
-        payload: { publish: { title: "My title" }, observationId: "s-route" }, rationale: "Fits a reel", candidates: [], proposedAt: 2,
-      },
-    };
-
-    it("does not render them without upstream data", async () => {
-      await render([]);
-      expect(document.body.querySelector("[data-column='ideas']")).toBeNull();
-      expect(document.body.querySelector("[data-column='to_route']")).toBeNull();
-    });
-
-    it("shows ideas and routing proposals with their actions", async () => {
-      const onProduce = vi.fn(async () => {});
-      const onApprove = vi.fn(async () => {});
-      const onReject = vi.fn(async () => {});
-      await act(async () => {
-        root.render(
-          <MissionKanbanBoard
-            missions={[]}
-            projectId="proj-1"
-            upstream={{ ideas: [idea], toRoute: [proposed], reviewRouting: true, onProduce, onApprove, onReject }}
-          />,
-        );
-      });
-      const ideas = document.body.querySelector("[data-column='ideas']")!;
-      const toRoute = document.body.querySelector("[data-column='to_route']")!;
-      expect(ideas.textContent).toContain("A strong hook");
-      expect(toRoute.textContent).toContain("Create Reel");
-      expect(toRoute.textContent).toContain("Fits a reel");
-      expect(toRoute.textContent).toContain("My title");
-
-      const click = async (root: Element, name: string) => {
-        const button = Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.includes(name) || b.getAttribute("aria-label") === name)!;
-        await act(async () => { button.click(); });
-      };
-      await click(ideas, "Produce");
-      await click(toRoute, "Approve");
-      await click(toRoute, "Reject");
-      expect(onProduce).toHaveBeenCalledWith("s-idea");
-      expect(onApprove).toHaveBeenCalledWith("s-route");
-      expect(onReject).toHaveBeenCalledWith("s-route");
-    });
-  });
 });

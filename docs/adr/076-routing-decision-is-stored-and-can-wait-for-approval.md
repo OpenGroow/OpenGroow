@@ -11,7 +11,7 @@
 - A Source carries its routing decision in `sources.routing`: the chosen target (`templateId`, `missionType`, `label`, `agentName`), the Mission `payload` as it will be created, the routing Agent's `rationale` (the RunResult summary), the `candidates` that were eligible, and a `state`: `proposed`, `approved` or `rejected`, with who decided (`agent` or `user`).
 - The Source routing Job has a `config.reviewRouting` flag. When off (the default), nothing changes for production: the Mission is created at once and the decision is recorded as `approved` by the `agent`. When on, `settleRoutingRun` stores the decision as `proposed` and creates no Mission. The Source stays `selectedAt`, so it is not ranked again.
 - `approveRouting` creates the production Mission from the stored decision, optionally with an edited `publish`. `rejectRouting` discards it. Both are owner-scoped mutations.
-- The Missions board gets two columns before "To do", both holding Sources: **Ideas** (scored, unpicked Sources, best score first) and **To route** (the `proposed` decisions). The board is the single view of a piece of content from idea to publication; Sources and Jobs stay as detail views.
+- The Sources page gets a production queue above its list, with two columns: **Ideas** (scored, unpicked Sources, best score first) and **To route** (the `proposed` decisions). They stay on the Sources page, not on the Missions board, so the board does not grow: once a Source is routed and approved, its production Mission appears in "To do".
 
 ### Consequences
 

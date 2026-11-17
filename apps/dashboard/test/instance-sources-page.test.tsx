@@ -22,7 +22,10 @@ vi.mock("convex/react", () => ({
 }));
 
 vi.mock("@convex/_generated/api", () => ({
-  api: { sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany" } },
+  api: {
+    sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany", listBoard: "sources.listBoard" },
+    source_routing: { forceProduction: "source_routing.forceProduction", approveRouting: "source_routing.approveRouting", rejectRouting: "source_routing.rejectRouting" },
+  },
 }));
 
 function makeSource(overrides: Partial<Record<string, unknown>> = {}) {
@@ -67,9 +70,10 @@ describe("InstanceSourcesContent", () => {
 
   async function render(
     results: Array<ReturnType<typeof makeSource>>,
-    { status = "Exhausted", families }: { status?: string; families?: string[] } = {},
+    { status = "Exhausted", families, board }: { status?: string; families?: string[]; board?: unknown } = {},
   ) {
-    useQueryMock.mockReturnValue(families ?? [...new Set(results.map((r) => r.family as string))].sort());
+    const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
+    useQueryMock.mockImplementation((key: string) => (key === "sources.listBoard" ? board : familyList));
     usePaginatedQueryMock.mockReturnValue({ results, status, loadMore });
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
@@ -268,5 +272,16 @@ describe("InstanceSourcesContent", () => {
       expect(document.querySelector('[role="alert"]')?.textContent).toContain("Forbidden");
       expect(document.body.textContent).toContain("Delete 1 Source?");
     });
+  });
+
+  it("shows the production queue above the list once the board has something to show", async () => {
+    await render([makeSource()], { board: { ideas: [{ _id: "s-idea", label: "TikTok post", family: "social", origin: "https://example.com/a", summary: "A strong hook", score: 0.8, capturedAt: 1 }], toRoute: [], reviewRouting: false } });
+    expect(document.body.querySelector("[aria-label='Production queue'] [data-column='ideas']")?.textContent).toContain("A strong hook");
+    expect(document.body.querySelector("[data-column='to_route']")).not.toBeNull();
+  });
+
+  it("hides the production queue when there is nothing in it", async () => {
+    await render([makeSource()], { board: { ideas: [], toRoute: [], reviewRouting: false } });
+    expect(document.body.querySelector("[aria-label='Production queue']")).toBeNull();
   });
 });
