@@ -301,6 +301,31 @@ describe("Performance Snapshots (ADR-078)", () => {
     expect(publication?.status).toBe("published");
   });
 
+  it("starts a new series when a retried Publication creates a new post, keeping the old Snapshots", async () => {
+    const s = await seed();
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect((await s.view()).snapshots.map((x) => x.postSeries)).toEqual([0]);
+
+    // The retry created another post: a new `externalId`.
+    await s.t.mutation(internal.publications.finish, { publicationId: s.publicationId, status: "published", externalId: "post-2" });
+    let view = await s.view();
+    expect(view.state).toBe("waiting");
+    expect(view.snapshots).toHaveLength(1);
+
+    // The old post is no longer measured; the new one starts its own 1, 3, 7 day curve.
+    reads.length = 0;
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    expect(reads).toEqual(["https://stats.example.com/post/post-2"]);
+    view = await s.view();
+    expect(view.snapshots.map((x) => [x.postSeries, x.delayMs])).toEqual([
+      [0, DAY],
+      [1, DAY],
+    ]);
+  });
+
   it("does not show another owner's Snapshots", async () => {
     const s = await seed();
     await s.publish();

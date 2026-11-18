@@ -21,8 +21,10 @@ export const analyticsTables = {
   // One row per Publication measured: the schedule and the state of its readings.
   publicationAnalytics: defineTable({
     publicationId: v.id("publications"),
+    /** The Publication's `postSeries` this row measures: a retry that creates a new post starts a new row. */
+    postSeries: v.number(),
     instanceId: v.string(),
-    /** The Publisher the Publication went through; its Analytics Adapter by default. */
+    /** The Publisher the Publication went through (its channel's link is resolved when reading). */
     publisherAdapter: v.string(),
     /** When the Publication became `published`: the delays count from here. */
     publishedAt: v.number(),
@@ -40,11 +42,13 @@ export const analyticsTables = {
     updatedAt: v.number(),
   })
     .index("by_publication", ["publicationId"])
+    .index("by_publication_and_series", ["publicationId", "postSeries"])
     .index("by_done_and_next", ["done", "nextAt"]),
 
-  // Append-only: a row is never patched or deleted (one series per Publication).
+  // Append-only: a row is never patched or deleted. A series is per (Publication, postSeries).
   performanceSnapshots: defineTable({
     publicationId: v.id("publications"),
+    postSeries: v.number(),
     instanceId: v.string(),
     /** The delay after `published` this reading stands for. */
     delayMs: v.number(),

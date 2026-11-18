@@ -15,17 +15,21 @@ export const RETRY_AFTER_MS = 60 * 60_000;
 
 /** Called when a Publication becomes `published`: schedules its readings, once. */
 export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publications">): Promise<void> {
-  const existing = await ctx.db
+  const postSeries = publication.postSeries ?? 0;
+  const rows = await ctx.db
     .query("publicationAnalytics")
     .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
-    .first();
-  if (existing) return;
+    .collect();
+  if (rows.some((row) => row.postSeries === postSeries)) return;
+  // A retry that created a new post: the old post is no longer measured, its Snapshots stay.
+  for (const row of rows) if (!row.done) await ctx.db.patch(row._id, { done: true, updatedAt: Date.now() });
   const publishers = await projectPublishers(ctx, publication.instanceId);
   const publisherAdapter = publication.attemptContext?.adapter ?? channelOf(publishers, publication.target)?.publisher.adapter;
   if (!publisherAdapter) return;
   const publishedAt = Date.now();
   await ctx.db.insert("publicationAnalytics", {
     publicationId: publication._id,
+    postSeries,
     instanceId: publication.instanceId,
     publisherAdapter,
     publishedAt,
@@ -38,7 +42,7 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
   });
 }
 
-/** The readings of a Publication: its state, why, when the next one is due, and its Snapshots (oldest first). */
+/** The readings of a Publication: the state of its current post's series, why, when the next one is due, and all its Snapshots (oldest first, each with its `postSeries`). */
 export const forPublication = query({
   args: { publicationId: v.id("publications") },
   handler: async (ctx, args) => {
@@ -46,8 +50,8 @@ export const forPublication = query({
     if (!publication || !(await readOwnerId(ctx, publication.instanceId))) return null;
     const row = await ctx.db
       .query("publicationAnalytics")
-      .withIndex("by_publication", (q) => q.eq("publicationId", args.publicationId))
-      .first();
+      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", args.publicationId).eq("postSeries", publication.postSeries ?? 0))
+      .unique();
     const snapshots = await ctx.db
       .query("performanceSnapshots")
       .withIndex("by_publication", (q) => q.eq("publicationId", args.publicationId))
@@ -58,7 +62,7 @@ export const forPublication = query({
       ...(row && !row.done ? { nextAt: row.nextAt } : {}),
       snapshots: snapshots
         .sort((a, b) => a.takenAt - b.takenAt)
-        .map((s) => ({ delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source })),
+        .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source })),
     };
   },
 });
@@ -113,6 +117,7 @@ export const record = internalMutation({
       case "taken": {
         await ctx.db.insert("performanceSnapshots", {
           publicationId: row.publicationId,
+          postSeries: row.postSeries,
           instanceId: row.instanceId,
           delayMs: row.delays[row.taken],
           takenAt: now,
