@@ -513,6 +513,10 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
   const [sort, setSort] = useState<ReadySort>("score");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<SourceRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const removeMany = useMutation(api.sources.removeMany);
   const targets = (useQuery(api.source_routing.listTargets, { instanceId }) ?? []) as Target[];
   const needle = search.trim().toLowerCase();
   const ready = sources
@@ -548,7 +552,16 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
       ) : (
         <ul className="grid gap-3">
           {ready.map((source) => (
-            <ReadySourceRow key={source._id} source={source} instanceId={instanceId} targets={targets} />
+            <ReadySourceRow
+              key={source._id}
+              source={source}
+              instanceId={instanceId}
+              targets={targets}
+              onDelete={() => {
+                setDeleteError(null);
+                setPendingDelete(source);
+              }}
+            />
           ))}
         </ul>
       )}
@@ -560,11 +573,59 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
           </Button>
         </div>
       ) : null}
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!deleting && !open) setPendingDelete(null);
+        }}
+        disablePointerDismissal={deleting}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this Source?</DialogTitle>
+            <DialogDescription>
+              This is permanent. A Mission already created from it is kept. The same post can show up again as a new Source
+              if an Agent captures it again.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? (
+            <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
+              {deleteError}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={deleting} onClick={() => setPendingDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!pendingDelete) return;
+                setDeleting(true);
+                setDeleteError(null);
+                try {
+                  await removeMany({ sourceIds: [pendingDelete._id as Id<"sources">] });
+                  setPendingDelete(null);
+                } catch (err) {
+                  setDeleteError(err instanceof Error ? err.message : "Could not delete the Source.");
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
 
-function ReadySourceRow({ source, instanceId, targets }: { source: SourceRow; instanceId: string; targets: Target[] }) {
+function ReadySourceRow({ source, instanceId, targets, onDelete }: { source: SourceRow; instanceId: string; targets: Target[]; onDelete: () => void }) {
   const setRouteTarget = useMutation(api.source_routing.setRouteTarget);
   const produce = useMutation(api.source_routing.forceProduction);
   const [busy, setBusy] = useState(false);
@@ -627,10 +688,16 @@ function ReadySourceRow({ source, instanceId, targets }: { source: SourceRow; in
               ))}
             </NativeSelect>
           </label>
-          <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
-            <Sparkles />
-            Produce
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
+              <Sparkles />
+              Produce
+            </Button>
+            <Button type="button" variant="outline" disabled={busy} onClick={onDelete}>
+              <Trash2 />
+              Delete
+            </Button>
+          </div>
         </div>
       </Card>
     </li>
