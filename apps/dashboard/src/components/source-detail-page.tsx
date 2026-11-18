@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
+import { useProduceSource } from "@/src/components/source-route-target";
 import { formatOf, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
@@ -33,6 +34,7 @@ export function SourceDetailPage({ params }: Props) {
 export function SourceDetailContent({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
+  const { produce, busy: producing } = useProduceSource(sourceId);
   useThumbnailRequests(instanceId, result ? [{ ...result.source, thumbnailUrl: result.thumbnailUrl }] : []);
 
   if (result === undefined) return <Message>Loading…</Message>;
@@ -68,11 +70,18 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <Badge variant="outline" className="gap-2" data-testid="source-format">
                 <PlatformMark platform={format.platform} />
                 {format.label}
               </Badge>
+              {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists. */}
+              {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
+                <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
+                  <Sparkles />
+                  Produce
+                </Button>
+              ) : null}
             </div>
             <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}

@@ -10,16 +10,19 @@ import { deriveSourcePipelineState, SourceDetailContent } from "../src/component
 
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
+const forceProductionMock = vi.fn();
 const requestThumbnailsMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useMutation: (ref: string) => (ref === "source_thumbnails.request" ? requestThumbnailsMock : retryMock),
+  useMutation: (ref: string) =>
+    ({ "source_routing.forceProduction": forceProductionMock, "source_thumbnails.request": requestThumbnailsMock })[ref] ?? retryMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { get: "sources.get", retry: "sources.retry" },
+    source_routing: { forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
   },
 }));
@@ -48,6 +51,7 @@ describe("SourceDetailContent", () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     retryMock.mockReset();
+    forceProductionMock.mockReset();
     requestThumbnailsMock.mockReset().mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -254,10 +258,36 @@ describe("SourceDetailContent", () => {
     expect(retryMock).toHaveBeenCalledWith({ sourceId: "src-1" });
   });
 
-  it("has no Produce button nor producer choice: production starts from the Sources list", async () => {
-    await render({ source: makeSource({ sourceId: "instagram-reel" }), analysisSchema: null });
-    expect(Array.from(document.querySelectorAll("button")).some((b) => /Produce/.test(b.textContent ?? ""))).toBe(false);
-    expect(document.querySelector("select")).toBeNull();
+  describe("Produce", () => {
+    const scored = { productFit: 0.75 };
+    const button = () => Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Produce");
+
+    it("is offered for a Scored Source (ready, scored, not picked yet) and produces it by id", async () => {
+      forceProductionMock.mockResolvedValue(undefined);
+      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
+      await act(async () => {
+        button()!.click();
+      });
+      expect(forceProductionMock).toHaveBeenCalledWith({ sourceId: "src-1" });
+    });
+
+    it("is not offered otherwise: not scored, already picked, not ready, or in production", async () => {
+      for (const overrides of [
+        {}, // ready but not scored
+        { scoring: scored, selectedAt: 1 },
+        { scoring: scored, selectedAt: 1, productionMissionId: "mission-1" },
+        { status: "processing", scoring: scored },
+        { status: "failed" },
+      ]) {
+        await render({ source: makeSource(overrides), analysisSchema: null });
+        expect(button()).toBeUndefined();
+      }
+    });
+
+    it("has no producer choice on the page", async () => {
+      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
+      expect(document.querySelector("select")).toBeNull();
+    });
   });
 
   describe("header", () => {
