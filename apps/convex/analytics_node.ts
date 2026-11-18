@@ -26,7 +26,7 @@ export const collectDue = internalAction({
         await ctx.runMutation(internal.analytics.record, { id: item.id, outcome });
       };
       try {
-        const adapter = await loadAnalyticsAdapter(ctx, item.publisherAdapter);
+        const adapter = item.analyticsAdapter ? await loadAnalyticsAdapter(ctx, item.analyticsAdapter) : null;
         if (!adapter) {
           await settle({ kind: "unmeasured" });
           continue;

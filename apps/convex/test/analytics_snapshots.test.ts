@@ -4,6 +4,7 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
 import { installPostiz } from "./postiz_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 
 // ADR-078, issue #88: a Publication that becomes `published` receives
@@ -18,6 +19,7 @@ vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
   "../analytics.ts": () => import("../analytics.js"),
+  "../analytics_adapters.ts": () => import("../analytics_adapters.js"),
   "../analytics_node.ts": () => import("../analytics_node.js"),
   "../instances.ts": () => import("../instances.js"),
   "../missions.ts": () => import("../missions.js"),
@@ -70,6 +72,7 @@ let reads: string[];
 async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled" } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
+  await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: `job-${INSTANCE_ID}`, status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.tokenIdentifier });

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { DEFAULT_COLLECT_DELAYS_MS, metricKindOf } from "@opengroow/publisher-sdk";
 import type { Doc } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx } from "./_generated/server.js";
+import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 
@@ -75,14 +76,19 @@ export const due = internalQuery({
       .query("publicationAnalytics")
       .withIndex("by_done_and_next", (q) => q.eq("done", false).lte("nextAt", args.now))
       .take(100);
+    const adapters = await installedAnalyticsAdapters(ctx);
     const out = [];
     for (const row of rows) {
       const publication = await ctx.db.get(row.publicationId);
       if (!publication) continue;
-      const publisher = (await projectPublishers(ctx, row.instanceId)).find((p) => p.adapter === row.publisherAdapter);
+      // The adapter is the one the channel is linked to now (ADR-078): none reads "analytics unavailable".
+      const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
+      const link = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : null;
+      // An adapter of the Publisher's own service reads with the Publisher's connection.
+      const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
       out.push({
         id: row._id,
-        publisherAdapter: row.publisherAdapter,
+        analyticsAdapter: link?.adapter.id ?? null,
         publishedAt: row.publishedAt,
         delayMs: row.delays[row.taken],
         kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),
