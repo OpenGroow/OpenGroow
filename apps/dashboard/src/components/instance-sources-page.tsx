@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Users, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -708,8 +708,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
           </div>
         </div>
         <div className="relative z-10 flex flex-wrap items-center gap-3 lg:justify-end">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
-            <Users aria-hidden="true" className="size-4" />
+          <label className="flex flex-col items-start gap-1 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
             Routed to:
             <NativeSelect aria-label="Routed to" className="h-10 w-56" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
               <option value={AUTO_TARGET}>Auto (router decides)</option>
