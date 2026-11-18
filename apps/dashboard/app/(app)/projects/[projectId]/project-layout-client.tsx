@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { use, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  BarChart3,
   Bot,
   CalendarClock,
   LayoutDashboard,
@@ -55,6 +56,7 @@ const PROJECT_VIEWS: ProjectView[] = [
   { id: "schedules", label: "Scheduler", icon: CalendarClock },
   { id: "brand", label: "Brand", icon: Palette },
   { id: "publishers", label: "Publishers", icon: Send },
+  { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "developer", label: "Developer", icon: ScrollText },
 ];

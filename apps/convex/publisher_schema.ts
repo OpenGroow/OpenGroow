@@ -96,5 +96,6 @@ export const publisherTables = {
   })
     .index("by_mission", ["missionId"])
     .index("by_mission_target", ["missionId", "target"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_instance_and_status", ["instanceId", "status"]),
 };
