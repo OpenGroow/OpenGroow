@@ -113,15 +113,17 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   const selection = useSourceSelection(visible);
   const tabs = (
-    <FilterChips
-      label="Sources view"
-      value={tab}
-      onChange={(id) => setTab(id === "all" ? "all" : "ready")}
-      options={[
-        { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
-        { id: "all", label: "All", count: sources.length },
-      ]}
-    />
+    <div className="shrink-0">
+      <FilterChips
+        label="Sources view"
+        value={tab}
+        onChange={(id) => setTab(id === "all" ? "all" : "ready")}
+        options={[
+          { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
+          { id: "all", label: "All", count: sources.length },
+        ]}
+      />
+    </div>
   );
   useThumbnailRequests(instanceId, tab === "all" ? visible : []);
 
@@ -161,7 +163,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
               {tabs}
               <div className="flex flex-col gap-3 sm:flex-row">
-                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" />
+                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" className="lg:w-52" />
                 <SelectButton selection={selection} />
               </div>
             </div>
@@ -593,12 +595,12 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         {tabs}
         <div className="flex flex-col gap-3 sm:flex-row">
-          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" />
-          <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-44" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
+          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" className="lg:w-52" />
+          <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-36" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
             <option value="score">Highest score</option>
             <option value="newest">Newest first</option>
           </NativeSelect>
-          <NativeSelect aria-label="Filter ready sources by agent" className="h-11 sm:w-48" value={agent} onChange={(event) => setAgent(event.target.value)}>
+          <NativeSelect aria-label="Filter ready sources by agent" className="h-11 sm:w-40" value={agent} onChange={(event) => setAgent(event.target.value)}>
             <option value="all">All agents</option>
             {agents.map((templateId) => (
               <option key={templateId} value={templateId}>{agentLabel(templateId)}</option>
