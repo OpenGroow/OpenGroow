@@ -512,9 +512,9 @@ function SourceRowItem({
             >
               {title}
             </Link>
-            <p className="m-0 truncate text-sm text-muted-foreground">
-              {source.marketing.summary ? `${source.label} · ${source.origin}` : source.label}
-            </p>
+            <div>
+              <FormatBadge source={source} />
+            </div>
           </div>
         </div>
         <div>

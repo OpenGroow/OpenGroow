@@ -135,6 +135,13 @@ describe("InstanceSourcesContent", () => {
     expect(links()).toEqual(["alpha reel"]);
   });
 
+  it("shows the same platform logo and media icon on the Other rows", async () => {
+    await render([makeSource({ sourceId: "tiktok-post", analysis: { creativeFeatures: { mediaType: "video" } } })]);
+    const badge = document.querySelector("ul li [title='TikTok video']")!;
+    expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/tiktok.svg");
+    expect(badge.querySelectorAll("svg")).toHaveLength(1);
+  });
+
   it("offers a short list of statuses, without Scored, Published or Excluded", async () => {
     await render([makeSource()]);
     const options = Array.from(document.querySelectorAll("select")[0]!.querySelectorAll("option")).map((o) => o.textContent);
