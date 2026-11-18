@@ -1,10 +1,11 @@
 import { paginationOptsValidator } from "convex/server";
 import { v, type ObjectType } from "convex/values";
 import { resolveSource } from "./source_enrichment.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { sourceMarketingV } from "./source_schema.js";
+import { originKeyOf } from "./source_origin.js";
 
 const insertArgs = {
   instanceId: v.string(),
@@ -31,7 +32,8 @@ const insertArgs = {
 // and the declared label/family/status are resolved by the caller (the
 // ingestion of a SourceJob result, `source_jobs/ingest_sources.ts`).
 export async function insertSource(ctx: MutationCtx, args: ObjectType<typeof insertArgs>) {
-  return await ctx.db.insert("sources", { ...args, createdAt: Date.now() });
+  const originKey = originKeyOf(args.origin);
+  return await ctx.db.insert("sources", { ...args, ...(originKey !== undefined ? { originKey } : {}), createdAt: Date.now() });
 }
 
 export const insert = internalMutation({
@@ -78,9 +80,11 @@ export async function completeSource(
   if (source.status !== "processing") {
     return { ok: false, error: `id: Source "${args.id}" is ${source.status}, only a processing Source can be completed` };
   }
+  const originKey = originKeyOf(args.origin);
   await ctx.db.patch(docId, {
     status: "ready",
     origin: args.origin,
+    originKey,
     capturedAt: args.capturedAt,
     marketing: args.marketing,
     ...(args.raw !== undefined ? { raw: args.raw } : {}),
@@ -246,14 +250,18 @@ export const removeMany = mutation({
     if (ids.length > MAX_SOURCES_PER_REMOVAL) {
       throw new Error(`At most ${MAX_SOURCES_PER_REMOVAL} Sources can be deleted at once`);
     }
-    const owned: Id<"sources">[] = [];
+    const owned: Doc<"sources">[] = [];
     for (const id of ids) {
       const source = await ctx.db.get(id);
       if (!source) continue;
       await requireOwnedRow(ctx, source);
-      owned.push(id);
+      owned.push(source);
     }
-    for (const id of owned) await ctx.db.delete(id);
+    for (const source of owned) {
+      // Its thumbnail is a stored file: it goes with the row.
+      if (source.thumbnailStorageId) await ctx.storage.delete(source.thumbnailStorageId);
+      await ctx.db.delete(source._id);
+    }
     return { removed: owned.length };
   },
 });
