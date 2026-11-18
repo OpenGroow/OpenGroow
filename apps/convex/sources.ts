@@ -1,10 +1,22 @@
 import { paginationOptsValidator } from "convex/server";
 import { v, type ObjectType } from "convex/values";
 import { resolveSource } from "./source_enrichment.js";
-import type { Id } from "./_generated/dataModel.js";
-import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { sourceMarketingV } from "./source_schema.js";
+import { originKeyOf } from "./source_origin.js";
+
+/** A Source's thumbnail is a stored file: the URL a page can load, or null. */
+async function thumbnailUrlOf(ctx: Pick<QueryCtx, "storage">, source: Doc<"sources">): Promise<string | null> {
+  return source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null;
+}
+
+/** Deletes a Source and the thumbnail file it owns. */
+export async function deleteSource(ctx: MutationCtx, source: Doc<"sources">): Promise<void> {
+  if (source.thumbnailStorageId) await ctx.storage.delete(source.thumbnailStorageId);
+  await ctx.db.delete(source._id);
+}
 
 const insertArgs = {
   instanceId: v.string(),
@@ -31,7 +43,8 @@ const insertArgs = {
 // and the declared label/family/status are resolved by the caller (the
 // ingestion of a SourceJob result, `source_jobs/ingest_sources.ts`).
 export async function insertSource(ctx: MutationCtx, args: ObjectType<typeof insertArgs>) {
-  return await ctx.db.insert("sources", { ...args, createdAt: Date.now() });
+  const originKey = originKeyOf(args.origin);
+  return await ctx.db.insert("sources", { ...args, ...(originKey !== undefined ? { originKey } : {}), createdAt: Date.now() });
 }
 
 export const insert = internalMutation({
@@ -78,9 +91,11 @@ export async function completeSource(
   if (source.status !== "processing") {
     return { ok: false, error: `id: Source "${args.id}" is ${source.status}, only a processing Source can be completed` };
   }
+  const originKey = originKeyOf(args.origin);
   await ctx.db.patch(docId, {
     status: "ready",
     origin: args.origin,
+    originKey,
     capturedAt: args.capturedAt,
     marketing: args.marketing,
     ...(args.raw !== undefined ? { raw: args.raw } : {}),
@@ -119,20 +134,62 @@ export const listByInstance = query({
     const ownerId = await readOwnerId(ctx, args.instanceId);
     if (ownerId === null) return { page: [], isDone: true, continueCursor: "" };
     const { family } = args;
-    if (family !== undefined) {
-      return await ctx.db
+    const result =
+      family !== undefined
+        ? await ctx.db
+            .query("sources")
+            .withIndex("by_instance_owner_family_createdAt", (q) =>
+              q.eq("instanceId", args.instanceId).eq("ownerId", ownerId).eq("family", family),
+            )
+            .order("desc")
+            .paginate(args.paginationOpts)
+        : await ctx.db
+            .query("sources")
+            .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
+            .order("desc")
+            .paginate(args.paginationOpts);
+    // The thumbnail is stored as a file: hand the page a URL it can load.
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map(async (source) => ({ ...source, thumbnailUrl: await thumbnailUrlOf(ctx, source) })),
+      ),
+    };
+  },
+});
+
+/** The most Sources of one status `counts` reads. */
+export const COUNT_CAP = 5000;
+
+/**
+ * The real number of Sources of an Instance (the Sources page's tiles and tab
+ * counts), not the number loaded so far. Convex has no `count()`, so each status
+ * is read through its index, at most `COUNT_CAP` rows; `capped` says a status
+ * had more. `scored` and `other` are the two tabs (the Scored stage, and what is
+ * neither Scored nor picked for production).
+ */
+export const counts = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    const out = { total: 0, processing: 0, ready: 0, failed: 0, unavailable: 0, scored: 0, other: 0, capped: false };
+    const ownerId = await readOwnerId(ctx, args.instanceId);
+    if (ownerId === null) return out;
+    for (const status of ["processing", "ready", "failed", "unavailable"] as const) {
+      const rows = await ctx.db
         .query("sources")
-        .withIndex("by_instance_owner_family_createdAt", (q) =>
-          q.eq("instanceId", args.instanceId).eq("ownerId", ownerId).eq("family", family),
-        )
-        .order("desc")
-        .paginate(args.paginationOpts);
+        .withIndex("by_instance_status_capturedAt", (q) => q.eq("instanceId", args.instanceId).eq("status", status))
+        .take(COUNT_CAP + 1);
+      if (rows.length > COUNT_CAP) out.capped = true;
+      for (const source of rows.slice(0, COUNT_CAP)) {
+        if (source.ownerId !== ownerId) continue;
+        out[status] += 1;
+        out.total += 1;
+        const analysed = status === "ready" && source.excluded !== true && source.scoring !== undefined;
+        if (!analysed) out.other += 1;
+        else if (source.selectedAt === undefined) out.scored += 1;
+      }
     }
-    return await ctx.db
-      .query("sources")
-      .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
-      .order("desc")
-      .paginate(args.paginationOpts);
+    return out;
   },
 });
 
@@ -189,6 +246,7 @@ export const get = query({
       source,
       analysisSchema: declaration?.analysisSchema ?? null,
       workspaceKey: agent?.workspaceKey ?? null,
+      thumbnailUrl: await thumbnailUrlOf(ctx, source),
     };
   },
 });
@@ -235,14 +293,14 @@ export const removeMany = mutation({
     if (ids.length > MAX_SOURCES_PER_REMOVAL) {
       throw new Error(`At most ${MAX_SOURCES_PER_REMOVAL} Sources can be deleted at once`);
     }
-    const owned: Id<"sources">[] = [];
+    const owned: Doc<"sources">[] = [];
     for (const id of ids) {
       const source = await ctx.db.get(id);
       if (!source) continue;
       await requireOwnedRow(ctx, source);
-      owned.push(id);
+      owned.push(source);
     }
-    for (const id of owned) await ctx.db.delete(id);
+    for (const source of owned) await deleteSource(ctx, source);
     return { removed: owned.length };
   },
 });

@@ -11,16 +11,19 @@ import { deriveSourcePipelineState, SourceDetailContent } from "../src/component
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
 const forceProductionMock = vi.fn();
+const requestThumbnailsMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useMutation: (ref: string) => (ref === "source_routing.forceProduction" ? forceProductionMock : retryMock),
+  useMutation: (ref: string) =>
+    ({ "source_routing.forceProduction": forceProductionMock, "source_thumbnails.request": requestThumbnailsMock })[ref] ?? retryMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { get: "sources.get", retry: "sources.retry" },
-  source_routing: { forceProduction: "source_routing.forceProduction" },
+    source_routing: { forceProduction: "source_routing.forceProduction" },
+    source_thumbnails: { request: "source_thumbnails.request" },
   },
 }));
 
@@ -49,6 +52,7 @@ describe("SourceDetailContent", () => {
     useQueryMock.mockReset();
     retryMock.mockReset();
     forceProductionMock.mockReset();
+    requestThumbnailsMock.mockReset().mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -162,15 +166,14 @@ describe("SourceDetailContent", () => {
     expect(details?.querySelector("pre")?.textContent).toBe('{"html":"<b>hi</b>"}');
   });
 
-  it("links to the producing Run and shows the SourceJob id only when provenance exists", async () => {
+  it("links to the producing Run only when provenance exists, and never shows the SourceJob id", async () => {
     await render({ source: makeSource(), analysisSchema: null, workspaceKey: "ws-1" });
     expect(document.querySelector("[data-testid='source-run-link']")).toBeNull();
-    expect(text()).not.toContain("job-1");
 
     await render({ source: makeSource({ runId: "run-1", sourceJobId: "job-1" }), analysisSchema: null, workspaceKey: "ws-1" });
     const link = document.querySelector("[data-testid='source-run-link']");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fseo/logs?runId=run-1");
-    expect(text()).toContain("job-1");
+    expect(text()).not.toContain("job-1");
   });
 
   it("labels analysis fields from schema titles, falling back to humanized keys", async () => {
@@ -255,41 +258,73 @@ describe("SourceDetailContent", () => {
     expect(retryMock).toHaveBeenCalledWith({ sourceId: "src-1" });
   });
 
-  describe("Force production (issue #535: scoring/planning now read Sources)", () => {
-    const socialSource = (overrides: Partial<Record<string, unknown>> = {}) =>
-      makeSource({
-        templateId: "@opengroow/social-engagement",
-        sourceId: "instagram-reel",
-        analysis: { creativeFeatures: { mediaType: "video" } },
-        ...overrides,
-      });
-    const button = () =>
-      Array.from(document.querySelectorAll("button")).find((b) => /Force production|Produce again/.test(b.textContent ?? ""));
+  describe("Produce", () => {
+    const scored = { productFit: 0.75 };
+    const button = () => Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Produce");
 
-    it("starts production for a ready video or carousel social Source, by Source id", async () => {
+    it("is offered for a Scored Source (ready, scored, not picked yet) and produces it by id", async () => {
       forceProductionMock.mockResolvedValue(undefined);
-      await render({ source: socialSource(), analysisSchema: null });
-      expect(button()?.textContent).toBe("Force production");
+      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
       await act(async () => {
         button()!.click();
       });
       expect(forceProductionMock).toHaveBeenCalledWith({ sourceId: "src-1" });
     });
 
-    it("offers to produce again once selected", async () => {
-      await render({ source: socialSource({ selectedAt: 1 }), analysisSchema: null });
-      expect(button()?.textContent).toBe("Produce again");
+    it("is not offered otherwise: not scored, already picked, not ready, or in production", async () => {
+      for (const overrides of [
+        {}, // ready but not scored
+        { scoring: scored, selectedAt: 1 },
+        { scoring: scored, selectedAt: 1, productionMissionId: "mission-1" },
+        { status: "processing", scoring: scored },
+        { status: "failed" },
+      ]) {
+        await render({ source: makeSource(overrides), analysisSchema: null });
+        expect(button()).toBeUndefined();
+      }
     });
 
-    it("is not offered for an image, an unenriched, a non-ready or a non-social Source", async () => {
-      await render({ source: socialSource({ analysis: { creativeFeatures: { mediaType: "image" } } }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-      await render({ source: socialSource({ analysis: {} }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-      await render({ source: socialSource({ status: "processing" }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-      await render({ source: makeSource({ analysis: { creativeFeatures: { mediaType: "video" } } }), analysisSchema: null });
-      expect(button()).toBeUndefined();
+    it("has no producer choice on the page", async () => {
+      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
+      expect(document.querySelector("select")).toBeNull();
+    });
+  });
+
+  describe("header", () => {
+    it("shows the platform, status and score like the Sources list", async () => {
+      await render({
+        source: makeSource({ sourceId: "instagram-reel", family: "social-video", analysis: { creativeFeatures: { mediaType: "video" } }, scoring: { replicationScore: 0.92 } }),
+        analysisSchema: null,
+        thumbnailUrl: "https://storage.example/t.jpg",
+      });
+      // The same badge as the Sources list: the platform logo and a media icon, the words as a tooltip.
+      const badge = document.querySelector("[title='Instagram Reel']")!;
+      // It sits right after the status pill, in the same row.
+      expect(badge.previousElementSibling?.textContent).toBe("Ready");
+      expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(badge.querySelectorAll("svg")).toHaveLength(1);
+      expect(badge.querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
+      expect(text()).not.toContain("Social Video"); // the family is not shown
+      expect(text()).toContain("Ready");
+      expect(document.querySelector("[data-testid='source-score']")?.textContent).toContain("Score 92");
+      expect(document.querySelector("img[src='https://storage.example/t.jpg']")).not.toBeNull();
+    });
+
+    it("shows nothing where the score would be when the Source is not scored, and asks for a missing thumbnail", async () => {
+      await render({ source: makeSource(), analysisSchema: null, thumbnailUrl: null });
+      expect(document.querySelector("[data-testid='source-score']")).toBeNull();
+      expect(document.querySelector("[data-testid='not-scored-hint']")).toBeNull();
+      expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["src-1"] });
+    });
+
+    it("links the origin to the original post", async () => {
+      await render({ source: makeSource({ origin: "https://www.instagram.com/reel/abc/" }), analysisSchema: null });
+      const link = Array.from(document.querySelectorAll("a")).find((a) => a.getAttribute("href") === "https://www.instagram.com/reel/abc/");
+      expect(link?.getAttribute("target")).toBe("_blank");
+      expect(link?.className).not.toContain("text-primary"); // underline on hover, no blue
+      expect(link?.textContent).toBe("Link"); // the URL itself is the tooltip
+      expect(link?.querySelector("svg")).toBeNull(); // no external-link icon
+      expect(link?.getAttribute("title")).toBe("https://www.instagram.com/reel/abc/");
     });
   });
 

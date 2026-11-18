@@ -482,4 +482,97 @@ describe("Source routing Job", () => {
     expect(result.runs).toHaveLength(1);
     expect(result.job).toMatchObject({ lastOutcome: "failed" });
   });
+
+  describe("review mode (ADR-076)", () => {
+    const publish = { platforms: ["instagram"], title: "Title", description: "Description" };
+
+    async function routeReel(t: ReturnType<typeof convexTest>, review: boolean) {
+      await seedInstance(t);
+      await activateAgent(t, "@opengroow/source");
+      await activateAgent(t, "@opengroow/openmontage-agent");
+      await t.run((ctx) => ctx.db.insert("brandCores", { instanceId: INSTANCE, audience: "Audience", offer: "Offer", updatedAt: NOW }));
+      const sourceId = await source(t);
+      const job = await routingJob(t);
+      if (review) await t.withIdentity(OWNER).mutation(api.source_routing.setReviewMode, { jobId: job._id, review: true });
+      await t.mutation(internal.source_routing.reserveWinner, { jobId: job._id, sourceId });
+      const run = await t.run((ctx) => ctx.db.query("runs").unique());
+      await t.run((ctx) => ctx.db.patch(run!._id, { status: "running" }));
+      await t.mutation(internal.runs.markCompleted, {
+        runId: run!._id,
+        result: { status: "success", summary: "Hook fits a reel", additionalDetails: { route: { templateId: "@opengroow/openmontage-agent", missionType: "create_reel", payload: { publish } } } },
+      });
+      return { sourceId, job };
+    }
+
+    it("keeps the decision on the Source and creates no Mission", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId, job } = await routeReel(t, true);
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), job: await ctx.db.get(job._id), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(0);
+      expect(state.source?.productionMissionId).toBeUndefined();
+      expect(state.source?.routing).toMatchObject({
+        state: "proposed",
+        decidedBy: "agent",
+        templateId: "@opengroow/openmontage-agent",
+        missionType: "create_reel",
+        rationale: "Hook fits a reel",
+        payload: { publish, observationId: sourceId },
+      });
+      expect(state.source?.routing?.candidates.length).toBeGreaterThan(0);
+      expect(state.job).toMatchObject({ lastOutcome: "succeeded" });
+    });
+
+    it("Produce on a proposal creates the Mission from it, without another routing run", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, true);
+
+      const result = await t.withIdentity(OWNER).mutation(api.source_routing.forceProduction, { sourceId });
+
+      expect(result.status).toBe("created");
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect(), runs: await ctx.db.query("runs").collect() }));
+      expect(state.missions).toHaveLength(1);
+      expect(state.missions[0]).toMatchObject({ type: "create_reel", payload: { publish, observationId: sourceId } });
+      expect(state.source?.productionMissionId).toBe(state.missions[0]!._id);
+      expect(state.source?.routing).toMatchObject({ state: "approved", decidedBy: "user" });
+      expect(state.runs).toHaveLength(2);
+    });
+
+    it("a producer chosen by hand makes Produce route to it, whatever the proposal was", async () => {
+      const t = convexTest(schema, modules);
+      await activateAgent(t, "@opengroow/visual-social");
+      const { sourceId, job } = await routeReel(t, true);
+      await t.withIdentity(OWNER).mutation(api.source_routing.setRouteTarget, { sourceId, target: { templateId: "@opengroow/visual-social", missionType: "create_carousel" } });
+
+      const result = await t.withIdentity(OWNER).mutation(api.source_routing.forceProduction, { sourceId });
+
+      expect(result.status).toBe("queued");
+      expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
+      await t.mutation(internal.source_routing.reserveWinner, { jobId: job._id, sourceId });
+      const runtime = (await t.run((ctx) => ctx.db.get(job._id)))?.runtime as { candidates: Array<{ templateId: string; missionType: string }> };
+      expect(runtime.candidates).toEqual([expect.objectContaining({ templateId: "@opengroow/visual-social", missionType: "create_carousel" })]);
+    });
+
+    it("refuses a producer that is not a candidate", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, true);
+      await expect(t.withIdentity(OWNER).mutation(api.source_routing.setRouteTarget, { sourceId, target: { templateId: "@nobody/none", missionType: "x" } })).rejects.toThrow("not available");
+    });
+
+    it("lists the producers a Source can be routed to", async () => {
+      const t = convexTest(schema, modules);
+      await routeReel(t, true);
+      const targets = await t.withIdentity(OWNER).query(api.source_routing.listTargets, { instanceId: INSTANCE });
+      expect(targets).toEqual(expect.arrayContaining([expect.objectContaining({ templateId: "@opengroow/openmontage-agent", missionType: "create_reel" })]));
+    });
+
+    it("auto mode still records the decision as approved by the agent", async () => {
+      const t = convexTest(schema, modules);
+      const { sourceId } = await routeReel(t, false);
+
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
+      expect(state.missions).toHaveLength(1);
+      expect(state.source?.routing).toMatchObject({ state: "approved", decidedBy: "agent", rationale: "Hook fits a reel" });
+    });
+  });
 });

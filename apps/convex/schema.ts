@@ -22,6 +22,7 @@ import { artifactV, runResultV } from "./run_result.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
+import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
@@ -684,6 +685,20 @@ export default defineSchema({
     producedAt: v.optional(v.number()),
     publishedAt: v.optional(v.number()),
     productionMissionId: v.optional(v.id("missions")),
+    // The routing decision (ADR-076): which producing Mission type was chosen
+    // for this Source, why, and whether a human still has to approve it.
+    routing: v.optional(routingDecisionV),
+    // The producer the user picked by hand on the Sources page ("Routed to").
+    // Produce routes the Source to it instead of letting the router choose.
+    routeTo: v.optional(v.object({ templateId: v.string(), missionType: v.string() })),
+    // The page's `og:image`, copied into storage (the CDN URLs expire). Set by
+    // `source_thumbnails`; `thumbnailTriedAt` records that a fetch was attempted.
+    thumbnailStorageId: v.optional(v.id("_storage")),
+    thumbnailTriedAt: v.optional(v.number()),
+    // What identifies the post `origin` points at (`source_origin.ts`): a post
+    // already ingested for the same Agent is not ingested again. Rows written
+    // before it existed have none and are not matched.
+    originKey: v.optional(v.string()),
     // Migration-only technical delegation pointer, cleared by #601.
     delegateMissionId: v.optional(v.id("missions")),
     // Ownership (and, for the family filter, the family) is folded into the
@@ -703,5 +718,7 @@ export default defineSchema({
     .index("by_instance_template_status", ["instanceId", "templateId", "status"])
     // The daily scoring job's "ready, within the lookback window" read (#487,
     // #535): the `capturedAt` bound is applied inside the index scan.
-    .index("by_instance_status_capturedAt", ["instanceId", "status", "capturedAt"]),
+    .index("by_instance_status_capturedAt", ["instanceId", "status", "capturedAt"])
+    // The ingestion's "is this post already here" lookup.
+    .index("by_instance_template_originKey", ["instanceId", "templateId", "originKey"]),
 });

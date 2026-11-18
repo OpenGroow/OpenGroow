@@ -64,6 +64,7 @@ type JobRow = Pick<
   running: boolean;
   workspaceKey?: string;
   latestRunId?: string;
+  config?: unknown;
 };
 
 type Unit = Doc<"jobs">["unit"];
@@ -238,6 +239,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   const pauseJob = useMutation(api.jobs.pause);
   const resumeJob = useMutation(api.jobs.resume);
   const runNowJob = useMutation(api.jobs.runNow);
+  const setReviewMode = useMutation(api.source_routing.setReviewMode);
   const [editing, setEditing] = useState(false);
 
   async function toggle(): Promise<void> {
@@ -246,6 +248,17 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
       await (job.state === "active" ? pauseJob({ jobId }) : resumeJob({ jobId }));
     } catch (error: unknown) {
       window.alert(extractConvexErrorMessage(error, "Failed to update the job."));
+    }
+  }
+
+  // Source routing only (ADR-076): wait for approval on the Sources page
+  // instead of creating the production Mission right away.
+  const reviewRouting = job.type === "source_routing" && (job.config as { reviewRouting?: boolean } | undefined)?.reviewRouting === true;
+  async function toggleReview(): Promise<void> {
+    try {
+      await setReviewMode({ jobId: job._id as Id<"jobs">, review: !reviewRouting });
+    } catch (error: unknown) {
+      window.alert(extractConvexErrorMessage(error, "Failed to update the routing mode."));
     }
   }
 
@@ -298,6 +311,11 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   </span>
                 ) : null}
               </p>
+              {reviewRouting ? (
+                <p className="m-0 text-sm text-muted-foreground">
+                  Each routing choice waits on the Sources page until you press Produce.
+                </p>
+              ) : null}
               <Outcome job={job} />
             </div>
           </div>
@@ -319,6 +337,12 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   <CalendarDays />
                   Edit recurrence
                 </DropdownMenuItem>
+                {job.type === "source_routing" ? (
+                  <DropdownMenuItem onClick={() => void toggleReview()}>
+                    <Route />
+                    {reviewRouting ? "Stop requiring approval" : "Require approval before production"}
+                  </DropdownMenuItem>
+                ) : null}
                 {job.workspaceKey !== undefined && job.latestRunId !== undefined ? (
                   <DropdownMenuLinkItem render={<Link href={runLogsHref(instanceId, job.templateId, job.latestRunId)} />}>
                     <ScrollText />
