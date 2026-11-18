@@ -612,19 +612,25 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
       {ready.length === 0 ? (
         <p className="text-sm text-muted-foreground">No scored Sources waiting for production.</p>
       ) : (
-        <ul className="grid gap-3">
-          {ready.map((source) => (
-            <ReadySourceRow
-              key={source._id}
-              source={source}
-              instanceId={instanceId}
-              targets={targets}
-              selecting={selection.selecting}
-              selected={selection.selected.has(source._id)}
-              onToggle={() => selection.toggleOne(source._id)}
-            />
-          ))}
-        </ul>
+        <div className="grid gap-3">
+          {/* Same height as the column names of the Other tab, so the rows start at the same place on both tabs. */}
+          <div aria-hidden="true" className="px-5 text-sm max-lg:hidden">
+            &nbsp;
+          </div>
+          <ul className="grid gap-3">
+            {ready.map((source) => (
+              <ReadySourceRow
+                key={source._id}
+                source={source}
+                instanceId={instanceId}
+                targets={targets}
+                selecting={selection.selecting}
+                selected={selection.selected.has(source._id)}
+                onToggle={() => selection.toggleOne(source._id)}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       {hasMore ? (
