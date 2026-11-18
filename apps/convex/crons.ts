@@ -60,4 +60,11 @@ crons.interval(
   internal.publication_polling_node.pollScheduled,
 );
 
+// Performance Snapshots (ADR-078): takes the readings that are due.
+crons.interval(
+  "analytics-collect",
+  { minutes: 10 },
+  internal.analytics_node.collectDue,
+);
+
 export default crons;
