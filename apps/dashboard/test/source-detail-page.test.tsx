@@ -299,6 +299,8 @@ describe("SourceDetailContent", () => {
       });
       // The same badge as the Sources list: the platform logo and a media icon, the words as a tooltip.
       const badge = document.querySelector("[title='Instagram Reel']")!;
+      // It sits right after the status pill, in the same row.
+      expect(badge.previousElementSibling?.textContent).toBe("Ready");
       expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
       expect(badge.querySelectorAll("svg")).toHaveLength(1);
       expect(badge.querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
