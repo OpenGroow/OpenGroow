@@ -305,12 +305,13 @@ describe("InstanceSourcesContent", () => {
       expect(document.body.textContent).not.toContain("Not scored yet");
     });
 
-    it("cuts a long title to 30 characters and keeps the full text as a tooltip", async () => {
-      const long = "A Christmas gift reel for a wife built around a printed love letter";
-      await render([reel({ marketing: { summary: long } })], { tab: "ready", targets });
-      const link = document.querySelector("[aria-label='Ready sources'] li a")!;
-      expect(link.textContent).toBe("A Christmas gift reel for a wi…");
-      expect(link.getAttribute("title")).toBe(long);
+    it("cuts a long title to 200 characters and keeps the full text as a tooltip", async () => {
+      const long = "A Christmas gift reel for a wife. ".repeat(10).trim();
+      await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready", targets });
+      const links = Array.from(document.querySelectorAll("[aria-label='Ready sources'] li a"));
+      const cut = links.find((link) => link.getAttribute("title") === long)!;
+      expect(cut.textContent).toBe(`${long.slice(0, 200).trimEnd()}…`);
+      expect(links.find((link) => link.getAttribute("title") === "Short title")!.textContent).toBe("Short title");
     });
 
     it("leaves out Sources already picked for production", async () => {
