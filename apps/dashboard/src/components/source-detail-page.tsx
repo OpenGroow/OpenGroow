@@ -69,21 +69,21 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <FormatBadge source={source} />
-              {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists. */}
-              {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
+            {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists. */}
+            {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
+              <div className="flex justify-end">
                 <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
                   <Sparkles />
                   Produce
                 </Button>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               <SourceStatusPill status={source.status} />
+              <FormatBadge source={source} />
               {score !== undefined ? (
                 <Badge variant="outline" className="gap-2 tabular-nums" data-testid="source-score">
                   <Sparkles aria-hidden="true" className="size-3.5" />
