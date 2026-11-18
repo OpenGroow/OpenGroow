@@ -584,10 +584,7 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-        <p className="m-0 text-sm text-muted-foreground">
-          Scored Sources waiting for production. Pick where each one is routed to, then Produce.
-        </p>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
         <div className="flex flex-col gap-3 sm:flex-row">
           <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" />
           <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-44" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
