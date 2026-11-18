@@ -86,7 +86,6 @@ function PublicationRow({ row, rank }: { row: AnalyticsRow; rank?: number }) {
           <span className="truncate font-medium text-foreground">{row.missionName}</span>
           <span className="truncate text-sm text-muted-foreground">
             {row.channelProfile ? `@${row.channelProfile}` : (row.channelName ?? row.target)}
-            {row.source ? ` · From ${row.source.label}` : ""}
           </span>
         </div>
         <StatusBadge tone={state.tone} label={label} />

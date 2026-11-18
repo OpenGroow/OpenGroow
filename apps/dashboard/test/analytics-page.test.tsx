@@ -12,6 +12,8 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 // Seam 3: `analytics.listForProject` is simulated.
 let rows: unknown[] | undefined = [];
 vi.mock("convex/react", () => ({
+  useAction: () => async () => ({ entries: [] }),
+  useMutation: () => async () => undefined,
   useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : undefined),
 }));
 vi.mock("@convex/_generated/api", () => ({
@@ -19,6 +21,7 @@ vi.mock("@convex/_generated/api", () => ({
     analytics: { listForProject: "analytics.listForProject" },
     analytics_connections: { list: "analytics_connections.list" },
     publisher_packages: { list: "publisher_packages.list" },
+    hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
   },
 }));
 vi.mock("@/src/hooks/use-authenticated-instances", () => ({
@@ -81,11 +84,10 @@ describe("Analytics page", () => {
     expect(text()).toContain("No published posts yet");
   });
 
-  it("lists a Publication with its platform, channel, Mission, Source of origin and the latest value of each metric", async () => {
+  it("lists a Publication with its platform, channel, Mission and the latest value of each metric", async () => {
     rows = [
       row({
         missionName: "Spring reel",
-        source: { id: "s1", label: "Competitor reel", origin: "https://example.com/r" },
         snapshots: [snap(DAY, { views: 100, likes: 3 }), snap(3 * DAY, { views: 250, likes: 9 })],
       }),
     ];
@@ -93,7 +95,7 @@ describe("Analytics page", () => {
     const card = section("Instagram");
     expect(card.textContent).toContain("@me");
     expect(card.textContent).toContain("Spring reel");
-    expect(card.textContent).toContain("Competitor reel");
+    expect(card.textContent).not.toContain("From ");
     expect(card.textContent).toMatch(/views\s*250/i);
     expect(card.textContent).toMatch(/likes\s*9/i);
     expect(card.textContent).not.toMatch(/views\s*100/i);

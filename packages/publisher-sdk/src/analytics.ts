@@ -1,4 +1,4 @@
-import { isValidIcon } from "./manifest.js";
+import { isValidIcon } from "./manifest";
 
 // The contract of an Analytics Adapter (ADR-078, docs/domain/publishing.md).
 // Separate from the Publisher contract and versioned on its own. An adapter
