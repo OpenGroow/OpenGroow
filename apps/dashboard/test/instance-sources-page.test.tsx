@@ -71,7 +71,7 @@ describe("InstanceSourcesContent", () => {
 
   async function render(
     results: Array<ReturnType<typeof makeSource>>,
-    { status = "Exhausted", families, tab = "all", targets = [] }: { status?: string; families?: string[]; tab?: "all" | "ready"; targets?: unknown[] } = {},
+    { status = "Exhausted", families, tab = "other", targets = [] }: { status?: string; families?: string[]; tab?: "other" | "ready"; targets?: unknown[] } = {},
   ) {
     const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
     useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : familyList));
@@ -79,9 +79,9 @@ describe("InstanceSourcesContent", () => {
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
     });
-    // The Ready tab opens first; the exhaustive list lives on All.
-    const all = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("All") && b.getAttribute("aria-pressed") !== null);
-    if (tab === "all" && all) await act(async () => { all.click(); });
+    // The Ready tab opens first; every other Source lives on Other.
+    const other = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Other") && b.getAttribute("aria-pressed") !== null);
+    if (tab === "other" && other) await act(async () => { other.click(); });
   }
 
   it("shows loading then empty states", async () => {
@@ -122,27 +122,35 @@ describe("InstanceSourcesContent", () => {
 
   const links = () => Array.from(document.querySelectorAll('a[href^="/projects/"]')).map((a) => a.textContent);
 
-  it("filters by exact status and by agent", async () => {
+  it("filters by status and by agent", async () => {
     await render([
       makeSource({ _id: "a", marketing: { summary: "alpha reel" }, templateId: "@opengroow/seo" }),
       makeSource({ _id: "b", status: "failed", marketing: { summary: "beta reel" }, templateId: "@opengroow/social" }),
+      makeSource({ _id: "c", status: "unavailable", marketing: { summary: "gamma reel" }, templateId: "@opengroow/social" }),
     ]);
-    await choose(1, "Failed");
-    expect(links()).toEqual(["beta reel"]);
-    const chip = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "All")!;
-    await act(async () => chip.click());
+    await choose(1, "failed");
+    expect(links()).toEqual(["beta reel", "gamma reel"]); // Failed covers Unavailable
+    await choose(1, "all");
     await choose(0, "@opengroow/seo");
     expect(links()).toEqual(["alpha reel"]);
   });
 
-  it("treats the Ready chip as every analysed stage", async () => {
+  it("offers a short list of statuses and no Scored or Excluded option", async () => {
+    await render([makeSource()]);
+    const options = Array.from(document.querySelectorAll("select")[1]!.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toEqual(["All statuses", "Processing", "Not scored yet", "Published", "Failed"]);
+  });
+
+  it("keeps the Scored Sources on the Ready tab, out of Other", async () => {
     await render([
       makeSource({ _id: "a", marketing: { summary: "alpha reel" }, scoring: { productFit: 1 } }),
       makeSource({ _id: "b", status: "processing", marketing: { summary: "beta reel" } }),
     ]);
-    const chip = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Ready")!;
-    await act(async () => chip.click());
-    expect(links()).toEqual(["alpha reel"]);
+    expect(links()).toEqual(["beta reel"]);
+    await choose(1, "processing");
+    expect(links()).toEqual(["beta reel"]);
+    await choose(1, "not-scored");
+    expect(links()).toEqual([]);
   });
 
   it("counts the loaded sources by status", async () => {
@@ -201,10 +209,11 @@ describe("InstanceSourcesContent", () => {
       makeSource({ _id: "j", status: "ready", excluded: true }),
     ]);
     const text = document.body.textContent ?? "";
+    // "Scored" is the Ready tab's stage: that Source is not listed here.
+    expect(text).not.toContain("Scored");
     for (const label of [
       "Ingestion",
       "Ready",
-      "Scored",
       "Routed",
       "In production",
       "Produced",
@@ -363,9 +372,9 @@ describe("InstanceSourcesContent", () => {
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["s-none"] });
     });
 
-    it("shows thumbnails and asks for the missing ones on the All tab too", async () => {
+    it("shows thumbnails and asks for the missing ones on the Other tab too", async () => {
       removeManyMock.mockResolvedValue(undefined);
-      await render([makeSource({ _id: "a-img", thumbnailUrl: "https://storage.example/a.jpg", thumbnailTriedAt: 1 }), makeSource({ _id: "a-none" })], { tab: "all" });
+      await render([makeSource({ _id: "a-img", thumbnailUrl: "https://storage.example/a.jpg", thumbnailTriedAt: 1 }), makeSource({ _id: "a-none" })], { tab: "other" });
       expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/a.jpg");
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["a-none"] });
     });

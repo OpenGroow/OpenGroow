@@ -60,25 +60,21 @@ const READY_TAB_STAGE = "Scored";
 
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
-// and it works on the loaded rows. "Ready" as a filter means every analysed
-// Source (Ready up to Published, matching the Ready tile); the exact stages
-// stay available in the select.
-const READY_ANY = "ready-any";
-const READY_STAGES = ["Ready", "Scored", "Routed", "In production", "Produced", "Published"];
-const STAGE_LABELS: Record<string, string> = { Ingestion: "Processing", Ready: "Ready (not scored yet)" };
-const STATUS_STAGES = ["Ingestion", ...READY_STAGES, "Failed", "Unavailable", "Excluded"];
-const STATUS_CHIPS = [
-  { id: "all", label: "All" },
-  { id: "Ingestion", label: "Processing" },
-  { id: READY_ANY, label: "Ready" },
-  { id: "Published", label: "Published" },
-  { id: "Failed", label: "Failed" },
-];
+// and it works on the loaded rows. The Other tab holds every Source the Ready tab
+// does not (the `Scored` stage), so that stage is not offered here; a Source in
+// production or just routed only shows under "All statuses". Nothing sets
+// `excluded` any more, so it is not offered either.
+const STATUS_FILTERS = [
+  { id: "processing", label: "Processing", stages: ["Ingestion"] },
+  { id: "not-scored", label: "Not scored yet", stages: ["Ready"] },
+  { id: "published", label: "Published", stages: ["Produced", "Published"] },
+  { id: "failed", label: "Failed", stages: ["Failed", "Unavailable"] },
+] as const;
 
-function matchesStage(source: SourceRow, filter: string): boolean {
-  const stage = stageOf(source);
+function matchesStatus(source: SourceRow, filter: string): boolean {
   if (filter === "all") return true;
-  return filter === READY_ANY ? READY_STAGES.includes(stage) : stage === filter;
+  const stages: readonly string[] = STATUS_FILTERS.find((entry) => entry.id === filter)?.stages ?? [];
+  return stages.includes(stageOf(source));
 }
 
 function stageOf(source: SourceRow): string {
@@ -90,7 +86,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [stage, setStage] = useState("all");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"ready" | "all">("ready");
+  const [tab, setTab] = useState<"ready" | "other">("ready");
   const {
     results: sources,
     status,
@@ -102,14 +98,15 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   ) as { results: SourceRow[]; status: string; loadMore: (numItems: number) => void };
 
   const needle = search.trim().toLowerCase();
-  const visible = sources.filter(
+  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE);
+  const visible = others.filter(
     (source) =>
-      matchesStage(source, stage) &&
+      matchesStatus(source, stage) &&
       (agent === "all" || source.templateId === agent) &&
       (needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle)),
   );
   const count = (predicate: (source: SourceRow) => boolean) => sources.filter(predicate).length;
-  const agents = [...new Set(sources.map((source) => source.templateId))].sort();
+  const agents = [...new Set(others.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   const selection = useSourceSelection(visible);
   const tabs = (
@@ -117,15 +114,15 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
       <FilterChips
         label="Sources view"
         value={tab}
-        onChange={(id) => setTab(id === "all" ? "all" : "ready")}
+        onChange={(id) => setTab(id === "other" ? "other" : "ready")}
         options={[
           { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
-          { id: "all", label: "All", count: sources.length },
+          { id: "other", label: "Other", count: others.length },
         ]}
       />
     </div>
   );
-  useThumbnailRequests(instanceId, tab === "all" ? visible : []);
+  useThumbnailRequests(instanceId, tab === "other" ? visible : []);
 
   return (
     <div className="grid gap-8">
@@ -158,7 +155,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             />
           ) : null}
 
-          {tab === "all" ? (
+          {tab === "other" ? (
           <section className="grid gap-5">
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
               {tabs}
@@ -169,7 +166,6 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <FilterChips options={STATUS_CHIPS} value={stage} onChange={setStage} label="Filter by status" />
               <NativeSelect
                 aria-label="Filter by agent"
                 className="h-11 sm:w-48"
@@ -190,10 +186,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                 onChange={(event) => setStage(event.target.value)}
               >
                 <option value="all">All statuses</option>
-                <option value={READY_ANY}>Ready (any stage)</option>
-                {STATUS_STAGES.map((option) => (
-                  <option key={option} value={option}>
-                    {STAGE_LABELS[option] ?? option}
+                {STATUS_FILTERS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
                   </option>
                 ))}
               </NativeSelect>
@@ -501,7 +496,7 @@ function SourceRowItem({
           </div>
         ) : null}
         <div className="flex min-w-0 items-center gap-4">
-          <SourceThumbnail source={source} className="size-[4.5rem]" />
+          <SourceThumbnail source={source} className="size-24" />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
