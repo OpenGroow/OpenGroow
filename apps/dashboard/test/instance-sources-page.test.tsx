@@ -325,12 +325,17 @@ describe("InstanceSourcesContent", () => {
       expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel" });
     });
 
-    it("deletes a Ready Source after a confirmation", async () => {
-      await render([reel()], { tab: "ready", targets });
-      const button = (name: string, scope: ParentNode = document.body) => Array.from(scope.querySelectorAll("button")).find((b) => b.textContent?.trim() === name)!;
-      await act(async () => { button("Delete", document.querySelector("[aria-label='Ready sources'] li")!).click(); });
+    it("uses the same Select mode as All to delete several Ready Sources", async () => {
+      await render([reel(), reel({ _id: "s-two", marketing: { summary: "Second" } })], { tab: "ready", targets });
+      const button = (name: string, scope: ParentNode = document.body) => Array.from(scope.querySelectorAll("button")).find((b) => b.textContent?.trim().startsWith(name))!;
+      expect(document.querySelectorAll("[role='checkbox']")).toHaveLength(0);
+      await act(async () => { button("Select").click(); });
+      const boxes = document.querySelectorAll("[aria-label='Ready sources'] li [role='checkbox']");
+      expect(boxes).toHaveLength(2);
+      await act(async () => { (boxes[0] as HTMLElement).click(); });
+      await act(async () => { button("Delete (1)").click(); });
       expect(removeManyMock).not.toHaveBeenCalled();
-      expect(document.body.textContent).toContain("Delete this Source?");
+      expect(document.body.textContent).toContain("Delete 1 Source?");
       await act(async () => { button("Delete", document.querySelector("[role='dialog']")!).click(); });
       expect(removeManyMock).toHaveBeenCalledWith({ sourceIds: ["s-reel"] });
     });
