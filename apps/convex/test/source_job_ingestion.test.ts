@@ -193,15 +193,33 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
         marketing: {}, analysis: { query: "running shoes" }, createdAt: 1,
       }),
     );
-    // The same post seen again later is a new record (append-only): it is kept.
+    // The same post seen again later is still one Source per post and Agent: the older one stays.
     const seenLater = keyword({ common: { ...keyword().common, capturedAt: 1_700_000_500_000 } });
     // Re-read with the capture time rounded differently: still the same record.
     const reRead = keyword({ common: { ...keyword().common, capturedAt: 1_700_000_000_060 } });
     await runJob(t, success([keyword(), reRead, seenLater]));
 
     const sources = await allSources(t);
-    expect(sources.map((s) => s.capturedAt).sort()).toEqual([1_700_000_000_000, 1_700_000_500_000]);
+    expect(sources.map((s) => s.capturedAt)).toEqual([1_700_000_000_000]);
     expect(await getJob(t)).toMatchObject({ lastOutcome: "succeeded" });
+  });
+
+  it("keeps one Source per post, whatever the share link or the Instagram path", async () => {
+    const t = convexTest(schema, modules);
+    const post = (origin: string, capturedAt: number) => keyword({ common: { ...keyword().common, origin, capturedAt } });
+    await runJob(t, success([
+      post("https://www.instagram.com/reel/DfMymnjh1v0/?psln=aaa", 1_700_000_000_000),
+      // Four days later: another share link, then the `/p/` form of the same post.
+      post("https://www.instagram.com/reel/DfMymnjh1v0/?srtk=bbb", 1_700_345_600_000),
+      post("https://www.instagram.com/p/DfMymnjh1v0/", 1_700_345_700_000),
+      // Another post is another Source.
+      post("https://www.instagram.com/reel/OtherPost123/", 1_700_345_800_000),
+    ]));
+
+    const sources = await allSources(t);
+    expect(sources.map((s) => s.originKey).sort()).toEqual(["instagram.com/p/DfMymnjh1v0", "instagram.com/p/OtherPost123"]);
+    // The first capture is the one kept.
+    expect(sources.find((s) => s.originKey === "instagram.com/p/DfMymnjh1v0")?.capturedAt).toBe(1_700_000_000_000);
   });
 
   it("stores the optional raw capture and normalizes the topics", async () => {

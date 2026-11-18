@@ -4,6 +4,7 @@ import type { RunResult } from "../run_result.js";
 import { validateSourceWrite } from "../source_schema.js";
 import { resolveSource } from "../source_enrichment.js";
 import { completeSource, insertSource } from "../sources.js";
+import { originKeyOf } from "../source_origin.js";
 import type { SourceJobOutcome } from "../source_jobs.js";
 
 import { MAX_SOURCES_PER_RESULT } from "./limits.js";
@@ -115,6 +116,30 @@ export async function ingestSources(
     if (existing) {
       accepted.push(key);
       ids.set(index, existing._id);
+      continue;
+    }
+
+    // The same post, captured again (another day, another share link): one
+    // Source per post and Agent, so it is not scored and routed twice. The
+    // older one stays, with its score and its Missions.
+    const originKey = originKeyOf(common.origin);
+    const sameOrigin = await ctx.db
+      .query("sources")
+      .withIndex("by_instance_template_origin_capturedAt", (q) =>
+        q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("origin", common.origin),
+      )
+      .first();
+    const samePost = sameOrigin ?? (originKey === undefined
+      ? null
+      : await ctx.db
+          .query("sources")
+          .withIndex("by_instance_template_originKey", (q) =>
+            q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("originKey", originKey),
+          )
+          .first());
+    if (samePost) {
+      accepted.push(key);
+      ids.set(index, samePost._id);
       continue;
     }
 
