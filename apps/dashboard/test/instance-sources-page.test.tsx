@@ -174,7 +174,7 @@ describe("InstanceSourcesContent", () => {
     expect(loadMore).toHaveBeenCalledWith(50);
   });
 
-  it("renders every derived normal and terminal pipeline state", async () => {
+  it("lists only the pipeline states that are not on the Ready tab or the Missions board", async () => {
     await render([
       makeSource({ _id: "a", status: "processing" }),
       makeSource({ _id: "b", status: "ready" }),
@@ -209,19 +209,12 @@ describe("InstanceSourcesContent", () => {
       makeSource({ _id: "j", status: "ready", excluded: true }),
     ]);
     const text = document.body.textContent ?? "";
-    // "Scored" is the Ready tab's stage: that Source is not listed here.
-    expect(text).not.toContain("Scored");
-    for (const label of [
-      "Ingestion",
-      "Ready",
-      "Routed",
-      "In production",
-      "Produced",
-      "Published",
-      "Failed",
-      "Unavailable",
-      "Excluded",
-    ]) {
+    // "Scored" is the Ready tab's stage and the production stages live on the
+    // Missions board: none of them is listed here.
+    for (const label of ["Scored", "Routed", "In production", "Produced", "Published"]) {
+      expect(text).not.toContain(label);
+    }
+    for (const label of ["Ingestion", "Ready", "Failed", "Unavailable", "Excluded"]) {
       expect(text).toContain(label);
     }
   });
