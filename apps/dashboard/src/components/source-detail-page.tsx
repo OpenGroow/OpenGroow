@@ -5,7 +5,7 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { CalendarDays, ExternalLink, Link2, Sparkles } from "lucide-react";
+import { CalendarDays, Link2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -109,9 +109,8 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <Link2 aria-hidden="true" className="size-4 shrink-0" />
             {/^https?:\/\//.test(origin) ? (
-              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="inline-flex min-w-0 items-center gap-1 hover:underline">
-                <span>Link</span>
-                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="hover:underline">
+                Link
               </a>
             ) : (
               <span className="truncate">{origin}</span>
