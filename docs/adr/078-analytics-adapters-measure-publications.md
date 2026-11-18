@@ -1,6 +1,6 @@
 # ADR-078: Analytics Adapters measure Publications, separately from Publishers
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
