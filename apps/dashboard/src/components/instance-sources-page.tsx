@@ -66,13 +66,13 @@ const READY_TAB_STAGE = "Scored";
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
 // and it works on the loaded rows. The Other tab holds every Source the Ready tab
-// does not (the `Scored` stage), so that stage is not offered here; a Source in
-// production or just routed only shows under "All statuses". Nothing sets
-// `excluded` any more, so it is not offered either.
+// does not (the `Scored` stage), so that stage is not offered here. Sources in
+// production or produced are followed on the Missions board (Done), so they are
+// not offered either and only show under "All statuses", like a Source just
+// routed. Nothing sets `excluded` any more.
 const STATUS_FILTERS = [
   { id: "processing", label: "Processing", stages: ["Ingestion"] },
   { id: "not-scored", label: "Not scored yet", stages: ["Ready"] },
-  { id: "published", label: "Published", stages: ["Produced", "Published"] },
   { id: "failed", label: "Failed", stages: ["Failed", "Unavailable"] },
 ] as const;
 
