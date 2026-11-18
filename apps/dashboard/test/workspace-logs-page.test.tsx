@@ -59,6 +59,7 @@ const RUN_1 = {
   createdAt: 1500,
 };
 
+let jobRunning = false;
 const JOB_1 = {
   _id: "job-1",
   jobType: "source_ingestion",
@@ -112,7 +113,7 @@ describe("WorkspaceLogsPage", () => {
         return args === "skip" ? undefined : [RUN_1];
       }
       if (query === "workspace_logs.listJobsForWorkspace") {
-        return args === "skip" ? undefined : [JOB_1];
+        return args === "skip" ? undefined : [{ ...JOB_1, running: jobRunning }];
       }
       if (query === "workspace_logs.listRunsForJob") {
         return args === "skip" ? undefined : [JOB_RUN_1];
@@ -260,6 +261,21 @@ describe("WorkspaceLogsPage", () => {
     });
     const labels = Array.from(document.querySelectorAll("button")).map((b) => b.textContent);
     expect(labels.some((text) => text?.includes("Back to Workspace"))).toBe(false);
+  });
+
+  it("does not show the last failure of an earlier execution while the job is running", async () => {
+    getWorkspaceRunTranscriptMock.mockReturnValue(new Promise(() => {}));
+    jobRunning = true;
+    try {
+      await renderPage();
+    } finally {
+      jobRunning = false;
+    }
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("social-agent job");
+    expect(text).toContain("Running");
+    expect(text).not.toContain("Last outcome");
+    expect(text).not.toContain("2 Sources invalid");
   });
 
   it("lists the Agent's job with its last outcome and error, and its Runs once expanded", async () => {

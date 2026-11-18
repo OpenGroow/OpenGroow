@@ -115,6 +115,15 @@ async function render(jobs: unknown) {
     expect(text).toContain("Agent is not active");
   });
 
+  it("hides the last outcome of an earlier execution while the job is running", async () => {
+    await render([makeJob({ lastOutcome: "failed", lastError: "Still invalid after 3 tries", running: true })]);
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Running");
+    expect(text).not.toContain("Last outcome");
+    expect(text).not.toContain("Still invalid after 3 tries");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("shows a skipped outcome as skipped, not as an error", async () => {
     await render([makeJob({ lastOutcome: "skipped" })]);
     const text = document.body.textContent ?? "";

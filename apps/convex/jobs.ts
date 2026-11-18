@@ -1,7 +1,7 @@
 import type { JobTypeName } from "@opengroow/agent-templates";
 import { getTemplateRegistry } from "./template_registry.js";
 import { v } from "convex/values";
-import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server.js";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
@@ -52,6 +52,13 @@ function inFlightRunId(job: Doc<"jobs">): Id<"runs"> | undefined {
   if (!job.runtime || typeof job.runtime !== "object" || Array.isArray(job.runtime)) return undefined;
   const value = (job.runtime as Record<string, unknown>).inFlightRunId;
   return typeof value === "string" ? value as Id<"runs"> : undefined;
+}
+
+/** Whether the job has a Run in flight: its last outcome is then about an earlier execution. */
+export async function isJobRunning(ctx: QueryCtx, job: Doc<"jobs">): Promise<boolean> {
+  const runId = inFlightRunId(job);
+  const run = runId ? await ctx.db.get(runId) : null;
+  return run !== null && IN_FLIGHT_RUN_STATUSES.has(run.status);
 }
 
 function runtimeOf(job: Doc<"jobs">): Record<string, unknown> {

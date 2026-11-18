@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server.js";
+import { isJobRunning } from "./jobs.js";
 import { internal } from "./_generated/api.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { readOwnerId } from "./instance_ownership.js";
@@ -88,6 +89,8 @@ export type ClientSafeJob = {
   lastRunAt?: number;
   lastOutcome?: "succeeded" | "failed" | "skipped";
   lastError?: string;
+  /** A Run is in flight: `lastOutcome` and `lastError` then describe an earlier execution. */
+  running: boolean;
 };
 
 function jobLabel(type: Doc<"jobs">["type"]): string {
@@ -121,7 +124,7 @@ export const listJobsForWorkspace = query({
       .withIndex("by_instance_template", (q) => q.eq("instanceId", args.instanceId).eq("templateId", templateId))
       .take(50);
     const ownedJobs = jobs.filter((job) => job.ownerId === ownerId);
-    return ownedJobs.map((job) => ({
+    return await Promise.all(ownedJobs.map(async (job) => ({
       _id: job._id,
       templateId: job.templateId,
       jobType: job.type,
@@ -130,7 +133,8 @@ export const listJobsForWorkspace = query({
       lastRunAt: job.lastRunAt,
       lastOutcome: job.lastOutcome,
       lastError: job.lastError,
-    }));
+      running: await isJobRunning(ctx, job),
+    })));
   },
 });
 
