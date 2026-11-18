@@ -305,13 +305,14 @@ describe("InstanceSourcesContent", () => {
       expect(document.body.textContent).not.toContain("Not scored yet");
     });
 
-    it("cuts a long title to 100 characters and keeps the full text as a tooltip", async () => {
+    it("cuts a long title to 100 characters below lg, and keeps the whole title for desktop", async () => {
       const long = "A Christmas gift reel for a wife. ".repeat(10).trim();
       await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready", targets });
       const links = Array.from(document.querySelectorAll("[aria-label='Ready sources'] li a"));
       const cut = links.find((link) => link.getAttribute("title") === long)!;
-      expect(cut.textContent).toBe(`${long.slice(0, 100).trimEnd()}…`);
-      expect(links.find((link) => link.getAttribute("title") === "Short title")!.textContent).toBe("Short title");
+      expect(cut.querySelector(".lg\\:hidden")!.textContent).toBe(`${long.slice(0, 100).trimEnd()}…`);
+      expect(cut.querySelector(".hidden")!.textContent).toBe(long);
+      expect(links.find((link) => link.getAttribute("title") === "Short title")!.querySelector(".lg\\:hidden")!.textContent).toBe("Short title");
     });
 
     it("leaves out Sources already picked for production", async () => {

@@ -558,6 +558,7 @@ function formatLabel(source: SourceRow): string {
 
 type ReadySort = "score" | "newest";
 
+// Below the `lg` breakpoint a Ready title is cut at this many characters.
 const READY_TITLE_CHARS = 100;
 const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
 
@@ -700,7 +701,9 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
                 onToggle();
               }}
             >
-              {shortTitle(title)}
+              {/* Cut at READY_TITLE_CHARS below `lg` only: desktop shows the whole title. */}
+              <span className="lg:hidden">{shortTitle(title)}</span>
+              <span className="hidden lg:inline">{title}</span>
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{formatLabel(source)}</Badge>
