@@ -5,6 +5,8 @@ import { internalMutation, internalQuery, query, type MutationCtx } from "./_gen
 import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
+import { getTemplateRegistry } from "./template_registry.js";
+import { analyticsDeclarationFor } from "@opengroow/agent-templates";
 
 // Performance Snapshots (ADR-078, docs/domain/publishing.md): when a
 // Publication becomes `published`, its readings are scheduled and the core
@@ -65,6 +67,68 @@ export const forPublication = query({
         .sort((a, b) => a.takenAt - b.takenAt)
         .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source })),
     };
+  },
+});
+
+/** The most Publications the Analytics page lists (newest first). */
+const LIST_LIMIT = 200;
+
+/**
+ * The Analytics page's rows: a Project's published Publications with their
+ * platform, channel, Mission, Source of origin, the Mission type's primary
+ * metric (what the page ranks by, within one platform) and their readings.
+ * Never a per-Mission total: each row is one Publication (ADR-078).
+ */
+export const listForProject = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    if (!(await readOwnerId(ctx, args.instanceId))) return [];
+    const publications = await ctx.db
+      .query("publications")
+      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
+      .order("desc")
+      .take(LIST_LIMIT);
+    const publishers = await projectPublishers(ctx, args.instanceId);
+    const registry = getTemplateRegistry(ctx);
+    const rows = [];
+    for (const publication of publications) {
+      const mission = await ctx.db.get(publication.missionId);
+      if (!mission) continue;
+      const found = channelOf(publishers, publication.target);
+      const series = publication.postSeries ?? 0;
+      const row = await ctx.db
+        .query("publicationAnalytics")
+        .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
+        .unique();
+      const snapshots = await ctx.db
+        .query("performanceSnapshots")
+        .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
+        .collect();
+      const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
+      const primaryMetric = analyticsDeclarationFor(template?.manifest, mission.type)?.primaryMetric;
+      const source = mission.sourceObservationId ? await ctx.db.get(mission.sourceObservationId) : null;
+      rows.push({
+        publicationId: publication._id,
+        missionId: mission._id,
+        missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
+        missionType: mission.type,
+        target: publication.target,
+        platform: found?.channel.channelService ?? publication.target.split(":")[0],
+        ...(found?.channel.channelName ? { channelName: found.channel.channelName } : {}),
+        ...(found?.channel.channelProfile ? { channelProfile: found.channel.channelProfile } : {}),
+        ...(found ? { publisherAdapter: found.publisher.adapter } : {}),
+        ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
+        ...(primaryMetric ? { primaryMetric } : {}),
+        ...(source ? { source: { id: source._id, label: source.label, origin: source.origin } } : {}),
+        state: row?.state ?? ("unmeasured" as const),
+        ...(row?.reason ? { reason: row.reason } : {}),
+        ...(row && !row.done ? { nextAt: row.nextAt } : {}),
+        snapshots: snapshots
+          .sort((a, b) => a.takenAt - b.takenAt)
+          .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics })),
+      });
+    }
+    return rows;
   },
 });
 
