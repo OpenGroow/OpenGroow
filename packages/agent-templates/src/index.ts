@@ -3,6 +3,7 @@ import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
 import { publishDeclarationProblem } from "./publish-declaration";
+import { analyticsDeclarationProblem } from "./analytics-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
 import { findUnknownManifestKey } from "./manifest-keys";
@@ -79,6 +80,8 @@ export {
   type OnPublishedPlaceholder,
   type PublishableKind,
 } from "./publish-declaration";
+export { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS, type AnalyticsDeclaration } from "./analytics-declaration";
+export { ANALYTICS_METRICS, analyticsKindOfPublishable, type AnalyticsKind, type AnalyticsMetric } from "./analytics-metrics";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
 export { executeActivationEffect } from "./execute-activation-effect";
@@ -515,6 +518,12 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         (m.mcpServers as McpServerConfig[]).map((server) => server.name),
       );
       if (problem) return { ok: false, reason: problem };
+      const analyticsProblem = analyticsDeclarationProblem(
+        entry.analytics,
+        `missionTypes[${JSON.stringify(entry.type)}]`,
+        (entry.publish as { kind?: string } | undefined)?.kind,
+      );
+      if (analyticsProblem) return { ok: false, reason: analyticsProblem };
       const jobs = (m as { externalJobsByMissionType?: Record<string, unknown> }).externalJobsByMissionType;
       if ((entry.publish as { resource?: unknown } | undefined)?.resource !== undefined && !jobs?.[entry.type as string]) {
         return {
