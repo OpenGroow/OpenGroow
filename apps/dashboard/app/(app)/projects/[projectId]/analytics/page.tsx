@@ -47,6 +47,8 @@ const STATES: Record<AnalyticsRow["state"], { label: string; tone: StatusTone }>
   complete: { label: "Complete", tone: "active" },
 };
 
+/** The same words always have the same colour: "No data yet" is the info tone, whether the reading found nothing or none was taken yet. */
+const stateTone = (row: AnalyticsRow): StatusTone => (stateLabel(row) === NO_DATA_LABEL ? STATES.no_data.tone : STATES[row.state].tone);
 const stateLabel = (row: AnalyticsRow) => (row.state === "waiting" && currentReadings(row).length === 0 ? NO_DATA_LABEL : STATES[row.state].label);
 const titleOf = (row: AnalyticsRow) => row.title ?? row.missionName;
 const accountOf = (row: AnalyticsRow) => (row.channelProfile ? `@${row.channelProfile}` : (row.channelName ?? row.target));
@@ -130,7 +132,7 @@ function PostDetail({ row }: { row: AnalyticsRow }) {
           </a>
         ) : null}
       </div>
-      <StatusBadge tone={STATES[row.state].tone} label={stateLabel(row)} />
+      <StatusBadge tone={stateTone(row)} label={stateLabel(row)} />
       {metrics.length > 0 ? (
         <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {metrics.map((metric) => (
