@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Hourglass, Image as ImageIcon, Images, Music2, Video } from "lucide-react";
+import { Hourglass, Image as ImageIcon, Images, Music2, Sparkles, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -95,8 +95,9 @@ export function FormatBadge({ source }: { source: VisualSource }) {
 
 const NOT_SCORED_HINT = "Not scored yet. Run the Source scoring job to score it.";
 
-// Stands where the score will be: hover (or focus) it to read what to do.
-export function NotScoredHint() {
+// Stands where the score will be: hover (or focus) it to read what to do. As a
+// `badge` it is the Score badge itself, with the hourglass where the number goes.
+export function NotScoredHint({ badge = false }: { badge?: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger
@@ -104,9 +105,17 @@ export function NotScoredHint() {
         aria-label={NOT_SCORED_HINT}
         data-testid="not-scored-hint"
         // Above the row's full-size link, or that link takes the hover.
-        render={<span tabIndex={0} className="relative z-10 inline-flex text-muted-foreground" />}
+        render={
+          badge ? (
+            <Badge variant="outline" tabIndex={0} className="relative z-10 gap-2" />
+          ) : (
+            <span tabIndex={0} className="relative z-10 inline-flex text-muted-foreground" />
+          )
+        }
       >
-        <Hourglass className="size-4" />
+        {badge ? <Sparkles aria-hidden="true" /> : null}
+        {badge ? "Score" : null}
+        <Hourglass aria-hidden="true" className="size-4" />
       </TooltipTrigger>
       <TooltipContent>{NOT_SCORED_HINT}</TooltipContent>
     </Tooltip>
