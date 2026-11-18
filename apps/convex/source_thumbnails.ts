@@ -38,6 +38,10 @@ function isImageUrl(url: string): boolean {
   }
 }
 
+// What TikTok serves instead of a cover when it has none to show (a private or
+// removed video): a generic fallback or its own logo. They are not a thumbnail.
+const PLACEHOLDER_IMAGE = /cover-fallback|\/static\/images\/|tiktok-logo|poster-square/i;
+
 function decodeEntities(value: string): string {
   return value.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
@@ -49,7 +53,7 @@ export function ogImageOf(html: string): string | undefined {
     const content = /content=["']([^"']+)["']/i.exec(tag)?.[1];
     if (!content) continue;
     const url = decodeEntities(content);
-    if (isImageUrl(url)) return url;
+    if (isImageUrl(url) && !PLACEHOLDER_IMAGE.test(url)) return url;
   }
   return undefined;
 }
@@ -76,6 +80,19 @@ export const save = internalMutation({
       thumbnailTriedAt: Date.now(),
       ...(args.storageId ? { thumbnailStorageId: args.storageId } : {}),
     });
+  },
+});
+
+/** Drops a Source's stored thumbnail (a placeholder that slipped through, say). The
+ * attempt stays recorded, so it is not fetched again. */
+export const clear = internalMutation({
+  args: { sourceId: v.id("sources") },
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get(args.sourceId);
+    if (!source?.thumbnailStorageId) return { cleared: false };
+    await ctx.storage.delete(source.thumbnailStorageId);
+    await ctx.db.patch(source._id, { thumbnailStorageId: undefined, thumbnailTriedAt: Date.now() });
+    return { cleared: true };
   },
 });
 

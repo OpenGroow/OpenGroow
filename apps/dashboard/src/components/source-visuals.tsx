@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Hourglass, Image as ImageIcon, Images, Music2, Video } from "lucide-react";
+import { Hourglass, Image as ImageIcon, ImageOff, Images, Music2, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -35,10 +35,27 @@ export function SourceGlyph({ family, className = "size-14" }: { family: string;
   );
 }
 
-// The page's own image when one was fetched, else the glyph of its family.
+// The tile of a Source whose image could not be had: a broken image.
+function BrokenThumbnail({ className }: { className: string }) {
+  return (
+    <span
+      role="img"
+      aria-label="No thumbnail available"
+      data-testid="broken-thumbnail"
+      className={cn("flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground", className)}
+    >
+      <ImageOff className="size-6" />
+    </span>
+  );
+}
+
+// The page's own image when one was fetched. A Source whose image was asked for
+// and never came (a private video, a blocked request), or whose image no longer
+// loads, shows a broken image; one still waiting for its image shows the glyph of its family.
 export function SourceThumbnail({ source, className = "size-14" }: { source: VisualSource; className?: string }) {
   const [broken, setBroken] = useState(false);
-  if (!source.thumbnailUrl || broken) return <SourceGlyph family={source.family} className={className} />;
+  if (broken || (!source.thumbnailUrl && source.thumbnailTriedAt !== undefined)) return <BrokenThumbnail className={className} />;
+  if (!source.thumbnailUrl) return <SourceGlyph family={source.family} className={className} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={source.thumbnailUrl} alt="" className={cn("shrink-0 rounded-xl object-cover", className)} loading="lazy" onError={() => setBroken(true)} />

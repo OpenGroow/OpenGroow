@@ -419,6 +419,13 @@ describe("InstanceSourcesContent", () => {
       expect(removeManyMock).toHaveBeenCalledWith({ sourceIds: ["s-reel"] });
     });
 
+    it("shows a broken image for a Source whose thumbnail was tried and never came, the glyph while it is still waiting", async () => {
+      removeManyMock.mockResolvedValue(undefined);
+      await render([reel({ thumbnailTriedAt: 1, thumbnailUrl: null }), reel({ _id: "s-wait", marketing: { summary: "Waiting" } })], { tab: "ready", targets });
+      expect(document.querySelectorAll("[data-testid='broken-thumbnail']")).toHaveLength(1);
+      expect(document.querySelectorAll("[aria-label='Ready sources'] li")).toHaveLength(2);
+    });
+
     it("shows the stored thumbnail and asks for the ones that are missing", async () => {
       removeManyMock.mockResolvedValue(undefined);
       await render(
