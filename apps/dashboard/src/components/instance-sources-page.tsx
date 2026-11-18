@@ -54,6 +54,11 @@ type SourceRow = Pick<
 
 const PAGE_SIZE = 50;
 
+// The toolbar of both tabs shares these, so it does not shift when switching tabs.
+const TOOLBAR_ROW = "flex flex-col justify-between gap-4 lg:flex-row lg:items-center";
+const TOOLBAR_SEARCH = "lg:w-52";
+const TOOLBAR_SELECT = "h-11 sm:w-40";
+
 // The Ready tab lists the Sources the pipeline calls Scored: analysed, scored
 // and not picked for production yet.
 const READY_TAB_STAGE = "Scored";
@@ -157,13 +162,13 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
 
           {tab === "other" ? (
           <section className="grid gap-5">
-            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div className={TOOLBAR_ROW}>
               {tabs}
               <div className="flex flex-col gap-3 sm:flex-row">
-                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" className="lg:w-52" />
+                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" className={TOOLBAR_SEARCH} />
                 <NativeSelect
                   aria-label="Filter by status"
-                  className="h-11 sm:w-40"
+                  className={TOOLBAR_SELECT}
                   value={stage}
                   onChange={(event) => setStage(event.target.value)}
                 >
@@ -176,7 +181,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                 </NativeSelect>
                 <NativeSelect
                   aria-label="Filter by agent"
-                  className="h-11 sm:w-40"
+                  className={TOOLBAR_SELECT}
                   value={agent}
                   onChange={(event) => setAgent(event.target.value)}
                 >
@@ -584,15 +589,15 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className={TOOLBAR_ROW}>
         {tabs}
         <div className="flex flex-col gap-3 sm:flex-row">
-          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" className="lg:w-52" />
-          <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-36" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
+          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" className={TOOLBAR_SEARCH} />
+          <NativeSelect aria-label="Sort ready sources" className={TOOLBAR_SELECT} value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
             <option value="score">Highest score</option>
             <option value="newest">Newest first</option>
           </NativeSelect>
-          <NativeSelect aria-label="Filter ready sources by agent" className="h-11 sm:w-40" value={agent} onChange={(event) => setAgent(event.target.value)}>
+          <NativeSelect aria-label="Filter ready sources by agent" className={TOOLBAR_SELECT} value={agent} onChange={(event) => setAgent(event.target.value)}>
             <option value="all">All agents</option>
             {agents.map((templateId) => (
               <option key={templateId} value={templateId}>{agentLabel(templateId)}</option>
