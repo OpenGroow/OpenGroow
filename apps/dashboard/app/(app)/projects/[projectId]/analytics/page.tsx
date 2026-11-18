@@ -242,8 +242,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
       ) : all.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground">
-            No measured posts yet. Their results appear here once a published post is measured by an analytics provider; add one in{" "}
-            <Link href="publishers" className="underline underline-offset-4">Publishers &amp; Analytics</Link>.
+            No measured posts yet. A published post is measured when its Mission type declares <code>analytics</code> in its Template and its channel has an analytics provider (see{" "}
+            <Link href="publishers" className="underline underline-offset-4">Publishers &amp; Analytics</Link>). Refresh reads the posts already published.
           </CardContent>
         </Card>
       ) : (

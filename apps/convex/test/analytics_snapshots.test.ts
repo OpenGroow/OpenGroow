@@ -460,4 +460,35 @@ describe("Performance Snapshots (ADR-078)", () => {
     await s.publish();
     await expect(s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" }).action(api.analytics_node.refresh, { instanceId: INSTANCE_ID })).rejects.toThrow();
   });
+
+  it("gives a post published before it was measured its row on Refresh, scheduling only the delays to come", async () => {
+    const s = await seed({ status: "published" });
+    vi.advanceTimersByTime(2 * DAY);
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 1, unavailable: 0, failed: 0 });
+    const view = await s.view();
+    expect(view.snapshots).toHaveLength(1);
+    expect(view.snapshots[0]).toMatchObject({ delayMs: 2 * DAY, source: "refresh" });
+    // The 1 day reading is long gone and is not recorded late; the 3 and 7 day ones are still scheduled.
+    expect(view.state).toBe("waiting");
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect((await s.view()).snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 3 * DAY]);
+  });
+
+  it("reads a post older than every delay once, on Refresh, and keeps it complete", async () => {
+    const s = await seed({ status: "published" });
+    vi.advanceTimersByTime(30 * DAY);
+    await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    const view = await s.view();
+    expect(view.snapshots).toHaveLength(1);
+    expect(view.state).toBe("complete");
+  });
+
+  it("does not measure a post whose Mission type declares no analytics, even on Refresh", async () => {
+    const s = await seed({ status: "published", type: "make_plain" });
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 0, unavailable: 0, failed: 0 });
+    expect((await s.view()).state).toBe("unmeasured");
+  });
 });

@@ -21,15 +21,23 @@ export const RETRY_AFTER_MS = 60 * 60_000;
 
 const DAY_MS = 24 * 60 * 60_000;
 
-/** Called when a Publication becomes `published`: schedules its readings, once. */
-export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publications">): Promise<void> {
+/**
+ * Called when a Publication becomes `published`: schedules its readings, once.
+ * `backfill`: a Publication published before it was measured (or before its Mission type declared
+ * `analytics`): its delays count from when it was published, only the ones still to come are
+ * scheduled, so no reading is recorded under a delay it does not stand for.
+ */
+export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publications">, options: { backfill?: boolean } = {}): Promise<void> {
   // Only a Mission type that declares `analytics` is measured (ADR-078): none, no reading.
   const mission = await ctx.db.get(publication.missionId);
   if (!mission) return;
   const template = await getTemplateRegistry(ctx).resolve(publication.instanceId, mission.templateId, mission.templateVersion);
   const declaration = analyticsDeclarationFor(template?.manifest, mission.type);
   if (!declaration) return;
-  const delays = declaration.collect.map((days) => days * DAY_MS);
+  const now = Date.now();
+  const publishedAt = options.backfill ? publication.updatedAt : now;
+  const all = declaration.collect.map((days) => days * DAY_MS);
+  const delays = options.backfill ? all.filter((delay) => publishedAt + delay > now) : all;
   const postSeries = publication.postSeries ?? 0;
   const rows = await ctx.db
     .query("publicationAnalytics")
@@ -41,7 +49,8 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
   const publishers = await projectPublishers(ctx, publication.instanceId);
   const publisherAdapter = publication.attemptContext?.adapter ?? channelOf(publishers, publication.target)?.publisher.adapter;
   if (!publisherAdapter) return;
-  const publishedAt = Date.now();
+  // Nothing left to schedule: the post is old enough that only a refresh reads it.
+  const finished = delays.length === 0;
   await ctx.db.insert("publicationAnalytics", {
     publicationId: publication._id,
     postSeries,
@@ -50,12 +59,26 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
     publishedAt,
     delays,
     taken: 0,
-    state: "waiting",
-    nextAt: publishedAt + delays[0],
-    done: false,
-    updatedAt: publishedAt,
+    state: finished ? "no_data" : "waiting",
+    nextAt: finished ? publishedAt : publishedAt + delays[0],
+    done: finished,
+    updatedAt: now,
   });
 }
+
+/** Gives the Publications of a Project that were published before they were measured the rows of their readings. */
+export const backfill = internalMutation({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    await ownerIdFor(ctx, args.instanceId);
+    const published = await ctx.db
+      .query("publications")
+      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
+      .order("desc")
+      .take(LIST_LIMIT);
+    for (const publication of published) await scheduleReadings(ctx, publication, { backfill: true });
+  },
+});
 
 /** The readings of a Publication: the state of its current post's series, why, when the next one is due, and all its Snapshots (oldest first, each with its `postSeries`). */
 export const forPublication = query({
@@ -253,7 +276,12 @@ export const recordRefreshed = internalMutation({
       });
       // A post the service now answers for is no longer failing or empty; its schedule resumes.
       if (row.state === "failed" || row.state === "no_data") {
-        await ctx.db.patch(row._id, { state: "waiting", reason: undefined, nextAt: Math.max(now, row.publishedAt + (row.delays[row.taken] ?? 0)), updatedAt: now });
+        await ctx.db.patch(row._id, {
+          state: row.done ? "complete" : "waiting",
+          reason: undefined,
+          nextAt: Math.max(now, row.publishedAt + (row.delays[row.taken] ?? 0)),
+          updatedAt: now,
+        });
       }
     }
   },

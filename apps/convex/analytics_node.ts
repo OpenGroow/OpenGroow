@@ -61,6 +61,8 @@ export const collectDue = internalAction({
 export const refresh = action({
   args: { instanceId: v.string() },
   handler: async (ctx, args): Promise<{ read: number; unavailable: number; failed: number; error?: string }> => {
+    // Posts published before they were measured join the Analytics page with this first reading.
+    await ctx.runMutation(internal.analytics.backfill, { instanceId: args.instanceId });
     const items = await ctx.runQuery(internal.analytics.forRefresh, { instanceId: args.instanceId });
     const now = Date.now();
     const readings: Array<{ id: Item["id"]; metrics: Record<string, number> }> = [];
