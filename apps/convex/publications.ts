@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { normalizePostUrl } from "./post_url.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
+import { scheduleReadings } from "./analytics.js";
 import { publishableForPlatform } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, notConfiguredTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
 import { allChannels, channelOf, projectPublishers, publishersOf, type PublisherChannelEntry } from "./project_publishers.js";
@@ -425,6 +426,7 @@ export const finish = internalMutation({
     });
     const updated = await ctx.db.get(publicationId);
     if (updated) await scheduleOnPublished(ctx, updated);
+    if (updated?.status === "published") await scheduleReadings(ctx, updated);
 
     const mission = await ctx.db.get(publication.missionId);
     if (mission) await completeMissionIfTargetsPublished(ctx, mission);

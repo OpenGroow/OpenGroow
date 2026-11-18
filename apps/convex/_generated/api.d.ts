@@ -10,6 +10,10 @@
 
 import type * as agent_deletion from "../agent_deletion.js";
 import type * as agent_hmac from "../agent_hmac.js";
+import type * as analytics from "../analytics.js";
+import type * as analytics_load_node from "../analytics/load_node.js";
+import type * as analytics_node from "../analytics_node.js";
+import type * as analytics_schema from "../analytics_schema.js";
 import type * as auth from "../auth.js";
 import type * as auth_config from "../auth_config.js";
 import type * as auth_node from "../auth_node.js";
@@ -167,6 +171,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   agent_deletion: typeof agent_deletion;
   agent_hmac: typeof agent_hmac;
+  analytics: typeof analytics;
+  "analytics/load_node": typeof analytics_load_node;
+  analytics_node: typeof analytics_node;
+  analytics_schema: typeof analytics_schema;
   auth: typeof auth;
   auth_config: typeof auth_config;
   auth_node: typeof auth_node;
