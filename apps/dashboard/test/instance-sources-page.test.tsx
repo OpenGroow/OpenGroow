@@ -174,7 +174,7 @@ describe("InstanceSourcesContent", () => {
     expect(loadMore).toHaveBeenCalledWith(50);
   });
 
-  it("lists only the pipeline states that are not on the Ready tab or the Missions board", async () => {
+  it("lists only the pipeline states that are not on the Scored tab or the Missions board", async () => {
     await render([
       makeSource({ _id: "a", status: "processing" }),
       makeSource({ _id: "b", status: "ready" }),
@@ -208,8 +208,9 @@ describe("InstanceSourcesContent", () => {
       makeSource({ _id: "i", status: "unavailable" }),
       makeSource({ _id: "j", status: "ready", excluded: true }),
     ]);
-    const text = document.body.textContent ?? "";
-    // "Scored" is the Ready tab's stage and the production stages live on the
+    // The rows only: the Scored tab label is on the page too.
+    const text = Array.from(document.querySelectorAll("ul li")).map((row) => row.textContent).join(" ");
+    // "Scored" is the Scored tab's stage and the production stages live on the
     // Missions board: none of them is listed here.
     for (const label of ["Scored", "Routed", "In production", "Produced", "Published"]) {
       expect(text).not.toContain(label);

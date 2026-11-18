@@ -59,7 +59,7 @@ const TOOLBAR_ROW = "flex flex-col justify-between gap-4 lg:flex-row lg:items-ce
 const TOOLBAR_SEARCH = "lg:w-52";
 const TOOLBAR_SELECT = "h-11 sm:w-40";
 
-// The Ready tab lists the Sources the pipeline calls Scored: analysed, scored
+// The Scored tab lists the Sources the pipeline calls Scored: analysed, scored
 // and not picked for production yet.
 const READY_TAB_STAGE = "Scored";
 
@@ -67,7 +67,7 @@ const READY_TAB_STAGE = "Scored";
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
 // and it works on the loaded rows. A Source that was picked for production
 // (Routed, In production, Produced, Published) is followed on the Missions board,
-// and a Scored one is on the Ready tab: neither is listed in Other. Nothing sets
+// and a Scored one is on the Scored tab: neither is listed in Other. Nothing sets
 // `excluded` any more.
 const PRODUCTION_STAGES: readonly string[] = ["Routed", "In production", "Produced", "Published"];
 const STATUS_FILTERS = [
@@ -121,7 +121,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
         value={tab}
         onChange={(id) => setTab(id === "other" ? "other" : "ready")}
         options={[
-          { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
+          { id: "ready", label: "Scored", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
           { id: "other", label: "Other", count: others.length },
         ]}
       />
@@ -256,7 +256,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
 }
 
 /** Select mode: checkboxes on every row, then one permanent deletion. Shared by
- * the All and Ready tabs; `visible` is the list on screen. */
+ * the Scored and Other tabs; `visible` is the list on screen. */
 function useSourceSelection(visible: SourceRow[]) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
