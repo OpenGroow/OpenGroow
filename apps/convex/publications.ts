@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { normalizePostUrl } from "./post_url.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { publishableForPlatform } from "./publishable.js";
@@ -414,8 +415,11 @@ export const finish = internalMutation({
     const { publicationId, rejected, ...fields } = args;
     const publication = await ctx.db.get(publicationId);
     if (!publication) throw new Error("Publication not found");
+    const newPost = fields.externalId !== undefined && publication.externalId !== undefined && fields.externalId !== publication.externalId;
     await ctx.db.patch(publicationId, {
       ...fields,
+      ...(fields.externalUrl !== undefined ? { externalUrl: normalizePostUrl(fields.externalUrl) } : {}),
+      ...(newPost ? { postSeries: (publication.postSeries ?? 0) + 1 } : {}),
       ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined, attemptContext: undefined } : {}),
       updatedAt: Date.now(),
     });
