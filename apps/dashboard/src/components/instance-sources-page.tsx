@@ -211,7 +211,6 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                   <span>Source</span>
                   <span>Status</span>
                   <span>Agent</span>
-                  <span>Family</span>
                   <span>Created</span>
                   <span>Score</span>
                   <span className="text-right">Actions</span>
@@ -394,7 +393,7 @@ function DeleteSourcesDialog({ selection }: { selection: SourceSelection }) {
 const DELETE_CHUNK = 100;
 
 const ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
+  "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
 
 // The Agent id is `@scope/slug`; the slug reads as the Agent's name.
 function agentLabel(templateId: string): string {
@@ -464,7 +463,7 @@ function SourceThumbnail({ source, className = "size-14" }: { source: SourceRow;
 
 // Select mode adds a leading checkbox column.
 const SELECT_ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
+  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
 
 function SourceRowItem({
   source,
@@ -522,7 +521,6 @@ function SourceRowItem({
           <SourcePipelinePill source={source} />
         </div>
         <span className="truncate text-sm text-muted-foreground">{agentLabel(source.templateId)}</span>
-        <span className="truncate text-sm text-foreground">{source.family}</span>
         <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.createdAt)}</span>
         <span className="text-sm text-foreground tabular-nums">
           {score ?? "–"}

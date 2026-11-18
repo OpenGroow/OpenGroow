@@ -101,7 +101,7 @@ describe("InstanceSourcesContent", () => {
     expect(text).toContain("running shoes are trending");
     expect(text).toContain("https://other.example");
     expect(text).toContain("Search keyword");
-    expect(text).toContain("social-video");
+    expect(text).not.toContain("social-video"); // the Family column is gone
     expect(text).toContain("2026");
     expect(text).toContain("Ready");
 
