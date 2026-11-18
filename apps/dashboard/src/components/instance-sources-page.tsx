@@ -89,13 +89,6 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [stage, setStage] = useState("all");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  // Select mode: checkboxes on every row, then one permanent deletion.
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const removeMany = useMutation(api.sources.removeMany);
   const [tab, setTab] = useState<"ready" | "all">("ready");
   const {
     results: sources,
@@ -117,47 +110,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const count = (predicate: (source: SourceRow) => boolean) => sources.filter(predicate).length;
   const agents = [...new Set(sources.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
-  // Only what is on screen can be deleted: a filter never hides a selected row from the count.
-  const selectedVisible = visible.filter((source) => selected.has(source._id));
-  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
-
-  function toggleSelecting(): void {
-    setSelecting((on) => !on);
-    setSelected(new Set());
-    setDeleteError(null);
-  }
-
-  function toggleOne(id: string): void {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAllVisible(): void {
-    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((source) => source._id)));
-  }
-
-  async function deleteSelected(): Promise<void> {
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const ids = selectedVisible.map((source) => source._id as Id<"sources">);
-      // One call per chunk: the server caps how many Sources a single deletion takes.
-      for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
-        await removeMany({ sourceIds: ids.slice(i, i + DELETE_CHUNK) });
-      }
-      setConfirming(false);
-      setSelected(new Set());
-      setSelecting(false);
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Could not delete the Sources.");
-    } finally {
-      setDeleting(false);
-    }
-  }
+  const selection = useSourceSelection(visible);
 
   return (
     <div className="grid gap-8">
@@ -234,38 +187,11 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" />
-                <Button type="button" variant={selecting ? "secondary" : "outline"} className="h-11" onClick={toggleSelecting}>
-                  <ListChecks />
-                  {selecting ? "Done" : "Select"}
-                </Button>
+                <SelectButton selection={selection} />
               </div>
             </div>
 
-            {selecting ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
-                <label className="flex items-center gap-3 text-sm text-foreground">
-                  <Checkbox
-                    checked={allVisibleSelected}
-                    indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
-                    onCheckedChange={toggleAllVisible}
-                    aria-label="Select all shown sources"
-                  />
-                  {selectedVisible.length === 0 ? "Select all shown" : `${selectedVisible.length} selected`}
-                </label>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={selectedVisible.length === 0}
-                  onClick={() => {
-                    setDeleteError(null);
-                    setConfirming(true);
-                  }}
-                >
-                  <Trash2 />
-                  Delete{selectedVisible.length > 0 ? ` (${selectedVisible.length})` : ""}
-                </Button>
-              </div>
-            ) : null}
+            <SelectionBar selection={selection} />
 
             {visible.length === 0 ? (
               <p className="text-sm text-muted-foreground">No Sources match these filters.</p>
@@ -273,9 +199,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               <div className="grid gap-3">
                 <div
                   aria-hidden="true"
-                  className={cn(selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
+                  className={cn(selection.selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
                 >
-                  {selecting ? <span /> : null}
+                  {selection.selecting ? <span /> : null}
                   <span>Source</span>
                   <span>Status</span>
                   <span>Agent</span>
@@ -290,9 +216,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                       key={source._id}
                       source={source}
                       instanceId={instanceId}
-                      selecting={selecting}
-                      selected={selected.has(source._id)}
-                      onToggle={() => toggleOne(source._id)}
+                      selecting={selection.selecting}
+                      selected={selection.selected.has(source._id)}
+                      onToggle={() => selection.toggleOne(source._id)}
                     />
                   ))}
                 </ul>
@@ -319,39 +245,142 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
         </>
       )}
 
-      <Dialog
-        open={confirming}
-        onOpenChange={(open) => {
-          if (!deleting) setConfirming(open);
-        }}
-        disablePointerDismissal={deleting}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Delete {selectedVisible.length} {selectedVisible.length === 1 ? "Source" : "Sources"}?
-            </DialogTitle>
-            <DialogDescription>
-              This is permanent. Missions already created from these Sources are kept. The same post can show up again as a
-              new Source if an Agent captures it again.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError ? (
-            <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
-              {deleteError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={deleting} onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" disabled={deleting} onClick={() => void deleteSelected()}>
-              {deleting ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSourcesDialog selection={selection} />
     </div>
+  );
+}
+
+/** Select mode: checkboxes on every row, then one permanent deletion. Shared by
+ * the All and Ready tabs; `visible` is the list on screen. */
+function useSourceSelection(visible: SourceRow[]) {
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const removeMany = useMutation(api.sources.removeMany);
+  // Only what is on screen can be deleted: a filter never hides a selected row from the count.
+  const selectedVisible = visible.filter((source) => selected.has(source._id));
+  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
+
+  return {
+    selecting,
+    selected,
+    selectedVisible,
+    allVisibleSelected,
+    confirming,
+    deleting,
+    deleteError,
+    setConfirming,
+    toggleSelecting(): void {
+      setSelecting((on) => !on);
+      setSelected(new Set());
+      setDeleteError(null);
+    },
+    toggleOne(id: string): void {
+      setSelected((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    },
+    toggleAllVisible(): void {
+      setSelected(allVisibleSelected ? new Set() : new Set(visible.map((source) => source._id)));
+    },
+    askToDelete(): void {
+      setDeleteError(null);
+      setConfirming(true);
+    },
+    async deleteSelected(): Promise<void> {
+      setDeleting(true);
+      setDeleteError(null);
+      try {
+        const ids = selectedVisible.map((source) => source._id as Id<"sources">);
+        // One call per chunk: the server caps how many Sources a single deletion takes.
+        for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+          await removeMany({ sourceIds: ids.slice(i, i + DELETE_CHUNK) });
+        }
+        setConfirming(false);
+        setSelected(new Set());
+        setSelecting(false);
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : "Could not delete the Sources.");
+      } finally {
+        setDeleting(false);
+      }
+    },
+  };
+}
+
+type SourceSelection = ReturnType<typeof useSourceSelection>;
+
+function SelectButton({ selection }: { selection: SourceSelection }) {
+  return (
+    <Button type="button" variant={selection.selecting ? "secondary" : "outline"} className="h-11" onClick={selection.toggleSelecting}>
+      <ListChecks />
+      {selection.selecting ? "Done" : "Select"}
+    </Button>
+  );
+}
+
+function SelectionBar({ selection }: { selection: SourceSelection }) {
+  const { selectedVisible, allVisibleSelected } = selection;
+  if (!selection.selecting) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
+      <label className="flex items-center gap-3 text-sm text-foreground">
+        <Checkbox
+          checked={allVisibleSelected}
+          indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
+          onCheckedChange={selection.toggleAllVisible}
+          aria-label="Select all shown sources"
+        />
+        {selectedVisible.length === 0 ? "Select all shown" : `${selectedVisible.length} selected`}
+      </label>
+      <Button type="button" variant="destructive" disabled={selectedVisible.length === 0} onClick={selection.askToDelete}>
+        <Trash2 />
+        Delete{selectedVisible.length > 0 ? ` (${selectedVisible.length})` : ""}
+      </Button>
+    </div>
+  );
+}
+
+function DeleteSourcesDialog({ selection }: { selection: SourceSelection }) {
+  const { selectedVisible, deleting, deleteError } = selection;
+  return (
+    <Dialog
+      open={selection.confirming}
+      onOpenChange={(open) => {
+        if (!deleting) selection.setConfirming(open);
+      }}
+      disablePointerDismissal={deleting}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Delete {selectedVisible.length} {selectedVisible.length === 1 ? "Source" : "Sources"}?
+          </DialogTitle>
+          <DialogDescription>
+            This is permanent. Missions already created from these Sources are kept. The same post can show up again as a
+            new Source if an Agent captures it again.
+          </DialogDescription>
+        </DialogHeader>
+        {deleteError ? (
+          <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
+            {deleteError}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={deleting} onClick={() => selection.setConfirming(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" disabled={deleting} onClick={() => void selection.deleteSelected()}>
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -513,10 +542,6 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
   const [sort, setSort] = useState<ReadySort>("score");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  const [pendingDelete, setPendingDelete] = useState<SourceRow | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const removeMany = useMutation(api.sources.removeMany);
   const targets = (useQuery(api.source_routing.listTargets, { instanceId }) ?? []) as Target[];
   const needle = search.trim().toLowerCase();
   const ready = sources
@@ -525,6 +550,7 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
     .filter((source) => needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle))
     .sort((a, b) => (sort === "score" ? (sourceScore(b.scoring) ?? -1) - (sourceScore(a.scoring) ?? -1) : b.createdAt - a.createdAt));
   const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
+  const selection = useSourceSelection(ready);
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
@@ -544,8 +570,11 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
               <option key={templateId} value={templateId}>{agentLabel(templateId)}</option>
             ))}
           </NativeSelect>
+          <SelectButton selection={selection} />
         </div>
       </div>
+
+      <SelectionBar selection={selection} />
 
       {ready.length === 0 ? (
         <p className="text-sm text-muted-foreground">No scored Sources waiting for production.</p>
@@ -557,10 +586,9 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
               source={source}
               instanceId={instanceId}
               targets={targets}
-              onDelete={() => {
-                setDeleteError(null);
-                setPendingDelete(source);
-              }}
+              selecting={selection.selecting}
+              selected={selection.selected.has(source._id)}
+              onToggle={() => selection.toggleOne(source._id)}
             />
           ))}
         </ul>
@@ -574,58 +602,19 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
         </div>
       ) : null}
 
-      <Dialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => {
-          if (!deleting && !open) setPendingDelete(null);
-        }}
-        disablePointerDismissal={deleting}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this Source?</DialogTitle>
-            <DialogDescription>
-              This is permanent. A Mission already created from it is kept. The same post can show up again as a new Source
-              if an Agent captures it again.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError ? (
-            <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
-              {deleteError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={deleting} onClick={() => setPendingDelete(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleting}
-              onClick={async () => {
-                if (!pendingDelete) return;
-                setDeleting(true);
-                setDeleteError(null);
-                try {
-                  await removeMany({ sourceIds: [pendingDelete._id as Id<"sources">] });
-                  setPendingDelete(null);
-                } catch (err) {
-                  setDeleteError(err instanceof Error ? err.message : "Could not delete the Source.");
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSourcesDialog selection={selection} />
     </section>
   );
 }
 
-function ReadySourceRow({ source, instanceId, targets, onDelete }: { source: SourceRow; instanceId: string; targets: Target[]; onDelete: () => void }) {
+function ReadySourceRow({ source, instanceId, targets, selecting, selected, onToggle }: {
+  source: SourceRow;
+  instanceId: string;
+  targets: Target[];
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
   const setRouteTarget = useMutation(api.source_routing.setRouteTarget);
   const produce = useMutation(api.source_routing.forceProduction);
   const [busy, setBusy] = useState(false);
@@ -659,13 +648,20 @@ function ReadySourceRow({ source, instanceId, targets, onDelete }: { source: Sou
 
   return (
     <li>
-      <Card className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center">
+      <Card className={cn("flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center", selected && "ring-2 ring-primary")}>
         <div className="flex min-w-0 flex-1 items-center gap-4">
+          {selecting ? <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} /> : null}
           <SourceGlyph family={source.family} />
           <div className="grid min-w-0 gap-2">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
               className="m-0 break-words text-base font-semibold text-foreground line-clamp-2"
+              onClick={(event) => {
+                // In select mode the title toggles the row; it never opens the Source.
+                if (!selecting) return;
+                event.preventDefault();
+                onToggle();
+              }}
             >
               {title}
             </Link>
@@ -688,16 +684,10 @@ function ReadySourceRow({ source, instanceId, targets, onDelete }: { source: Sou
               ))}
             </NativeSelect>
           </label>
-          <div className="flex flex-col gap-2">
-            <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
-              <Sparkles />
-              Produce
-            </Button>
-            <Button type="button" variant="outline" disabled={busy} onClick={onDelete}>
-              <Trash2 />
-              Delete
-            </Button>
-          </div>
+          <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
+            <Sparkles />
+            Produce
+          </Button>
         </div>
       </Card>
     </li>
