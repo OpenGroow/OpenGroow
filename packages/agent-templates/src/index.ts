@@ -81,7 +81,6 @@ export {
   type PublishableKind,
 } from "./publish-declaration";
 export { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS, type AnalyticsDeclaration } from "./analytics-declaration";
-export { ANALYTICS_METRICS, analyticsKindOfPublishable, type AnalyticsKind, type AnalyticsMetric } from "./analytics-metrics";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
 export { executeActivationEffect } from "./execute-activation-effect";

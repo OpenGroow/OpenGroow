@@ -4,6 +4,7 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
 import { installPostiz } from "./postiz_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 
 // ADR-078, issue #88: a Publication that becomes `published` receives
@@ -18,6 +19,7 @@ vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
   "../analytics.ts": () => import("../analytics.js"),
+  "../analytics_adapters.ts": () => import("../analytics_adapters.js"),
   "../analytics_node.ts": () => import("../analytics_node.js"),
   "../instances.ts": () => import("../instances.js"),
   "../missions.ts": () => import("../missions.js"),
@@ -70,6 +72,7 @@ let reads: string[];
 async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled" } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
+  await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: `job-${INSTANCE_ID}`, status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.tokenIdentifier });
@@ -299,6 +302,31 @@ describe("Performance Snapshots (ADR-078)", () => {
     expect(await s.view()).toMatchObject({ state: "unmeasured", snapshots: [] });
     const publication = await s.t.run(async (ctx) => ctx.db.get(s.publicationId));
     expect(publication?.status).toBe("published");
+  });
+
+  it("starts a new series when a retried Publication creates a new post, keeping the old Snapshots", async () => {
+    const s = await seed();
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect((await s.view()).snapshots.map((x) => x.postSeries)).toEqual([0]);
+
+    // The retry created another post: a new `externalId`.
+    await s.t.mutation(internal.publications.finish, { publicationId: s.publicationId, status: "published", externalId: "post-2" });
+    let view = await s.view();
+    expect(view.state).toBe("waiting");
+    expect(view.snapshots).toHaveLength(1);
+
+    // The old post is no longer measured; the new one starts its own 1, 3, 7 day curve.
+    reads.length = 0;
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    expect(reads).toEqual(["https://stats.example.com/post/post-2"]);
+    view = await s.view();
+    expect(view.snapshots.map((x) => [x.postSeries, x.delayMs])).toEqual([
+      [0, DAY],
+      [1, DAY],
+    ]);
   });
 
   it("does not show another owner's Snapshots", async () => {

@@ -2,7 +2,7 @@
  * Manifest validation for a Mission type's `analytics` declaration (issue #90,
  * ADR-078). Pure function over raw manifest data.
  */
-import { ANALYTICS_METRICS, analyticsKindOfPublishable, isMetricOfKind } from "./analytics-metrics";
+import { isMetricOfKind, METRIC_VOCABULARY, metricKindOf } from "@opengroow/publisher-sdk";
 
 /** Delays, in days after the Publication became `published`, when `collect` is omitted. */
 export const DEFAULT_ANALYTICS_COLLECT_DAYS: readonly number[] = [1, 3, 7];
@@ -38,9 +38,9 @@ export function analyticsDeclarationProblem(raw: unknown, at: string, publishKin
     if (key !== "primaryMetric" && key !== "collect") return `${where} has unknown key "${key}"`;
   }
   if (publishKind === undefined) return `${where} needs a \`publish\` declaration: only Publications are measured`;
-  const kind = analyticsKindOfPublishable(publishKind);
+  const kind = metricKindOf(publishKind);
   if (!isMetricOfKind(kind, analytics.primaryMetric)) {
-    return `${where}.primaryMetric ${JSON.stringify(analytics.primaryMetric)} is not a metric of kind "${publishKind}" — one of ${ANALYTICS_METRICS[kind].join(", ")}`;
+    return `${where}.primaryMetric ${JSON.stringify(analytics.primaryMetric)} is not a metric of kind "${publishKind}" — one of ${METRIC_VOCABULARY[kind].join(", ")}`;
   }
   if (analytics.collect !== undefined) {
     const collect = analytics.collect;

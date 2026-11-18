@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateManifest } from "./index.js";
 import { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS } from "./analytics-declaration.js";
-import { ANALYTICS_METRICS } from "./analytics-metrics.js";
+import { METRIC_VOCABULARY } from "@opengroow/publisher-sdk";
 
 // Issue #90, ADR-078: a Mission type that publishes may declare `analytics`.
 const SERVER = { name: "mcp", transport: "streamable-http", url: "http://localhost/mcp" };
@@ -36,7 +36,7 @@ describe("missionTypes[].analytics", () => {
     expect(reason(article({ primaryMetric: "views" }))).toContain('"views"');
   });
   it("refuses a metric outside the vocabulary", () => {
-    expect(reason(social({ primaryMetric: "impressions" }))).toContain(ANALYTICS_METRICS.social.join(", "));
+    expect(reason(social({ primaryMetric: "impressions" }))).toContain(METRIC_VOCABULARY.social.join(", "));
   });
   it("requires a primary metric", () => {
     expect(reason(social({}))).toContain("primaryMetric");

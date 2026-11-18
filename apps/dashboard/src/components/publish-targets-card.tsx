@@ -34,6 +34,7 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
   const addChannel = useMutation(api.publishers.addChannel);
   const updateSettings = useMutation(api.publishers.updateSettings);
   const removeTarget = useMutation(api.publishers.removeTarget);
+  const setAnalyticsLink = useMutation(api.publishers.setAnalyticsLink);
   const listChannels = useAction(api.publishers_node.listChannels);
   const installedPackage = useInstalledPublisher(publisher.adapter);
   const channelOptions = installedPackage?.channelOptions;
@@ -95,6 +96,15 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
       });
     } catch (e) {
       setError(errorMessage(e, "Option could not be saved"));
+    }
+  }
+
+  async function handleAnalyticsLink(current: Extract<Target, { mapped: true }>, analyticsAdapter: string | null) {
+    setError("");
+    try {
+      await setAnalyticsLink({ instanceId: id, adapter: publisher.adapter, target: current.target, analyticsAdapter });
+    } catch (e) {
+      setError(errorMessage(e, "The analytics link could not be saved"));
     }
   }
 
@@ -222,6 +232,31 @@ export function PublishTargetsCard({ instanceId: id, publisher }: { instanceId: 
                     <Trash2 aria-hidden="true" />
                   </Button>
                 </div>
+                {t.mapped ? (
+                  <div className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3">
+                    <Label htmlFor={`analytics-${t.target}`} className="text-sm text-muted-foreground">
+                      Analytics
+                    </Label>
+                    <NativeSelect
+                      id={`analytics-${t.target}`}
+                      className="w-auto min-w-48"
+                      value={t.analytics.linked ? t.analytics.adapterId : ""}
+                      onChange={(event) => void handleAnalyticsLink(t, event.target.value || null)}
+                    >
+                      <option value="">None</option>
+                      {t.analytics.options.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    {t.analytics.linked ? (
+                      t.analytics.isDefault ? <StatusBadge tone="neutral" label="Default" /> : null
+                    ) : (
+                      <StatusBadge tone="warning" label="Analytics unavailable" />
+                    )}
+                  </div>
+                ) : null}
                 {expanded && t.mapped ? (
                   <div className="grid gap-4 border-t border-border p-4 md:grid-cols-2">
                     {options.map((option) => {

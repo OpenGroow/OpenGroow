@@ -15,6 +15,8 @@ const modules = {
 };
 
 const INSTANCE_ID = "openclaw-publishers";
+// No Analytics Adapter is installed in these tests: a channel reads "analytics unavailable".
+const UNLINKED = { linked: false, options: [] };
 const OWNER = { name: "Owner", email: "o@example.com", tokenIdentifier: "test|pub-owner", subject: "pub-owner" };
 const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|pub-stranger", subject: "pub-stranger" };
 
@@ -194,7 +196,7 @@ describe("publishers", () => {
     await owner.mutation(api.publishers.updateSettings, { adapter: "postiz", instanceId: INSTANCE_ID, target: second, settings: { board: "recipes" } });
     let publisher = await owner.query(api.publishers.list, { instanceId: INSTANCE_ID }).then((all) => all[0] ?? null);
     expect(publisher?.targets).toEqual([
-      { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta" },
+      { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My Insta", channelService: "instagram", channelProfile: "myinsta", analytics: UNLINKED },
       {
         target: "instagram:other-insta",
         mapped: true,
@@ -202,6 +204,7 @@ describe("publishers", () => {
         channelName: "Other Insta",
         channelService: "instagram",
         channelProfile: "Other.Insta",
+        analytics: UNLINKED,
         settings: { board: "recipes" },
       },
     ]);

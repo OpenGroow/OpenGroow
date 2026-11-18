@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANALYTICS_CONTRACT_VERSION, metricKindOf, pickMetrics } from "./analytics";
+import { ANALYTICS_CONTRACT_VERSION, isMetricOfKind, metricKindOf, pickMetrics } from "./analytics";
 
 describe("metric vocabulary", () => {
   it("keeps the social metrics for a social post and ignores unknown ones", () => {
@@ -30,5 +30,14 @@ describe("metric vocabulary", () => {
 
   it("has its own contract version", () => {
     expect(ANALYTICS_CONTRACT_VERSION).toBe(1);
+  });
+});
+
+describe("isMetricOfKind", () => {
+  it("accepts a metric of the kind and refuses another kind's or an unknown one", () => {
+    expect(isMetricOfKind("social", "views")).toBe(true);
+    expect(isMetricOfKind("social", "pageviews")).toBe(false);
+    expect(isMetricOfKind("article", "visitors")).toBe(true);
+    expect(isMetricOfKind("article", 3)).toBe(false);
   });
 });

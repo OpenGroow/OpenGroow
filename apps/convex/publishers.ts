@@ -9,6 +9,7 @@ import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { requirePublisherMeta } from "./publisher_packages.js";
 import { servesPlatform } from "@opengroow/publisher-sdk";
+import { canMeasure, installedAnalyticsAdapters, linkedAdapter, type AnalyticsAdapterMeta } from "./analytics_adapters.js";
 import { allChannels, MAX_PUBLISHERS_PER_PROJECT, projectPublisher, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 
 // Project-level Publishers (ADR-069, ADR-075): several per Project, at most one
@@ -43,7 +44,8 @@ async function requirePublisher(ctx: MutationCtx, instanceId: string, adapter: s
 }
 
 /** What the dashboard sees of a Publisher: never its API key. */
-function view(publisher: ProjectPublisher) {
+function view(publisher: ProjectPublisher, analyticsAdapters: readonly AnalyticsAdapterMeta[]) {
+  const options = analyticsAdapters.filter((a) => canMeasure(a, publisher.adapter)).map((a) => ({ id: a.id, name: a.name }));
   return {
     adapter: publisher.adapter,
     url: publisher.url,
@@ -58,6 +60,13 @@ function view(publisher: ProjectPublisher) {
             channelService: t.channelService,
             channelProfile: t.channelProfile,
             settings: t.settings,
+            // `linked: false` reads "analytics unavailable" (nothing measures this channel), not "no data yet".
+            analytics: (() => {
+              const link = linkedAdapter(analyticsAdapters, publisher.adapter, t.analyticsAdapter);
+              return link
+                ? { linked: true as const, adapterId: link.adapter.id, name: link.adapter.name, isDefault: link.isDefault, options }
+                : { linked: false as const, options };
+            })(),
           }
         : { target: t.target, mapped: false as const },
     ),
@@ -69,7 +78,8 @@ export const list = query({
   args: { instanceId: v.string() },
   handler: async (ctx, args) => {
     if (!(await readOwnerId(ctx, args.instanceId))) return [];
-    return (await projectPublishers(ctx, args.instanceId)).map(view);
+    const analyticsAdapters = await installedAnalyticsAdapters(ctx);
+    return (await projectPublishers(ctx, args.instanceId)).map((p) => view(p, analyticsAdapters));
   },
 });
 
@@ -154,6 +164,29 @@ export const updateSettings = mutation({
     }
     await ctx.db.patch(publisher._id, {
       targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, settings: args.settings } : t)),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Links a channel to an Analytics Adapter, or unlinks it (`null`, then it reads "analytics
+ * unavailable"). An adapter that needs the id of a service is refused for a Publisher of another service.
+ */
+export const setAnalyticsLink = mutation({
+  args: { instanceId: v.string(), adapter: v.string(), target: v.string(), analyticsAdapter: v.union(v.string(), v.null()) },
+  handler: async (ctx, args) => {
+    const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
+    if (!publisher.targets.some((t) => t.target === args.target)) throw new Error(`Unknown channel "${args.target}"`);
+    if (args.analyticsAdapter !== null) {
+      const chosen = (await installedAnalyticsAdapters(ctx)).find((a) => a.id === args.analyticsAdapter);
+      if (!chosen) throw new Error(`The Analytics Adapter "${args.analyticsAdapter}" is not installed`);
+      if (!canMeasure(chosen, publisher.adapter)) {
+        throw new Error(`${chosen.name} ("${chosen.id}") only works with the Publisher "${chosen.publisher ?? "of its own service"}", not "${publisher.adapter}"`);
+      }
+    }
+    await ctx.db.patch(publisher._id, {
+      targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, analyticsAdapter: args.analyticsAdapter } : t)),
       updatedAt: Date.now(),
     });
   },
