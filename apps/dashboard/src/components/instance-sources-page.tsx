@@ -2,21 +2,29 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Trash2, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
 import { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
+import { isWebUrl } from "@/src/lib/web-url";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { sourceScore } from "@/src/lib/source-score";
+import { FormatBadge, NotScoredHint, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { cn } from "@/lib/utils";
+
+// Matches the server's `COUNT_CAP` (`sources.counts`): a status with that many Sources shows "5000+".
+const COUNT_CAP = 5000;
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -43,31 +51,41 @@ type SourceRow = Pick<
   | "producedAt"
   | "publishedAt"
   | "excluded"
-> & { _id: string };
+  | "sourceId"
+  | "analysis"
+  | "routing"
+  | "routeTo"
+  | "thumbnailTriedAt"
+> & { _id: string; thumbnailUrl?: string | null };
 
 const PAGE_SIZE = 50;
 
+// The toolbar of both tabs shares these, so it does not shift when switching tabs.
+const TOOLBAR_ROW = "flex flex-col justify-between gap-4 lg:flex-row lg:items-center";
+const TOOLBAR_SEARCH = "lg:w-52";
+const TOOLBAR_SELECT = "h-11 sm:w-40";
+
+// The Scored tab lists the Sources the pipeline calls Scored: analysed, scored
+// and not picked for production yet.
+const READY_TAB_STAGE = "Scored";
+
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
-// and it works on the loaded rows. "Ready" as a filter means every analysed
-// Source (Ready up to Published, matching the Ready tile); the exact stages
-// stay available in the select.
-const READY_ANY = "ready-any";
-const READY_STAGES = ["Ready", "Scored", "Routed", "In production", "Produced", "Published"];
-const STAGE_LABELS: Record<string, string> = { Ingestion: "Processing", Ready: "Ready (not scored yet)" };
-const STATUS_STAGES = ["Ingestion", ...READY_STAGES, "Failed", "Unavailable", "Excluded"];
-const STATUS_CHIPS = [
-  { id: "all", label: "All" },
-  { id: "Ingestion", label: "Processing" },
-  { id: READY_ANY, label: "Ready" },
-  { id: "Published", label: "Published" },
-  { id: "Failed", label: "Failed" },
-];
+// and it works on the loaded rows. A Source that was picked for production
+// (Routed, In production, Produced, Published) is followed on the Missions board,
+// and a Scored one is on the Scored tab: neither is listed in Other. Nothing sets
+// `excluded` any more.
+const PRODUCTION_STAGES: readonly string[] = ["Routed", "In production", "Produced", "Published"];
+const STATUS_FILTERS = [
+  { id: "processing", label: "Processing", stages: ["Ingestion"] },
+  { id: "not-scored", label: "Not scored yet", stages: ["Ready"] },
+  { id: "failed", label: "Failed", stages: ["Failed", "Unavailable"] },
+] as const;
 
-function matchesStage(source: SourceRow, filter: string): boolean {
-  const stage = stageOf(source);
+function matchesStatus(source: SourceRow, filter: string): boolean {
   if (filter === "all") return true;
-  return filter === READY_ANY ? READY_STAGES.includes(stage) : stage === filter;
+  const stages: readonly string[] = STATUS_FILTERS.find((entry) => entry.id === filter)?.stages ?? [];
+  return stages.includes(stageOf(source));
 }
 
 function stageOf(source: SourceRow): string {
@@ -79,13 +97,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [stage, setStage] = useState("all");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  // Select mode: checkboxes on every row, then one permanent deletion.
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const removeMany = useMutation(api.sources.removeMany);
+  const [tab, setTab] = useState<"ready" | "other">("ready");
   const {
     results: sources,
     status,
@@ -97,56 +109,37 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   ) as { results: SourceRow[]; status: string; loadMore: (numItems: number) => void };
 
   const needle = search.trim().toLowerCase();
-  const visible = sources.filter(
+  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE && !PRODUCTION_STAGES.includes(stageOf(source)));
+  const visible = others.filter(
     (source) =>
-      matchesStage(source, stage) &&
+      matchesStatus(source, stage) &&
       (agent === "all" || source.templateId === agent) &&
       (needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle)),
   );
   const count = (predicate: (source: SourceRow) => boolean) => sources.filter(predicate).length;
-  const agents = [...new Set(sources.map((source) => source.templateId))].sort();
+  // The real numbers, from the server: the rows loaded so far only count what "Load more" has fetched.
+  // Until they arrive, the loaded rows stand in.
+  const serverCounts = useQuery(api.sources.counts, { instanceId });
+  const totals = serverCounts;
+  const shown = (value: number | undefined, fallback: number): number | string =>
+    value === undefined ? fallback : totals?.capped && value >= COUNT_CAP ? `${value}+` : value;
+  const agents = [...new Set(others.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
-  // Only what is on screen can be deleted: a filter never hides a selected row from the count.
-  const selectedVisible = visible.filter((source) => selected.has(source._id));
-  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
-
-  function toggleSelecting(): void {
-    setSelecting((on) => !on);
-    setSelected(new Set());
-    setDeleteError(null);
-  }
-
-  function toggleOne(id: string): void {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAllVisible(): void {
-    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((source) => source._id)));
-  }
-
-  async function deleteSelected(): Promise<void> {
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const ids = selectedVisible.map((source) => source._id as Id<"sources">);
-      // One call per chunk: the server caps how many Sources a single deletion takes.
-      for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
-        await removeMany({ sourceIds: ids.slice(i, i + DELETE_CHUNK) });
-      }
-      setConfirming(false);
-      setSelected(new Set());
-      setSelecting(false);
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Could not delete the Sources.");
-    } finally {
-      setDeleting(false);
-    }
-  }
+  const selection = useSourceSelection(visible);
+  const tabs = (
+    <div className="shrink-0">
+      <FilterChips
+        label="Sources view"
+        value={tab}
+        onChange={(id) => setTab(id === "other" ? "other" : "ready")}
+        options={[
+          { id: "ready", label: "Scored", count: totals?.scored ?? count((source) => stageOf(source) === READY_TAB_STAGE) },
+          { id: "other", label: "Other", count: totals?.other ?? others.length },
+        ]}
+      />
+    </div>
+  );
+  useThumbnailRequests(instanceId, tab === "other" ? visible : []);
 
   return (
     <div className="grid gap-8">
@@ -158,23 +151,49 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
         <p className="text-sm text-muted-foreground">No Sources yet.</p>
       ) : (
         <>
-          {/* Counted over the loaded rows (no server-side counter exists), so
-              the first tile says "Loaded" until every page is in. */}
+          {/* The server's real counts; until they arrive, the loaded rows stand in
+              and the first tile says "Loaded" while more pages remain. */}
           <section aria-label="Source counts" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <StatTile icon={Layers} label={hasMore ? "Loaded sources" : "Total sources"} value={sources.length} tone="visual" />
-            <StatTile icon={LoaderCircle} label="Processing" value={count((s) => s.status === "processing")} tone="research" />
-            <StatTile icon={CircleCheck} label="Ready" value={count((s) => s.status === "ready")} tone="engagement" />
-            <StatTile icon={CircleX} label="Failed" value={count((s) => s.status === "failed")} tone="error" />
-            <StatTile icon={Ban} label="Unavailable" value={count((s) => s.status === "unavailable")} />
+            <StatTile icon={Layers} label={totals || !hasMore ? "Total sources" : "Loaded sources"} value={shown(totals?.total, sources.length)} tone="visual" />
+            <StatTile icon={LoaderCircle} label="Processing" value={shown(totals?.processing, count((s) => s.status === "processing"))} tone="research" />
+            <StatTile icon={CircleCheck} label="Ready" value={shown(totals?.ready, count((s) => s.status === "ready"))} tone="engagement" />
+            <StatTile icon={CircleX} label="Failed" value={shown(totals?.failed, count((s) => s.status === "failed"))} tone="error" />
+            <StatTile icon={Ban} label="Unavailable" value={shown(totals?.unavailable, count((s) => s.status === "unavailable"))} />
           </section>
 
+          {tab === "ready" ? (
+            <ReadySources
+              tabs={tabs}
+              sources={sources}
+              instanceId={instanceId}
+              hasMore={hasMore}
+              loadingMore={status === "LoadingMore"}
+              onLoadMore={() => loadMore(PAGE_SIZE)}
+            />
+          ) : null}
+
+          {tab === "other" ? (
           <section className="grid gap-5">
-            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-              <div className="flex flex-wrap gap-3">
-                <FilterChips options={STATUS_CHIPS} value={stage} onChange={setStage} label="Filter by status" />
+            <div className={TOOLBAR_ROW}>
+              {tabs}
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" className={TOOLBAR_SEARCH} />
+                <NativeSelect
+                  aria-label="Filter by status"
+                  className={TOOLBAR_SELECT}
+                  value={stage}
+                  onChange={(event) => setStage(event.target.value)}
+                >
+                  <option value="all">All statuses</option>
+                  {STATUS_FILTERS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </NativeSelect>
                 <NativeSelect
                   aria-label="Filter by agent"
-                  className="h-11 sm:w-48"
+                  className={TOOLBAR_SELECT}
                   value={agent}
                   onChange={(event) => setAgent(event.target.value)}
                 >
@@ -185,55 +204,11 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                     </option>
                   ))}
                 </NativeSelect>
-                <NativeSelect
-                  aria-label="Filter by status"
-                  className="h-11 sm:w-48"
-                  value={stage}
-                  onChange={(event) => setStage(event.target.value)}
-                >
-                  <option value="all">All statuses</option>
-                  <option value={READY_ANY}>Ready (any stage)</option>
-                  {STATUS_STAGES.map((option) => (
-                    <option key={option} value={option}>
-                      {STAGE_LABELS[option] ?? option}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" />
-                <Button type="button" variant={selecting ? "secondary" : "outline"} className="h-11" onClick={toggleSelecting}>
-                  <ListChecks />
-                  {selecting ? "Done" : "Select"}
-                </Button>
+                <SelectButton selection={selection} />
               </div>
             </div>
 
-            {selecting ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
-                <label className="flex items-center gap-3 text-sm text-foreground">
-                  <Checkbox
-                    checked={allVisibleSelected}
-                    indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
-                    onCheckedChange={toggleAllVisible}
-                    aria-label="Select all shown sources"
-                  />
-                  {selectedVisible.length === 0 ? "Select all shown" : `${selectedVisible.length} selected`}
-                </label>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={selectedVisible.length === 0}
-                  onClick={() => {
-                    setDeleteError(null);
-                    setConfirming(true);
-                  }}
-                >
-                  <Trash2 />
-                  Delete{selectedVisible.length > 0 ? ` (${selectedVisible.length})` : ""}
-                </Button>
-              </div>
-            ) : null}
+            <SelectionBar selection={selection} />
 
             {visible.length === 0 ? (
               <p className="text-sm text-muted-foreground">No Sources match these filters.</p>
@@ -241,13 +216,12 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               <div className="grid gap-3">
                 <div
                   aria-hidden="true"
-                  className={cn(selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
+                  className={cn(selection.selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
                 >
-                  {selecting ? <span /> : null}
+                  {selection.selecting ? <span /> : null}
                   <span>Source</span>
                   <span>Status</span>
                   <span>Agent</span>
-                  <span>Family</span>
                   <span>Created</span>
                   <span>Score</span>
                   <span className="text-right">Actions</span>
@@ -258,9 +232,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                       key={source._id}
                       source={source}
                       instanceId={instanceId}
-                      selecting={selecting}
-                      selected={selected.has(source._id)}
-                      onToggle={() => toggleOne(source._id)}
+                      selecting={selection.selecting}
+                      selected={selection.selected.has(source._id)}
+                      onToggle={() => selection.toggleOne(source._id)}
                     />
                   ))}
                 </ul>
@@ -283,42 +257,146 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               ) : null}
             </div>
           </section>
+          ) : null}
         </>
       )}
 
-      <Dialog
-        open={confirming}
-        onOpenChange={(open) => {
-          if (!deleting) setConfirming(open);
-        }}
-        disablePointerDismissal={deleting}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Delete {selectedVisible.length} {selectedVisible.length === 1 ? "Source" : "Sources"}?
-            </DialogTitle>
-            <DialogDescription>
-              This is permanent. Missions already created from these Sources are kept. The same post can show up again as a
-              new Source if an Agent captures it again.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError ? (
-            <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
-              {deleteError}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={deleting} onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" disabled={deleting} onClick={() => void deleteSelected()}>
-              {deleting ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSourcesDialog selection={selection} />
     </div>
+  );
+}
+
+/** Select mode: checkboxes on every row, then one permanent deletion. Shared by
+ * the Scored and Other tabs; `visible` is the list on screen. */
+function useSourceSelection(visible: SourceRow[]) {
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const removeMany = useMutation(api.sources.removeMany);
+  // Only what is on screen can be deleted: a filter never hides a selected row from the count.
+  const selectedVisible = visible.filter((source) => selected.has(source._id));
+  const allVisibleSelected = visible.length > 0 && selectedVisible.length === visible.length;
+
+  return {
+    selecting,
+    selected,
+    selectedVisible,
+    allVisibleSelected,
+    confirming,
+    deleting,
+    deleteError,
+    setConfirming,
+    toggleSelecting(): void {
+      setSelecting((on) => !on);
+      setSelected(new Set());
+      setDeleteError(null);
+    },
+    toggleOne(id: string): void {
+      setSelected((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    },
+    toggleAllVisible(): void {
+      setSelected(allVisibleSelected ? new Set() : new Set(visible.map((source) => source._id)));
+    },
+    askToDelete(): void {
+      setDeleteError(null);
+      setConfirming(true);
+    },
+    async deleteSelected(): Promise<void> {
+      setDeleting(true);
+      setDeleteError(null);
+      try {
+        const ids = selectedVisible.map((source) => source._id as Id<"sources">);
+        // One call per chunk: the server caps how many Sources a single deletion takes.
+        for (let i = 0; i < ids.length; i += DELETE_CHUNK) {
+          await removeMany({ sourceIds: ids.slice(i, i + DELETE_CHUNK) });
+        }
+        setConfirming(false);
+        setSelected(new Set());
+        setSelecting(false);
+      } catch (err) {
+        setDeleteError(err instanceof Error ? err.message : "Could not delete the Sources.");
+      } finally {
+        setDeleting(false);
+      }
+    },
+  };
+}
+
+type SourceSelection = ReturnType<typeof useSourceSelection>;
+
+function SelectButton({ selection }: { selection: SourceSelection }) {
+  return (
+    <Button type="button" variant={selection.selecting ? "secondary" : "outline"} className="h-11" onClick={selection.toggleSelecting}>
+      <ListChecks />
+      {selection.selecting ? "Done" : "Select"}
+    </Button>
+  );
+}
+
+function SelectionBar({ selection }: { selection: SourceSelection }) {
+  const { selectedVisible, allVisibleSelected } = selection;
+  if (!selection.selecting) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-3">
+      <label className="flex items-center gap-3 text-sm text-foreground">
+        <Checkbox
+          checked={allVisibleSelected}
+          indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
+          onCheckedChange={selection.toggleAllVisible}
+          aria-label="Select all shown sources"
+        />
+        {selectedVisible.length === 0 ? "Select all shown" : `${selectedVisible.length} selected`}
+      </label>
+      <Button type="button" variant="destructive" disabled={selectedVisible.length === 0} onClick={selection.askToDelete}>
+        <Trash2 />
+        Delete{selectedVisible.length > 0 ? ` (${selectedVisible.length})` : ""}
+      </Button>
+    </div>
+  );
+}
+
+function DeleteSourcesDialog({ selection }: { selection: SourceSelection }) {
+  const { selectedVisible, deleting, deleteError } = selection;
+  return (
+    <Dialog
+      open={selection.confirming}
+      onOpenChange={(open) => {
+        if (!deleting) selection.setConfirming(open);
+      }}
+      disablePointerDismissal={deleting}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            Delete {selectedVisible.length} {selectedVisible.length === 1 ? "Source" : "Sources"}?
+          </DialogTitle>
+          <DialogDescription>
+            This is permanent. Missions already created from these Sources are kept. The same post can show up again as a
+            new Source if an Agent captures it again.
+          </DialogDescription>
+        </DialogHeader>
+        {deleteError ? (
+          <p role="alert" className="m-0 rounded-xl bg-destructive/10 px-4 py-3 text-sm leading-6 text-destructive">
+            {deleteError}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={deleting} onClick={() => selection.setConfirming(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" disabled={deleting} onClick={() => void selection.deleteSelected()}>
+            {deleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -326,53 +404,11 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
 const DELETE_CHUNK = 100;
 
 const ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
-
-// The Agent id is `@scope/slug`; the slug reads as the Agent's name.
-function agentLabel(templateId: string): string {
-  const slug = templateId.split("/").pop() ?? templateId;
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-// Scores are 0..1. `replicationScore` only exists once the daily engagement
-// job has run; before that a scored Source only has its three rubric scores,
-// so their mean stands in. Shown on a 0..100 scale.
-function sourceScore(scoring: SourceRow["scoring"]): number | undefined {
-  if (scoring === undefined) return undefined;
-  const { replicationScore, productFit, replicability, creativeStrength } = scoring;
-  const value =
-    replicationScore ??
-    (productFit !== undefined && replicability !== undefined && creativeStrength !== undefined
-      ? (productFit + replicability + creativeStrength) / 3
-      : undefined);
-  return value === undefined ? undefined : Math.round(value * 100);
-}
-
-function isWebUrl(value: string): boolean {
-  return /^https?:\/\//.test(value);
-}
-
-// No thumbnail is stored on a Source, so the leading tile shows the kind of
-// content its family names.
-function SourceGlyph({ family }: { family: string }) {
-  const Icon = /tiktok|music|audio/i.test(family) ? Music2 : Video;
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
-    >
-      <Icon className="size-6" />
-    </span>
-  );
-}
+  "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
 
 // Select mode adds a leading checkbox column.
 const SELECT_ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
+  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
 
 function SourceRowItem({
   source,
@@ -397,7 +433,7 @@ function SourceRowItem({
       <Card
         className={cn(
           selecting ? SELECT_ROW_GRID : ROW_GRID,
-          "relative min-h-24 cursor-pointer gap-y-3 px-5 py-6 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+          "relative cursor-pointer gap-y-3 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
           selected && "ring-2 ring-primary"
         )}
       >
@@ -407,7 +443,7 @@ function SourceRowItem({
           </div>
         ) : null}
         <div className="flex min-w-0 items-center gap-4">
-          <SourceGlyph family={source.family} />
+          <SourceThumbnail source={source} className="size-24" />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
@@ -421,19 +457,18 @@ function SourceRowItem({
             >
               {title}
             </Link>
-            <p className="m-0 truncate text-sm text-muted-foreground">
-              {source.marketing.summary ? `${source.label} · ${source.origin}` : source.label}
-            </p>
+            <div>
+              <FormatBadge source={source} />
+            </div>
           </div>
         </div>
         <div>
           <SourcePipelinePill source={source} />
         </div>
         <span className="truncate text-sm text-muted-foreground">{agentLabel(source.templateId)}</span>
-        <span className="truncate text-sm text-foreground">{source.family}</span>
         <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.createdAt)}</span>
         <span className="text-sm text-foreground tabular-nums">
-          {score ?? "–"}
+          {score ?? (stageOf(source) === "Ready" ? <NotScoredHint /> : "–")}
         </span>
         <div className="relative z-10 flex justify-end">
           {isWebUrl(source.origin) ? (
@@ -446,6 +481,160 @@ function SourceRowItem({
               <ExternalLink />
             </Button>
           ) : null}
+        </div>
+      </Card>
+    </li>
+  );
+}
+
+type ReadySort = "score" | "newest";
+
+// Below the `lg` breakpoint a Ready title is cut at this many characters.
+const READY_TITLE_CHARS = 100;
+const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
+
+function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadMore }: {
+  tabs: React.ReactNode;
+  sources: SourceRow[];
+  instanceId: string;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+}) {
+  const [sort, setSort] = useState<ReadySort>("score");
+  const [agent, setAgent] = useState("all");
+  const [search, setSearch] = useState("");
+  const targets = useRouteTargets(instanceId);
+  const needle = search.trim().toLowerCase();
+  const ready = sources
+    .filter((source) => stageOf(source) === READY_TAB_STAGE)
+    .filter((source) => agent === "all" || source.templateId === agent)
+    .filter((source) => needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle))
+    .sort((a, b) => (sort === "score" ? (sourceScore(b.scoring) ?? -1) - (sourceScore(a.scoring) ?? -1) : b.createdAt - a.createdAt));
+  const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
+  const selection = useSourceSelection(ready);
+  useThumbnailRequests(instanceId, ready);
+
+  return (
+    <section aria-label="Ready sources" className="grid gap-5">
+      <div className={TOOLBAR_ROW}>
+        {tabs}
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" className={TOOLBAR_SEARCH} />
+          <NativeSelect aria-label="Sort ready sources" className={TOOLBAR_SELECT} value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
+            <option value="score">Highest score</option>
+            <option value="newest">Newest first</option>
+          </NativeSelect>
+          <NativeSelect aria-label="Filter ready sources by agent" className={TOOLBAR_SELECT} value={agent} onChange={(event) => setAgent(event.target.value)}>
+            <option value="all">All agents</option>
+            {agents.map((templateId) => (
+              <option key={templateId} value={templateId}>{agentLabel(templateId)}</option>
+            ))}
+          </NativeSelect>
+          <SelectButton selection={selection} />
+        </div>
+      </div>
+
+      <SelectionBar selection={selection} />
+
+      {ready.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No scored Sources waiting for production.</p>
+      ) : (
+        <div className="grid gap-3">
+          {/* Same height as the column names of the Other tab, so the rows start at the same place on both tabs. */}
+          <div aria-hidden="true" className="px-5 text-sm max-lg:hidden">
+            &nbsp;
+          </div>
+          <ul className="grid gap-3">
+            {ready.map((source) => (
+              <ReadySourceRow
+                key={source._id}
+                source={source}
+                instanceId={instanceId}
+                targets={targets}
+                selecting={selection.selecting}
+                selected={selection.selected.has(source._id)}
+                onToggle={() => selection.toggleOne(source._id)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {hasMore ? (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
+            Load more
+          </Button>
+        </div>
+      ) : null}
+
+      <DeleteSourcesDialog selection={selection} />
+    </section>
+  );
+}
+
+function ReadySourceRow({ source, instanceId, targets, selecting, selected, onToggle }: {
+  source: SourceRow;
+  instanceId: string;
+  targets: ReturnType<typeof useRouteTargets>;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const { produce, busy } = useProduceSource(source._id);
+  const title = source.marketing.summary ?? source.origin;
+  const score = sourceScore(source.scoring);
+  // What Produce will use: the producer chosen by hand, else the router's own
+  // proposal, else the router decides when Produce is pressed.
+  const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
+
+  return (
+    <li>
+      <Card
+        className={cn(
+          "relative flex cursor-pointer flex-col gap-4 p-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center lg:pr-5",
+          selected && "ring-2 ring-primary",
+        )}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {selecting ? (
+            <div className="relative z-10 pl-2">
+              <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
+            </div>
+          ) : null}
+          <SourceThumbnail source={source} className="size-24" />
+          <div className="grid min-w-0 max-w-lg gap-2 lg:max-w-none">
+            <Link
+              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
+              title={title}
+              className="m-0 break-words text-sm font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+              onClick={(event) => {
+                // In select mode the title toggles the row; it never opens the Source.
+                if (!selecting) return;
+                event.preventDefault();
+                onToggle();
+              }}
+            >
+              {/* Cut at READY_TITLE_CHARS below `lg` only: desktop shows the whole title. */}
+              <span className="lg:hidden">{shortTitle(title)}</span>
+              <span className="hidden lg:inline">{title}</span>
+            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <FormatBadge source={source} />
+              {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
+            </div>
+          </div>
+        </div>
+        <div className="relative z-10 flex flex-wrap items-end gap-3 lg:justify-end">
+          <label className="flex flex-col items-start gap-1 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
+            Routed to:
+            <RouteTargetSelect source={source} targets={targets} className="h-10 w-56" />
+          </label>
+          <Button type="button" variant="accent" className="h-10" disabled={busy} onClick={() => void produce()}>
+            <Sparkles />
+            Produce
+          </Button>
         </div>
       </Card>
     </li>

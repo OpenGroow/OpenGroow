@@ -5,13 +5,19 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CalendarDays, Link2, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { sourceScore } from "@/src/lib/source-score";
+import { useProduceSource } from "@/src/components/source-route-target";
+import { FormatBadge, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
-import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
+import { formatSourceDate, SourceStatusPill } from "@/src/components/source-status-pill";
 import { Card } from "@/components/ui/card";
+import { isWebUrl } from "@/src/lib/web-url";
 
 export { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
 
@@ -29,7 +35,9 @@ export function SourceDetailPage({ params }: Props) {
 export function SourceDetailContent({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
-  const forceProduction = useMutation(api.source_routing.forceProduction);
+  const { produce, busy: producing } = useProduceSource(sourceId);
+  const visual = result ? { ...result.source, thumbnailUrl: result.thumbnailUrl } : undefined;
+  useThumbnailRequests(instanceId, visual ? [visual] : []);
 
   if (result === undefined) return <Message>Loading…</Message>;
   if (result === null) return <Message>Source not found.</Message>;
@@ -40,24 +48,8 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
   const analysis = (source.analysis ?? {}) as Record<string, unknown>;
   const pipeline = deriveSourcePipelineState(source);
 
-  // `routing` only produces something for `video`/
-  // `carousel` social Sources — an `image` one, or one not yet enriched (so
-  // there are no creative features yet), silently no-ops. Gating the button on
-  // the same condition avoids a click that looks like it worked but produced
-  // nothing.
-  const creativeFeatures = analysis.creativeFeatures as { mediaType?: unknown } | undefined;
-  const canForceProduction =
-    source.templateId === "@opengroow/social-engagement" &&
-    source.status === "ready" &&
-    (creativeFeatures?.mediaType === "video" || creativeFeatures?.mediaType === "carousel");
-
-  async function handleForceProduction(): Promise<void> {
-    try {
-      await forceProduction({ sourceId: sourceId as Id<"sources"> });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Failed to start production."));
-    }
-  }
+  const score = sourceScore(source.scoring);
+  const origin = String(source.origin);
 
   async function handleRetry(): Promise<void> {
     try {
@@ -69,60 +61,78 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
 
   return (
     <div className="grid max-w-[920px] gap-8" data-testid="source-detail">
-      <header className="grid gap-3">
+      <header className="grid gap-5">
         <Link
           href={`/projects/${encodeURIComponent(instanceId)}/sources`}
           className="w-fit text-xs font-semibold text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           ← Sources
         </Link>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">
-              {source.label} · {source.family}
-            </span>
-            <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <SourceThumbnail source={visual!} className="h-36 w-28" />
+          <div className="grid min-w-0 flex-1 gap-3">
+            <h1 className="m-0 text-xl font-semibold tracking-tight break-words text-foreground sm:text-2xl">
               {source.marketing.summary ?? source.origin}
             </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <SourceStatusPill status={source.status} />
+              <FormatBadge source={source} />
+              {score !== undefined ? (
+                <Badge variant="outline" className="gap-2 tabular-nums" data-testid="source-score">
+                  <Sparkles aria-hidden="true" className="size-3.5" />
+                  Score {score}
+                </Badge>
+              ) : null}
+              {source.status === "failed" ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleRetry()}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SourcePipelinePill source={source} />
-            {source.status === "failed" ? (
-              <Button type="button" variant="outline" onClick={() => void handleRetry()}>
-                Retry
-              </Button>
-            ) : null}
-            {canForceProduction ? (
-              <Button type="button" variant="outline" onClick={() => void handleForceProduction()}>
-                {source.selectedAt !== undefined ? "Produce again" : "Force production"}
-              </Button>
-            ) : null}
-          </div>
+          {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists.
+              Its own column, so the thumbnail, the title and the button start on the same line. */}
+          {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
+            <Button type="button" variant="accent" className="h-10 shrink-0 sm:self-start" disabled={producing} onClick={() => void produce()}>
+              <Sparkles />
+              Produce
+            </Button>
+          ) : null}
         </div>
         {source.status === "processing" && source.retryRequested ? (
           <p className="m-0 text-sm text-muted-foreground">
             Retry requested. It is picked up at the next run of the Agent&apos;s job.
           </p>
         ) : null}
-        <p className="m-0 text-sm text-muted-foreground">
-          Observed {formatSourceDate(source.capturedAt)} ·{" "}
-          <SchemaValue value={source.origin} />
-        </p>
-        {source.runId || source.sourceJobId ? (
-          <p className="m-0 text-sm text-muted-foreground">
-            {source.runId && workspaceKey ? (
+        <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarDays aria-hidden="true" className="size-4" />
+            Observed {formatSourceDate(source.capturedAt)}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <Link2 aria-hidden="true" className="size-4 shrink-0" />
+            {isWebUrl(origin) ? (
+              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="hover:underline">
+                Link
+              </a>
+            ) : (
+              <span className="truncate">{origin}</span>
+            )}
+          </span>
+          {source.runId && workspaceKey ? (
+            <>
+              <span aria-hidden="true">·</span>
               <Link
                 data-testid="source-run-link"
                 href={runLogsHref(instanceId, source.templateId, source.runId)}
-                className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 View Run
               </Link>
-            ) : null}
-            {source.runId && workspaceKey && source.sourceJobId ? " · " : null}
-            {source.sourceJobId ? <>Job {source.sourceJobId}</> : null}
-          </p>
-        ) : null}
+            </>
+          ) : null}
+        </p>
         {source.productionMissionId ? (
           <Link
             data-testid="source-production-mission-link"

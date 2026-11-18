@@ -30,6 +30,7 @@ vi.mock("@convex/_generated/api", () => ({
       runNow: "jobs.runNow",
       setFrequency: "jobs.setFrequency",
     },
+    source_routing: { setReviewMode: "source_routing.setReviewMode" },
   },
 }));
 

@@ -45,14 +45,17 @@ function SearchField({
   onChange,
   label,
   placeholder,
+  className = "lg:w-80",
 }: {
   value: string
   onChange: (value: string) => void
   label: string
   placeholder: string
+  /** Width of the field from `lg` up (it is full width below). */
+  className?: string
 }) {
   return (
-    <div className="relative w-full lg:w-80">
+    <div className={`relative w-full ${className}`}>
       <Search
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted-foreground"

@@ -1,7 +1,7 @@
 import { openClawAgentSlug } from "@opengroow/agent-templates";
 import { z } from "zod";
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx } from "./_generated/server.js";
+import { internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { getTemplateRegistry } from "./template_registry.js";
@@ -15,6 +15,7 @@ import { syncJobsWithAgentStatus } from "./jobs.js";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import { enqueueCommand } from "./commands.js";
 import { jobResultFilePath, jobRunFilePath } from "./source_jobs/job_files.js";
+import { routingDecisionV } from "./source_routing_decision.js";
 
 export const SOURCE_ROUTING_JOB_TYPE = "source_routing" as const;
 export const MAX_ROUTING_TRIES = 3;
@@ -35,6 +36,8 @@ export type RoutingRuntime = {
   inFlightTries?: number;
   inFlightErrors?: string[];
   candidates?: RoutingCandidate[];
+  // Produce on a Source: the Job routes that Source only (and, when the user
+  // chose a producer by hand, `source.routeTo` restricts the router to it).
   forcedSourceId?: Id<"sources">;
 };
 
@@ -92,7 +95,7 @@ export function buildSourceRoutingRunFile(args: { source: Doc<"sources">; candid
   return lines.join("\n") + "\n";
 }
 
-async function candidateMissions(ctx: MutationCtx, instanceId: string): Promise<RoutingCandidate[]> {
+async function candidateMissions(ctx: QueryCtx, instanceId: string): Promise<RoutingCandidate[]> {
   const agents = await ctx.db.query("projectAgents").withIndex("by_instance_status", (q) =>
     q.eq("instanceId", instanceId).eq("status", "active"),
   ).take(100);
@@ -220,26 +223,60 @@ export async function settleRoutingRun(ctx: MutationCtx, run: { _id: Id<"runs">;
     await finishJob(ctx, job, "failed", undefined, "Selected Source is missing or already has a production Mission", run._id);
     return;
   }
-  const targetAgent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) =>
-    q.eq("instanceId", source.instanceId).eq("templateId", candidate.templateId),
-  ).unique();
-  if (!targetAgent || targetAgent.status !== "active") {
+  if (!(await findActiveAgent(ctx, source.instanceId, candidate.templateId))) {
     await finishJob(ctx, job, "failed", undefined, `Routing target Agent ${candidate.templateId} is no longer active`, run._id);
     return;
   }
-  // Keep Mission insertion, its initial Run, and the Source pointer in this
-  // mutation. If dispatch cannot validate the target Agent, let the mutation
-  // fail so Convex rolls back the partial Mission insert instead of leaving a
-  // production Mission without a Run.
-  const { missionId } = await insertMissionAndDispatch(ctx, {
-    ownerId: source.ownerId, instanceId: source.instanceId, templateId: candidate.templateId,
-    type: candidate.missionType,
+  const now = Date.now();
+  const decision: RoutingDecision = {
+    state: "proposed",
+    decidedBy: "agent",
+    templateId: candidate.templateId,
+    agentName: candidate.agentName,
+    missionType: candidate.missionType,
+    label: candidate.label,
     // The routing LLM only supplies what it authors (publish, ...); the Source being produced is known server-side.
     payload: candidate.missionType === "create_reel" ? reelPayload(parsed.data.payload, source._id) : parsed.data.payload,
+    rationale: result.summary,
+    candidates: runtime.candidates,
+    proposedAt: now,
+  };
+  if (job.config?.reviewRouting === true && !forced) {
+    // Review mode (ADR-076): keep the decision on the Source and stop. The
+    // Source shows it as "Routed to" until a human presses Produce, which is
+    // when the production Mission exists. A forced run is that Produce already.
+    await ctx.db.patch(source._id, { routing: decision });
+    await finishJob(ctx, job, "succeeded", result.summary, undefined, run._id);
+    return;
+  }
+  await createProductionMission(ctx, source, { ...decision, state: "approved", decidedAt: now });
+  await finishJob(ctx, job, "succeeded", result.summary, undefined, run._id);
+}
+
+type RoutingDecision = typeof routingDecisionV.type;
+
+/** The Agent behind a routing target, when it is still active. */
+async function findActiveAgent(ctx: QueryCtx, instanceId: string, templateId: string): Promise<Doc<"projectAgents"> | null> {
+  const agent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) =>
+    q.eq("instanceId", instanceId).eq("templateId", templateId),
+  ).unique();
+  return agent?.status === "active" ? agent : null;
+}
+
+/** Create the production Mission for a Source and record the decision that led
+ * to it. Keep Mission insertion, its initial Run, and the Source pointer in one
+ * mutation. If dispatch cannot validate the target Agent, let the mutation
+ * fail so Convex rolls back the partial Mission insert instead of leaving a
+ * production Mission without a Run. */
+async function createProductionMission(ctx: MutationCtx, source: Doc<"sources">, decision: RoutingDecision): Promise<Id<"missions">> {
+  const { missionId } = await insertMissionAndDispatch(ctx, {
+    ownerId: source.ownerId, instanceId: source.instanceId, templateId: decision.templateId,
+    type: decision.missionType,
+    payload: decision.payload,
     sourceObservationId: source._id,
   });
-  await ctx.db.patch(source._id, { productionMissionId: missionId });
-  await finishJob(ctx, job, "succeeded", result.summary, undefined, run._id);
+  await ctx.db.patch(source._id, { productionMissionId: missionId, routing: decision });
+  return missionId;
 }
 
 export async function failRoutingRun(ctx: MutationCtx, run: { _id: Id<"runs">; agentName: string; jobId: Id<"jobs"> }, error: string, retry: boolean): Promise<void> {
@@ -362,7 +399,10 @@ export const reserveWinner = internalMutation({
     const source = await ctx.db.get(args.sourceId);
     const forced = source !== null && runtime.forcedSourceId === source._id;
     if (!source || source.status !== "ready" || (!forced && (source.selectedAt !== undefined || source.productionMissionId !== undefined))) return { status: "unavailable" as const };
-    const candidates = await candidateMissions(ctx, job.instanceId);
+    const target = forced ? source.routeTo : undefined;
+    const candidates = (await candidateMissions(ctx, job.instanceId)).filter((entry) =>
+      target === undefined || (entry.templateId === target.templateId && entry.missionType === target.missionType),
+    );
     const now = Date.now();
     const consumeManualRun = args.requestAt !== undefined && job.runNowAt === args.requestAt;
     const restorePaused = consumeManualRun && runtime.runNowRestorePaused === true;
@@ -450,9 +490,12 @@ export const settleNoSelection = internalMutation({
   },
 });
 
-/** Queue a routing Job for a specific Source from the dashboard. The Agent
- * still chooses the producing Mission type; this mutation only bypasses the
- * unattended Top-1 scorer and never creates a technical Mission. */
+/** Produce a Source from the dashboard (the Sources page's Produce button).
+ * Where it goes: the producer the user chose by hand, else the router's own
+ * proposal. A proposal that is still valid becomes the Mission at once; any
+ * other case queues a routing Job for this Source (constrained to the chosen
+ * producer, if any). It bypasses the unattended Top-1 scorer and never creates
+ * a technical Mission. */
 export const forceProduction = mutation({
   args: { sourceId: v.id("sources") },
   handler: async (ctx, args) => {
@@ -460,6 +503,13 @@ export const forceProduction = mutation({
     if (!source) throw new Error("Source not found");
     await requireOwnedRow(ctx, source);
     if (source.status !== "ready") throw new Error("Source is not ready for production");
+    const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
+    const chosen = source.routeTo;
+    if (proposal && (!chosen || (chosen.templateId === proposal.templateId && chosen.missionType === proposal.missionType))) {
+      if (!(await findActiveAgent(ctx, source.instanceId, proposal.templateId))) throw new Error(`Routing target Agent ${proposal.templateId} is not active`);
+      const missionId = await createProductionMission(ctx, source, { ...proposal, state: "approved", decidedBy: "user", decidedAt: Date.now() });
+      return { status: "created" as const, missionId };
+    }
     const job = await ctx.db.query("jobs").withIndex("by_instance_type_template", (q) =>
       q.eq("instanceId", source.instanceId).eq("type", SOURCE_ROUTING_JOB_TYPE).eq("templateId", SOURCE_TEMPLATE_ID),
     ).unique();
@@ -484,6 +534,7 @@ export const forceProduction = mutation({
       updatedAt: now,
     });
     await ctx.scheduler.runAfter(0, internal.source_routing.tick, {});
+    return { status: "queued" as const };
   },
 });
 
@@ -564,7 +615,7 @@ export const listByInstance = query({
     const agent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) => q.eq("instanceId", args.instanceId).eq("templateId", SOURCE_TEMPLATE_ID)).unique();
     return jobs.filter((job) => ownerIds.has(job.ownerId)).map((job) => {
       const runtime = routingRuntime(job);
-      return { _id: job._id, jobType: "routing" as const, templateId: SOURCE_TEMPLATE_ID, agentName: "Source routing", state: job.state, unit: job.unit, dayOfWeek: job.dayOfWeek, dayOfMonth: job.dayOfMonth, hour: job.hour, minute: job.minute, timezone: job.timezone, nextRunAt: job.nextRunAt, lastRunAt: job.lastRunAt, lastOutcome: job.lastOutcome, lastSummary: job.lastSummary, lastError: job.lastError, running: runtime.inFlightRunId !== undefined, workspaceKey: agent?.workspaceKey, latestRunId: job.latestRunId };
+      return { _id: job._id, jobType: "routing" as const, templateId: SOURCE_TEMPLATE_ID, agentName: "Source routing", state: job.state, unit: job.unit, dayOfWeek: job.dayOfWeek, dayOfMonth: job.dayOfMonth, hour: job.hour, minute: job.minute, timezone: job.timezone, nextRunAt: job.nextRunAt, lastRunAt: job.lastRunAt, lastOutcome: job.lastOutcome, lastSummary: job.lastSummary, lastError: job.lastError, running: runtime.inFlightRunId !== undefined, reviewRouting: job.config?.reviewRouting === true, workspaceKey: agent?.workspaceKey, latestRunId: job.latestRunId };
     });
   },
 });
@@ -585,6 +636,46 @@ export const setFrequency = mutation({
 
 export const pause = mutation({ args: { jobId: v.id("jobs") }, handler: async (ctx, args) => { const job = await loadOwnedJob(ctx, args.jobId); await ctx.db.patch(job._id, { state: "paused", updatedAt: Date.now() }); } });
 export const resume = mutation({ args: { jobId: v.id("jobs") }, handler: async (ctx, args) => { const job = await loadOwnedJob(ctx, args.jobId); const now = Date.now(); await ctx.db.patch(job._id, { state: "active", nextRunAt: computeNextRunAt(frequencyOf(job), job.timezone, now), updatedAt: now }); } });
+
+/** The producers a Source can be routed to, for the "Routed to" choice. */
+export const listTargets = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    const ownerIds = await ownerIdsFor(ctx, args.instanceId);
+    if (ownerIds === null) return [];
+    return await candidateMissions(ctx, args.instanceId);
+  },
+});
+
+/** Choose by hand where a Source is routed to (`null` goes back to the
+ * router's own choice). Produce then uses it. */
+export const setRouteTarget = mutation({
+  args: { sourceId: v.id("sources"), target: v.union(v.null(), v.object({ templateId: v.string(), missionType: v.string() })) },
+  handler: async (ctx, args) => {
+    const source = await ctx.db.get(args.sourceId);
+    if (!source) throw new Error("Source not found");
+    await requireOwnedRow(ctx, source);
+    if (source.productionMissionId !== undefined) throw new Error("Source already has a production Mission");
+    const { target } = args;
+    if (target !== null) {
+      const candidates = await candidateMissions(ctx, source.instanceId);
+      if (!candidates.some((entry) => entry.templateId === target.templateId && entry.missionType === target.missionType)) {
+        throw new Error("That producer is not available");
+      }
+    }
+    await ctx.db.patch(source._id, { routeTo: target ?? undefined });
+  },
+});
+
+/** Switch the routing Job between running unattended and waiting for approval. */
+export const setReviewMode = mutation({
+  args: { jobId: v.id("jobs"), review: v.boolean() },
+  handler: async (ctx, args) => {
+    const job = await loadOwnedJob(ctx, args.jobId);
+    const config = job.config && typeof job.config === "object" && !Array.isArray(job.config) ? job.config : {};
+    await ctx.db.patch(job._id, { config: { ...config, reviewRouting: args.review }, updatedAt: Date.now() });
+  },
+});
 
 export const loadDispatchInputs = internalQuery({
   args: { runId: v.id("runs") },
