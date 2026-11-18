@@ -10,30 +10,16 @@ import { deriveSourcePipelineState, SourceDetailContent } from "../src/component
 
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
-const forceProductionMock = vi.fn();
-const setRouteTargetMock = vi.fn();
 const requestThumbnailsMock = vi.fn();
-let targets: unknown[] = [];
 
 vi.mock("convex/react", () => ({
-  // The Source page asks for the Source, and for the producers it can be routed to.
-  useQuery: (ref: string, ...rest: unknown[]) => (ref === "source_routing.listTargets" ? targets : useQueryMock(ref, ...rest)),
-  useMutation: (ref: string) =>
-    ({
-      "source_routing.forceProduction": forceProductionMock,
-      "source_routing.setRouteTarget": setRouteTargetMock,
-      "source_thumbnails.request": requestThumbnailsMock,
-    })[ref] ?? retryMock,
+  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useMutation: (ref: string) => (ref === "source_thumbnails.request" ? requestThumbnailsMock : retryMock),
 }));
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { get: "sources.get", retry: "sources.retry" },
-    source_routing: {
-      forceProduction: "source_routing.forceProduction",
-      setRouteTarget: "source_routing.setRouteTarget",
-      listTargets: "source_routing.listTargets",
-    },
     source_thumbnails: { request: "source_thumbnails.request" },
   },
 }));
@@ -62,10 +48,7 @@ describe("SourceDetailContent", () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     retryMock.mockReset();
-    forceProductionMock.mockReset();
-    setRouteTargetMock.mockReset();
     requestThumbnailsMock.mockReset().mockResolvedValue(undefined);
-    targets = [];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -272,44 +255,10 @@ describe("SourceDetailContent", () => {
     expect(retryMock).toHaveBeenCalledWith({ sourceId: "src-1" });
   });
 
-  describe("Produce and the producer it routes to", () => {
-    const readySource = (overrides: Partial<Record<string, unknown>> = {}) => makeSource({ sourceId: "instagram-reel", ...overrides });
-    const button = () => Array.from(document.querySelectorAll("button")).find((b) => /^Produce( again)?$/.test(b.textContent?.trim() ?? ""));
-
-    it("produces a ready Source, by Source id", async () => {
-      forceProductionMock.mockResolvedValue(undefined);
-      await render({ source: readySource(), analysisSchema: null });
-      expect(button()?.textContent?.trim()).toBe("Produce");
-      await act(async () => {
-        button()!.click();
-      });
-      expect(forceProductionMock).toHaveBeenCalledWith({ sourceId: "src-1" });
-    });
-
-    it("offers to produce again once selected", async () => {
-      await render({ source: readySource({ selectedAt: 1 }), analysisSchema: null });
-      expect(button()?.textContent?.trim()).toBe("Produce again");
-    });
-
-    it("is only offered for a ready Source", async () => {
-      await render({ source: readySource({ status: "processing" }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-      await render({ source: readySource({ status: "failed" }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-    });
-
-    it("lets the producer be chosen next to Produce", async () => {
-      targets = [{ templateId: "@opengroow/content-creator", agentName: "c", missionType: "create_image", label: "Create image", description: "" }];
-      await render({ source: readySource(), analysisSchema: null });
-      const select = document.querySelector("select")!;
-      expect(select.value).toBe("auto");
-      const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-      await act(async () => {
-        setValue.call(select, "@opengroow/content-creator::create_image");
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      expect(setRouteTargetMock).toHaveBeenCalledWith({ sourceId: "src-1", target: { templateId: "@opengroow/content-creator", missionType: "create_image" } });
-    });
+  it("has no Produce button nor producer choice: production starts from the Sources list", async () => {
+    await render({ source: makeSource({ sourceId: "instagram-reel" }), analysisSchema: null });
+    expect(Array.from(document.querySelectorAll("button")).some((b) => /Produce/.test(b.textContent ?? ""))).toBe(false);
+    expect(document.querySelector("select")).toBeNull();
   });
 
   describe("header", () => {
