@@ -3,6 +3,7 @@ import { internal } from "./_generated/api.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server.js";
 import { originKeyOf } from "./source_origin.js";
+import { deleteSource } from "./sources.js";
 
 // One-off cleanup of the Sources that were ingested before a post could only be
 // ingested once (`source_origin.ts`): the same post captured on several days.
@@ -83,8 +84,7 @@ export const removeDuplicates = internalMutation({
     let removed = 0;
     for (const group of groups) {
       for (const source of group.remove) {
-        if (source.thumbnailStorageId) await ctx.storage.delete(source.thumbnailStorageId);
-        await ctx.db.delete(source._id);
+        await deleteSource(ctx, source);
         removed += 1;
       }
     }

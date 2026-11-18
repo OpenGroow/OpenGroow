@@ -6,6 +6,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { NativeSelect } from "@/components/ui/native-select";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { titleCase } from "@/src/lib/mission-type";
 
 // "Routed to" (ADR-076): where a Source goes when it is produced. Shared by the
 // Sources list and the Source page.
@@ -23,12 +24,7 @@ const targetKey = (target: { templateId: string; missionType: string }) => `${ta
 
 // The Agent id is `@scope/slug`; the slug reads as the Agent's name.
 export function agentLabel(templateId: string): string {
-  const slug = templateId.split("/").pop() ?? templateId;
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
+  return titleCase(templateId.split("/").pop() ?? templateId, "-");
 }
 
 /** The producers a Source can be routed to. */
