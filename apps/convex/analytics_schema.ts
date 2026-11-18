@@ -18,6 +18,19 @@ export const analyticsStateV = v.union(
 );
 
 export const analyticsTables = {
+  // The connection of an Analytics Adapter to its service, once per Project (ADR-078).
+  analyticsConnections: defineTable({
+    instanceId: v.string(),
+    /** The id of an installed Analytics Adapter. */
+    adapter: v.string(),
+    url: v.string(),
+    // Never returned to the dashboard in clear: queries expose `hasApiKey` only.
+    apiKey: v.optional(v.string()),
+    /** The values of the options the package declares. */
+    options: v.optional(v.record(v.string(), v.union(v.string(), v.number()))),
+    updatedAt: v.number(),
+  }).index("by_instance_and_adapter", ["instanceId", "adapter"]),
+
   // One row per Publication measured: the schedule and the state of its readings.
   publicationAnalytics: defineTable({
     publicationId: v.id("publications"),

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { AnalyticsKey } from "@opengroow/publisher-sdk";
+import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import { internalQuery, type QueryCtx } from "./_generated/server.js";
 
 // The Analytics Adapter layer over the hub packages (ADR-078), like
@@ -8,19 +8,12 @@ import { internalQuery, type QueryCtx } from "./_generated/server.js";
 // (installing from the hub comes with the adapter packages). A package of kind
 // "analytics" leaves its data in `meta` and its id in `provides`.
 
-/** What an installed Analytics Adapter declares, readable without its code. */
-export type AnalyticsAdapterMeta = {
-  id: string;
-  name: string;
-  /** The key it needs from a Publication. */
-  needs: AnalyticsKey;
-  /**
-   * The Publisher (its adapter id) this adapter belongs to, e.g. Postiz for its own analytics. It is
-   * the adapter's default for that Publisher's channels, and an adapter that needs the service's
-   * `externalId` works only with it.
-   */
-  publisher?: string;
-};
+/**
+ * What an installed Analytics Adapter declares, readable without its code (its manifest): id, name, the
+ * key it needs, the Publisher it belongs to (its default for that Publisher's channels; an adapter that
+ * needs the service's `externalId` works only with it), its earliest delay and the options a Project can set.
+ */
+export type { AnalyticsAdapterMeta };
 
 type Ctx = Pick<QueryCtx, "db">;
 

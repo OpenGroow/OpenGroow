@@ -1,4 +1,12 @@
-import { parseCapabilities, parsePublisherManifest, type CapabilitiesData, type ChannelOptionsData } from "@opengroow/publisher-sdk";
+import {
+  parseAnalyticsManifest,
+  parseAnalyticsMetrics,
+  parseCapabilities,
+  parsePublisherManifest,
+  type AnalyticsAdapterMeta,
+  type CapabilitiesData,
+  type ChannelOptionsData,
+} from "@opengroow/publisher-sdk";
 import { HUB_PACKAGE_KINDS, type HubPackageKind } from "@opengroow/agent-templates/hub-package-kinds";
 import { v } from "convex/values";
 import type { PackageFile } from "./template_registry_store.js";
@@ -91,8 +99,17 @@ export type PublisherMeta = {
 };
 
 /** The package's `meta`, from files that `problemWith` accepted. */
-export function describe(kind: HubPackageKind, files: readonly PackageFile[]): PublisherMeta {
+export function describe(kind: "publisher", files: readonly PackageFile[]): PublisherMeta;
+export function describe(kind: "analytics", files: readonly PackageFile[]): AnalyticsAdapterMeta;
+export function describe(kind: HubPackageKind, files: readonly PackageFile[]): PublisherMeta | AnalyticsAdapterMeta;
+export function describe(kind: HubPackageKind, files: readonly PackageFile[]): PublisherMeta | AnalyticsAdapterMeta {
   switch (kind) {
+    case "analytics": {
+      const manifest = parseAnalyticsManifest(JSON.parse(files.find((f) => f.path === "manifest.json")!.content));
+      if (!manifest.ok) throw new Error(manifest.error);
+      const { contractVersion: _contract, ...meta } = manifest.manifest;
+      return meta;
+    }
     case "publisher": {
       const json = (path: string) => JSON.parse(files.find((f) => f.path === path)!.content);
       const manifest = parsePublisherManifest(json("manifest.json"));
@@ -109,6 +126,33 @@ export function describe(kind: HubPackageKind, files: readonly PackageFile[]): P
       };
     }
   }
+}
+
+/** The id a package of `kind` is looked up by (stored as `provides`): a Publisher's adapter id, an Analytics Adapter's id. */
+export function providedId(meta: PublisherMeta | AnalyticsAdapterMeta): string {
+  return "adapter" in meta ? meta.adapter : meta.id;
+}
+
+function analyticsProblem(entry: { id: string }, files: readonly PackageFile[]): string | undefined {
+  const manifestFile = readJson(files, "manifest.json");
+  if (!manifestFile.ok) return manifestFile.error;
+  const manifest = parseAnalyticsManifest(manifestFile.value);
+  if (!manifest.ok) return manifest.error;
+  // The id an adapter is stored with must be the package's own: a package cannot take another one's.
+  const name = entry.id.slice(entry.id.indexOf("/") + 1);
+  if (name !== `analytics-${manifest.manifest.id}`) {
+    return `The hub lists ${entry.id} but the manifest declares the adapter "${manifest.manifest.id}": expected the package name analytics-${manifest.manifest.id}`;
+  }
+  const bundle = files.find((f) => f.path === "dist/plugin.mjs");
+  if (!bundle || bundle.content.trim() === "") return "dist/plugin.mjs is missing or empty";
+  const metrics = readJson(files, "data/metrics.json");
+  if (!metrics.ok) return metrics.error;
+  try {
+    if (parseAnalyticsMetrics(metrics.value).adapter !== manifest.manifest.id) return `data/metrics.json is for another adapter than "${manifest.manifest.id}"`;
+  } catch (error) {
+    return `data/metrics.json: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  return undefined;
 }
 
 /** Why a downloaded package must not be installed as `kind`, or undefined when it is acceptable. */
@@ -132,5 +176,7 @@ export function problemWith(kind: HubPackageKind, entry: { id: string; tag: stri
   switch (kind) {
     case "publisher":
       return publisherProblem(entry, files);
+    case "analytics":
+      return analyticsProblem(entry, files);
   }
 }

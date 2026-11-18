@@ -1,8 +1,8 @@
 /**
  * `groowhub validate template <folder> [--tag <name>@<version>]`
  * `groowhub validate index <index.json> [--kind publisher]`
- * `groowhub validate publisher <folder>`
- * `groowhub pack publisher <folder> --out <dir> [--index <publishers.json>]`
+ * `groowhub validate publisher <folder>` / `validate analytics <folder>`
+ * `groowhub pack publisher <folder> --out <dir> [--index <publishers.json>]` / `pack analytics` (`analytics.json`)
  *
  * The tooling of the hub repository (groowhub): it checks and builds what the
  * hub distributes with the code the product runs at installation, so a hub can
@@ -16,18 +16,23 @@ import { fileURLToPath } from "node:url";
 import { parseHubIndex, parseHubPackageIndex } from "../../agent-templates/src/hub-index.js";
 import { validatePackageFolder } from "../../agent-templates/src/validate-package.js";
 import { checkPublisherFolder, packPublisher } from "./publisher.js";
+import { checkAnalyticsFolder, packAnalytics } from "./analytics.js";
 
 const USAGE = `Usage:
   groowhub validate template <folder> [--tag <name>@<version>]
-  groowhub validate index <index.json> [--kind publisher]
+  groowhub validate index <index.json> [--kind publisher|analytics]
   groowhub validate publisher <folder>
-  groowhub pack publisher <folder> --out <dir> [--index <publishers.json>]`;
+  groowhub validate analytics <folder>
+  groowhub pack publisher <folder> --out <dir> [--index <publishers.json>]
+  groowhub pack analytics <folder> --out <dir> [--index <analytics.json>]`;
 
 export type Command =
   | { command: "validate-template"; folder: string; tag?: string }
-  | { command: "validate-index"; file: string; kind: "template" | "publisher" }
+  | { command: "validate-index"; file: string; kind: "template" | "publisher" | "analytics" }
   | { command: "validate-publisher"; folder: string }
-  | { command: "pack-publisher"; folder: string; out: string; index?: string };
+  | { command: "validate-analytics"; folder: string }
+  | { command: "pack-publisher"; folder: string; out: string; index?: string }
+  | { command: "pack-analytics"; folder: string; out: string; index?: string };
 
 function flags(rest: readonly string[], names: readonly string[]): { positional: string[]; values: Record<string, string> } {
   const positional: string[] = [];
@@ -55,19 +60,24 @@ export function parseArgs(argv: readonly string[]): Command {
     const { positional, values } = flags(rest, ["--kind"]);
     if (!positional[0]) throw new Error(`${USAGE}\n\nmissing <index.json>`);
     const kind = values["--kind"] ?? "template";
-    if (kind !== "template" && kind !== "publisher") throw new Error(`${USAGE}\n\nunknown kind ${kind}`);
+    if (kind !== "template" && kind !== "publisher" && kind !== "analytics") throw new Error(`${USAGE}\n\nunknown kind ${kind}`);
     return { command: "validate-index", file: positional[0], kind };
   }
-  if (verb === "validate" && noun === "publisher") {
+  if (verb === "validate" && (noun === "publisher" || noun === "analytics")) {
     const { positional } = flags(rest, []);
     if (!positional[0]) throw new Error(`${USAGE}\n\nmissing <folder>`);
-    return { command: "validate-publisher", folder: positional[0] };
+    return { command: noun === "publisher" ? "validate-publisher" : "validate-analytics", folder: positional[0] };
   }
-  if (verb === "pack" && noun === "publisher") {
+  if (verb === "pack" && (noun === "publisher" || noun === "analytics")) {
     const { positional, values } = flags(rest, ["--out", "--index"]);
     if (!positional[0]) throw new Error(`${USAGE}\n\nmissing <folder>`);
     if (!values["--out"]) throw new Error(`${USAGE}\n\nmissing --out <dir>`);
-    return { command: "pack-publisher", folder: positional[0], out: values["--out"], ...(values["--index"] ? { index: values["--index"] } : {}) };
+    return {
+      command: noun === "publisher" ? "pack-publisher" : "pack-analytics",
+      folder: positional[0],
+      out: values["--out"],
+      ...(values["--index"] ? { index: values["--index"] } : {}),
+    };
   }
   throw new Error(USAGE);
 }
@@ -92,14 +102,16 @@ export function run(
     return result.ok ? 0 : 1;
   }
 
-  if (parsed.command === "validate-publisher" || parsed.command === "pack-publisher") {
+  if (parsed.command === "validate-publisher" || parsed.command === "pack-publisher" || parsed.command === "validate-analytics" || parsed.command === "pack-analytics") {
     const dir = resolve(io.cwd, parsed.folder);
+    const analytics = parsed.command.endsWith("analytics");
     try {
-      if (parsed.command === "validate-publisher") {
-        const { pkg } = checkPublisherFolder(dir);
+      if (parsed.command === "validate-publisher" || parsed.command === "validate-analytics") {
+        const { pkg } = analytics ? checkAnalyticsFolder(dir) : checkPublisherFolder(dir);
         io.log(`OK ${pkg.name}@${pkg.version}`);
       } else {
-        const result = packPublisher(dir, resolve(io.cwd, parsed.out), parsed.index ? { indexFile: resolve(io.cwd, parsed.index) } : {});
+        const pack = analytics ? packAnalytics : packPublisher;
+        const result = pack(dir, resolve(io.cwd, parsed.out), parsed.index ? { indexFile: resolve(io.cwd, parsed.index) } : {});
         io.log(`${result.file}`);
         io.log(`${result.tag} ${result.digest}`);
       }
@@ -117,7 +129,7 @@ export function run(
     io.error(`ERROR ${parsed.file}: ${error instanceof Error ? error.message : error}`);
     return 1;
   }
-  if (parsed.kind === "publisher") {
+  if (parsed.kind === "publisher" || parsed.kind === "analytics") {
     const index = parseHubPackageIndex(json);
     if (index.ok) io.log(`OK ${index.index.packages.length} package(s)`);
     else io.error(`ERROR ${parsed.file}: ${index.reason}`);
