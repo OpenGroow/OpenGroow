@@ -1,10 +1,10 @@
 import { v, type Infer } from "convex/values";
 import { metricKindOf } from "@opengroow/publisher-sdk";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { internalMutation, internalQuery, query, type MutationCtx } from "./_generated/server.js";
+import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
 import { connectionFor, projectAnalyticsConnection } from "./analytics_connections.js";
-import { readOwnerId } from "./instance_ownership.js";
+import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { analyticsDeclarationFor } from "@opengroow/agent-templates";
@@ -163,6 +163,30 @@ export const listForProject = query({
   },
 });
 
+type ReadingRow = Doc<"publicationAnalytics">;
+
+/** What an adapter needs to take the reading of one Publication (its channel's adapter and connection). */
+async function readingItem(ctx: Pick<QueryCtx, "db">, row: ReadingRow, adapters: Awaited<ReturnType<typeof installedAnalyticsAdapters>>, delayMs: number) {
+  const publication = await ctx.db.get(row.publicationId);
+  if (!publication) return null;
+  // The adapter is the one the channel is linked to now (ADR-078): none reads "analytics unavailable".
+  const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
+  const link = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : null;
+  // The Project's own connection to the adapter, else (for the adapter of the Publisher's own service) the Publisher's.
+  const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
+  const connection = link ? connectionFor(await projectAnalyticsConnection(ctx, row.instanceId, link.adapter.id), publisher) : undefined;
+  return {
+    id: row._id,
+    analyticsAdapter: link?.adapter.id ?? null,
+    publishedAt: row.publishedAt,
+    delayMs,
+    kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),
+    externalId: publication.externalId,
+    externalUrl: publication.externalUrl,
+    ...(connection ? { connection } : {}),
+  };
+}
+
 /** Readings due now, with what the adapter needs to take them. */
 export const due = internalQuery({
   args: { now: v.number() },
@@ -174,26 +198,64 @@ export const due = internalQuery({
     const adapters = await installedAnalyticsAdapters(ctx);
     const out = [];
     for (const row of rows) {
-      const publication = await ctx.db.get(row.publicationId);
-      if (!publication) continue;
-      // The adapter is the one the channel is linked to now (ADR-078): none reads "analytics unavailable".
-      const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
-      const link = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : null;
-      // The Project's own connection to the adapter, else (for the adapter of the Publisher's own service) the Publisher's.
-      const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
-      const connection = link ? connectionFor(await projectAnalyticsConnection(ctx, row.instanceId, link.adapter.id), publisher) : undefined;
-      out.push({
-        id: row._id,
-        analyticsAdapter: link?.adapter.id ?? null,
-        publishedAt: row.publishedAt,
-        delayMs: row.delays[row.taken],
-        kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),
-        externalId: publication.externalId,
-        externalUrl: publication.externalUrl,
-        ...(connection ? { connection } : {}),
-      });
+      const item = await readingItem(ctx, row, adapters, row.delays[row.taken]);
+      if (item) out.push(item);
     }
     return out;
+  },
+});
+
+/** The most posts a refresh reads. */
+const REFRESH_LIMIT = 100;
+
+/**
+ * Every measured post of a Project, to read again now: what "Refresh" on the Analytics page takes,
+ * whatever their schedule. Only the adapter's own earliest delay holds a reading back (`delayMs` 0).
+ */
+export const forRefresh = internalQuery({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    await ownerIdFor(ctx, args.instanceId);
+    const rows = await ctx.db
+      .query("publicationAnalytics")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .order("desc")
+      .take(REFRESH_LIMIT);
+    const adapters = await installedAnalyticsAdapters(ctx);
+    const out = [];
+    for (const row of rows) {
+      // The post of the Publication's current series, and not one whose post the service does not know.
+      const publication = await ctx.db.get(row.publicationId);
+      if (!publication || (publication.postSeries ?? 0) !== row.postSeries || row.state === "post_unknown") continue;
+      const item = await readingItem(ctx, row, adapters, 0);
+      if (item) out.push(item);
+    }
+    return out;
+  },
+});
+
+/** Records readings the owner asked for: Snapshots outside the schedule, which they never advance. */
+export const recordRefreshed = internalMutation({
+  args: { readings: v.array(v.object({ id: v.id("publicationAnalytics"), metrics: v.record(v.string(), v.number()) })) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    for (const { id, metrics } of args.readings) {
+      const row = await ctx.db.get(id);
+      if (!row) continue;
+      await ctx.db.insert("performanceSnapshots", {
+        publicationId: row.publicationId,
+        postSeries: row.postSeries,
+        instanceId: row.instanceId,
+        delayMs: now - row.publishedAt,
+        takenAt: now,
+        metrics,
+        source: "refresh",
+      });
+      // A post the service now answers for is no longer failing or empty; its schedule resumes.
+      if (row.state === "failed" || row.state === "no_data") {
+        await ctx.db.patch(row._id, { state: "waiting", reason: undefined, nextAt: Math.max(now, row.publishedAt + (row.delays[row.taken] ?? 0)), updatedAt: now });
+      }
+    }
   },
 });
 

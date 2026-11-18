@@ -56,7 +56,8 @@ export const analyticsTables = {
   })
     .index("by_publication", ["publicationId"])
     .index("by_publication_and_series", ["publicationId", "postSeries"])
-    .index("by_done_and_next", ["done", "nextAt"]),
+    .index("by_done_and_next", ["done", "nextAt"])
+    .index("by_instance", ["instanceId"]),
 
   // Append-only: a row is never patched or deleted. A series is per (Publication, postSeries).
   performanceSnapshots: defineTable({
@@ -68,6 +69,7 @@ export const analyticsTables = {
     takenAt: v.number(),
     /** Metrics of the closed vocabulary of the Publication's kind. */
     metrics: v.record(v.string(), v.number()),
-    source: v.literal("adapter"),
+    /** `adapter`: a scheduled reading. `refresh`: one the owner asked for, outside the schedule. */
+    source: v.union(v.literal("adapter"), v.literal("refresh")),
   }).index("by_publication", ["publicationId"]),
 };

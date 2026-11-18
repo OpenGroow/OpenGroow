@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Crown, Eye, ExternalLink, Layers, Users } from "lucide-react";
+import { Crown, Eye, ExternalLink, Layers, Loader2, RefreshCw, Users } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
 import { useAuthenticatedInstances } from "@/src/hooks/use-authenticated-instances";
 import { useResolvedProjectId } from "@/src/hooks/use-resolved-project-id";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -20,6 +21,7 @@ import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badg
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { SourceThumbnail } from "@/src/components/source-visuals";
 import { compact, currentReadings, engagementRate, latestMetrics, percent, rankValue, totalsOf } from "@/src/lib/analytics-figures";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { cn } from "@/lib/utils";
 
 // The Analytics page (ADR-078): the Project's measured posts, the way the Sources
@@ -178,6 +180,40 @@ function PostRow({ row, selected, onSelect }: { row: AnalyticsRow; selected: boo
 
 type Sort = "top" | "recent";
 
+/** Reads every post's statistics now, outside the schedule, and says how it went. */
+function RefreshButton({ instanceId }: { instanceId: string | undefined }) {
+  const refresh = useAction(api.analytics_node.refresh);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: StatusTone; text: string } | null>(null);
+
+  async function handleRefresh() {
+    if (!instanceId) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await refresh({ instanceId });
+      const posts = (n: number) => `${n} ${n === 1 ? "post" : "posts"}`;
+      if (result.failed > 0) setMessage({ tone: "error", text: `${posts(result.failed)} could not be read${result.error ? `: ${result.error}` : ""}` });
+      else if (result.read === 0) setMessage({ tone: "info", text: "Nothing to read yet" });
+      else setMessage({ tone: "active", text: `${posts(result.read)} updated${result.unavailable > 0 ? `, ${result.unavailable} not available yet` : ""}` });
+    } catch (error) {
+      setMessage({ tone: "error", text: extractConvexErrorMessage(error, "Could not refresh") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-3">
+      {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
+      <Button type="button" variant="outline" size="lg" disabled={!instanceId || busy} onClick={() => void handleRefresh()}>
+        {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
+        Refresh
+      </Button>
+    </div>
+  );
+}
+
 export default function AnalyticsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedInstanceId = useResolvedProjectId(params);
   const instances = useAuthenticatedInstances<InstanceRecord>();
@@ -200,7 +236,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
 
   return (
     <div className="grid gap-8">
-      <PageHeader title="Analytics" description="How your published posts performed." />
+      <PageHeader title="Analytics" description="How your published posts performed." action={<RefreshButton instanceId={instanceId} />} />
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : all.length === 0 ? (

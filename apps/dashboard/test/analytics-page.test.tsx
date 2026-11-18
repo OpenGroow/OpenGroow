@@ -10,16 +10,17 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Seam 3: `analytics.listForProject` is simulated.
+const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
 let rows: unknown[] | undefined = [];
 vi.mock("convex/react", () => ({
-  useAction: () => async () => ({ entries: [] }),
+  useAction: () => refreshAction,
   useMutation: () => async () => undefined,
   useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : undefined),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     analytics: { listForProject: "analytics.listForProject" },
-    analytics_connections: { list: "analytics_connections.list" },
+    analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
   },
@@ -159,5 +160,24 @@ describe("Analytics page", () => {
     expect(detail()).toContain("Post not found at the service");
     expect(detail()).toContain("42");
     expect(detail()).not.toContain("Next reading");
+  });
+
+  it("reads every post again on Refresh and says how many were updated", async () => {
+    rows = [row({ title: "A", snapshots: [snap(DAY, { views: 9 })] })];
+    refreshAction.mockClear();
+    await render();
+    const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Refresh"))!;
+    await act(async () => button.click());
+    expect(refreshAction).toHaveBeenCalledWith({ instanceId: "inst-1" });
+    expect(text()).toContain("2 posts updated");
+  });
+
+  it("says why a refresh could not read a post", async () => {
+    rows = [row({ title: "A", snapshots: [snap(DAY, { views: 9 })] })];
+    refreshAction.mockResolvedValueOnce({ read: 0, unavailable: 0, failed: 1, error: "Service answered 500" } as never);
+    await render();
+    const button = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Refresh"))!;
+    await act(async () => button.click());
+    expect(text()).toContain("1 post could not be read: Service answered 500");
   });
 });

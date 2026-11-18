@@ -427,4 +427,37 @@ describe("Performance Snapshots (ADR-078)", () => {
     const stranger = s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" });
     expect(await stranger.query(api.analytics.forPublication, { publicationId: s.publicationId })).toBeNull();
   });
+
+  it("reads every measured post now on Refresh, as Snapshots outside the schedule", async () => {
+    const s = await seed();
+    await s.publish();
+    vi.advanceTimersByTime(HOUR);
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 1, unavailable: 0, failed: 0 });
+    const view = await s.view();
+    expect(view.snapshots).toHaveLength(1);
+    expect(view.snapshots[0]).toMatchObject({ delayMs: HOUR, source: "refresh", metrics: { views: 146 } });
+    // The schedule is not advanced: the 1 day reading is still taken.
+    expect(view.state).toBe("waiting");
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect((await s.view()).snapshots.map((x) => x.delayMs)).toEqual([HOUR, DAY]);
+  });
+
+  it("reports what a refresh could not read, without recording it", async () => {
+    const s = await seed();
+    await s.publish();
+    answer = () => json({}, 500);
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 0, unavailable: 0, failed: 1, error: "Service answered 500" });
+    const view = await s.view();
+    expect(view.snapshots).toEqual([]);
+    expect(view.state).toBe("waiting");
+  });
+
+  it("refuses a refresh of someone else's Project", async () => {
+    const s = await seed();
+    await s.publish();
+    await expect(s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" }).action(api.analytics_node.refresh, { instanceId: INSTANCE_ID })).rejects.toThrow();
+  });
 });
