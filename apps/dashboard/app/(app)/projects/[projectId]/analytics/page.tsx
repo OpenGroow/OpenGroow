@@ -54,9 +54,28 @@ const dateOf = (row: AnalyticsRow) => new Date(row.publishedAt).toLocaleDateStri
 
 const GRID = "grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1fr)_repeat(4,minmax(0,0.8fr))_1.5rem] items-center gap-4";
 
+/** The first frame of a video that has no cover: the browser loads the video itself, from its own URL. */
+function VideoFrame({ url, className, fallback }: { url: string; className: string; fallback: React.ReactNode }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) return fallback;
+  return (
+    <video
+      src={`${url}#t=0.1`}
+      muted
+      playsInline
+      preload="metadata"
+      aria-hidden="true"
+      tabIndex={-1}
+      onError={() => setBroken(true)}
+      className={cn("shrink-0 rounded-xl bg-muted object-cover", className)}
+    />
+  );
+}
+
 function Thumbnail({ row, className }: { row: AnalyticsRow; className: string }) {
   const source = { _id: row.publicationId, templateId: "", sourceId: "", label: titleOf(row), family: row.kind ?? "video", thumbnailUrl: row.thumbnailUrl ?? null };
-  return <SourceThumbnail source={source} className={className} />;
+  const thumbnail = <SourceThumbnail source={source} className={className} />;
+  return !row.thumbnailUrl && row.videoUrl ? <VideoFrame url={row.videoUrl} className={className} fallback={thumbnail} /> : thumbnail;
 }
 
 /** One metric over the readings, with its dates: the shape of how the post grew. */

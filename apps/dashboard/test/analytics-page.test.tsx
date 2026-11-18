@@ -180,4 +180,10 @@ describe("Analytics page", () => {
     await act(async () => button.click());
     expect(text()).toContain("1 post could not be read: Service answered 500");
   });
+
+  it("shows the first frame of a video that has no cover", async () => {
+    rows = [row({ title: "Clip", kind: "video", videoUrl: "https://cdn.example.com/v.mp4", snapshots: [snap(DAY, { views: 9 })] })];
+    await render();
+    expect(container.querySelector("li button video, button[data-publication] video")?.getAttribute("src")).toBe("https://cdn.example.com/v.mp4#t=0.1");
+  });
 });

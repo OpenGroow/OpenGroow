@@ -181,6 +181,14 @@ describe("analytics.listForProject", () => {
     expect(rows.filter((r) => !r.thumbnailUrl)).toHaveLength(1);
   });
 
+  it("gives the video of a post with no cover, so the page can show its first frame", async () => {
+    const s = await seed();
+    await s.publish({ target: "instagram:me", state: "waiting", publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c" } });
+    const [row] = await s.list();
+    expect(row.thumbnailUrl).toBeUndefined();
+    expect(row.videoUrl).toBe("https://cdn.example.com/v.mp4");
+  });
+
   it("leaves out Publications that are not published, and shows nothing to someone else", async () => {
     const s = await seed();
     await s.publish({ target: "instagram:me", status: "failed" });

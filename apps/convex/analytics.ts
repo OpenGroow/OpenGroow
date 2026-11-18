@@ -117,6 +117,8 @@ function postFace(mission: Doc<"missions">, platform: string | undefined) {
     ...(typeof p?.title === "string" && p.title.trim() ? { title: p.title.trim() } : {}),
     ...(typeof p?.kind === "string" ? { kind: p.kind } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    // A video with no cover: the page shows its first frame.
+    ...(!thumbnailUrl && p?.kind === "video" && str(p.videoUrl) ? { videoUrl: str(p.videoUrl) } : {}),
   };
 }
 
