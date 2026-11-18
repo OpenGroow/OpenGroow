@@ -2,10 +2,21 @@ import { paginationOptsValidator } from "convex/server";
 import { v, type ObjectType } from "convex/values";
 import { resolveSource } from "./source_enrichment.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server.js";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { sourceMarketingV } from "./source_schema.js";
 import { originKeyOf } from "./source_origin.js";
+
+/** A Source's thumbnail is a stored file: the URL a page can load, or null. */
+async function thumbnailUrlOf(ctx: Pick<QueryCtx, "storage">, source: Doc<"sources">): Promise<string | null> {
+  return source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null;
+}
+
+/** Deletes a Source and the thumbnail file it owns. */
+export async function deleteSource(ctx: MutationCtx, source: Doc<"sources">): Promise<void> {
+  if (source.thumbnailStorageId) await ctx.storage.delete(source.thumbnailStorageId);
+  await ctx.db.delete(source._id);
+}
 
 const insertArgs = {
   instanceId: v.string(),
@@ -141,10 +152,7 @@ export const listByInstance = query({
     return {
       ...result,
       page: await Promise.all(
-        result.page.map(async (source) => ({
-          ...source,
-          thumbnailUrl: source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null,
-        })),
+        result.page.map(async (source) => ({ ...source, thumbnailUrl: await thumbnailUrlOf(ctx, source) })),
       ),
     };
   },
@@ -177,8 +185,8 @@ export const counts = query({
         out[status] += 1;
         out.total += 1;
         const analysed = status === "ready" && source.excluded !== true && source.scoring !== undefined;
-        if (analysed && source.selectedAt === undefined) out.scored += 1;
-        else if (!(analysed && source.selectedAt !== undefined)) out.other += 1;
+        if (!analysed) out.other += 1;
+        else if (source.selectedAt === undefined) out.scored += 1;
       }
     }
     return out;
@@ -238,7 +246,7 @@ export const get = query({
       source,
       analysisSchema: declaration?.analysisSchema ?? null,
       workspaceKey: agent?.workspaceKey ?? null,
-      thumbnailUrl: source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null,
+      thumbnailUrl: await thumbnailUrlOf(ctx, source),
     };
   },
 });
@@ -292,11 +300,7 @@ export const removeMany = mutation({
       await requireOwnedRow(ctx, source);
       owned.push(source);
     }
-    for (const source of owned) {
-      // Its thumbnail is a stored file: it goes with the row.
-      if (source.thumbnailStorageId) await ctx.storage.delete(source.thumbnailStorageId);
-      await ctx.db.delete(source._id);
-    }
+    for (const source of owned) await deleteSource(ctx, source);
     return { removed: owned.length };
   },
 });

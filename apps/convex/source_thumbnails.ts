@@ -20,23 +20,17 @@ const CRAWLER_USER_AGENT = "facebookexternalhit/1.1";
 /** At most this many Sources are scheduled by one `request` call. */
 export const MAX_REQUESTED = 20;
 
-export function isThumbnailPage(url: string): boolean {
+function isHttpsOn(url: string, hosts: RegExp): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && PAGE_HOSTS.test(parsed.hostname);
+    return parsed.protocol === "https:" && hosts.test(parsed.hostname);
   } catch {
     return false;
   }
 }
 
-function isImageUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" && IMAGE_HOSTS.test(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
+export const isThumbnailPage = (url: string): boolean => isHttpsOn(url, PAGE_HOSTS);
+const isImageUrl = (url: string): boolean => isHttpsOn(url, IMAGE_HOSTS);
 
 // What TikTok serves instead of a cover when it has none to show (a private or
 // removed video): a generic fallback or its own logo. They are not a thumbnail.
