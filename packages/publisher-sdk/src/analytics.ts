@@ -1,3 +1,5 @@
+import { isValidIcon } from "./manifest.js";
+
 // The contract of an Analytics Adapter (ADR-078, docs/domain/publishing.md).
 // Separate from the Publisher contract and versioned on its own. An adapter
 // reads how one post performed at a service; the core owns the schedule, the
@@ -71,6 +73,8 @@ export type AnalyticsPackageManifest = {
   publisher?: string;
   /** The earliest delay after publication at which the service can report (ms). */
   earliestDelayMs: number;
+  /** The logo, an image data URI, like a Publisher's. */
+  icon?: string;
   options?: AnalyticsOptionDecl[];
 };
 
@@ -97,6 +101,9 @@ export function parseAnalyticsManifest(raw: unknown): { ok: true; manifest: Anal
   }
   if (typeof m.earliestDelayMs !== "number" || !Number.isFinite(m.earliestDelayMs) || m.earliestDelayMs < 0) {
     return { ok: false, error: "The manifest `earliestDelayMs` must be a number of ms, 0 or more" };
+  }
+  if (m.icon !== undefined && !isValidIcon(m.icon)) {
+    return { ok: false, error: "The manifest `icon` must be a png, webp, jpeg or svg data URI of a bounded size" };
   }
   let options: AnalyticsOptionDecl[] | undefined;
   if (m.options !== undefined) {
@@ -130,6 +137,7 @@ export function parseAnalyticsManifest(raw: unknown): { ok: true; manifest: Anal
       needs: m.needs,
       ...(typeof m.publisher === "string" ? { publisher: m.publisher } : {}),
       earliestDelayMs: m.earliestDelayMs,
+      ...(typeof m.icon === "string" ? { icon: m.icon } : {}),
       ...(options ? { options } : {}),
     },
   };

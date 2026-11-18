@@ -20,6 +20,16 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 
 type AdapterView = FunctionReturnType<typeof api.analytics_connections.list>[number];
 
+/** An adapter's logo (an image data URI), or the initial of its name when it has none or the image does not load. */
+function AdapterLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
+  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
+  if (!icon || brokenIcon === icon) {
+    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
+}
+
 function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: AdapterView }) {
   const save = useMutation(api.analytics_connections.save);
   const remove = useMutation(api.analytics_connections.remove);
@@ -65,7 +75,9 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
 
   return (
     <Card className="grid gap-4 p-5" aria-label={`${adapter.name} analytics connection`}>
-      <div className="grid gap-1">
+      <div className="flex items-center gap-3">
+        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-10 rounded-lg object-contain" />
+        <div className="grid gap-1">
         <h3 className="m-0 text-base font-semibold">{adapter.name}</h3>
         <p className="m-0 text-sm text-muted-foreground">
           {adapter.configured
@@ -74,6 +86,7 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
               ? `Not configured: it reads through the ${adapter.publisher} Publisher's connection. Set one here to use another instance or key.`
               : "Not configured: nothing is measured with it yet."}
         </p>
+        </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="grid gap-2">
@@ -128,7 +141,7 @@ export function AddAnalyticsButton({ instanceId }: { instanceId: string | undefi
   const catalogue = useAction(api.hub_packages_node.catalogue);
   const install = useAction(api.hub_packages_node.install);
   const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<Array<{ packageId: string; name: string; description: string }> | null>(null);
+  const [entries, setEntries] = useState<Array<{ packageId: string; name: string; description: string; icon?: string }> | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,6 +202,7 @@ export function AddAnalyticsButton({ instanceId }: { instanceId: string | undefi
                       .finally(() => setInstalling(null));
                   }}
                 >
+                  <AdapterLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                   <span className="grid flex-1">
                     <span className="text-base font-medium">{entry.name} analytics</span>
                     {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}

@@ -14,7 +14,7 @@ import { parseAnalyticsManifest, parseAnalyticsMetrics, type AnalyticsPackageMan
 const REPOSITORY = "OpenGroow/groowhub";
 
 type PackageJson = { name?: string; version?: string; description?: string };
-type IndexEntry = { id: string; name: string; description: string; repository: string; tag: string; asset: string; digest: string; verification: string };
+type IndexEntry = { id: string; name: string; description: string; repository: string; tag: string; asset: string; digest: string; verification: string; icon?: string };
 
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf-8")) as T;
 
@@ -88,6 +88,7 @@ export function packAnalytics(dir: string, outDir: string, options: { indexFile?
         asset,
         digest,
         verification: previous?.verification ?? "official",
+        ...(manifest.icon ? { icon: manifest.icon } : {}),
       };
       index.packages = previous ? index.packages.map((p) => (p.id === pkg.name ? entry : p)) : [...index.packages, entry];
       writeFileSync(options.indexFile, `${JSON.stringify(index, null, 2)}\n`);

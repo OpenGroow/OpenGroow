@@ -65,6 +65,7 @@ export const list = query({
       out.push({
         adapter: adapter.id,
         name: adapter.name,
+        ...(adapter.icon ? { icon: adapter.icon } : {}),
         ...(adapter.publisher ? { publisher: adapter.publisher } : {}),
         optionDecls: adapter.options ?? [],
         configured: Boolean(stored),
