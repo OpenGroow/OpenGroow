@@ -1,7 +1,8 @@
 // The contract of an Analytics Adapter (ADR-078, docs/domain/publishing.md).
 // Separate from the Publisher contract and versioned on its own. An adapter
 // reads how one post performed at a service; the core owns the schedule, the
-// retries, the Snapshots and the closed metric vocabulary.
+// retries, the Snapshots and the closed metric vocabulary. Authoring guide:
+// docs/ANALYTICS_ADAPTERS.md.
 
 export const ANALYTICS_CONTRACT_VERSION = 1;
 
