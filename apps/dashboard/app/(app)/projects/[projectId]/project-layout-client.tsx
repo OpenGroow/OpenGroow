@@ -55,7 +55,7 @@ const PROJECT_VIEWS: ProjectView[] = [
   { id: "jobs", label: "Jobs", icon: ListChecks },
   { id: "schedules", label: "Scheduler", icon: CalendarClock },
   { id: "brand", label: "Brand", icon: Palette },
-  { id: "publishers", label: "Publishers & Analytics", icon: Send },
+  { id: "publishers", label: "Publish", icon: Send },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "developer", label: "Developer", icon: ScrollText },
