@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
-import { useMutation, usePaginatedQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
@@ -21,6 +21,9 @@ import { sourceScore } from "@/src/lib/source-score";
 import { FormatBadge, NotScoredHint, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
 import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { cn } from "@/lib/utils";
+
+// Matches the server's `COUNT_CAP` (`sources.counts`): a status with that many Sources shows "5000+".
+const COUNT_CAP = 5000;
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -113,6 +116,14 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
       (needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle)),
   );
   const count = (predicate: (source: SourceRow) => boolean) => sources.filter(predicate).length;
+  // The real numbers, from the server: the rows loaded so far only count what "Load more" has fetched.
+  // Until they arrive, the loaded rows stand in.
+  const serverCounts = useQuery(api.sources.counts, { instanceId });
+  const totals = serverCounts !== undefined && !Array.isArray(serverCounts)
+    ? serverCounts
+    : undefined;
+  const shown = (value: number | undefined, fallback: number): number | string =>
+    value === undefined ? fallback : totals?.capped && value >= COUNT_CAP ? `${value}+` : value;
   const agents = [...new Set(others.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   const selection = useSourceSelection(visible);
@@ -123,8 +134,8 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
         value={tab}
         onChange={(id) => setTab(id === "other" ? "other" : "ready")}
         options={[
-          { id: "ready", label: "Scored", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
-          { id: "other", label: "Other", count: others.length },
+          { id: "ready", label: "Scored", count: totals?.scored ?? count((source) => stageOf(source) === READY_TAB_STAGE) },
+          { id: "other", label: "Other", count: totals?.other ?? others.length },
         ]}
       />
     </div>
@@ -141,14 +152,14 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
         <p className="text-sm text-muted-foreground">No Sources yet.</p>
       ) : (
         <>
-          {/* Counted over the loaded rows (no server-side counter exists), so
-              the first tile says "Loaded" until every page is in. */}
+          {/* The server's real counts; until they arrive, the loaded rows stand in
+              and the first tile says "Loaded" while more pages remain. */}
           <section aria-label="Source counts" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            <StatTile icon={Layers} label={hasMore ? "Loaded sources" : "Total sources"} value={sources.length} tone="visual" />
-            <StatTile icon={LoaderCircle} label="Processing" value={count((s) => s.status === "processing")} tone="research" />
-            <StatTile icon={CircleCheck} label="Ready" value={count((s) => s.status === "ready")} tone="engagement" />
-            <StatTile icon={CircleX} label="Failed" value={count((s) => s.status === "failed")} tone="error" />
-            <StatTile icon={Ban} label="Unavailable" value={count((s) => s.status === "unavailable")} />
+            <StatTile icon={Layers} label={totals || !hasMore ? "Total sources" : "Loaded sources"} value={shown(totals?.total, sources.length)} tone="visual" />
+            <StatTile icon={LoaderCircle} label="Processing" value={shown(totals?.processing, count((s) => s.status === "processing"))} tone="research" />
+            <StatTile icon={CircleCheck} label="Ready" value={shown(totals?.ready, count((s) => s.status === "ready"))} tone="engagement" />
+            <StatTile icon={CircleX} label="Failed" value={shown(totals?.failed, count((s) => s.status === "failed"))} tone="error" />
+            <StatTile icon={Ban} label="Unavailable" value={shown(totals?.unavailable, count((s) => s.status === "unavailable"))} />
           </section>
 
           {tab === "ready" ? (
