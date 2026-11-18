@@ -8,16 +8,21 @@ import { InstanceSourcesContent } from "../src/components/instance-sources-page"
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+if (!("PointerEvent" in window)) Object.defineProperty(window, "PointerEvent", { value: MouseEvent, configurable: true });
+
 const useQueryMock = vi.fn();
 const usePaginatedQueryMock = vi.fn();
+const removeManyMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   usePaginatedQuery: (...args: unknown[]) => usePaginatedQueryMock(...args),
+  useMutation: () => removeManyMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
-  api: { sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies" } },
+  api: { sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany" } },
 }));
 
 function makeSource(overrides: Partial<Record<string, unknown>> = {}) {
@@ -47,6 +52,7 @@ describe("InstanceSourcesContent", () => {
     useQueryMock.mockReset();
     usePaginatedQueryMock.mockReset();
     loadMore.mockReset();
+    removeManyMock.mockReset().mockResolvedValue({ removed: 0 });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -201,5 +207,66 @@ describe("InstanceSourcesContent", () => {
     ]) {
       expect(text).toContain(label);
     }
+  });
+  describe("select mode", () => {
+    const rows = () => [
+      makeSource({ _id: "src-1", marketing: { summary: "first" } }),
+      makeSource({ _id: "src-2", marketing: { summary: "second" } }),
+      makeSource({ _id: "src-3", marketing: { summary: "third" } }),
+    ];
+    const buttonByText = (text: string) =>
+      Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim().startsWith(text));
+    const checkboxes = () => Array.from(document.querySelectorAll('[role="checkbox"]')) as HTMLElement[];
+    async function click(el: Element | undefined) {
+      await act(async () => (el as HTMLElement).click());
+    }
+
+    it("shows no checkbox until Select is pressed, and hides them again on Done", async () => {
+      await render(rows());
+      expect(checkboxes()).toHaveLength(0);
+      await click(buttonByText("Select"));
+      expect(checkboxes()).toHaveLength(4); // select all + one per row
+      await click(buttonByText("Done"));
+      expect(checkboxes()).toHaveLength(0);
+    });
+
+    it("deletes only the checked Sources, after a confirmation", async () => {
+      await render(rows());
+      await click(buttonByText("Select"));
+      expect(buttonByText("Delete")?.hasAttribute("disabled")).toBe(true);
+
+      await click(checkboxes()[1]); // src-1
+      await click(checkboxes()[3]); // src-3
+      expect(document.body.textContent).toContain("2 selected");
+
+      await click(buttonByText("Delete (2)"));
+      expect(removeManyMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Delete 2 Sources?");
+      expect(document.body.textContent).toContain("permanent");
+
+      const confirm = Array.from(document.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "Delete").at(-1);
+      await click(confirm);
+      expect(removeManyMock).toHaveBeenCalledWith({ sourceIds: ["src-1", "src-3"] });
+      expect(checkboxes()).toHaveLength(0); // back to the normal list
+    });
+
+    it("selects every Source on screen with the first checkbox", async () => {
+      await render(rows());
+      await click(buttonByText("Select"));
+      await click(checkboxes()[0]);
+      expect(document.body.textContent).toContain("3 selected");
+    });
+
+    it("keeps the dialog open and shows the error when the deletion fails", async () => {
+      removeManyMock.mockRejectedValue(new Error("Forbidden"));
+      await render(rows());
+      await click(buttonByText("Select"));
+      await click(checkboxes()[1]);
+      await click(buttonByText("Delete (1)"));
+      const confirm = Array.from(document.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "Delete").at(-1);
+      await click(confirm);
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain("Forbidden");
+      expect(document.body.textContent).toContain("Delete 1 Source?");
+    });
   });
 });

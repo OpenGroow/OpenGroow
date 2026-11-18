@@ -215,3 +215,46 @@ describe("sources.retry", () => {
     );
   });
 });
+
+describe("sources.removeMany", () => {
+  it("deletes the owner's Sources and reports how many", async () => {
+    const t = convexTest(schema, modules);
+    const [a, b, c] = await seed(t, [{ origin: "a" }, { origin: "b" }, { origin: "c" }]);
+    const result = await t.withIdentity(OWNER).mutation(api.sources.removeMany, { sourceIds: [a!, c!, a!] });
+    expect(result).toEqual({ removed: 2 });
+    const left = await t.run((ctx) => ctx.db.query("sources").collect());
+    expect(left.map((s) => s._id)).toEqual([b]);
+  });
+
+  it("skips an id that no longer exists", async () => {
+    const t = convexTest(schema, modules);
+    const [a] = await seed(t, [{}]);
+    await t.withIdentity(OWNER).mutation(api.sources.removeMany, { sourceIds: [a!] });
+    const again = await t.withIdentity(OWNER).mutation(api.sources.removeMany, { sourceIds: [a!] });
+    expect(again).toEqual({ removed: 0 });
+  });
+
+  it("deletes nothing when one id belongs to someone else", async () => {
+    const t = convexTest(schema, modules);
+    const [mine, theirs] = await seed(t, [{ origin: "mine" }, { origin: "theirs", ownerId: STRANGER.subject }]);
+    await expect(
+      t.withIdentity(OWNER).mutation(api.sources.removeMany, { sourceIds: [mine!, theirs!] }),
+    ).rejects.toThrow("Forbidden");
+    expect(await t.run((ctx) => ctx.db.query("sources").collect())).toHaveLength(2);
+  });
+
+  it("rejects a stranger", async () => {
+    const t = convexTest(schema, modules);
+    const [a] = await seed(t, [{}]);
+    await expect(
+      t.withIdentity(STRANGER).mutation(api.sources.removeMany, { sourceIds: [a!] }),
+    ).rejects.toThrow();
+    expect(await t.run((ctx) => ctx.db.query("sources").collect())).toHaveLength(1);
+  });
+
+  it("rejects more Sources than one call may delete", async () => {
+    const t = convexTest(schema, modules);
+    const ids = await seed(t, Array.from({ length: 101 }, (_, i) => ({ origin: `o${i}` })));
+    await expect(t.withIdentity(OWNER).mutation(api.sources.removeMany, { sourceIds: ids as never })).rejects.toThrow("At most 100");
+  });
+});
