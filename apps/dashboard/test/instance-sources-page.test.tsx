@@ -305,6 +305,14 @@ describe("InstanceSourcesContent", () => {
       expect(document.body.textContent).not.toContain("Not scored yet");
     });
 
+    it("cuts a long title to 30 characters and keeps the full text as a tooltip", async () => {
+      const long = "A Christmas gift reel for a wife built around a printed love letter";
+      await render([reel({ marketing: { summary: long } })], { tab: "ready", targets });
+      const link = document.querySelector("[aria-label='Ready sources'] li a")!;
+      expect(link.textContent).toBe("A Christmas gift reel for a wi…");
+      expect(link.getAttribute("title")).toBe(long);
+    });
+
     it("leaves out Sources already picked for production", async () => {
       await render([reel(), makeSource({ _id: "s-picked", marketing: { summary: "Picked" }, scoring: scored, selectedAt: 1 })], { tab: "ready", targets });
       expect(document.body.textContent).not.toContain("Picked");
