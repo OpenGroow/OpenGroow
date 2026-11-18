@@ -6,6 +6,7 @@ import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsConnec
 import { installPostiz } from "./postiz_fixture";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
+import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
 // ADR-078, issue #88: a Publication that becomes `published` receives
 // append-only Performance Snapshots 1, 3 and 7 days after. Driven through the
@@ -37,6 +38,15 @@ const modules = {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const INSTANCE_ID = "openclaw-analytics";
+const MEASURED = fixtureTemplate("@test/social", {
+  missionTypes: [
+    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: { primaryMetric: "views" } },
+    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { primaryMetric: "views", collect: [2] } },
+    { type: "make_plain", label: "Plain", payload: "{}", agentsMd: "c.md", publish: { kind: "image" } },
+  ],
+} as never);
+useTemplateRegistry([INSTANCE_ID], [MEASURED]);
+
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|an", subject: "an-owner" };
 
 /** Stub adapter: asks `https://stats.example.com/post/<key>` and maps the answer. */
@@ -72,7 +82,7 @@ let answer: Answer;
 let reads: string[];
 const connections: AnalyticsConnection[] = [];
 
-async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled" } = {}) {
+async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled"; type?: string } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
   await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
@@ -95,8 +105,8 @@ async function seed(opts: { externalId?: string | null; externalUrl?: string; st
     const missionId = await ctx.db.insert("missions", {
       ownerId: OWNER.subject,
       instanceId: INSTANCE_ID,
-      templateId: "@test/none",
-      type: "make_image",
+      templateId: "@test/social",
+      type: opts.type ?? "make_image",
       payload: { publishTargets: ["instagram:love_youmake"] },
       status: "approved",
       createdAt: now,
@@ -350,6 +360,65 @@ describe("Performance Snapshots (ADR-078)", () => {
     vi.advanceTimersByTime(2 * DAY);
     await s.tick();
     expect(connections[1]).toEqual({ url: "https://stats.postiz.example.com", apiKey: "analytics-key", options: { lookbackDays: 30 } });
+  });
+
+  it("follows the Template's `collect` delays", async () => {
+    const s = await seed({ type: "make_short" });
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect(reads).toEqual([]);
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY]);
+    expect(view.state).toBe("complete");
+  });
+
+  it("does not measure a Mission type that declares no `analytics`", async () => {
+    const s = await seed({ type: "make_plain" });
+    await s.publish();
+    vi.advanceTimersByTime(8 * DAY);
+    await s.tick();
+    expect(reads).toEqual([]);
+    expect(await s.view()).toMatchObject({ state: "unmeasured", snapshots: [] });
+    expect(await s.t.run(async (ctx) => ctx.db.query("publicationAnalytics").collect())).toEqual([]);
+  });
+
+  it("resumes measuring once an adapter is linked after the reading found none", async () => {
+    stub.adapter = null;
+    const s = await seed();
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect(await s.view()).toMatchObject({ state: "unmeasured" });
+    stub.adapter = stubAdapter();
+    vi.advanceTimersByTime(HOUR);
+    await s.tick();
+    expect(reads).toHaveLength(1);
+    expect((await s.view()).snapshots).toHaveLength(1);
+  });
+
+  it("tells the owner when the Project has no connection to the adapter", async () => {
+    const s = await seed();
+    await s.t.run(async (ctx) => {
+      const publisher = await ctx.db.query("publishers").first();
+      if (publisher) await ctx.db.patch(publisher._id, { apiKey: undefined });
+    });
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect(reads).toEqual([]);
+    expect(await s.view()).toMatchObject({ state: "failed", reason: expect.stringContaining("no connection") });
+  });
+
+  it("starts a new series when a retry gives no id but another post URL", async () => {
+    const s = await seed({ externalId: null, externalUrl: "https://blog.example/a" });
+    await s.publish();
+    await s.t.mutation(internal.publications.finish, { publicationId: s.publicationId, status: "published", externalUrl: "https://blog.example/a/?utm_source=x" });
+    expect(await s.t.run(async (ctx) => (await ctx.db.get(s.publicationId))?.postSeries ?? 0)).toBe(0);
+    await s.t.mutation(internal.publications.finish, { publicationId: s.publicationId, status: "published", externalUrl: "https://blog.example/b" });
+    expect(await s.t.run(async (ctx) => (await ctx.db.get(s.publicationId))?.postSeries)).toBe(1);
   });
 
   it("does not show another owner's Snapshots", async () => {

@@ -416,7 +416,13 @@ export const finish = internalMutation({
     const { publicationId, rejected, ...fields } = args;
     const publication = await ctx.db.get(publicationId);
     if (!publication) throw new Error("Publication not found");
-    const newPost = fields.externalId !== undefined && publication.externalId !== undefined && fields.externalId !== publication.externalId;
+    // A retry made another post: a new id, or (when an id cannot be compared) a different normalized URL.
+    const idComparable = fields.externalId !== undefined && publication.externalId !== undefined;
+    const newPost = idComparable
+      ? fields.externalId !== publication.externalId
+      : fields.externalUrl !== undefined &&
+        publication.externalUrl !== undefined &&
+        normalizePostUrl(fields.externalUrl) !== normalizePostUrl(publication.externalUrl);
     await ctx.db.patch(publicationId, {
       ...fields,
       ...(fields.externalUrl !== undefined ? { externalUrl: normalizePostUrl(fields.externalUrl) } : {}),

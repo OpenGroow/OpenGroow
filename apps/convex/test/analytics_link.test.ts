@@ -4,6 +4,7 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
+import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS, WEB_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
 
 // ADR-078, issue #92: a Publish target is linked to at most one Analytics Adapter, by default
@@ -37,6 +38,15 @@ const modules = {
 };
 
 const INSTANCE_ID = "openclaw-link";
+const MEASURED = fixtureTemplate("@test/social", {
+  missionTypes: [
+    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: { primaryMetric: "views" } },
+    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { primaryMetric: "views", collect: [2] } },
+    { type: "make_plain", label: "Plain", payload: "{}", agentsMd: "c.md", publish: { kind: "image" } },
+  ],
+} as never);
+useTemplateRegistry([INSTANCE_ID], [MEASURED]);
+
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|link", subject: "link-owner" };
 const TARGET = "instagram:love_youmake";
 
@@ -130,7 +140,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
       const missionId = await ctx.db.insert("missions", {
         ownerId: OWNER.subject,
         instanceId: INSTANCE_ID,
-        templateId: "@test/none",
+        templateId: "@test/social",
         type: "make_image",
         payload: { publishTargets: [TARGET] },
         status: "approved",

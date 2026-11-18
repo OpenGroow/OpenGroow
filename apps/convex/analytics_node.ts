@@ -6,10 +6,7 @@ import { internal } from "./_generated/api.js";
 import { internalAction } from "./_generated/server.js";
 import { loadAnalyticsAdapter } from "./analytics/load_node.js";
 import { messageOf } from "./error_message.js";
-import type { outcomeV } from "./analytics.js";
-
-// Retry delay of a reading that found nothing or failed (same as analytics.ts).
-const RETRY_AFTER_MS = 60 * 60_000;
+import { RETRY_AFTER_MS, type outcomeV } from "./analytics.js";
 
 /**
  * Takes the readings that are due (ADR-078). Polling, like Publications: a
@@ -21,14 +18,15 @@ export const collectDue = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
     const due = await ctx.runQuery(internal.analytics.due, { now });
+    const outcomes: Array<{ id: (typeof due)[number]["id"]; outcome: Infer<typeof outcomeV> }> = [];
     for (const item of due) {
       const settle = async (outcome: Infer<typeof outcomeV>) => {
-        await ctx.runMutation(internal.analytics.record, { id: item.id, outcome });
+        outcomes.push({ id: item.id, outcome });
       };
       try {
         const adapter = item.analyticsAdapter ? await loadAnalyticsAdapter(ctx, item.analyticsAdapter) : null;
         if (!adapter) {
-          await settle({ kind: "unmeasured" });
+          await settle({ kind: "unmeasured", reason: "No Analytics Adapter is linked to this channel" });
           continue;
         }
         // The later of the Template's delay and the adapter's earliest delay wins.
@@ -39,8 +37,13 @@ export const collectDue = internalAction({
         }
         // No reading is tried before the Publication has the key the adapter needs.
         const key = adapter.needs === "externalId" ? item.externalId : item.externalUrl;
-        if (!key || !item.connection) {
+        if (!key) {
           await settle({ kind: "postponed", nextAt: now + RETRY_AFTER_MS });
+          continue;
+        }
+        // The owner can fix this one: say so rather than reading "no data yet".
+        if (!item.connection) {
+          await settle({ kind: "failed", error: `The Project has no connection to the Analytics Adapter "${item.analyticsAdapter}": add its URL and API key` });
           continue;
         }
         const result = await adapter.read(item.connection, {
@@ -62,5 +65,6 @@ export const collectDue = internalAction({
         await settle({ kind: "failed", error: messageOf(error) });
       }
     }
+    if (outcomes.length > 0) await ctx.runMutation(internal.analytics.recordMany, { outcomes });
   },
 });
