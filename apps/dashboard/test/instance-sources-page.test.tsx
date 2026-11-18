@@ -25,6 +25,7 @@ vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany" },
     source_routing: { listTargets: "source_routing.listTargets", setRouteTarget: "source_routing.setRouteTarget", forceProduction: "source_routing.forceProduction" },
+    source_thumbnails: { request: "source_thumbnails.request" },
   },
 }));
 
@@ -327,6 +328,7 @@ describe("InstanceSourcesContent", () => {
 
     it("uses the same Select mode as All to delete several Ready Sources", async () => {
       await render([reel(), reel({ _id: "s-two", marketing: { summary: "Second" } })], { tab: "ready", targets });
+      removeManyMock.mockClear(); // every mutation shares this mock, including the thumbnail request
       const button = (name: string, scope: ParentNode = document.body) => Array.from(scope.querySelectorAll("button")).find((b) => b.textContent?.trim().startsWith(name))!;
       expect(document.querySelectorAll("[role='checkbox']")).toHaveLength(0);
       await act(async () => { button("Select").click(); });
@@ -338,6 +340,16 @@ describe("InstanceSourcesContent", () => {
       expect(document.body.textContent).toContain("Delete 1 Source?");
       await act(async () => { button("Delete", document.querySelector("[role='dialog']")!).click(); });
       expect(removeManyMock).toHaveBeenCalledWith({ sourceIds: ["s-reel"] });
+    });
+
+    it("shows the stored thumbnail and asks for the ones that are missing", async () => {
+      removeManyMock.mockResolvedValue(undefined);
+      await render(
+        [reel({ thumbnailUrl: "https://storage.example/thumb.jpg", thumbnailTriedAt: 1 }), reel({ _id: "s-none", marketing: { summary: "No image yet" } })],
+        { tab: "ready", targets },
+      );
+      expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/thumb.jpg");
+      expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["s-none"] });
     });
 
     it("preselects the router's proposal", async () => {

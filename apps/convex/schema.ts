@@ -691,6 +691,10 @@ export default defineSchema({
     // The producer the user picked by hand on the Sources page ("Routed to").
     // Produce routes the Source to it instead of letting the router choose.
     routeTo: v.optional(v.object({ templateId: v.string(), missionType: v.string() })),
+    // The page's `og:image`, copied into storage (the CDN URLs expire). Set by
+    // `source_thumbnails`; `thumbnailTriedAt` records that a fetch was attempted.
+    thumbnailStorageId: v.optional(v.id("_storage")),
+    thumbnailTriedAt: v.optional(v.number()),
     // Migration-only technical delegation pointer, cleared by #601.
     delegateMissionId: v.optional(v.id("missions")),
     // Ownership (and, for the family filter, the family) is folded into the

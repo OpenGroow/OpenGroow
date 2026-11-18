@@ -136,6 +136,7 @@ import type * as source_routing from "../source_routing.js";
 import type * as source_routing_decision from "../source_routing_decision.js";
 import type * as source_schema from "../source_schema.js";
 import type * as source_scoring from "../source_scoring.js";
+import type * as source_thumbnails from "../source_thumbnails.js";
 import type * as sources from "../sources.js";
 import type * as sources_social from "../sources_social.js";
 import type * as template_install_local from "../template_install_local.js";
@@ -289,6 +290,7 @@ declare const fullApi: ApiFromModules<{
   source_routing_decision: typeof source_routing_decision;
   source_schema: typeof source_schema;
   source_scoring: typeof source_scoring;
+  source_thumbnails: typeof source_thumbnails;
   sources: typeof sources;
   sources_social: typeof sources_social;
   template_install_local: typeof template_install_local;
