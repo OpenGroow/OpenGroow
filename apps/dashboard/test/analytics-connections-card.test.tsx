@@ -72,21 +72,27 @@ describe("Analytics connections card", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("says an unconfigured adapter reads through its Publisher's connection", async () => {
+  it("saves only the options inside the Publisher's page, which already holds the connection", async () => {
     await renderEmbedded();
-    expect(container.textContent).toContain("Reads through the postiz Publisher's connection");
+    expect(document.getElementById("analytics-url-postiz")).toBeNull();
+    expect(document.getElementById("analytics-key-postiz")).toBeNull();
+    expect(container.textContent).toContain("set in Configuration");
+    await type("analytics-option-postiz-lookbackDays", "30");
+    await act(async () => button("Save changes").click());
+    expect(save).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz", options: { lookbackDays: 30 } });
   });
 
-  it("saves the URL, the key and the options the package declares", async () => {
-    await renderEmbedded();
-    await type("analytics-url-postiz", "https://postiz.example.com");
-    await type("analytics-key-postiz", "secret");
-    await type("analytics-option-postiz-lookbackDays", "30");
+  it("saves the URL, the key and the options of an adapter that belongs to no Publisher", async () => {
+    adapters = [{ adapter: "ga", name: "Google Analytics", optionDecls: [OPTION], configured: false }];
+    await render();
+    await type("analytics-url-ga", "https://analytics.example.com");
+    await type("analytics-key-ga", "secret");
+    await type("analytics-option-ga-lookbackDays", "30");
     await act(async () => button("Save changes").click());
     expect(save).toHaveBeenCalledWith({
       instanceId: "inst-1",
-      adapter: "postiz",
-      url: "https://postiz.example.com",
+      adapter: "ga",
+      url: "https://analytics.example.com",
       apiKey: "secret",
       options: { lookbackDays: 30 },
     });

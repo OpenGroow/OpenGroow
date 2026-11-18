@@ -51,8 +51,9 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
       await save({
         instanceId,
         adapter: adapter.adapter,
-        url,
-        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        // Inside the Publisher's page the connection is the Publisher's own: only the options are saved.
+        ...(embedded ? {} : { url }),
+        ...(!embedded && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         options: Object.fromEntries(adapter.optionDecls.map((d) => [d.key, d.type === "number" ? Number(options[d.key]) : (options[d.key] ?? "")])),
       });
       setApiKey("");
@@ -83,16 +84,20 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
       : "Not configured: nothing is measured with it yet.";
   const card = (
       <Card className="gap-4 p-5">
-        <h4 className="m-0 text-base font-semibold">{embedded ? "Analytics connection" : "Connection"}</h4>
-        {embedded && publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
+        <h4 className="m-0 text-base font-semibold">{embedded ? "Analytics" : "Connection"}</h4>
+        {embedded ? <p className="m-0 text-sm text-muted-foreground">Reads with the connection of this Publisher, set in Configuration.</p> : null}
         <div className="grid gap-4 md:grid-cols-2">
-          <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
-          <ConnectionKeyField
-            id={`analytics-key-${adapter.adapter}`}
-            placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
-            value={apiKey}
-            onChange={setApiKey}
-          />
+          {embedded ? null : (
+            <>
+              <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
+              <ConnectionKeyField
+                id={`analytics-key-${adapter.adapter}`}
+                placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
+                value={apiKey}
+                onChange={setApiKey}
+              />
+            </>
+          )}
           {adapter.optionDecls.map((decl) => (
             <div key={decl.key} className="grid gap-2">
               <Label htmlFor={`analytics-option-${adapter.adapter}-${decl.key}`}>{decl.label}</Label>
@@ -108,11 +113,11 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" size="lg" disabled={!url.trim() || busy} onClick={() => void handleSave()}>
+          <Button type="button" size="lg" disabled={(!embedded && !url.trim()) || busy} onClick={() => void handleSave()}>
             {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
             Save changes
           </Button>
-          {adapter.configured ? (
+          {adapter.configured && !embedded ? (
             <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void handleRemove()}>
               <Trash2 aria-hidden="true" />
               Remove

@@ -68,7 +68,7 @@ export const list = query({
         ...(adapter.icon ? { icon: adapter.icon } : {}),
         ...(adapter.publisher ? { publisher: adapter.publisher } : {}),
         optionDecls: adapter.options ?? [],
-        configured: Boolean(stored),
+        configured: Boolean(stored?.apiKey),
         ...(stored ? { url: stored.url, hasApiKey: Boolean(stored.apiKey), options: stored.options ?? {} } : {}),
       });
     }
@@ -80,7 +80,8 @@ export const save = mutation({
   args: {
     instanceId: v.string(),
     adapter: v.string(),
-    url: v.string(),
+    // Omit to keep the stored URL: an adapter that reads through its Publisher's connection only has options to save.
+    url: v.optional(v.string()),
     // Omit to keep the stored key.
     apiKey: v.optional(v.string()),
     options: v.optional(v.record(v.string(), v.union(v.string(), v.number()))),
@@ -88,12 +89,12 @@ export const save = mutation({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const meta = await requireAdapter(ctx, args.adapter);
-    const url = args.url.trim().replace(/\/+$/, "");
-    if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid URL");
+    const existing = await projectAnalyticsConnection(ctx, args.instanceId, args.adapter);
+    const url = args.url === undefined ? (existing?.url ?? "") : args.url.trim().replace(/\/+$/, "");
+    if (args.url !== undefined && !/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid URL");
     const options = args.options ?? {};
     checkOptions(meta.options ?? [], options);
     const apiKey = args.apiKey?.trim() || undefined;
-    const existing = await projectAnalyticsConnection(ctx, args.instanceId, args.adapter);
     const now = Date.now();
     if (existing) {
       await ctx.db.patch(existing._id, { url, options, ...(apiKey ? { apiKey } : {}), updatedAt: now });
