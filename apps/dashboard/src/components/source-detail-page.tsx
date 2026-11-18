@@ -5,7 +5,7 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { CalendarDays, ExternalLink, Link2, Sparkles, Workflow } from "lucide-react";
+import { CalendarDays, ExternalLink, Link2, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -109,7 +109,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <Link2 aria-hidden="true" className="size-4 shrink-0" />
             {/^https?:\/\//.test(origin) ? (
-              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline">
+              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="inline-flex min-w-0 items-center gap-1 hover:underline">
                 <span>Link</span>
                 <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
               </a>
@@ -123,19 +123,10 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
               <Link
                 data-testid="source-run-link"
                 href={runLogsHref(instanceId, source.templateId, source.runId)}
-                className="font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 View Run
               </Link>
-            </>
-          ) : null}
-          {source.sourceJobId ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="inline-flex items-center gap-1.5">
-                <Workflow aria-hidden="true" className="size-4" />
-                Job {source.sourceJobId}
-              </span>
             </>
           ) : null}
         </p>
