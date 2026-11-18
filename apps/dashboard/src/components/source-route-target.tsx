@@ -29,8 +29,7 @@ export function agentLabel(templateId: string): string {
 
 /** The producers a Source can be routed to. */
 export function useRouteTargets(instanceId: string): Target[] {
-  const targets = useQuery(api.source_routing.listTargets, { instanceId });
-  return Array.isArray(targets) ? (targets as Target[]) : [];
+  return useQuery(api.source_routing.listTargets, { instanceId }) ?? [];
 }
 
 /** What Produce will use: the producer chosen by hand, else the router's own

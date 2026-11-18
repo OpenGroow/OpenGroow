@@ -77,19 +77,6 @@ export const save = internalMutation({
   },
 });
 
-/** Drops a Source's stored thumbnail (a placeholder that slipped through, say). The
- * attempt stays recorded, so it is not fetched again. */
-export const clear = internalMutation({
-  args: { sourceId: v.id("sources") },
-  handler: async (ctx, args) => {
-    const source = await ctx.db.get(args.sourceId);
-    if (!source?.thumbnailStorageId) return { cleared: false };
-    await ctx.storage.delete(source.thumbnailStorageId);
-    await ctx.db.patch(source._id, { thumbnailStorageId: undefined, thumbnailTriedAt: Date.now() });
-    return { cleared: true };
-  },
-});
-
 export const fetchThumbnail = internalAction({
   args: { sourceId: v.id("sources") },
   handler: async (ctx, args) => {

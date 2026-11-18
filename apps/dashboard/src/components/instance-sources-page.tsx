@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
 import { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
+import { isWebUrl } from "@/src/lib/web-url";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
@@ -119,9 +120,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   // The real numbers, from the server: the rows loaded so far only count what "Load more" has fetched.
   // Until they arrive, the loaded rows stand in.
   const serverCounts = useQuery(api.sources.counts, { instanceId });
-  const totals = serverCounts !== undefined && !Array.isArray(serverCounts)
-    ? serverCounts
-    : undefined;
+  const totals = serverCounts;
   const shown = (value: number | undefined, fallback: number): number | string =>
     value === undefined ? fallback : totals?.capped && value >= COUNT_CAP ? `${value}+` : value;
   const agents = [...new Set(others.map((source) => source.templateId))].sort();
@@ -406,10 +405,6 @@ const DELETE_CHUNK = 100;
 
 const ROW_GRID =
   "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
-
-function isWebUrl(value: string): boolean {
-  return /^https?:\/\//.test(value);
-}
 
 // Select mode adds a leading checkbox column.
 const SELECT_ROW_GRID =

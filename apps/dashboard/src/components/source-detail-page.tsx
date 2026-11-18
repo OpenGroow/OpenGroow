@@ -17,6 +17,7 @@ import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/sch
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
 import { formatSourceDate, SourceStatusPill } from "@/src/components/source-status-pill";
 import { Card } from "@/components/ui/card";
+import { isWebUrl } from "@/src/lib/web-url";
 
 export { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
 
@@ -35,12 +36,13 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
   const { produce, busy: producing } = useProduceSource(sourceId);
-  useThumbnailRequests(instanceId, result ? [{ ...result.source, thumbnailUrl: result.thumbnailUrl }] : []);
+  const visual = result ? { ...result.source, thumbnailUrl: result.thumbnailUrl } : undefined;
+  useThumbnailRequests(instanceId, visual ? [visual] : []);
 
   if (result === undefined) return <Message>Loading…</Message>;
   if (result === null) return <Message>Source not found.</Message>;
 
-  const { source, analysisSchema, workspaceKey, thumbnailUrl } = result;
+  const { source, analysisSchema, workspaceKey } = result;
   const marketing = source.marketing as Record<string, unknown>;
   const scoring = (source.scoring ?? {}) as Record<string, unknown>;
   const analysis = (source.analysis ?? {}) as Record<string, unknown>;
@@ -67,7 +69,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           ← Sources
         </Link>
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-          <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
+          <SourceThumbnail source={visual!} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
             <h1 className="m-0 text-xl font-semibold tracking-tight break-words text-foreground sm:text-2xl">
               {source.marketing.summary ?? source.origin}
@@ -110,7 +112,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <span aria-hidden="true">·</span>
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <Link2 aria-hidden="true" className="size-4 shrink-0" />
-            {/^https?:\/\//.test(origin) ? (
+            {isWebUrl(origin) ? (
               <a href={origin} target="_blank" rel="noreferrer" title={origin} className="hover:underline">
                 Link
               </a>

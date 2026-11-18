@@ -22,14 +22,13 @@ export type VisualSource = {
   thumbnailTriedAt?: number;
 };
 
+const TILE = "flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground";
+
 // The leading tile of a Source with no image: the kind of content its family names.
 export function SourceGlyph({ family, className = "size-14" }: { family: string; className?: string }) {
   const Icon = /tiktok|music|audio/i.test(family) ? Music2 : Video;
   return (
-    <span
-      aria-hidden="true"
-      className={cn("flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground", className)}
-    >
+    <span aria-hidden="true" className={cn(TILE, className)}>
       <Icon className="size-6" />
     </span>
   );
@@ -38,12 +37,7 @@ export function SourceGlyph({ family, className = "size-14" }: { family: string;
 // The tile of a Source whose image could not be had: a broken image.
 function BrokenThumbnail({ className }: { className: string }) {
   return (
-    <span
-      role="img"
-      aria-label="No thumbnail available"
-      data-testid="broken-thumbnail"
-      className={cn("flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground", className)}
-    >
+    <span role="img" aria-label="No thumbnail available" data-testid="broken-thumbnail" className={cn(TILE, className)}>
       <ImageOff className="size-6" />
     </span>
   );
