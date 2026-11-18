@@ -297,8 +297,11 @@ describe("SourceDetailContent", () => {
         analysisSchema: null,
         thumbnailUrl: "https://storage.example/t.jpg",
       });
-      expect(document.querySelector("[data-testid='source-format']")?.textContent).toContain("Instagram Reel");
-      expect(document.querySelector("[data-testid='source-format'] img")?.getAttribute("src")).toBe("/platforms/instagram.svg");
+      // The same badge as the Sources list: the platform logo and a media icon, the words as a tooltip.
+      const badge = document.querySelector("[title='Instagram Reel']")!;
+      expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(badge.querySelectorAll("svg")).toHaveLength(1);
+      expect(badge.querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
       expect(text()).not.toContain("Social Video"); // the family is not shown
       expect(text()).toContain("Ready");
       expect(document.querySelector("[data-testid='source-score']")?.textContent).toContain("Score 92");
