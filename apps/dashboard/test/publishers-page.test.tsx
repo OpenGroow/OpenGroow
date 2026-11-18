@@ -12,6 +12,9 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 const useQueryMock = vi.fn();
 // What `publisher_packages.list` returns: reassigned by a test to simulate an install.
 let analyticsAdapters: unknown[] | undefined;
+// What the hub lists as analytics providers (the publisher tests leave it empty).
+let hubAnalytics: unknown[] = [];
+let catalogueAction: ((args: { kind: string }) => Promise<unknown>) | undefined;
 let installedPublishers: Array<(typeof INSTALLED_PUBLISHERS)[number] & { connectionUrlLabel?: string }> = INSTALLED_PUBLISHERS;
 const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
@@ -22,7 +25,12 @@ vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) =>
     args[0] === "analytics_connections.list" ? analyticsAdapters : args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useMutation: (name: string) => (mutations[name] ??= vi.fn(async () => "key")),
-  useAction: (name: string) => (actions[name] ??= vi.fn(async () => ({ ok: true, channels: [] }))),
+  useAction: (name: string) => {
+    actions[name] ??= vi.fn(async () => ({ ok: true, channels: [] }));
+    if (name !== "hub_packages_node.catalogue") return actions[name];
+    // One function for the whole run, like Convex's: a new one per render would restart the effects that depend on it.
+    return (catalogueAction ??= (args: { kind: string }) => (args.kind === "analytics" ? Promise.resolve({ entries: hubAnalytics }) : actions[name](args)));
+  },
 }));
 vi.mock("@convex/_generated/api", () => {
   const names = (group: string, fns: string[]) =>
@@ -62,6 +70,7 @@ describe("Publishers page", () => {
     useQueryMock.mockReset();
     installedPublishers = INSTALLED_PUBLISHERS;
     analyticsAdapters = undefined;
+    hubAnalytics = [];
     for (const k of Object.keys(mutations)) delete mutations[k];
     for (const k of Object.keys(actions)) delete actions[k];
     container = document.createElement("div");
@@ -108,6 +117,18 @@ describe("Publishers page", () => {
     await click(byText("Analytics"));
     expect(text()).toContain("Look-back window (days)");
     expect(text()).not.toContain("Postiz URL\nChannels");
+  });
+
+  it("offers, in the Add provider dialog, the analytics providers that belong to no Publisher", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [];
+    hubAnalytics = [{ packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "" }, { packageId: "@opengroow/analytics-ga", name: "Google", description: "" }];
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
+    await render();
+    await click(byText("Add provider"));
+    expect(text()).toContain("Analytics providers");
+    expect(text()).toContain("Google analytics");
+    expect(text()).not.toContain("Postiz analytics");
   });
 
   it("has no Analytics tab when the Publisher has no analytics adapter", async () => {
@@ -194,8 +215,8 @@ describe("Publishers page", () => {
       ],
     }));
     await render();
-    expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
-    await click(byText("Add publisher"));
+    expect((byText("Add provider") as HTMLButtonElement).disabled).toBe(false);
+    await click(byText("Add provider"));
     const options = [...document.querySelectorAll('[role="dialog"] button')].map((b) => b.textContent ?? "");
     expect(options.some((o) => o.includes("GitHub"))).toBe(true);
     expect(options.some((o) => o.includes("Postiz"))).toBe(false);
@@ -205,7 +226,7 @@ describe("Publishers page", () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
     await render();
-    await click(byText("Add publisher"));
+    await click(byText("Add provider"));
     expect(text()).toContain("Every publisher of the hub is already added.");
   });
 
@@ -236,9 +257,9 @@ describe("Publishers page", () => {
     useQueryMock.mockReturnValue(null);
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", icon: "data:image/png;base64,iVBORw0KGgo=" }] }));
     await render();
-    expect((byText("Add publisher") as HTMLButtonElement).disabled).toBe(false);
-    await click(byText("Add publisher"));
-    expect(text()).toContain("Add a publisher");
+    expect((byText("Add provider") as HTMLButtonElement).disabled).toBe(false);
+    await click(byText("Add provider"));
+    expect(text()).toContain("Add a provider");
     await click(byText("Postiz"));
     expect(text()).toContain("Postiz URL");
   });
@@ -278,7 +299,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
   };
   const openDialog = async () => {
     await render();
-    await click(byText("Add publisher"));
+    await click(byText("Add provider"));
   };
 
   it("shows the logo and label the hub gives each package, before installing it", async () => {

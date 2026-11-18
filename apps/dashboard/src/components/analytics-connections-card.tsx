@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Download, Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,99 +144,8 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
   );
 }
 
-/** The "Add analytics" button of the page header: a dialog listing the hub's Analytics Adapters not installed yet. */
-export function AddAnalyticsButton({ instanceId }: { instanceId: string | undefined }) {
-  const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
-  const catalogue = useAction(api.hub_packages_node.catalogue);
-  const install = useAction(api.hub_packages_node.install);
-  const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState<Array<{ packageId: string; name: string; description: string; icon?: string }> | null>(null);
-  const [installing, setInstalling] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setEntries(null);
-    setError(null);
-    void catalogue({ kind: "analytics" })
-      .then((result) => {
-        if (cancelled) return;
-        setEntries(result.entries);
-        if (result.error) setError(`The hub could not be read: ${result.error}`);
-      })
-      .catch((e) => !cancelled && setError(extractConvexErrorMessage(e, "The hub could not be read")));
-    return () => {
-      cancelled = true;
-    };
-  }, [open, catalogue]);
-
-  const installedNames = (adapters ?? []).map((a) => a.name);
-  const available = (entries ?? []).filter((entry) => !installedNames.includes(entry.name));
-
-  return (
-    <>
-      <Button type="button" size="lg" onClick={() => setOpen(true)}>
-        <Plus aria-hidden="true" />
-        Add analytics
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add analytics</DialogTitle>
-            <DialogDescription>Choose the service that will measure how your posts performed.</DialogDescription>
-          </DialogHeader>
-          {entries === null && !error ? (
-            <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Reading the hub
-            </p>
-          ) : (
-            <div className="grid gap-2">
-              {available.map((entry) => (
-                <button
-                  key={entry.packageId}
-                  type="button"
-                  disabled={installing !== null}
-                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
-                  onClick={() => {
-                    setInstalling(entry.packageId);
-                    setError(null);
-                    install({ kind: "analytics", packageId: entry.packageId })
-                      .then((result) => {
-                        if (result.status === "error") setError(result.errorMessage);
-                        else setOpen(false);
-                      })
-                      .catch((e) => setError(extractConvexErrorMessage(e, "The adapter could not be installed")))
-                      .finally(() => setInstalling(null));
-                  }}
-                >
-                  <AdapterLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
-                  <span className="grid flex-1">
-                    <span className="text-base font-medium">{entry.name} analytics</span>
-                    {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
-                  </span>
-                  {installing === entry.packageId ? (
-                    <Loader2 className="size-4 animate-spin" aria-label="Installing" />
-                  ) : (
-                    <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
-                  )}
-                </button>
-              ))}
-              {available.length === 0 && entries !== null ? (
-                <p className="m-0 text-sm text-muted-foreground">Every analytics service of the hub is already added.</p>
-              ) : null}
-            </div>
-          )}
-          {error ? <p className="m-0 text-sm text-destructive">{error}</p> : null}
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 /** `@opengroow/analytics-postiz` -> `postiz`: the adapter id of the Publisher a package is conventionally named after (ADR-072). */
-const analyticsAdapterOf = (packageId: string) => packageId.slice(packageId.indexOf("/") + 1).replace(/^analytics-/, "");
+export const analyticsAdapterOf = (packageId: string) => packageId.slice(packageId.indexOf("/") + 1).replace(/^analytics-/, "");
 
 /**
  * The Analytics Adapter of an installed Publisher comes with it: the person
@@ -246,7 +154,7 @@ const analyticsAdapterOf = (packageId: string) => packageId.slice(packageId.inde
  * that has none yet, once per package (a failure, such as a non-admin account, leaves it
  * to "Add analytics").
  */
-function useInstallPublishersAnalytics(installedAdapters: string[] | undefined) {
+export function useInstallPublishersAnalytics(installedAdapters: string[] | undefined) {
   const publishers = useInstalledPublishers();
   const catalogue = useAction(api.hub_packages_node.catalogue);
   const install = useAction(api.hub_packages_node.install);
@@ -268,16 +176,15 @@ function useInstallPublishersAnalytics(installedAdapters: string[] | undefined) 
   }, [wanted, have, catalogue, install]);
 }
 
-/** The connections of the Project's Analytics Adapters that belong to no Publisher. Nothing while loading. */
+/** The Analytics providers that belong to no Publisher, each with its connection. Nothing while loading. */
 export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | undefined }) {
   const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
-  useInstallPublishersAnalytics(adapters?.map((a) => a.adapter));
   // An adapter of a Publisher is set up in that Publisher's page; only the others live here.
   const standalone = (adapters ?? []).filter((adapter) => !adapter.publisher);
   if (!instanceId || standalone.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">
-      <h2 className="m-0 text-xl font-semibold">Connections</h2>
+      <h2 className="m-0 text-xl font-semibold">Analytics providers</h2>
       {standalone.map((adapter) => (
         <AdapterForm key={adapter.adapter} instanceId={instanceId} adapter={adapter} />
       ))}

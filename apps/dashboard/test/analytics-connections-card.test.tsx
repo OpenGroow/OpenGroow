@@ -4,7 +4,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AdapterForm, AddAnalyticsButton, AnalyticsConnectionsCard } from "../src/components/analytics-connections-card";
+import { AdapterForm, AnalyticsConnectionsCard, useInstallPublishersAnalytics } from "../src/components/analytics-connections-card";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -114,15 +114,6 @@ describe("Analytics connections card", () => {
     expect(remove).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz" });
   });
 
-  it("offers the hub's adapters that are not installed", async () => {
-    adapters = [];
-    catalogue.mockResolvedValueOnce({ entries: [{ packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "Postiz statistics" }] });
-    await act(async () => root.render(<AddAnalyticsButton instanceId="inst-1" />));
-    await act(async () => button("Add analytics").click());
-    await act(async () => button("Postiz analytics").click());
-    expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
-  });
-
   it("installs the analytics package of an installed Publisher on its own, once", async () => {
     adapters = [];
     publishers = [{ adapter: "postiz" }];
@@ -132,8 +123,12 @@ describe("Analytics connections card", () => {
         { packageId: "@opengroow/analytics-other", name: "Other", description: "" },
       ],
     });
-    await render();
-    await render();
+    const Probe = () => {
+      useInstallPublishersAnalytics((adapters as Array<{ adapter: string }>).map((a) => a.adapter));
+      return null;
+    };
+    await act(async () => root.render(<Probe />));
+    await act(async () => root.render(<Probe />));
     expect(install).toHaveBeenCalledTimes(1);
     expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
     catalogue.mockResolvedValue({ entries: [] });

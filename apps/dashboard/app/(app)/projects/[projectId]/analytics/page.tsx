@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Crown, Eye, ExternalLink, Layers, Users } from "lucide-react";
@@ -18,7 +19,6 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { SourceThumbnail } from "@/src/components/source-visuals";
-import { AddAnalyticsButton, AnalyticsConnectionsCard } from "@/src/components/analytics-connections-card";
 import { compact, currentReadings, engagementRate, latestMetrics, percent, rankValue, totalsOf } from "@/src/lib/analytics-figures";
 import { cn } from "@/lib/utils";
 
@@ -200,12 +200,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
 
   return (
     <div className="grid gap-8">
-      <PageHeader title="Analytics" description="How your published posts performed." action={<AddAnalyticsButton instanceId={instanceId} />} />
+      <PageHeader title="Analytics" description="How your published posts performed." />
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : all.length === 0 ? (
         <Card>
-          <CardContent className="text-muted-foreground">No measured posts yet. Add an analytics service, and the results of your published posts appear here.</CardContent>
+          <CardContent className="text-muted-foreground">
+            No measured posts yet. Their results appear here once a published post is measured by an analytics provider; add one in{" "}
+            <Link href="publishers" className="underline underline-offset-4">Publishers &amp; Analytics</Link>.
+          </CardContent>
         </Card>
       ) : (
         <>
@@ -264,7 +267,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
           )}
         </>
       )}
-      <AnalyticsConnectionsCard instanceId={instanceId} />
     </div>
   );
 }
