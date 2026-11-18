@@ -112,6 +112,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const agents = [...new Set(sources.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   const selection = useSourceSelection(visible);
+  useThumbnailRequests(instanceId, tab === "all" ? visible : []);
 
   return (
     <div className="grid gap-8">
@@ -433,6 +434,20 @@ function SourceGlyph({ family }: { family: string }) {
   );
 }
 
+// Asks the server for the thumbnails of the rows on screen that never had one
+// (images are copied server side; a Source without one keeps its glyph).
+function useThumbnailRequests(instanceId: string, rows: SourceRow[]): void {
+  const requestThumbnails = useMutation(api.source_thumbnails.request);
+  const missingKey = rows
+    .filter((source) => !source.thumbnailUrl && source.thumbnailTriedAt === undefined)
+    .map((source) => source._id)
+    .join(",");
+  useEffect(() => {
+    if (missingKey === "") return;
+    void requestThumbnails({ instanceId, sourceIds: missingKey.split(",") as Id<"sources">[] }).catch(() => undefined);
+  }, [missingKey, instanceId, requestThumbnails]);
+}
+
 // The page's own image when one was fetched, else the glyph of its family.
 function SourceThumbnail({ source }: { source: SourceRow }) {
   const [broken, setBroken] = useState(false);
@@ -480,7 +495,7 @@ function SourceRowItem({
           </div>
         ) : null}
         <div className="flex min-w-0 items-center gap-4">
-          <SourceGlyph family={source.family} />
+          <SourceThumbnail source={source} />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
@@ -562,15 +577,7 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
     .sort((a, b) => (sort === "score" ? (sourceScore(b.scoring) ?? -1) - (sourceScore(a.scoring) ?? -1) : b.createdAt - a.createdAt));
   const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
   const selection = useSourceSelection(ready);
-  // Ask for the thumbnails of the rows on screen that never had one (images are
-  // copied server side; a Source without one keeps its glyph).
-  const requestThumbnails = useMutation(api.source_thumbnails.request);
-  const missing = ready.filter((source) => !source.thumbnailUrl && source.thumbnailTriedAt === undefined).map((source) => source._id);
-  const missingKey = missing.join(",");
-  useEffect(() => {
-    if (missingKey === "") return;
-    void requestThumbnails({ instanceId, sourceIds: missingKey.split(",") as Id<"sources">[] }).catch(() => undefined);
-  }, [missingKey, instanceId, requestThumbnails]);
+  useThumbnailRequests(instanceId, ready);
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
