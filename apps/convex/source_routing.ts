@@ -36,10 +36,9 @@ export type RoutingRuntime = {
   inFlightTries?: number;
   inFlightErrors?: string[];
   candidates?: RoutingCandidate[];
+  // Produce on a Source: the Job routes that Source only (and, when the user
+  // chose a producer by hand, `source.routeTo` restricts the router to it).
   forcedSourceId?: Id<"sources">;
-  // Produce on a Source whose producer the user chose by hand: the router only
-  // writes that producer's payload.
-  forcedTarget?: { templateId: string; missionType: string };
 };
 
 function frequencyOf(job: Doc<"jobs">): Frequency {
@@ -224,10 +223,7 @@ export async function settleRoutingRun(ctx: MutationCtx, run: { _id: Id<"runs">;
     await finishJob(ctx, job, "failed", undefined, "Selected Source is missing or already has a production Mission", run._id);
     return;
   }
-  const targetAgent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) =>
-    q.eq("instanceId", source.instanceId).eq("templateId", candidate.templateId),
-  ).unique();
-  if (!targetAgent || targetAgent.status !== "active") {
+  if (!(await findActiveAgent(ctx, source.instanceId, candidate.templateId))) {
     await finishJob(ctx, job, "failed", undefined, `Routing target Agent ${candidate.templateId} is no longer active`, run._id);
     return;
   }
@@ -258,6 +254,14 @@ export async function settleRoutingRun(ctx: MutationCtx, run: { _id: Id<"runs">;
 }
 
 type RoutingDecision = typeof routingDecisionV.type;
+
+/** The Agent behind a routing target, when it is still active. */
+async function findActiveAgent(ctx: QueryCtx, instanceId: string, templateId: string): Promise<Doc<"projectAgents"> | null> {
+  const agent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) =>
+    q.eq("instanceId", instanceId).eq("templateId", templateId),
+  ).unique();
+  return agent?.status === "active" ? agent : null;
+}
 
 /** Create the production Mission for a Source and record the decision that led
  * to it. Keep Mission insertion, its initial Run, and the Source pointer in one
@@ -395,7 +399,7 @@ export const reserveWinner = internalMutation({
     const source = await ctx.db.get(args.sourceId);
     const forced = source !== null && runtime.forcedSourceId === source._id;
     if (!source || source.status !== "ready" || (!forced && (source.selectedAt !== undefined || source.productionMissionId !== undefined))) return { status: "unavailable" as const };
-    const target = forced ? runtime.forcedTarget : undefined;
+    const target = forced ? source.routeTo : undefined;
     const candidates = (await candidateMissions(ctx, job.instanceId)).filter((entry) =>
       target === undefined || (entry.templateId === target.templateId && entry.missionType === target.missionType),
     );
@@ -502,10 +506,7 @@ export const forceProduction = mutation({
     const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
     const chosen = source.routeTo;
     if (proposal && (!chosen || (chosen.templateId === proposal.templateId && chosen.missionType === proposal.missionType))) {
-      const agent = await ctx.db.query("projectAgents").withIndex("by_instance_template", (q) =>
-        q.eq("instanceId", source.instanceId).eq("templateId", proposal.templateId),
-      ).unique();
-      if (!agent || agent.status !== "active") throw new Error(`Routing target Agent ${proposal.templateId} is not active`);
+      if (!(await findActiveAgent(ctx, source.instanceId, proposal.templateId))) throw new Error(`Routing target Agent ${proposal.templateId} is not active`);
       const missionId = await createProductionMission(ctx, source, { ...proposal, state: "approved", decidedBy: "user", decidedAt: Date.now() });
       return { status: "created" as const, missionId };
     }
@@ -527,7 +528,6 @@ export const forceProduction = mutation({
       runtime: {
         ...runtime,
         forcedSourceId: args.sourceId,
-        ...(chosen ? { forcedTarget: chosen } : {}),
         runNowRequestedAt: now,
         runNowRestorePaused: job.state === "paused",
       },
