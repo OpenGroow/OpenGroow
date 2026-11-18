@@ -702,8 +702,8 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
           <label className="flex items-center gap-2 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
             <Users aria-hidden="true" className="size-4" />
             Routed to:
-            <NativeSelect aria-label="Routed to" className="h-10 w-48" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
-              <option value={AUTO_TARGET}>Auto</option>
+            <NativeSelect aria-label="Routed to" className="h-10 w-56" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
+              <option value={AUTO_TARGET}>Auto (router decides)</option>
               {targets.map((target) => (
                 <option key={targetKey(target)} value={targetKey(target)}>
                   {agentLabel(target.templateId)} · {target.label}
