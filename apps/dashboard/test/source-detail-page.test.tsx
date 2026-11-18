@@ -338,6 +338,8 @@ describe("SourceDetailContent", () => {
       await render({ source: makeSource({ origin: "https://www.instagram.com/reel/abc/" }), analysisSchema: null });
       const link = Array.from(document.querySelectorAll("a")).find((a) => a.getAttribute("href") === "https://www.instagram.com/reel/abc/");
       expect(link?.getAttribute("target")).toBe("_blank");
+      expect(link?.textContent).toBe("Link"); // the URL itself is the tooltip
+      expect(link?.getAttribute("title")).toBe("https://www.instagram.com/reel/abc/");
     });
   });
 
