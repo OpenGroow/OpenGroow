@@ -119,20 +119,30 @@ export const listByInstance = query({
     const ownerId = await readOwnerId(ctx, args.instanceId);
     if (ownerId === null) return { page: [], isDone: true, continueCursor: "" };
     const { family } = args;
-    if (family !== undefined) {
-      return await ctx.db
-        .query("sources")
-        .withIndex("by_instance_owner_family_createdAt", (q) =>
-          q.eq("instanceId", args.instanceId).eq("ownerId", ownerId).eq("family", family),
-        )
-        .order("desc")
-        .paginate(args.paginationOpts);
-    }
-    return await ctx.db
-      .query("sources")
-      .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
-      .order("desc")
-      .paginate(args.paginationOpts);
+    const result =
+      family !== undefined
+        ? await ctx.db
+            .query("sources")
+            .withIndex("by_instance_owner_family_createdAt", (q) =>
+              q.eq("instanceId", args.instanceId).eq("ownerId", ownerId).eq("family", family),
+            )
+            .order("desc")
+            .paginate(args.paginationOpts)
+        : await ctx.db
+            .query("sources")
+            .withIndex("by_instance_owner_createdAt", (q) => q.eq("instanceId", args.instanceId).eq("ownerId", ownerId))
+            .order("desc")
+            .paginate(args.paginationOpts);
+    // The thumbnail is stored as a file: hand the page a URL it can load.
+    return {
+      ...result,
+      page: await Promise.all(
+        result.page.map(async (source) => ({
+          ...source,
+          thumbnailUrl: source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null,
+        })),
+      ),
+    };
   },
 });
 

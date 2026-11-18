@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -49,7 +49,8 @@ type SourceRow = Pick<
   | "analysis"
   | "routing"
   | "routeTo"
-> & { _id: string };
+  | "thumbnailTriedAt"
+> & { _id: string; thumbnailUrl?: string | null };
 
 const PAGE_SIZE = 50;
 
@@ -432,6 +433,16 @@ function SourceGlyph({ family }: { family: string }) {
   );
 }
 
+// The page's own image when one was fetched, else the glyph of its family.
+function SourceThumbnail({ source }: { source: SourceRow }) {
+  const [broken, setBroken] = useState(false);
+  if (!source.thumbnailUrl || broken) return <SourceGlyph family={source.family} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={source.thumbnailUrl} alt="" className="size-14 shrink-0 rounded-xl object-cover" loading="lazy" onError={() => setBroken(true)} />
+  );
+}
+
 // Select mode adds a leading checkbox column.
 const SELECT_ROW_GRID =
   "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_minmax(0,1fr)_7rem_4rem_6rem]";
@@ -551,6 +562,15 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
     .sort((a, b) => (sort === "score" ? (sourceScore(b.scoring) ?? -1) - (sourceScore(a.scoring) ?? -1) : b.createdAt - a.createdAt));
   const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
   const selection = useSourceSelection(ready);
+  // Ask for the thumbnails of the rows on screen that never had one (images are
+  // copied server side; a Source without one keeps its glyph).
+  const requestThumbnails = useMutation(api.source_thumbnails.request);
+  const missing = ready.filter((source) => !source.thumbnailUrl && source.thumbnailTriedAt === undefined).map((source) => source._id);
+  const missingKey = missing.join(",");
+  useEffect(() => {
+    if (missingKey === "") return;
+    void requestThumbnails({ instanceId, sourceIds: missingKey.split(",") as Id<"sources">[] }).catch(() => undefined);
+  }, [missingKey, instanceId, requestThumbnails]);
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
@@ -651,7 +671,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
       <Card className={cn("flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center", selected && "ring-2 ring-primary")}>
         <div className="flex min-w-0 flex-1 items-center gap-4">
           {selecting ? <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} /> : null}
-          <SourceGlyph family={source.family} />
+          <SourceThumbnail source={source} />
           <div className="grid min-w-0 gap-2">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
