@@ -462,7 +462,8 @@ function NotScoredHint() {
         delay={100}
         aria-label={NOT_SCORED_HINT}
         data-testid="not-scored-hint"
-        render={<span tabIndex={0} className="inline-flex text-muted-foreground" />}
+        // Above the row's full-size link, or that link takes the hover.
+        render={<span tabIndex={0} className="relative z-10 inline-flex text-muted-foreground" />}
       >
         <Hourglass className="size-4" />
       </TooltipTrigger>
