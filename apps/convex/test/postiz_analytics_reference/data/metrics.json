@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "adapter": "postiz",
+  "kind": "social",
+  "labels": {
+    "Views": "views",
+    "Reach": "reach",
+    "Likes": "likes",
+    "Comments": "comments",
+    "Shares": "shares",
+    "Saves": "saves"
+  }
+}

@@ -15,7 +15,11 @@ vi.mock("convex/react", () => ({
   useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : undefined),
 }));
 vi.mock("@convex/_generated/api", () => ({
-  api: { analytics: { listForProject: "analytics.listForProject" }, publisher_packages: { list: "publisher_packages.list" } },
+  api: {
+    analytics: { listForProject: "analytics.listForProject" },
+    analytics_connections: { list: "analytics_connections.list" },
+    publisher_packages: { list: "publisher_packages.list" },
+  },
 }));
 vi.mock("@/src/hooks/use-authenticated-instances", () => ({
   useAuthenticatedInstances: () => [{ openclawId: "inst-1" }],

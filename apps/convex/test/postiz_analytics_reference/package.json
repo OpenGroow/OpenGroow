@@ -1,0 +1,7 @@
+{
+  "name": "@opengroow/analytics-postiz",
+  "version": "1.0.0",
+  "description": "Read how a post performed from the statistics of a Postiz instance",
+  "license": "AGPL-3.0-only",
+  "type": "module"
+}

@@ -13,6 +13,7 @@ import type * as agent_hmac from "../agent_hmac.js";
 import type * as analytics from "../analytics.js";
 import type * as analytics_adapters from "../analytics_adapters.js";
 import type * as analytics_load_node from "../analytics/load_node.js";
+import type * as analytics_connections from "../analytics_connections.js";
 import type * as analytics_node from "../analytics_node.js";
 import type * as analytics_schema from "../analytics_schema.js";
 import type * as auth from "../auth.js";
@@ -175,6 +176,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   analytics_adapters: typeof analytics_adapters;
   "analytics/load_node": typeof analytics_load_node;
+  analytics_connections: typeof analytics_connections;
   analytics_node: typeof analytics_node;
   analytics_schema: typeof analytics_schema;
   auth: typeof auth;

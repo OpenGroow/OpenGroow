@@ -76,7 +76,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
   });
 
   it("offers only the adapters that can measure this channel", async () => {
-    const s = await seed({ adapters: [POSTIZ_ANALYTICS, WEB_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other" }] });
+    const s = await seed({ adapters: [POSTIZ_ANALYTICS, WEB_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0 }] });
     const { options } = await s.analytics();
     expect(options.map((o) => o.id)).toEqual(["postiz-analytics", "web-analytics"]);
   });
@@ -103,7 +103,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
   });
 
   it("refuses an adapter that needs the id of another service's Publisher", async () => {
-    const s = await seed({ adapters: [POSTIZ_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other" }] });
+    const s = await seed({ adapters: [POSTIZ_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0 }] });
     await expect(s.link("other-analytics")).rejects.toThrow(/other-analytics.*other/);
     expect(await s.analytics()).toMatchObject({ adapterId: "postiz-analytics" });
   });

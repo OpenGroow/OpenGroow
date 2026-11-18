@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
+import { AnalyticsConnectionsCard } from "@/src/components/analytics-connections-card";
 
 // The Analytics page (ADR-078): a Project's published posts with how they
 // performed. Posts are ranked by their Mission type's primary metric within
@@ -149,6 +150,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
           </section>
         ))
       )}
+      <AnalyticsConnectionsCard instanceId={instanceId} />
     </div>
   );
 }

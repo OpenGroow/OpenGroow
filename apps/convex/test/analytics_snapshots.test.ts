@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
-import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
+import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsConnection, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
 import { installPostiz } from "./postiz_fixture";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
@@ -21,6 +21,7 @@ const modules = {
   "../analytics.ts": () => import("../analytics.js"),
   "../analytics_adapters.ts": () => import("../analytics_adapters.js"),
   "../analytics_node.ts": () => import("../analytics_node.js"),
+  "../analytics_connections.ts": () => import("../analytics_connections.js"),
   "../instances.ts": () => import("../instances.js"),
   "../missions.ts": () => import("../missions.js"),
   "../publications.ts": () => import("../publications.js"),
@@ -47,6 +48,7 @@ function stubAdapter(opts: { needs?: AnalyticsKey; earliestDelayMs?: number } = 
     needs: opts.needs ?? "externalId",
     earliestDelayMs: opts.earliestDelayMs ?? 0,
     async read(conn, request: ReadRequest) {
+      connections.push(conn);
       let response: Response;
       try {
         response = await fetch(`https://stats.example.com/post/${request.externalId ?? request.url}`, {
@@ -68,6 +70,7 @@ type Answer = () => Response;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 let answer: Answer;
 let reads: string[];
+const connections: AnalyticsConnection[] = [];
 
 async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled" } = {}) {
   const t = convexTest(schema, modules);
@@ -128,6 +131,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-11-01T10:00:00Z"));
   stub.adapter = stubAdapter();
   reads = [];
+  connections.length = 0;
   answer = () => json({ views: 146, reach: 116, likes: 2, comments: 0, shares: 0, saves: 0, impressions: 999 });
   vi.stubGlobal(
     "fetch",
@@ -327,6 +331,25 @@ describe("Performance Snapshots (ADR-078)", () => {
       [0, DAY],
       [1, DAY],
     ]);
+  });
+
+  it("reads with the Publisher's connection until the Project configures the adapter, then with its own connection and options", async () => {
+    const s = await seed();
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    await s.tick();
+    expect(connections).toEqual([{ url: "https://postiz.example.com", apiKey: "secret" }]);
+
+    await s.owner.mutation(api.analytics_connections.save, {
+      instanceId: INSTANCE_ID,
+      adapter: "postiz-analytics",
+      url: "https://stats.postiz.example.com",
+      apiKey: "analytics-key",
+      options: { lookbackDays: 30 },
+    });
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    expect(connections[1]).toEqual({ url: "https://stats.postiz.example.com", apiKey: "analytics-key", options: { lookbackDays: 30 } });
   });
 
   it("does not show another owner's Snapshots", async () => {

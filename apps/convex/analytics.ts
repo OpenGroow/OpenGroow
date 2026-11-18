@@ -3,6 +3,7 @@ import { DEFAULT_COLLECT_DELAYS_MS, metricKindOf } from "@opengroow/publisher-sd
 import type { Doc } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
+import { connectionFor, projectAnalyticsConnection } from "./analytics_connections.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
@@ -148,8 +149,9 @@ export const due = internalQuery({
       // The adapter is the one the channel is linked to now (ADR-078): none reads "analytics unavailable".
       const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
       const link = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : null;
-      // An adapter of the Publisher's own service reads with the Publisher's connection.
+      // The Project's own connection to the adapter, else (for the adapter of the Publisher's own service) the Publisher's.
       const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
+      const connection = link ? connectionFor(await projectAnalyticsConnection(ctx, row.instanceId, link.adapter.id), publisher) : undefined;
       out.push({
         id: row._id,
         analyticsAdapter: link?.adapter.id ?? null,
@@ -158,7 +160,7 @@ export const due = internalQuery({
         kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),
         externalId: publication.externalId,
         externalUrl: publication.externalUrl,
-        ...(publisher?.apiKey ? { connection: { url: publisher.url, apiKey: publisher.apiKey } } : {}),
+        ...(connection ? { connection } : {}),
       });
     }
     return out;
