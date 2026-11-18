@@ -99,3 +99,30 @@ describe("source dedupe", () => {
     expect(await t.run((ctx) => ctx.storage.get(storageId))).toBeNull();
   });
 });
+
+describe("sources.counts", () => {
+  it("counts every Source by status, and the two tabs, whatever has been loaded", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t);
+    const scoring = { productFit: 0.75, replicability: 0.75, creativeStrength: 0.75 };
+    await post(t, "https://www.instagram.com/reel/S1/", T0, { scoring });
+    await post(t, "https://www.instagram.com/reel/S2/", T0 + 1, { scoring });
+    await post(t, "https://www.instagram.com/reel/P1/", T0 + 2, { scoring, selectedAt: T0 }); // picked: on neither tab
+    await post(t, "https://www.instagram.com/reel/N1/", T0 + 3); // ready, not scored: Other
+    await post(t, "https://www.instagram.com/reel/F1/", T0 + 4, { status: "failed" });
+    await post(t, "https://www.instagram.com/reel/U1/", T0 + 5, { status: "unavailable" });
+    await post(t, "https://www.instagram.com/reel/G1/", T0 + 6, { status: "processing" });
+
+    const counts = await t.withIdentity(OWNER).query(api.sources.counts, { instanceId: INSTANCE });
+
+    expect(counts).toEqual({ total: 7, processing: 1, ready: 4, failed: 1, unavailable: 1, scored: 2, other: 4, capped: false });
+  });
+
+  it("counts nothing for someone who does not own the Instance", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t);
+    await post(t, "https://www.instagram.com/reel/S1/", T0);
+    const counts = await t.withIdentity({ ...OWNER, subject: "stranger", tokenIdentifier: "test|stranger" }).query(api.sources.counts, { instanceId: INSTANCE });
+    expect(counts.total).toBe(0);
+  });
+});

@@ -23,7 +23,7 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany" },
+    sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany", counts: "sources.counts" },
     source_routing: { listTargets: "source_routing.listTargets", setRouteTarget: "source_routing.setRouteTarget", forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
   },
@@ -71,10 +71,10 @@ describe("InstanceSourcesContent", () => {
 
   async function render(
     results: Array<ReturnType<typeof makeSource>>,
-    { status = "Exhausted", families, tab = "other", targets = [] }: { status?: string; families?: string[]; tab?: "other" | "ready"; targets?: unknown[] } = {},
+    { status = "Exhausted", families, tab = "other", targets = [], counts }: { status?: string; families?: string[]; tab?: "other" | "ready"; targets?: unknown[]; counts?: unknown } = {},
   ) {
     const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
-    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : familyList));
+    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : key === "sources.counts" ? counts : familyList));
     usePaginatedQueryMock.mockReturnValue({ results, status, loadMore });
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
@@ -179,6 +179,28 @@ describe("InstanceSourcesContent", () => {
         ?.textContent;
     expect(tile("Total sources")).toContain("2");
     expect(tile("Failed")).toContain("1");
+  });
+
+  it("shows the server's real counts, not the number of rows loaded so far", async () => {
+    await render([makeSource({ _id: "a" })], {
+      status: "CanLoadMore",
+      counts: { total: 312, processing: 5, ready: 290, failed: 12, unavailable: 5, scored: 270, other: 42, capped: false },
+    });
+    const tile = (label: string) =>
+      Array.from(document.querySelectorAll("[data-slot=stat-tile]")).find((t) => t.textContent?.includes(label))?.textContent;
+    expect(tile("Total sources")).toContain("312"); // not "Loaded sources: 1"
+    expect(tile("Processing")).toContain("5");
+    expect(tile("Ready")).toContain("290");
+    expect(tile("Failed")).toContain("12");
+    expect(tile("Unavailable")).toContain("5");
+    const tabs = Array.from(document.querySelectorAll("button[aria-pressed]")).map((b) => b.textContent);
+    expect(tabs).toEqual(["Scored270", "Other42"]);
+  });
+
+  it("marks a status the server stopped counting with a plus", async () => {
+    await render([makeSource()], { counts: { total: 5300, processing: 0, ready: 5000, failed: 300, unavailable: 0, scored: 0, other: 5000, capped: true } });
+    const tile = Array.from(document.querySelectorAll("[data-slot=stat-tile]")).find((t) => t.textContent?.includes("Ready"))?.textContent;
+    expect(tile).toContain("5000+");
   });
 
   it("offers Load more only while another page can be loaded", async () => {
