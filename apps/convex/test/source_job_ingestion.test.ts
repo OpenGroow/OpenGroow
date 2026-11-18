@@ -12,6 +12,7 @@ import {
   RUNTIME_WORKSPACE_FILE_READ_RESULT,
 } from "@opengroow/protocol";
 import { MAX_SOURCES_PER_RESULT } from "../source_jobs/limits";
+import { originKeyOf } from "../source_origin";
 
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
 
@@ -189,8 +190,8 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
     await t.run((ctx) =>
       ctx.db.insert("sources", {
         instanceId: INSTANCE, ownerId: OWNER, templateId: TEMPLATE, sourceId: "keyword", label: "Search keyword",
-        family: "search", status: "ready", origin: keyword().common.origin, capturedAt: keyword().common.capturedAt,
-        marketing: {}, analysis: { query: "running shoes" }, createdAt: 1,
+        family: "search", status: "ready", origin: keyword().common.origin, originKey: originKeyOf(keyword().common.origin),
+        capturedAt: keyword().common.capturedAt, marketing: {}, analysis: { query: "running shoes" }, createdAt: 1,
       }),
     );
     // The same post seen again later is still one Source per post and Agent: the older one stays.
