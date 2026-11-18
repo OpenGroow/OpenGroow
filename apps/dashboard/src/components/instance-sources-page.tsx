@@ -558,7 +558,7 @@ function formatLabel(source: SourceRow): string {
 
 type ReadySort = "score" | "newest";
 
-const READY_TITLE_CHARS = 200;
+const READY_TITLE_CHARS = 125;
 const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
 
 function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }: {
