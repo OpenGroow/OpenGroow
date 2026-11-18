@@ -5,13 +5,12 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { CalendarDays, ExternalLink, Link2, Sparkles, Users, Workflow } from "lucide-react";
+import { CalendarDays, ExternalLink, Link2, Sparkles, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
 import { formatOf, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
-import { RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
@@ -34,8 +33,6 @@ export function SourceDetailPage({ params }: Props) {
 export function SourceDetailContent({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
-  const targets = useRouteTargets(instanceId);
-  const { produce, busy: producing } = useProduceSource(sourceId);
   useThumbnailRequests(instanceId, result ? [{ ...result.source, thumbnailUrl: result.thumbnailUrl }] : []);
 
   if (result === undefined) return <Message>Loading…</Message>;
@@ -71,26 +68,11 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="gap-2" data-testid="source-format">
-                  <PlatformMark platform={format.platform} />
-                  {format.label}
-                </Badge>
-              </div>
-              {source.status === "ready" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Users aria-hidden="true" className="size-4" />
-                    Agent:
-                    <RouteTargetSelect source={source} targets={targets} className="h-10 w-56" />
-                  </label>
-                  <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
-                    <Sparkles />
-                    {source.selectedAt !== undefined ? "Produce again" : "Produce"}
-                  </Button>
-                </div>
-              ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="gap-2" data-testid="source-format">
+                <PlatformMark platform={format.platform} />
+                {format.label}
+              </Badge>
             </div>
             <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}
