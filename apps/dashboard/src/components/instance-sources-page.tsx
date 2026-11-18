@@ -65,11 +65,11 @@ const READY_TAB_STAGE = "Scored";
 
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
-// and it works on the loaded rows. The Other tab holds every Source the Ready tab
-// does not (the `Scored` stage), so that stage is not offered here. Sources in
-// production or produced are followed on the Missions board (Done), so they are
-// not offered either and only show under "All statuses", like a Source just
-// routed. Nothing sets `excluded` any more.
+// and it works on the loaded rows. A Source that was picked for production
+// (Routed, In production, Produced, Published) is followed on the Missions board,
+// and a Scored one is on the Ready tab: neither is listed in Other. Nothing sets
+// `excluded` any more.
+const PRODUCTION_STAGES: readonly string[] = ["Routed", "In production", "Produced", "Published"];
 const STATUS_FILTERS = [
   { id: "processing", label: "Processing", stages: ["Ingestion"] },
   { id: "not-scored", label: "Not scored yet", stages: ["Ready"] },
@@ -103,7 +103,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   ) as { results: SourceRow[]; status: string; loadMore: (numItems: number) => void };
 
   const needle = search.trim().toLowerCase();
-  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE);
+  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE && !PRODUCTION_STAGES.includes(stageOf(source)));
   const visible = others.filter(
     (source) =>
       matchesStatus(source, stage) &&
