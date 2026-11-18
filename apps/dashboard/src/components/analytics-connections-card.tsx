@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { Download, Loader2, Plus, Save, Trash2 } from "lucide-react";
@@ -12,6 +12,7 @@ import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connect
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
 // The connection of an Analytics Adapter, once per Project (ADR-078), set up
@@ -224,9 +225,42 @@ export function AddAnalyticsButton({ instanceId }: { instanceId: string | undefi
   );
 }
 
+/** `@opengroow/analytics-postiz` -> `postiz`: the adapter id of the Publisher a package is conventionally named after (ADR-072). */
+const analyticsAdapterOf = (packageId: string) => packageId.slice(packageId.indexOf("/") + 1).replace(/^analytics-/, "");
+
+/**
+ * The Analytics Adapter of an installed Publisher comes with it: the person
+ * added the service once, in Publishers, and should not have to add it again
+ * here. Installs the hub's analytics package named after each installed Publisher
+ * that has none yet, once per package (a failure, such as a non-admin account, leaves it
+ * to "Add analytics").
+ */
+function useInstallPublishersAnalytics(installedAdapters: string[] | undefined) {
+  const publishers = useInstalledPublishers();
+  const catalogue = useAction(api.hub_packages_node.catalogue);
+  const install = useAction(api.hub_packages_node.install);
+  const tried = useRef(new Set<string>());
+  const wanted = publishers?.map((p) => p.adapter).sort().join(",");
+  const have = installedAdapters?.slice().sort().join(",");
+  useEffect(() => {
+    if (wanted === undefined || have === undefined || wanted === "") return;
+    const missing = wanted.split(",").filter((adapter) => !have.split(",").includes(adapter) && !tried.current.has(adapter));
+    if (missing.length === 0) return;
+    missing.forEach((adapter) => tried.current.add(adapter));
+    void catalogue({ kind: "analytics" })
+      .then(async (result) => {
+        for (const entry of result.entries) {
+          if (missing.includes(analyticsAdapterOf(entry.packageId))) await install({ kind: "analytics", packageId: entry.packageId });
+        }
+      })
+      .catch(() => undefined);
+  }, [wanted, have, catalogue, install]);
+}
+
 /** The Analytics Adapters of the Project: installed ones to configure, and the hub's to install. Nothing while loading. */
 export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | undefined }) {
   const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
+  useInstallPublishersAnalytics(adapters?.map((a) => a.adapter));
   if (!instanceId || adapters === undefined || adapters.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">

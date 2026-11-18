@@ -11,19 +11,21 @@ import { AddAnalyticsButton, AnalyticsConnectionsCard } from "../src/components/
 // Seam 3: `analytics_connections.list` is simulated; we observe what the card saves.
 const OPTION = { key: "lookbackDays", label: "Look-back window (days)", type: "number", default: 7, min: 1, max: 90 };
 let adapters: unknown[] | undefined;
+let publishers: unknown[] | undefined;
 const save = vi.fn(async (..._args: unknown[]) => "id");
 const remove = vi.fn(async (..._args: unknown[]) => undefined);
 const catalogue = vi.fn(async (..._args: unknown[]) => ({ entries: [] as unknown[] }));
 const install = vi.fn(async (..._args: unknown[]) => ({ status: "installed" }));
 
 vi.mock("convex/react", () => ({
-  useQuery: (name: unknown) => (name === "analytics_connections.list" ? adapters : undefined),
+  useQuery: (name: unknown) => (name === "analytics_connections.list" ? adapters : name === "publisher_packages.list" ? publishers : undefined),
   useMutation: (name: string) => (name === "analytics_connections.save" ? save : remove),
   useAction: (name: string) => (name === "hub_packages_node.catalogue" ? catalogue : install),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     analytics_connections: { list: "analytics_connections.list", save: "analytics_connections.save", remove: "analytics_connections.remove" },
+    publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
   },
 }));
@@ -33,6 +35,7 @@ describe("Analytics connections card", () => {
   let root: Root;
   beforeEach(() => {
     adapters = [{ adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [OPTION], configured: false }];
+    publishers = [];
     save.mockClear();
     remove.mockClear();
     catalogue.mockClear();
@@ -105,5 +108,21 @@ describe("Analytics connections card", () => {
     await act(async () => button("Add analytics").click());
     await act(async () => button("Postiz analytics").click());
     expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+  });
+
+  it("installs the analytics package of an installed Publisher on its own, once", async () => {
+    adapters = [];
+    publishers = [{ adapter: "postiz" }];
+    catalogue.mockResolvedValue({
+      entries: [
+        { packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "" },
+        { packageId: "@opengroow/analytics-other", name: "Other", description: "" },
+      ],
+    });
+    await render();
+    await render();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+    catalogue.mockResolvedValue({ entries: [] });
   });
 });
