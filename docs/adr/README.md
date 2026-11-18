@@ -78,3 +78,4 @@ Numbers 010, 015, 016 and 033 each appear twice (pre-existing collision); refer 
 | 074 | A GitHub Publisher publishes site articles; `article` joins the Publishable kinds | Proposed | no | [074-article-publishing-moves-to-a-github-publisher.md](074-article-publishing-moves-to-a-github-publisher.md) |
 | 075 | A Project has several Publishers, at most one per adapter | Proposed | no | [075-several-publishers-per-project.md](075-several-publishers-per-project.md) |
 | 076 | The routing decision is stored on the Source and can wait for human approval | Proposed | no | [076-routing-decision-is-stored-and-can-wait-for-approval.md](076-routing-decision-is-stored-and-can-wait-for-approval.md) |
+| 077 | Sources declare their platform, dedupe key and thumbnail in the Template manifest | Proposed | no | [077-sources-declare-their-platform-dedupe-key-and-thumbnail.md](077-sources-declare-their-platform-dedupe-key-and-thumbnail.md) |

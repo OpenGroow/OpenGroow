@@ -1,4 +1,5 @@
 import { paginationOptsValidator } from "convex/server";
+import type { SourcePlatformDeclaration } from "@opengroow/agent-templates";
 import { v, type ObjectType } from "convex/values";
 import { resolveSource } from "./source_enrichment.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
@@ -42,14 +43,22 @@ const insertArgs = {
 // Sources are append-only (ADR-051): the only write is an insert. Validation
 // and the declared label/family/status are resolved by the caller (the
 // ingestion of a SourceJob result, `source_jobs/ingest_sources.ts`).
-export async function insertSource(ctx: MutationCtx, args: ObjectType<typeof insertArgs>) {
-  const originKey = originKeyOf(args.origin);
+export async function insertSource(ctx: MutationCtx, args: ObjectType<typeof insertArgs>, platform?: SourcePlatformDeclaration) {
+  const originKey = originKeyOf(args.origin, platform);
   return await ctx.db.insert("sources", { ...args, ...(originKey !== undefined ? { originKey } : {}), createdAt: Date.now() });
+}
+
+/** The platform the Template declares for a Source type, for callers that have not resolved the declaration. */
+async function platformOfSource(
+  ctx: MutationCtx,
+  source: { instanceId: string; templateId: string; sourceId: string },
+): Promise<SourcePlatformDeclaration | undefined> {
+  return (await resolveSource(ctx, source.instanceId, source.templateId, source.sourceId))?.declaration.platform;
 }
 
 export const insert = internalMutation({
   args: insertArgs,
-  handler: async (ctx, args) => await insertSource(ctx, args),
+  handler: async (ctx, args) => await insertSource(ctx, args, await platformOfSource(ctx, args)),
 });
 
 const completeArgs = {
@@ -66,7 +75,7 @@ const completeArgs = {
 
 export const complete = internalMutation({
   args: completeArgs,
-  handler: async (ctx, args) => await completeSource(ctx, args),
+  handler: async (ctx, args) => await completeSource(ctx, args, await platformOfSource(ctx, args)),
 });
 
 /**
@@ -79,6 +88,7 @@ export const complete = internalMutation({
 export async function completeSource(
   ctx: MutationCtx,
   args: ObjectType<typeof completeArgs>,
+  platform?: SourcePlatformDeclaration,
 ): Promise<{ ok: true; id: Id<"sources"> } | { ok: false; error: string }> {
   const docId = ctx.db.normalizeId("sources", args.id);
   const source = docId ? await ctx.db.get(docId) : null;
@@ -91,7 +101,7 @@ export async function completeSource(
   if (source.status !== "processing") {
     return { ok: false, error: `id: Source "${args.id}" is ${source.status}, only a processing Source can be completed` };
   }
-  const originKey = originKeyOf(args.origin);
+  const originKey = originKeyOf(args.origin, platform);
   await ctx.db.patch(docId, {
     status: "ready",
     origin: args.origin,

@@ -52,7 +52,7 @@ export function renderActiveAgentsSection(agents: ActiveAgentInfo[]): string | n
 export type CarouselPlanningSourceInfo = {
   /** The platform the source Observation itself came from — the default the
    * instruction file tells the Agent to prefer for `publish.platforms`. */
-  platform: "instagram" | "tiktok";
+  platform: string;
   mediaType?: "video" | "image" | "carousel";
   /** `creativeFeatures.format`/`mediaStructure` (issue #455): the
    * most direct structural read the analysis MCP produces — how many beats the

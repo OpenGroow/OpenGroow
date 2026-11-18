@@ -19,7 +19,7 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { sourceScore } from "@/src/lib/source-score";
-import { FormatBadge, NotScoredHint, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { FormatBadge, NotScoredHint, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
 import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { cn } from "@/lib/utils";
 
@@ -428,6 +428,7 @@ function SourceRowItem({
   // already the title.
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
+  const platformOf = useSourcePlatforms(instanceId);
   return (
     <li>
       <Card
@@ -458,7 +459,7 @@ function SourceRowItem({
               {title}
             </Link>
             <div>
-              <FormatBadge source={source} />
+              <FormatBadge source={source} platform={platformOf(source)} />
             </div>
           </div>
         </div>
@@ -583,6 +584,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
   onToggle: () => void;
 }) {
   const { produce, busy } = useProduceSource(source._id);
+  const platformOf = useSourcePlatforms(instanceId);
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
   // What Produce will use: the producer chosen by hand, else the router's own
@@ -621,7 +623,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
               <span className="hidden lg:inline">{title}</span>
             </Link>
             <div className="flex flex-wrap items-center gap-2">
-              <FormatBadge source={source} />
+              <FormatBadge source={source} platform={platformOf(source)} />
               {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
             </div>
           </div>

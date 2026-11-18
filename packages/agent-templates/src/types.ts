@@ -505,12 +505,38 @@ export type TemplateSkillDeclaration = {
   version?: string;
 };
 
+/** Media kinds a Source can carry; `mediaLabels` renames them for the platform ("Reel" for an Instagram video). */
+export type SourceMediaKind = "video" | "image" | "carousel";
+
+/**
+ * The platform a Source comes from (ADR-077). Declarative data only: scraping
+ * stays code, selected by name through `thumbnail`.
+ */
+export type SourcePlatformDeclaration = {
+  /** Shown to the user ("Instagram"); also the prefix of the dedupe key. */
+  name: string;
+  /** The platform's logo: a png, webp, jpeg or svg data URI, same rule as a Publisher's icon. */
+  icon?: string;
+  /** Domains of the Source's pages. Nothing else is requested, and `originPattern` only runs on these. */
+  pageHosts: string[];
+  /** Regex over `host/path` (no `www.`, no query) with exactly one capture group: the post's identity, so one post is ingested once. */
+  originPattern?: string;
+  /** Named thumbnail strategy: the code that finds the image of a page. */
+  thumbnail?: "og-image";
+  /** Domains the thumbnail image may be fetched from. Required with `thumbnail`. */
+  imageHosts?: string[];
+  /** Words for a media kind on this platform. */
+  mediaLabels?: Partial<Record<SourceMediaKind, string>>;
+};
+
 /**
  * A Source the Template can produce (issue #528). `family` is free text, not a
  * global enum. `analysisSchema` is a JSON Schema restricted to a strict
  * keyword allow-list (see `findUnsupportedSchemaKeyword`).
  */
 export type SourceDeclaration = {
+  /** Where the Source comes from, so generic code reads the platform from the Template (ADR-077). */
+  platform?: SourcePlatformDeclaration;
   /** Source type, unique in the Template; the `sourceId` written by the Agent is this value. */
   type: string;
   label: string;

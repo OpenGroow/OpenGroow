@@ -50,10 +50,10 @@ export type ObservationFixture = {
   replicationScore?: number;
 };
 
-// The Source declarations the social pipeline code keys on (`platformOf`). They
+// The Source declarations the social pipeline code keys on (`sourceId` of a social Source). They
 // mirror the Sources declared by a real social Template and are deliberately
 // frozen here for the pipeline tests, not read from a Template package: no
-// package versioned in this repository declares them. If `platformOf` changes,
+// package versioned in this repository declares them. If the social Sources change,
 // update these values by hand.
 const SOURCE_BY_PLATFORM = {
   instagram: { type: "instagram-reel", label: "Instagram Reel", family: "social-video" },

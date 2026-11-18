@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
 import { useProduceSource } from "@/src/components/source-route-target";
-import { FormatBadge, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
@@ -38,6 +38,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
   const { produce, busy: producing } = useProduceSource(sourceId);
   const visual = result ? { ...result.source, thumbnailUrl: result.thumbnailUrl } : undefined;
   useThumbnailRequests(instanceId, visual ? [visual] : []);
+  const platformOf = useSourcePlatforms(instanceId);
 
   if (result === undefined) return <Message>Loading…</Message>;
   if (result === null) return <Message>Source not found.</Message>;
@@ -76,7 +77,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
             </h1>
             <div className="flex flex-wrap items-center gap-2">
               <SourceStatusPill status={source.status} />
-              <FormatBadge source={source} />
+              <FormatBadge source={source} platform={platformOf(visual!)} />
               {score !== undefined ? (
                 <Badge variant="outline" className="gap-2 tabular-nums" data-testid="source-score">
                   <Sparkles aria-hidden="true" className="size-3.5" />

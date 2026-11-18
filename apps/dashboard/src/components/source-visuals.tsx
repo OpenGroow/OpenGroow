@@ -1,19 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Hourglass, Image as ImageIcon, ImageOff, Images, Music2, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { InstagramLogo, TikTokLogo } from "@/src/components/social-platform-icons";
 
 // What the pieces below read from a Source: both the Sources list and the
 // Source page satisfy it.
 export type VisualSource = {
   _id: string;
+  templateId: string;
   sourceId: string;
   label: string;
   family: string;
@@ -70,30 +70,41 @@ export function useThumbnailRequests(instanceId: string, rows: VisualSource[]): 
   }, [missingKey, instanceId, requestThumbnails]);
 }
 
-export type SourceFormat = { platform?: "Instagram" | "TikTok"; media?: "video" | "image" | "carousel"; label: string };
+type MediaKind = "video" | "image" | "carousel";
+
+/** What a Source's Template declares about its platform (ADR-077). */
+export type SourcePlatform = { templateId: string; sourceId: string; name: string; icon?: string; mediaLabels?: Partial<Record<MediaKind, string>> };
+
+// The platforms the Instance's Templates declare, found by the Source they belong to.
+export function useSourcePlatforms(instanceId: string): (source: VisualSource) => SourcePlatform | undefined {
+  const platforms = useQuery(api.source_platforms.forInstance, { instanceId });
+  return (source) => platforms?.find((p) => p.templateId === source.templateId && p.sourceId === source.sourceId);
+}
+
+export type SourceFormat = { platform?: SourcePlatform; media?: MediaKind; label: string };
 
 // The platform the Source came from and the kind of media it is. `label` says
 // it in words ("Instagram Reel"); it falls back to the declared label when the
 // platform or media is not known.
-export function formatOf(source: VisualSource): SourceFormat {
-  const platform = source.sourceId === "instagram-reel" ? "Instagram" : source.sourceId === "tiktok-post" ? "TikTok" : undefined;
+export function formatOf(source: VisualSource, platform?: SourcePlatform): SourceFormat {
   const features = (source.analysis as { creativeFeatures?: { mediaType?: unknown } } | undefined)?.creativeFeatures;
   const media = features?.mediaType === "video" || features?.mediaType === "image" || features?.mediaType === "carousel" ? features.mediaType : undefined;
   if (!platform || !media) return { ...(platform ? { platform } : {}), ...(media ? { media } : {}), label: source.label };
-  const noun = media === "video" ? (platform === "Instagram" ? "Reel" : "video") : media;
-  return { platform, media, label: `${platform} ${noun}` };
+  return { platform, media, label: `${platform.name} ${platform.mediaLabels?.[media] ?? media}` };
 }
 
 const MEDIA_ICONS = { video: Video, image: ImageIcon, carousel: Images } as const;
 
-export function PlatformMark({ platform }: { platform?: SourceFormat["platform"] }) {
-  return platform === "Instagram" ? <InstagramLogo /> : platform === "TikTok" ? <TikTokLogo /> : null;
+// The platform's own logo, shipped in its Template; nothing without one.
+export function PlatformMark({ platform }: { platform?: SourcePlatform }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return platform?.icon ? <img src={platform.icon} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" /> : null;
 }
 
 // The platform logo and a media icon, the words only for a tooltip and screen readers.
-export function FormatBadge({ source }: { source: VisualSource }) {
-  const { platform, media, label } = formatOf(source);
-  if (!platform && !media) return <Badge variant="outline">{label}</Badge>;
+export function FormatBadge({ source, platform }: { source: VisualSource; platform?: SourcePlatform }) {
+  const { media, label } = formatOf(source, platform);
+  if (!platform?.icon && !media) return <Badge variant="outline">{label}</Badge>;
   const MediaIcon = media ? MEDIA_ICONS[media] : undefined;
   return (
     <Badge variant="outline" title={label} className="gap-2">

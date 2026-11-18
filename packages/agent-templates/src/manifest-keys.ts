@@ -45,6 +45,7 @@ import type {
   RevisionRunEffect,
   SelectRequirementOption,
   SourceDeclaration,
+  SourcePlatformDeclaration,
   SourceExternalJobPollingContract,
   StatusCheckContract,
   TemplateSkillDeclaration,
@@ -97,7 +98,10 @@ const SOURCE_JOB = keySetOf<SourceExternalJobPollingContract>({
   server: true, mcpTool: true, statusField: true, terminalStates: true, outputIsRoot: true, unavailableErrorCodes: true,
 });
 const TERMINAL_STATES = keySetOf<ExternalJobTerminalStateMap>({ completed: true, failed: true });
-const SOURCE = keySetOf<SourceDeclaration>({ type: true, label: true, family: true, agentsMd: true, analysisSchema: true });
+const SOURCE = keySetOf<SourceDeclaration>({ type: true, label: true, family: true, agentsMd: true, analysisSchema: true, platform: true });
+const SOURCE_PLATFORM = keySetOf<SourcePlatformDeclaration>({
+  name: true, icon: true, pageHosts: true, originPattern: true, thumbnail: true, imageHosts: true, mediaLabels: true,
+});
 const JOB_TYPE = keySetOf<JobTypeDeclaration>({ type: true, agentsMd: true, sourceTypes: true });
 const GENERATIVE_CALL = keySetOf<NonNullable<AgentManifest["generativeMcpCall"]>[string]>({ toolName: true });
 const ACTIVATION = keySetOf<ActivationEffect>({
@@ -272,7 +276,7 @@ export function findUnknownManifestKey(manifest: unknown): string | undefined {
       eachEntry(manifest.externalJobsByMissionType, "externalJobsByMissionType", (jobs, at) =>
         eachEntry(jobs, at, checkMissionJob),
       ),
-    () => eachItem(manifest.sources, "sources", (source, at) => unknownKeyIn(source, SOURCE, at), byType),
+    () => eachItem(manifest.sources, "sources", (source, at) => firstOf(() => unknownKeyIn(source, SOURCE, at), () => unknownKeyIn(isObj(source) ? source.platform : undefined, SOURCE_PLATFORM, `${at}.platform`)), byType),
     () => eachItem(manifest.jobTypes, "jobTypes", (job, at) => unknownKeyIn(job, JOB_TYPE, at), byType),
     () =>
       eachEntry(manifest.externalJobsBySource, "externalJobsBySource", (jobs, at) =>

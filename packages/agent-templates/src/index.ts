@@ -47,6 +47,8 @@ export type {
   ReviewContentContract,
   RevisionRunEffect,
   SourceDeclaration,
+  SourceMediaKind,
+  SourcePlatformDeclaration,
   JobTypeDeclaration,
   JobTypeName,
   StatusCheckContract,

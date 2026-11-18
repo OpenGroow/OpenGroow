@@ -218,9 +218,9 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
     ]));
 
     const sources = await allSources(t);
-    expect(sources.map((s) => s.originKey).sort()).toEqual(["instagram.com/p/DfMymnjh1v0", "instagram.com/p/OtherPost123"]);
+    expect(sources.map((s) => s.originKey).sort()).toEqual(["instagram/DfMymnjh1v0", "instagram/OtherPost123"]);
     // The first capture is the one kept.
-    expect(sources.find((s) => s.originKey === "instagram.com/p/DfMymnjh1v0")?.capturedAt).toBe(1_700_000_000_000);
+    expect(sources.find((s) => s.originKey === "instagram/DfMymnjh1v0")?.capturedAt).toBe(1_700_000_000_000);
   });
 
   it("stores the optional raw capture and normalizes the topics", async () => {

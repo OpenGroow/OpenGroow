@@ -58,6 +58,29 @@ Each `bin` entry becomes a launcher in `~/.opengroow/bin`, which the paired node
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 
+## Source platform: logo, dedupe key and thumbnail (ADR-077)
+
+A Source declaration in `sources[]` may carry a `platform`. Without it the Source has no logo and no thumbnail, and two captures of one post are two Sources unless their pages are the same.
+
+```json
+"platform": {
+  "name": "Instagram",
+  "icon": "data:image/svg+xml;base64,…",
+  "pageHosts": ["instagram.com"],
+  "originPattern": "^instagram\\.com/(?:[^/]+/)?(?:p|reels?|tv)/([A-Za-z0-9_-]+)",
+  "thumbnail": "og-image",
+  "imageHosts": ["cdninstagram.com", "fbcdn.net"],
+  "mediaLabels": { "video": "Reel" }
+}
+```
+
+- **`name`** is shown to the user and prefixes the dedupe key (`instagram/<capture>`).
+- **`icon`** is a png, webp, jpeg or svg data URI of at most 64 KB, like a Publisher's.
+- **`pageHosts`** are domains (`example.com`, subdomains included): no scheme, port, IP address or `localhost`. Nothing else is requested for this Source.
+- **`originPattern`** is matched against `host/path` (lowercase, no `www.`, no query). It needs exactly one capture group: the post's identity. Two origins with the same capture are one post, ingested once. A page it does not match keeps its page as key.
+- **`thumbnail`** names the strategy that finds the page image. `"og-image"` reads the page's `og:image` (best effort: a private post or a blocked request shows no image). It requires **`imageHosts`**, the only domains an image may come from.
+- **`mediaLabels`** gives the platform's word for `video`, `image` or `carousel` ("Instagram Reel").
+
 ## Mission payload: fields and Extra options
 
 A Mission type's `payload` is the JSON a Mission starts with; `fields` decides how the Create Mission and Create Schedule forms show it. The dashboard applies one rule to every Mission type, with no per-Template code:
