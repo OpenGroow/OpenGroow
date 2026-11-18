@@ -162,15 +162,14 @@ describe("SourceDetailContent", () => {
     expect(details?.querySelector("pre")?.textContent).toBe('{"html":"<b>hi</b>"}');
   });
 
-  it("links to the producing Run and shows the SourceJob id only when provenance exists", async () => {
+  it("links to the producing Run only when provenance exists, and never shows the SourceJob id", async () => {
     await render({ source: makeSource(), analysisSchema: null, workspaceKey: "ws-1" });
     expect(document.querySelector("[data-testid='source-run-link']")).toBeNull();
-    expect(text()).not.toContain("job-1");
 
     await render({ source: makeSource({ runId: "run-1", sourceJobId: "job-1" }), analysisSchema: null, workspaceKey: "ws-1" });
     const link = document.querySelector("[data-testid='source-run-link']");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/agents/%40opengroow%2Fseo/logs?runId=run-1");
-    expect(text()).toContain("job-1");
+    expect(text()).not.toContain("job-1");
   });
 
   it("labels analysis fields from schema titles, falling back to humanized keys", async () => {
@@ -287,6 +286,7 @@ describe("SourceDetailContent", () => {
       await render({ source: makeSource({ origin: "https://www.instagram.com/reel/abc/" }), analysisSchema: null });
       const link = Array.from(document.querySelectorAll("a")).find((a) => a.getAttribute("href") === "https://www.instagram.com/reel/abc/");
       expect(link?.getAttribute("target")).toBe("_blank");
+      expect(link?.className).not.toContain("text-primary"); // underline on hover, no blue
       expect(link?.textContent).toBe("Link"); // the URL itself is the tooltip
       expect(link?.getAttribute("title")).toBe("https://www.instagram.com/reel/abc/");
     });
