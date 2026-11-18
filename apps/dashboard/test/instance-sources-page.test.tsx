@@ -150,6 +150,8 @@ describe("InstanceSourcesContent", () => {
     const hints = document.querySelectorAll("[data-testid='not-scored-hint']");
     expect(hints).toHaveLength(1);
     expect(hints[0]!.getAttribute("aria-label")).toBe("Not scored yet. Run the Source scoring job to score it.");
+    // The row's full-size link must not sit over it, or the tooltip never opens on hover.
+    expect(hints[0]!.className).toContain("z-10");
   });
 
   it("offers a short list of statuses, without Scored, Published or Excluded", async () => {
