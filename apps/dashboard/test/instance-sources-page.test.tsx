@@ -240,6 +240,7 @@ describe("InstanceSourcesContent", () => {
 
     it("deletes only the checked Sources, after a confirmation", async () => {
       await render(rows());
+      removeManyMock.mockClear(); // every mutation shares this mock, including the thumbnail request
       await click(buttonByText("Select"));
       expect(buttonByText("Delete")?.hasAttribute("disabled")).toBe(true);
 
@@ -350,6 +351,13 @@ describe("InstanceSourcesContent", () => {
       );
       expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/thumb.jpg");
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["s-none"] });
+    });
+
+    it("shows thumbnails and asks for the missing ones on the All tab too", async () => {
+      removeManyMock.mockResolvedValue(undefined);
+      await render([makeSource({ _id: "a-img", thumbnailUrl: "https://storage.example/a.jpg", thumbnailTriedAt: 1 }), makeSource({ _id: "a-none" })], { tab: "all" });
+      expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/a.jpg");
+      expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["a-none"] });
     });
 
     it("preselects the router's proposal", async () => {
