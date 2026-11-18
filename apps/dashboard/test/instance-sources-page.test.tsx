@@ -142,6 +142,16 @@ describe("InstanceSourcesContent", () => {
     expect(badge.querySelectorAll("svg")).toHaveLength(1);
   });
 
+  it("shows an hourglass with the way to score a Source that is not scored yet", async () => {
+    await render([
+      makeSource({ _id: "a" }), // analysed, no score
+      makeSource({ _id: "b", status: "failed" }),
+    ]);
+    const hints = document.querySelectorAll("[data-testid='not-scored-hint']");
+    expect(hints).toHaveLength(1);
+    expect(hints[0]!.getAttribute("aria-label")).toBe("Not scored yet. Run the Source scoring job to score it.");
+  });
+
   it("offers a short list of statuses, without Scored, Published or Excluded", async () => {
     await render([makeSource()]);
     const options = Array.from(document.querySelectorAll("select")[0]!.querySelectorAll("option")).map((o) => o.textContent);

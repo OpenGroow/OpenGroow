@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Image as ImageIcon, Images, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Hourglass, Image as ImageIcon, Images, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +17,7 @@ import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { InstagramLogo, TikTokLogo } from "@/src/components/social-platform-icons";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { cn } from "@/lib/utils";
@@ -451,6 +452,25 @@ function useThumbnailRequests(instanceId: string, rows: SourceRow[]): void {
   }, [missingKey, instanceId, requestThumbnails]);
 }
 
+const NOT_SCORED_HINT = "Not scored yet. Run the Source scoring job to score it.";
+
+// Stands where the score will be: hover (or focus) it to read what to do.
+function NotScoredHint() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={100}
+        aria-label={NOT_SCORED_HINT}
+        data-testid="not-scored-hint"
+        render={<span tabIndex={0} className="inline-flex text-muted-foreground" />}
+      >
+        <Hourglass className="size-4" />
+      </TooltipTrigger>
+      <TooltipContent>{NOT_SCORED_HINT}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 // The page's own image when one was fetched, else the glyph of its family.
 function SourceThumbnail({ source, className = "size-14" }: { source: SourceRow; className?: string }) {
   const [broken, setBroken] = useState(false);
@@ -523,7 +543,7 @@ function SourceRowItem({
         <span className="truncate text-sm text-muted-foreground">{agentLabel(source.templateId)}</span>
         <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.createdAt)}</span>
         <span className="text-sm text-foreground tabular-nums">
-          {score ?? "–"}
+          {score ?? (stageOf(source) === "Ready" ? <NotScoredHint /> : "–")}
         </span>
         <div className="relative z-10 flex justify-end">
           {isWebUrl(source.origin) ? (
