@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
 import { useProduceSource } from "@/src/components/source-route-target";
-import { formatOf, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { FormatBadge, NotScoredHint, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
@@ -46,7 +46,6 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
   const analysis = (source.analysis ?? {}) as Record<string, unknown>;
   const pipeline = deriveSourcePipelineState(source);
 
-  const format = formatOf(source);
   const score = sourceScore(source.scoring);
   const origin = String(source.origin);
 
@@ -71,10 +70,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <Badge variant="outline" className="gap-2" data-testid="source-format">
-                <PlatformMark platform={format.platform} />
-                {format.label}
-              </Badge>
+              <FormatBadge source={source} />
               {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists. */}
               {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
                 <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
