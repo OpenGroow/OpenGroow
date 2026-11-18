@@ -697,7 +697,7 @@ export default defineSchema({
     thumbnailTriedAt: v.optional(v.number()),
     // What identifies the post `origin` points at (`source_origin.ts`): a post
     // already ingested for the same Agent is not ingested again. Rows written
-    // before it existed get it from `source_dedupe.backfillOriginKeys`.
+    // before it existed have none and are not matched.
     originKey: v.optional(v.string()),
     // Migration-only technical delegation pointer, cleared by #601.
     delegateMissionId: v.optional(v.id("missions")),

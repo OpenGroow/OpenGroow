@@ -123,7 +123,6 @@ import type * as score_jobs from "../score_jobs.js";
 import type * as source_agent from "../source_agent.js";
 import type * as source_bootstrap from "../source_bootstrap.js";
 import type * as source_bootstrap_node from "../source_bootstrap_node.js";
-import type * as source_dedupe from "../source_dedupe.js";
 import type * as source_enrichment from "../source_enrichment.js";
 import type * as source_jobs from "../source_jobs.js";
 import type * as source_jobs_enrichment_poll_node from "../source_jobs/enrichment_poll_node.js";
@@ -279,7 +278,6 @@ declare const fullApi: ApiFromModules<{
   source_agent: typeof source_agent;
   source_bootstrap: typeof source_bootstrap;
   source_bootstrap_node: typeof source_bootstrap_node;
-  source_dedupe: typeof source_dedupe;
   source_enrichment: typeof source_enrichment;
   source_jobs: typeof source_jobs;
   "source_jobs/enrichment_poll_node": typeof source_jobs_enrichment_poll_node;
