@@ -688,6 +688,9 @@ export default defineSchema({
     // The routing decision (ADR-076): which producing Mission type was chosen
     // for this Source, why, and whether a human still has to approve it.
     routing: v.optional(routingDecisionV),
+    // The producer the user picked by hand on the Sources page ("Routed to").
+    // Produce routes the Source to it instead of letting the router choose.
+    routeTo: v.optional(v.object({ templateId: v.string(), missionType: v.string() })),
     // Migration-only technical delegation pointer, cleared by #601.
     delegateMissionId: v.optional(v.id("missions")),
     // Ownership (and, for the family filter, the family) is folded into the
@@ -707,7 +710,5 @@ export default defineSchema({
     .index("by_instance_template_status", ["instanceId", "templateId", "status"])
     // The daily scoring job's "ready, within the lookback window" read (#487,
     // #535): the `capturedAt` bound is applied inside the index scan.
-    .index("by_instance_status_capturedAt", ["instanceId", "status", "capturedAt"])
-    // The board's "To route" column: the routing decisions waiting for a human.
-    .index("by_instance_routing_state", ["instanceId", "routing.state"]),
+    .index("by_instance_status_capturedAt", ["instanceId", "status", "capturedAt"]),
 });

@@ -14,10 +14,10 @@ export const routingCandidateV = v.object({
 });
 
 export const routingDecisionV = v.object({
-  // `proposed`: waiting for a human (review mode). `approved`: a production
-  // Mission exists (created by the agent in auto mode, or on approval).
-  // `rejected`: a human discarded the proposal; no Mission is created.
-  state: v.union(v.literal("proposed"), v.literal("approved"), v.literal("rejected")),
+  // `proposed`: waiting for a human (review mode): the Source shows it as
+  // "Routed to" until Produce. `approved`: a production Mission exists
+  // (created by the agent in auto mode, or on Produce).
+  state: v.union(v.literal("proposed"), v.literal("approved")),
   // Who moved the decision to its current state.
   decidedBy: v.union(v.literal("agent"), v.literal("user")),
   templateId: v.string(),
