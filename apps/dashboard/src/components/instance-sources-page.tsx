@@ -556,7 +556,7 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
       )}
 
       {hasMore ? (
-        <div>
+        <div className="flex justify-end">
           <Button type="button" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
             Load more
           </Button>

@@ -310,14 +310,10 @@ describe("SourceDetailContent", () => {
       expect(document.querySelector("img[src='https://storage.example/t.jpg']")).not.toBeNull();
     });
 
-    it("shows the not-scored hourglass instead of a score, and asks for a missing thumbnail", async () => {
+    it("shows nothing where the score would be when the Source is not scored, and asks for a missing thumbnail", async () => {
       await render({ source: makeSource(), analysisSchema: null, thumbnailUrl: null });
       expect(document.querySelector("[data-testid='source-score']")).toBeNull();
-      // The Score badge itself, with the hourglass where the number goes.
-      const hint = document.querySelector("[data-testid='not-scored-hint']")!;
-      expect(hint.textContent).toContain("Score");
-      expect(hint.querySelectorAll("svg")).toHaveLength(2);
-      expect(hint.className).toContain("rounded-full"); // styled as the badge
+      expect(document.querySelector("[data-testid='not-scored-hint']")).toBeNull();
       expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["src-1"] });
     });
 

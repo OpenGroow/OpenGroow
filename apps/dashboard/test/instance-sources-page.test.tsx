@@ -407,6 +407,12 @@ describe("InstanceSourcesContent", () => {
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["s-none"] });
     });
 
+    it("puts Load more on the right of the Scored tab", async () => {
+      await render([reel()], { tab: "ready", targets, status: "CanLoadMore" });
+      const button = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Load more")!;
+      expect(button.parentElement!.className).toContain("justify-end");
+    });
+
     it("shows thumbnails and asks for the missing ones on the Other tab too", async () => {
       removeManyMock.mockResolvedValue(undefined);
       await render([makeSource({ _id: "a-img", thumbnailUrl: "https://storage.example/a.jpg", thumbnailTriedAt: 1 }), makeSource({ _id: "a-none" })], { tab: "other" });
