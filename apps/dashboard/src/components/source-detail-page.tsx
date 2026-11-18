@@ -81,7 +81,7 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
                   Score {score}
                 </Badge>
               ) : source.status === "ready" ? (
-                <NotScoredHint />
+                <NotScoredHint badge />
               ) : null}
               {source.status === "failed" ? (
                 <Button type="button" variant="outline" size="sm" onClick={() => void handleRetry()}>
