@@ -37,10 +37,13 @@ function latestMetrics(row: AnalyticsRow): Record<string, number> {
   return currentSnapshots(row).at(-1)?.metrics ?? {};
 }
 
+/** A reading that found nothing is "No data yet", not an error. */
+const NO_DATA_LABEL = "No data yet";
+
 const STATES: Record<AnalyticsRow["state"], { label: string; tone: StatusTone }> = {
   unmeasured: { label: "Analytics unavailable", tone: "neutral" },
   waiting: { label: "Waiting for readings", tone: "progress" },
-  no_data: { label: "No data yet", tone: "info" },
+  no_data: { label: NO_DATA_LABEL, tone: "info" },
   failed: { label: "Failed", tone: "error" },
   post_unknown: { label: "Post unknown", tone: "warning" },
   complete: { label: "Complete", tone: "active" },
@@ -55,14 +58,14 @@ function Curve({ metric, values }: { metric: string; values: number[] }) {
   const point = (value: number, index: number) => {
     const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * (width - 4) + 2;
     const y = max === min ? height / 2 : height - 3 - ((value - min) / (max - min)) * (height - 6);
-    return `${x},${y}`;
+    return { x, y };
   };
   return (
     <svg role="img" aria-label={`${metricWords(metric)} over time: ${values.join(", ")}`} viewBox={`0 0 ${width} ${height}`} className="h-7 w-24 text-primary">
       {values.length > 1 ? (
-        <polyline points={values.map(point).join(" ")} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={values.map((value, index) => { const { x, y } = point(value, index); return `${x},${y}`; }).join(" ")} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
       ) : (
-        <circle cx={point(values[0], 0).split(",")[0]} cy={point(values[0], 0).split(",")[1]} r="3" fill="currentColor" />
+        <circle cx={point(values[0], 0).x} cy={point(values[0], 0).y} r="3" fill="currentColor" />
       )}
     </svg>
   );
@@ -74,7 +77,7 @@ function PublicationRow({ row, rank }: { row: AnalyticsRow; rank?: number }) {
   const latest = latestMetrics(row);
   const metrics = Object.keys(latest);
   // A reading that found nothing is "No data yet", not an error; the same words before the first reading of a waiting post.
-  const label = row.state === "waiting" && snapshots.length === 0 ? "No data yet" : state.label;
+  const label = row.state === "waiting" && snapshots.length === 0 ? NO_DATA_LABEL : state.label;
   return (
     <li data-publication={row.publicationId} className="grid gap-3 border-t border-border px-5 py-4 first:border-t-0">
       <div className="flex flex-wrap items-center gap-3">

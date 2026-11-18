@@ -1,6 +1,6 @@
-import { v } from "convex/values";
-import { DEFAULT_COLLECT_DELAYS_MS, metricKindOf } from "@opengroow/publisher-sdk";
-import type { Doc } from "./_generated/dataModel.js";
+import { v, type Infer } from "convex/values";
+import { metricKindOf } from "@opengroow/publisher-sdk";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
 import { connectionFor, projectAnalyticsConnection } from "./analytics_connections.js";
@@ -17,8 +17,17 @@ import { analyticsDeclarationFor } from "@opengroow/agent-templates";
 /** A reading that found nothing yet, or failed, is asked again after this. */
 export const RETRY_AFTER_MS = 60 * 60_000;
 
+const DAY_MS = 24 * 60 * 60_000;
+
 /** Called when a Publication becomes `published`: schedules its readings, once. */
 export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publications">): Promise<void> {
+  // Only a Mission type that declares `analytics` is measured (ADR-078): none, no reading.
+  const mission = await ctx.db.get(publication.missionId);
+  if (!mission) return;
+  const template = await getTemplateRegistry(ctx).resolve(publication.instanceId, mission.templateId, mission.templateVersion);
+  const declaration = analyticsDeclarationFor(template?.manifest, mission.type);
+  if (!declaration) return;
+  const delays = declaration.collect.map((days) => days * DAY_MS);
   const postSeries = publication.postSeries ?? 0;
   const rows = await ctx.db
     .query("publicationAnalytics")
@@ -37,10 +46,10 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
     instanceId: publication.instanceId,
     publisherAdapter,
     publishedAt,
-    delays: DEFAULT_COLLECT_DELAYS_MS,
+    delays,
     taken: 0,
     state: "waiting",
-    nextAt: publishedAt + DEFAULT_COLLECT_DELAYS_MS[0],
+    nextAt: publishedAt + delays[0],
     done: false,
     updatedAt: publishedAt,
   });
@@ -174,17 +183,16 @@ export const outcomeV = v.union(
   v.object({ kind: v.literal("post_unknown"), reason: v.string() }),
   // Not due yet (the adapter reports later than the Template asked) or its key is missing: no reading tried.
   v.object({ kind: v.literal("postponed"), nextAt: v.number() }),
-  v.object({ kind: v.literal("unmeasured") }),
+  // Nothing measures this channel (yet): kept and asked again, so linking an adapter later resumes the readings.
+  v.object({ kind: v.literal("unmeasured"), reason: v.optional(v.string()) }),
 );
 
-/** Records the outcome of one reading. Never touches the Publication. */
-export const record = internalMutation({
-  args: { id: v.id("publicationAnalytics"), outcome: outcomeV },
-  handler: async (ctx, args) => {
-    const row = await ctx.db.get(args.id);
+type Outcome = Infer<typeof outcomeV>;
+
+async function applyOutcome(ctx: MutationCtx, id: Id<"publicationAnalytics">, outcome: Outcome): Promise<void> {
+    const row = await ctx.db.get(id);
     if (!row || row.done) return;
     const now = Date.now();
-    const { outcome } = args;
     switch (outcome.kind) {
       case "taken": {
         await ctx.db.insert("performanceSnapshots", {
@@ -221,8 +229,15 @@ export const record = internalMutation({
         await ctx.db.patch(row._id, { nextAt: outcome.nextAt, updatedAt: now });
         return;
       case "unmeasured":
-        await ctx.db.patch(row._id, { state: "unmeasured", done: true, updatedAt: now });
+        await ctx.db.patch(row._id, { state: "unmeasured", reason: outcome.reason, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
         return;
     }
+}
+
+/** Records the outcomes of the readings tried in one tick. Never touches a Publication. */
+export const recordMany = internalMutation({
+  args: { outcomes: v.array(v.object({ id: v.id("publicationAnalytics"), outcome: outcomeV })) },
+  handler: async (ctx, args) => {
+    for (const { id, outcome } of args.outcomes) await applyOutcome(ctx, id, outcome);
   },
 });

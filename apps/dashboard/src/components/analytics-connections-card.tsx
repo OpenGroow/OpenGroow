@@ -7,7 +7,9 @@ import { Download, Loader2, Save, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
 // The connection of an Analytics Adapter, once per Project (ADR-078), set up
@@ -16,13 +18,6 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 // Publisher reads through that Publisher's connection.
 
 type AdapterView = FunctionReturnType<typeof api.analytics_connections.list>[number];
-
-const INPUT_CLASS =
-  "h-10 w-full rounded-lg border border-input bg-transparent px-3 text-base outline-none transition-colors focus:border-ring focus:ring-3 focus:ring-ring/50 md:text-sm dark:bg-input/30";
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message.replace(/^.*Uncaught Error:\s*/s, "").split("\n")[0]! : fallback;
-}
 
 function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: AdapterView }) {
   const save = useMutation(api.analytics_connections.save);
@@ -49,7 +44,7 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
       setApiKey("");
       setMessage({ tone: "active", text: "Saved" });
     } catch (error) {
-      setMessage({ tone: "error", text: errorMessage(error, "Could not save") });
+      setMessage({ tone: "error", text: extractConvexErrorMessage(error, "Could not save") });
     } finally {
       setBusy(false);
     }
@@ -82,13 +77,12 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
       <div className="grid gap-4 md:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor={`analytics-url-${adapter.adapter}`}>{adapter.name} URL</Label>
-          <input id={`analytics-url-${adapter.adapter}`} className={INPUT_CLASS} autoComplete="off" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <Input id={`analytics-url-${adapter.adapter}`} autoComplete="off" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />
         </div>
         <div className="grid gap-2">
           <Label htmlFor={`analytics-key-${adapter.adapter}`}>API key</Label>
-          <input
+          <Input
             id={`analytics-key-${adapter.adapter}`}
-            className={INPUT_CLASS}
             type="password"
             autoComplete="off"
             placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
@@ -99,10 +93,9 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
         {adapter.optionDecls.map((decl) => (
           <div key={decl.key} className="grid gap-2">
             <Label htmlFor={`analytics-option-${adapter.adapter}-${decl.key}`}>{decl.label}</Label>
-            <input
+            <Input
               id={`analytics-option-${adapter.adapter}-${decl.key}`}
-              className={INPUT_CLASS}
-              type={decl.type === "number" ? "number" : "text"}
+                type={decl.type === "number" ? "number" : "text"}
               {...(decl.min !== undefined ? { min: decl.min } : {})}
               {...(decl.max !== undefined ? { max: decl.max } : {})}
               value={options[decl.key] ?? ""}
@@ -144,7 +137,7 @@ function InstallFromHub({ installedNames }: { installedNames: string[] }) {
         setEntries(result.entries);
         if (result.error) setError(`The hub could not be read: ${result.error}`);
       })
-      .catch((e) => !cancelled && setError(errorMessage(e, "The hub could not be read")));
+      .catch((e) => !cancelled && setError(extractConvexErrorMessage(e, "The hub could not be read")));
     return () => {
       cancelled = true;
     };
@@ -171,7 +164,7 @@ function InstallFromHub({ installedNames }: { installedNames: string[] }) {
                 .then((result) => {
                   if (result.status === "error") setError(result.errorMessage);
                 })
-                .catch((e) => setError(errorMessage(e, "The adapter could not be installed")))
+                .catch((e) => setError(extractConvexErrorMessage(e, "The adapter could not be installed")))
                 .finally(() => setInstalling(null));
             }}
           >

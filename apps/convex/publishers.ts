@@ -46,6 +46,12 @@ async function requirePublisher(ctx: MutationCtx, instanceId: string, adapter: s
 /** What the dashboard sees of a Publisher: never its API key. */
 function view(publisher: ProjectPublisher, analyticsAdapters: readonly AnalyticsAdapterMeta[]) {
   const options = analyticsAdapters.filter((a) => canMeasure(a, publisher.adapter)).map((a) => ({ id: a.id, name: a.name }));
+  const analyticsOf = (stored: string | null | undefined) => {
+    const link = linkedAdapter(analyticsAdapters, publisher.adapter, stored);
+    return link
+      ? { linked: true as const, adapterId: link.adapter.id, name: link.adapter.name, isDefault: link.isDefault, options }
+      : { linked: false as const, options };
+  };
   return {
     adapter: publisher.adapter,
     url: publisher.url,
@@ -61,12 +67,7 @@ function view(publisher: ProjectPublisher, analyticsAdapters: readonly Analytics
             channelProfile: t.channelProfile,
             settings: t.settings,
             // `linked: false` reads "analytics unavailable" (nothing measures this channel), not "no data yet".
-            analytics: (() => {
-              const link = linkedAdapter(analyticsAdapters, publisher.adapter, t.analyticsAdapter);
-              return link
-                ? { linked: true as const, adapterId: link.adapter.id, name: link.adapter.name, isDefault: link.isDefault, options }
-                : { linked: false as const, options };
-            })(),
+            analytics: analyticsOf(t.analyticsAdapter),
           }
         : { target: t.target, mapped: false as const },
     ),

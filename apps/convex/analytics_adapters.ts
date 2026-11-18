@@ -17,9 +17,13 @@ export type { AnalyticsAdapterMeta };
 
 type Ctx = Pick<QueryCtx, "db">;
 
+/** More installed Analytics Adapters than this is not expected. */
+const MAX_ADAPTERS = 200;
+const MAX_PACKAGE_FILES = 100;
+
 /** The installed Analytics Adapters, ordered by id. */
 export async function installedAnalyticsAdapters(ctx: Ctx): Promise<AnalyticsAdapterMeta[]> {
-  const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "analytics")).collect();
+  const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "analytics")).take(MAX_ADAPTERS);
   return rows.flatMap((row) => (row.meta ? [row.meta as AnalyticsAdapterMeta] : [])).sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -52,11 +56,11 @@ export const bundleOf = internalQuery({
   handler: async (ctx, { adapter }) => {
     const row = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "analytics").eq("provides", adapter)).unique();
     if (!row) return null;
-    const bundle = await ctx.db
+    const files = await ctx.db
       .query("hubPackageFiles")
       .withIndex("by_package", (q) => q.eq("hubPackageId", row._id))
-      .collect()
-      .then((files) => files.find((f) => f.path === "dist/plugin.mjs"));
+      .take(MAX_PACKAGE_FILES);
+    const bundle = files.find((f) => f.path === "dist/plugin.mjs");
     return bundle ? { packageId: row.packageId, digest: row.digest, source: bundle.content } : null;
   },
 });
