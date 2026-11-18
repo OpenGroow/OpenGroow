@@ -32,7 +32,8 @@ function AdapterLogo({ icon, name, className }: { icon?: string; name: string; c
   return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
 }
 
-function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: AdapterView }) {
+/** `embedded`: inside the Publisher's own page, which already names the service. */
+export function AdapterForm({ instanceId, adapter, embedded = false }: { instanceId: string; adapter: AdapterView; embedded?: boolean }) {
   const save = useMutation(api.analytics_connections.save);
   const remove = useMutation(api.analytics_connections.remove);
   const [url, setUrl] = useState(adapter.url ?? "");
@@ -80,20 +81,10 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
     : adapter.publisher
       ? `Reads through the ${adapter.publisher} Publisher's connection until you set one here.`
       : "Not configured: nothing is measured with it yet.";
-  return (
-    <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
-      <header className="flex items-center gap-4">
-        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
-        <div className="grid flex-1 gap-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>
-            {adapter.configured ? <StatusBadge tone="active" label="Own connection" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="warning" label="Not configured" />}
-          </div>
-          {publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
-        </div>
-      </header>
+  const card = (
       <Card className="gap-4 p-5">
-        <h4 className="m-0 text-base font-semibold">Connection</h4>
+        <h4 className="m-0 text-base font-semibold">{embedded ? "Analytics connection" : "Connection"}</h4>
+        {embedded && publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
         <div className="grid gap-4 md:grid-cols-2">
           <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
           <ConnectionKeyField
@@ -130,6 +121,21 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
           {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
         </div>
       </Card>
+  );
+  if (embedded) return card;
+  return (
+    <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
+      <header className="flex items-center gap-4">
+        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
+        <div className="grid flex-1 gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>
+            {adapter.configured ? <StatusBadge tone="active" label="Own connection" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="warning" label="Not configured" />}
+          </div>
+          {publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
+        </div>
+      </header>
+      {card}
     </section>
   );
 }
@@ -257,15 +263,17 @@ function useInstallPublishersAnalytics(installedAdapters: string[] | undefined) 
   }, [wanted, have, catalogue, install]);
 }
 
-/** The Analytics Adapters of the Project: installed ones to configure, and the hub's to install. Nothing while loading. */
+/** The connections of the Project's Analytics Adapters that belong to no Publisher. Nothing while loading. */
 export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | undefined }) {
   const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
   useInstallPublishersAnalytics(adapters?.map((a) => a.adapter));
-  if (!instanceId || adapters === undefined || adapters.length === 0) return null;
+  // An adapter of a Publisher is set up in that Publisher's page; only the others live here.
+  const standalone = (adapters ?? []).filter((adapter) => !adapter.publisher);
+  if (!instanceId || standalone.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">
       <h2 className="m-0 text-xl font-semibold">Connections</h2>
-      {adapters.map((adapter) => (
+      {standalone.map((adapter) => (
         <AdapterForm key={adapter.adapter} instanceId={instanceId} adapter={adapter} />
       ))}
     </section>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
+import { BarChart3, Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PanelIcon } from "@/components/opengroow/settings-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { AdapterForm } from "@/src/components/analytics-connections-card";
 import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
@@ -240,6 +241,8 @@ function PublisherPanel({
   const testConnection = useAction(api.publishers_node.testConnection);
   const hubCatalogue = useAction(api.hub_packages_node.catalogue);
   const installPackage = useAction(api.hub_packages_node.install);
+  // The Analytics Adapter that belongs to this Publisher (ADR-078): its settings are a tab here.
+  const analyticsAdapter = useQuery(api.analytics_connections.list, publisher ? { instanceId: id } : "skip")?.find((a) => a.publisher === adapterId);
 
   const [url, setUrl] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -251,7 +254,7 @@ function PublisherPanel({
   const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
   // The outcome of the last check: the hub is read only when the user asks.
   const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
-  const [tab, setTab] = useState<"configuration" | "channels">("configuration");
+  const [tab, setTab] = useState<"configuration" | "channels" | "analytics">("configuration");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -423,6 +426,12 @@ function PublisherPanel({
             <Layers className="size-4" aria-hidden="true" />
             Channels{publisher ? ` (${publisher.targets.length})` : ""}
           </button>
+          {analyticsAdapter ? (
+            <button type="button" role="tab" aria-selected={tab === "analytics"} className={tabClass(tab === "analytics")} onClick={() => setTab("analytics")}>
+              <BarChart3 className="size-4" aria-hidden="true" />
+              Analytics
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -528,6 +537,8 @@ function PublisherPanel({
           />
         ) : null}
         </>
+      ) : tab === "analytics" && analyticsAdapter ? (
+        <AdapterForm instanceId={id} adapter={analyticsAdapter} embedded />
       ) : publisher ? (
         <PublishTargetsCard instanceId={id} publisher={publisher} />
       ) : (

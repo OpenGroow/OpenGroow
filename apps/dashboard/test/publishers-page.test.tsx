@@ -11,6 +11,7 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 
 const useQueryMock = vi.fn();
 // What `publisher_packages.list` returns: reassigned by a test to simulate an install.
+let analyticsAdapters: unknown[] | undefined;
 let installedPublishers: Array<(typeof INSTALLED_PUBLISHERS)[number] & { connectionUrlLabel?: string }> = INSTALLED_PUBLISHERS;
 const mutations: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
@@ -19,7 +20,7 @@ const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) =>
-    args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
+    args[0] === "analytics_connections.list" ? analyticsAdapters : args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),
   useMutation: (name: string) => (mutations[name] ??= vi.fn(async () => "key")),
   useAction: (name: string) => (actions[name] ??= vi.fn(async () => ({ ok: true, channels: [] }))),
 }));
@@ -32,6 +33,7 @@ vi.mock("@convex/_generated/api", () => {
       publishers_node: names("publishers_node", ["testConnection", "listChannels"]),
       hub_packages_node: names("hub_packages_node", ["catalogue", "install"]),
       publisher_packages: names("publisher_packages", ["list"]),
+      analytics_connections: names("analytics_connections", ["list", "save", "remove"]),
     },
   };
 });
@@ -59,6 +61,7 @@ describe("Publishers page", () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     installedPublishers = INSTALLED_PUBLISHERS;
+    analyticsAdapters = undefined;
     for (const k of Object.keys(mutations)) delete mutations[k];
     for (const k of Object.keys(actions)) delete actions[k];
     container = document.createElement("div");
@@ -96,6 +99,21 @@ describe("Publishers page", () => {
     expect(text()).not.toContain("My IG");
     await click(byText("Configuration"));
     expect(text()).toContain("Postiz URL");
+  });
+
+  it("shows an Analytics tab with the settings of the adapter that belongs to the Publisher", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [{ adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [{ key: "lookbackDays", label: "Look-back window (days)", type: "number", default: 7 }], configured: false }];
+    await render();
+    await click(byText("Analytics"));
+    expect(text()).toContain("Look-back window (days)");
+    expect(text()).not.toContain("Postiz URL\nChannels");
+  });
+
+  it("has no Analytics tab when the Publisher has no analytics adapter", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    await render();
+    expect(byText("Analytics")).toBeFalsy();
   });
 
   it("uses the package's connection label while keeping its publisher title", async () => {

@@ -4,7 +4,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AddAnalyticsButton, AnalyticsConnectionsCard } from "../src/components/analytics-connections-card";
+import { AdapterForm, AddAnalyticsButton, AnalyticsConnectionsCard } from "../src/components/analytics-connections-card";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -50,6 +50,8 @@ describe("Analytics connections card", () => {
   });
 
   const render = () => act(async () => root.render(<AnalyticsConnectionsCard instanceId="inst-1" />));
+  // The form of an adapter that belongs to a Publisher: the Publisher's page shows it as a tab.
+  const renderEmbedded = () => act(async () => root.render(<AdapterForm instanceId="inst-1" adapter={adapters![0] as never} embedded />));
   const type = async (id: string, value: string) => {
     const input = document.getElementById(id) as HTMLInputElement;
     await act(async () => {
@@ -65,13 +67,18 @@ describe("Analytics connections card", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("says an unconfigured adapter reads through its Publisher's connection", async () => {
+  it("leaves the adapters of a Publisher to that Publisher's page", async () => {
     await render();
+    expect(container.textContent).toBe("");
+  });
+
+  it("says an unconfigured adapter reads through its Publisher's connection", async () => {
+    await renderEmbedded();
     expect(container.textContent).toContain("Reads through the postiz Publisher's connection");
   });
 
   it("saves the URL, the key and the options the package declares", async () => {
-    await render();
+    await renderEmbedded();
     await type("analytics-url-postiz", "https://postiz.example.com");
     await type("analytics-key-postiz", "secret");
     await type("analytics-option-postiz-lookbackDays", "30");
