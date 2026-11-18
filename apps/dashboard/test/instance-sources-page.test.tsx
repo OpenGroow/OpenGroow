@@ -319,11 +319,13 @@ describe("InstanceSourcesContent", () => {
         { tab: "ready", targets },
       );
       const badge = (title: string) => document.querySelector(`[aria-label='Ready sources'] [title='${title}']`)!;
-      // Instagram video: an svg for the logo and one for the media, the words only for screen readers.
-      expect(badge("Instagram Reel").querySelectorAll("svg")).toHaveLength(2);
+      // Instagram video: the logo is an image, the media an icon, and the words are for screen readers only.
+      expect(badge("Instagram Reel").querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(badge("Instagram Reel").querySelectorAll("svg")).toHaveLength(1);
       expect(badge("Instagram Reel").querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
-      expect(badge("TikTok carousel").querySelectorAll("svg")).toHaveLength(2);
-      expect(badge("Instagram image").querySelectorAll("svg")).toHaveLength(2);
+      expect(badge("TikTok carousel").querySelector("img")!.getAttribute("src")).toBe("/platforms/tiktok.svg");
+      expect(badge("TikTok carousel").querySelectorAll("svg")).toHaveLength(1);
+      expect(badge("Instagram image").querySelectorAll("svg")).toHaveLength(1);
       // Unknown platform and media: the declared label, as text.
       expect(Array.from(document.querySelectorAll("[aria-label='Ready sources'] li")).some((row) => row.textContent?.includes("Search keyword"))).toBe(true);
     });
