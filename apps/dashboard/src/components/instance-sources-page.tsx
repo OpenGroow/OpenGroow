@@ -157,41 +157,38 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
 
           {tab === "other" ? (
           <section className="grid gap-5">
-            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               {tabs}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" className="lg:w-52" />
+                <NativeSelect
+                  aria-label="Filter by status"
+                  className="h-11 sm:w-40"
+                  value={stage}
+                  onChange={(event) => setStage(event.target.value)}
+                >
+                  <option value="all">All statuses</option>
+                  {STATUS_FILTERS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <NativeSelect
+                  aria-label="Filter by agent"
+                  className="h-11 sm:w-40"
+                  value={agent}
+                  onChange={(event) => setAgent(event.target.value)}
+                >
+                  <option value="all">All agents</option>
+                  {agents.map((templateId) => (
+                    <option key={templateId} value={templateId}>
+                      {agentLabel(templateId)}
+                    </option>
+                  ))}
+                </NativeSelect>
                 <SelectButton selection={selection} />
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <NativeSelect
-                aria-label="Filter by agent"
-                className="h-11 sm:w-48"
-                value={agent}
-                onChange={(event) => setAgent(event.target.value)}
-              >
-                <option value="all">All agents</option>
-                {agents.map((templateId) => (
-                  <option key={templateId} value={templateId}>
-                    {agentLabel(templateId)}
-                  </option>
-                ))}
-              </NativeSelect>
-              <NativeSelect
-                aria-label="Filter by status"
-                className="h-11 sm:w-48"
-                value={stage}
-                onChange={(event) => setStage(event.target.value)}
-              >
-                <option value="all">All statuses</option>
-                {STATUS_FILTERS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </NativeSelect>
             </div>
 
             <SelectionBar selection={selection} />
