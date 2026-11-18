@@ -313,7 +313,7 @@ describe("SourceDetailContent", () => {
   });
 
   describe("header", () => {
-    it("shows the platform, family, status and score like the Sources list", async () => {
+    it("shows the platform, status and score like the Sources list", async () => {
       await render({
         source: makeSource({ sourceId: "instagram-reel", family: "social-video", analysis: { creativeFeatures: { mediaType: "video" } }, scoring: { replicationScore: 0.92 } }),
         analysisSchema: null,
@@ -321,7 +321,7 @@ describe("SourceDetailContent", () => {
       });
       expect(document.querySelector("[data-testid='source-format']")?.textContent).toContain("Instagram Reel");
       expect(document.querySelector("[data-testid='source-format'] img")?.getAttribute("src")).toBe("/platforms/instagram.svg");
-      expect(text()).toContain("Social Video");
+      expect(text()).not.toContain("Social Video"); // the family is not shown
       expect(text()).toContain("Ready");
       expect(document.querySelector("[data-testid='source-score']")?.textContent).toContain("Score 92");
       expect(document.querySelector("img[src='https://storage.example/t.jpg']")).not.toBeNull();

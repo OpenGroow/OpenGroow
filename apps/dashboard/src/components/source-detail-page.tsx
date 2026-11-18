@@ -5,12 +5,12 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { CalendarDays, ExternalLink, Link2, Sparkles, Tag, Users, Workflow } from "lucide-react";
+import { CalendarDays, ExternalLink, Link2, Sparkles, Users, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
-import { formatOf, humanize, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { formatOf, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
 import { RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
@@ -76,10 +76,6 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
                 <Badge variant="outline" className="gap-2" data-testid="source-format">
                   <PlatformMark platform={format.platform} />
                   {format.label}
-                </Badge>
-                <Badge variant="outline" className="gap-2">
-                  <Tag aria-hidden="true" className="size-3.5" />
-                  {humanize(source.family)}
                 </Badge>
               </div>
               {source.status === "ready" ? (
