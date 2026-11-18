@@ -422,12 +422,12 @@ function isWebUrl(value: string): boolean {
 
 // No thumbnail is stored on a Source, so the leading tile shows the kind of
 // content its family names.
-function SourceGlyph({ family }: { family: string }) {
+function SourceGlyph({ family, className = "size-14" }: { family: string; className?: string }) {
   const Icon = /tiktok|music|audio/i.test(family) ? Music2 : Video;
   return (
     <span
       aria-hidden="true"
-      className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground"
+      className={cn("flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground", className)}
     >
       <Icon className="size-6" />
     </span>
@@ -449,12 +449,12 @@ function useThumbnailRequests(instanceId: string, rows: SourceRow[]): void {
 }
 
 // The page's own image when one was fetched, else the glyph of its family.
-function SourceThumbnail({ source }: { source: SourceRow }) {
+function SourceThumbnail({ source, className = "size-14" }: { source: SourceRow; className?: string }) {
   const [broken, setBroken] = useState(false);
-  if (!source.thumbnailUrl || broken) return <SourceGlyph family={source.family} />;
+  if (!source.thumbnailUrl || broken) return <SourceGlyph family={source.family} className={className} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={source.thumbnailUrl} alt="" className="size-14 shrink-0 rounded-xl object-cover" loading="lazy" onError={() => setBroken(true)} />
+    <img src={source.thumbnailUrl} alt="" className={cn("shrink-0 rounded-xl object-cover", className)} loading="lazy" onError={() => setBroken(true)} />
   );
 }
 
@@ -485,7 +485,7 @@ function SourceRowItem({
       <Card
         className={cn(
           selecting ? SELECT_ROW_GRID : ROW_GRID,
-          "relative min-h-24 cursor-pointer gap-y-3 px-5 py-6 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+          "relative cursor-pointer gap-y-3 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
           selected && "ring-2 ring-primary"
         )}
       >
@@ -495,7 +495,7 @@ function SourceRowItem({
           </div>
         ) : null}
         <div className="flex min-w-0 items-center gap-4">
-          <SourceThumbnail source={source} />
+          <SourceThumbnail source={source} className="size-[4.5rem]" />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
@@ -675,14 +675,23 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
 
   return (
     <li>
-      <Card className={cn("flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center", selected && "ring-2 ring-primary")}>
+      <Card
+        className={cn(
+          "relative flex cursor-pointer flex-col gap-4 p-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center lg:pr-5",
+          selected && "ring-2 ring-primary",
+        )}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          {selecting ? <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} /> : null}
-          <SourceThumbnail source={source} />
+          {selecting ? (
+            <div className="relative z-10 pl-2">
+              <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
+            </div>
+          ) : null}
+          <SourceThumbnail source={source} className="size-24" />
           <div className="grid min-w-0 gap-2">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
-              className="m-0 break-words text-base font-semibold text-foreground line-clamp-2"
+              className="m-0 break-words text-base font-semibold text-foreground outline-none line-clamp-2 after:absolute after:inset-0 after:content-['']"
               onClick={(event) => {
                 // In select mode the title toggles the row; it never opens the Source.
                 if (!selecting) return;
@@ -698,7 +707,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+        <div className="relative z-10 flex flex-wrap items-center gap-3 lg:justify-end">
           <label className="flex items-center gap-2 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
             <Users aria-hidden="true" className="size-4" />
             Routed to:
