@@ -137,7 +137,7 @@ export const setPublishAt = mutation({
 });
 
 /** The Publishable the Mission's latest result (or last Artifact) carries. */
-function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
+export function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   return (resultArtifact ?? mission.lastArtifact)?.publishable as Record<string, unknown> | undefined;
 }

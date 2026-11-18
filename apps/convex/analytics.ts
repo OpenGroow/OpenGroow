@@ -8,6 +8,8 @@ import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { analyticsDeclarationFor } from "@opengroow/agent-templates";
+import { publishableOf } from "./publications.js";
+import { publishableForPlatform } from "./publishable.js";
 
 // Performance Snapshots (ADR-078, docs/domain/publishing.md): when a
 // Publication becomes `published`, its readings are scheduled and the core
@@ -80,6 +82,21 @@ export const forPublication = query({
   },
 });
 
+/** What the Analytics page shows of the post: its title, its kind and an image to recognise it by. */
+function postFace(mission: Doc<"missions">, platform: string | undefined) {
+  const base = publishableOf(mission);
+  const served = base ? publishableForPlatform(base, platform) : undefined;
+  const p = served?.ok ? served.publishable : base;
+  const str = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined);
+  const slides = Array.isArray(p?.slideUrls) ? str(p.slideUrls[0]) : undefined;
+  const thumbnailUrl = str(p?.coverUrl) ?? str(p?.imageUrl) ?? slides;
+  return {
+    ...(typeof p?.title === "string" && p.title.trim() ? { title: p.title.trim() } : {}),
+    ...(typeof p?.kind === "string" ? { kind: p.kind } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+  };
+}
+
 /** The most Publications the Analytics page lists (newest first). */
 const LIST_LIMIT = 200;
 
@@ -116,8 +133,13 @@ export const listForProject = query({
         .collect();
       const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
       const primaryMetric = analyticsDeclarationFor(template?.manifest, mission.type)?.primaryMetric;
-      const source = mission.sourceObservationId ? await ctx.db.get(mission.sourceObservationId) : null;
+      // A channel with no Analytics Adapter is not measured: nothing to show for it.
+      if (!row || row.state === "unmeasured") continue;
+      const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+      const face = postFace(mission, platform);
       rows.push({
+        ...face,
+        publishedAt: row.publishedAt,
         publicationId: publication._id,
         missionId: mission._id,
         missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
@@ -129,10 +151,9 @@ export const listForProject = query({
         ...(found ? { publisherAdapter: found.publisher.adapter } : {}),
         ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
         ...(primaryMetric ? { primaryMetric } : {}),
-        ...(source ? { source: { id: source._id, label: source.label, origin: source.origin } } : {}),
-        state: row?.state ?? ("unmeasured" as const),
-        ...(row?.reason ? { reason: row.reason } : {}),
-        ...(row && !row.done ? { nextAt: row.nextAt } : {}),
+        state: row.state,
+        ...(row.reason ? { reason: row.reason } : {}),
+        ...(!row.done ? { nextAt: row.nextAt } : {}),
         snapshots: snapshots
           .sort((a, b) => a.takenAt - b.takenAt)
           .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics })),

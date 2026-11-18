@@ -53,9 +53,9 @@ async function seed() {
     type?: string;
     status?: "published" | "failed";
     name?: string;
-    sourceId?: string;
+    publishable?: Record<string, unknown>;
     postSeries?: number;
-    state?: "waiting" | "no_data" | "failed" | "post_unknown" | "complete";
+    state?: "unmeasured" | "waiting" | "no_data" | "failed" | "post_unknown" | "complete";
     reason?: string;
     done?: boolean;
     snapshots?: Array<{ delayMs: number; metrics: Record<string, number>; postSeries?: number }>;
@@ -71,7 +71,7 @@ async function seed() {
         status: "done",
         number: 1,
         ...(opts.name ? { name: opts.name } : {}),
-        ...(opts.sourceId ? { sourceObservationId: opts.sourceId as never } : {}),
+        ...(opts.publishable ? { lastArtifact: { publishable: opts.publishable } } : {}),
         createdAt: now,
         updatedAt: now,
       } as never);
@@ -146,13 +146,14 @@ describe("analytics.listForProject", () => {
     expect(row.snapshots.map((x) => x.metrics.views)).toEqual([100, 250]);
   });
 
-  it("reads 'unmeasured' for a Publication with no readings, and no primary metric for a Mission type that opts out", async () => {
+  it("leaves out a Publication that is not measured: a Mission type that opts out, or no reading scheduled", async () => {
     const s = await seed();
     await s.publish({ target: "tiktok:me", type: "make_note" });
-    const [row] = await s.list();
-    expect(row.state).toBe("unmeasured");
-    expect(row.primaryMetric).toBeUndefined();
-    expect(row.snapshots).toEqual([]);
+    await s.publish({ target: "instagram:me", state: "unmeasured" });
+    await s.publish({ target: "instagram:me", state: "waiting" });
+    const rows = await s.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("waiting");
   });
 
   it("carries the reason of a failed reading and of an unknown post, keeping the earlier Snapshots", async () => {
@@ -167,36 +168,24 @@ describe("analytics.listForProject", () => {
     expect(unknown?.snapshots).toHaveLength(1);
   });
 
-  it("names the Source of origin of the Mission", async () => {
+  it("shows the post by its title, its kind and the image of its Publishable", async () => {
     const s = await seed();
-    const sourceId = await s.t.run((ctx) =>
-      ctx.db.insert("sources", {
-        instanceId: INSTANCE_ID,
-        ownerId: OWNER.subject,
-        templateId: TEMPLATE_ID,
-        sourceId: "post",
-        label: "Competitor reel",
-        family: "social",
-        status: "ready",
-        origin: "https://example.com/reel/1",
-        capturedAt: 1,
-        createdAt: 1,
-        marketing: {},
-        analysis: {},
-      } as never),
-    );
-    await s.publish({ target: "instagram:me", sourceId, state: "waiting" });
+    await s.publish({
+      target: "instagram:me",
+      state: "waiting",
+      publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", coverUrl: "https://cdn.example.com/c.jpg", title: "5 simple rituals", caption: "c" },
+    });
     await s.publish({ target: "instagram:me", state: "waiting" });
     const rows = await s.list();
-    expect(rows.find((r) => r.source)?.source).toEqual({ id: sourceId, label: "Competitor reel", origin: "https://example.com/reel/1" });
-    expect(rows.filter((r) => !r.source)).toHaveLength(1);
+    expect(rows.find((r) => r.title)).toMatchObject({ title: "5 simple rituals", kind: "video", thumbnailUrl: "https://cdn.example.com/c.jpg" });
+    expect(rows.filter((r) => !r.thumbnailUrl)).toHaveLength(1);
   });
 
   it("leaves out Publications that are not published, and shows nothing to someone else", async () => {
     const s = await seed();
     await s.publish({ target: "instagram:me", status: "failed" });
     expect(await s.list()).toEqual([]);
-    await s.publish({ target: "instagram:me" });
+    await s.publish({ target: "instagram:me", state: "waiting" });
     expect(await s.list()).toHaveLength(1);
     expect(await s.t.withIdentity(STRANGER).query(api.analytics.listForProject, { instanceId: INSTANCE_ID })).toEqual([]);
   });
