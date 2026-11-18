@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Image as ImageIcon, Images, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +17,7 @@ import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { InstagramLogo, TikTokLogo } from "@/src/components/social-platform-icons";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { cn } from "@/lib/utils";
 
@@ -548,15 +549,34 @@ type Target = { templateId: string; agentName: string; missionType: string; labe
 const AUTO_TARGET = "auto";
 const targetKey = (target: { templateId: string; missionType: string }) => `${target.templateId}::${target.missionType}`;
 
-// "Instagram Reel", "TikTok video", "Instagram image"…: the platform the Source
-// came from and the kind of media it is. Falls back to the declared label.
-function formatLabel(source: SourceRow): string {
+type SourceFormat = { platform?: "Instagram" | "TikTok"; media?: "video" | "image" | "carousel"; label: string };
+
+// The platform the Source came from and the kind of media it is, as the badge's
+// two icons ("Instagram Reel" = the Instagram logo and a video icon). `label` is
+// the same in words, for the tooltip and screen readers; it falls back to the
+// declared label when the platform or media is not known.
+function formatOf(source: SourceRow): SourceFormat {
   const platform = source.sourceId === "instagram-reel" ? "Instagram" : source.sourceId === "tiktok-post" ? "TikTok" : undefined;
   const features = (source.analysis as { creativeFeatures?: { mediaType?: unknown } } | undefined)?.creativeFeatures;
-  const media = features?.mediaType;
-  if (!platform || typeof media !== "string") return source.label;
+  const media = features?.mediaType === "video" || features?.mediaType === "image" || features?.mediaType === "carousel" ? features.mediaType : undefined;
+  if (!platform || !media) return { ...(platform ? { platform } : {}), ...(media ? { media } : {}), label: source.label };
   const noun = media === "video" ? (platform === "Instagram" ? "Reel" : "video") : media;
-  return `${platform} ${noun}`;
+  return { platform, media, label: `${platform} ${noun}` };
+}
+
+const MEDIA_ICONS = { video: Video, image: ImageIcon, carousel: Images } as const;
+
+function FormatBadge({ source }: { source: SourceRow }) {
+  const { platform, media, label } = formatOf(source);
+  if (!platform && !media) return <Badge variant="outline">{label}</Badge>;
+  const MediaIcon = media ? MEDIA_ICONS[media] : undefined;
+  return (
+    <Badge variant="outline" title={label} className="gap-2">
+      {platform === "Instagram" ? <InstagramLogo /> : platform === "TikTok" ? <TikTokLogo /> : null}
+      {MediaIcon ? <MediaIcon aria-hidden="true" className="size-4" /> : null}
+      <span className="sr-only">{label}</span>
+    </Badge>
+  );
 }
 
 type ReadySort = "score" | "newest";
@@ -717,7 +737,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
               <span className="hidden lg:inline">{title}</span>
             </Link>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{formatLabel(source)}</Badge>
+              <FormatBadge source={source} />
               {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
             </div>
           </div>

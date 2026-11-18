@@ -308,6 +308,26 @@ describe("InstanceSourcesContent", () => {
       expect(document.body.textContent).not.toContain("Not scored yet");
     });
 
+    it("shows the platform logo and a media icon instead of the words", async () => {
+      await render(
+        [
+          reel(),
+          reel({ _id: "s-tt", sourceId: "tiktok-post", marketing: { summary: "tt" }, analysis: { creativeFeatures: { mediaType: "carousel" } } }),
+          reel({ _id: "s-img", marketing: { summary: "img" }, analysis: { creativeFeatures: { mediaType: "image" } } }),
+          reel({ _id: "s-other", sourceId: "keyword", label: "Search keyword", marketing: { summary: "kw" }, analysis: {} }),
+        ],
+        { tab: "ready", targets },
+      );
+      const badge = (title: string) => document.querySelector(`[aria-label='Ready sources'] [title='${title}']`)!;
+      // Instagram video: an svg for the logo and one for the media, the words only for screen readers.
+      expect(badge("Instagram Reel").querySelectorAll("svg")).toHaveLength(2);
+      expect(badge("Instagram Reel").querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
+      expect(badge("TikTok carousel").querySelectorAll("svg")).toHaveLength(2);
+      expect(badge("Instagram image").querySelectorAll("svg")).toHaveLength(2);
+      // Unknown platform and media: the declared label, as text.
+      expect(Array.from(document.querySelectorAll("[aria-label='Ready sources'] li")).some((row) => row.textContent?.includes("Search keyword"))).toBe(true);
+    });
+
     it("cuts a long title to 100 characters below lg, and keeps the whole title for desktop", async () => {
       const long = "A Christmas gift reel for a wife. ".repeat(10).trim();
       await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready", targets });
