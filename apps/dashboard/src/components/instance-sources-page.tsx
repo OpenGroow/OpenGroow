@@ -112,6 +112,17 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const agents = [...new Set(sources.map((source) => source.templateId))].sort();
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   const selection = useSourceSelection(visible);
+  const tabs = (
+    <FilterChips
+      label="Sources view"
+      value={tab}
+      onChange={(id) => setTab(id === "all" ? "all" : "ready")}
+      options={[
+        { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
+        { id: "all", label: "All", count: sources.length },
+      ]}
+    />
+  );
   useThumbnailRequests(instanceId, tab === "all" ? visible : []);
 
   return (
@@ -134,18 +145,9 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             <StatTile icon={Ban} label="Unavailable" value={count((s) => s.status === "unavailable")} />
           </section>
 
-          <FilterChips
-            label="Sources view"
-            value={tab}
-            onChange={(id) => setTab(id === "all" ? "all" : "ready")}
-            options={[
-              { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
-              { id: "all", label: "All", count: sources.length },
-            ]}
-          />
-
           {tab === "ready" ? (
             <ReadySources
+              tabs={tabs}
               sources={sources}
               instanceId={instanceId}
               hasMore={hasMore}
@@ -157,40 +159,42 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
           {tab === "all" ? (
           <section className="grid gap-5">
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-              <div className="flex flex-wrap gap-3">
-                <FilterChips options={STATUS_CHIPS} value={stage} onChange={setStage} label="Filter by status" />
-                <NativeSelect
-                  aria-label="Filter by agent"
-                  className="h-11 sm:w-48"
-                  value={agent}
-                  onChange={(event) => setAgent(event.target.value)}
-                >
-                  <option value="all">All agents</option>
-                  {agents.map((templateId) => (
-                    <option key={templateId} value={templateId}>
-                      {agentLabel(templateId)}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <NativeSelect
-                  aria-label="Filter by status"
-                  className="h-11 sm:w-48"
-                  value={stage}
-                  onChange={(event) => setStage(event.target.value)}
-                >
-                  <option value="all">All statuses</option>
-                  <option value={READY_ANY}>Ready (any stage)</option>
-                  {STATUS_STAGES.map((option) => (
-                    <option key={option} value={option}>
-                      {STAGE_LABELS[option] ?? option}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
+              {tabs}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <SearchField value={search} onChange={setSearch} label="Search sources" placeholder="Search sources…" />
                 <SelectButton selection={selection} />
               </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <FilterChips options={STATUS_CHIPS} value={stage} onChange={setStage} label="Filter by status" />
+              <NativeSelect
+                aria-label="Filter by agent"
+                className="h-11 sm:w-48"
+                value={agent}
+                onChange={(event) => setAgent(event.target.value)}
+              >
+                <option value="all">All agents</option>
+                {agents.map((templateId) => (
+                  <option key={templateId} value={templateId}>
+                    {agentLabel(templateId)}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                aria-label="Filter by status"
+                className="h-11 sm:w-48"
+                value={stage}
+                onChange={(event) => setStage(event.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value={READY_ANY}>Ready (any stage)</option>
+                {STATUS_STAGES.map((option) => (
+                  <option key={option} value={option}>
+                    {STAGE_LABELS[option] ?? option}
+                  </option>
+                ))}
+              </NativeSelect>
             </div>
 
             <SelectionBar selection={selection} />
@@ -562,7 +566,8 @@ type ReadySort = "score" | "newest";
 const READY_TITLE_CHARS = 100;
 const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
 
-function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }: {
+function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadMore }: {
+  tabs: React.ReactNode;
   sources: SourceRow[];
   instanceId: string;
   hasMore: boolean;
@@ -585,7 +590,8 @@ function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }:
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        {tabs}
         <div className="flex flex-col gap-3 sm:flex-row">
           <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" />
           <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-44" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
