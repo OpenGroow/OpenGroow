@@ -558,6 +558,9 @@ function formatLabel(source: SourceRow): string {
 
 type ReadySort = "score" | "newest";
 
+const READY_TITLE_CHARS = 30;
+const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
+
 function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }: {
   sources: SourceRow[];
   instanceId: string;
@@ -691,7 +694,8 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
           <div className="grid min-w-0 gap-2">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
-              className="m-0 break-words text-base font-semibold text-foreground outline-none line-clamp-2 after:absolute after:inset-0 after:content-['']"
+              title={title}
+              className="m-0 break-words text-sm font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
               onClick={(event) => {
                 // In select mode the title toggles the row; it never opens the Source.
                 if (!selecting) return;
@@ -699,7 +703,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
                 onToggle();
               }}
             >
-              {title}
+              {shortTitle(title)}
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{formatLabel(source)}</Badge>
@@ -707,7 +711,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
             </div>
           </div>
         </div>
-        <div className="relative z-10 flex flex-wrap items-center gap-3 lg:justify-end">
+        <div className="relative z-10 flex flex-wrap items-end gap-3 lg:justify-end">
           <label className="flex flex-col items-start gap-1 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
             Routed to:
             <NativeSelect aria-label="Routed to" className="h-10 w-56" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
@@ -719,7 +723,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
               ))}
             </NativeSelect>
           </label>
-          <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
+          <Button type="button" variant="accent" className="h-10" disabled={busy} onClick={() => void onProduce()}>
             <Sparkles />
             Produce
           </Button>
