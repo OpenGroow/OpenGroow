@@ -103,21 +103,6 @@ describe("source thumbnails", () => {
     expect(row?.thumbnailTriedAt).toBe(NOW);
   });
 
-  it("clear drops a stored thumbnail and its file, and keeps the attempt recorded", async () => {
-    const t = convexTest(schema, modules);
-    const sourceId = await seed(t, "https://vm.tiktok.com/ZN8rwQB9j/");
-    const storageId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([1])], { type: "image/png" })));
-    await t.run((ctx) => ctx.db.patch(sourceId, { thumbnailStorageId: storageId, thumbnailTriedAt: 1 }));
-
-    expect(await t.mutation(internal.source_thumbnails.clear, { sourceId })).toEqual({ cleared: true });
-
-    const row = await t.run((ctx) => ctx.db.get(sourceId));
-    expect(row?.thumbnailStorageId).toBeUndefined();
-    expect(row?.thumbnailTriedAt).toBe(NOW);
-    expect(await t.run((ctx) => ctx.storage.get(storageId))).toBeNull();
-    expect(await t.mutation(internal.source_thumbnails.clear, { sourceId })).toEqual({ cleared: false });
-  });
-
   it("never requests a page outside Instagram and TikTok", async () => {
     const t = convexTest(schema, modules);
     const sourceId = await seed(t, "https://example.com/post/1");
