@@ -51,13 +51,6 @@ export function creativeFeaturesOf(source: Source): Record<string, unknown> | un
     : undefined;
 }
 
-/** The social platform, derived from the declared Source id. */
-export function platformOf(source: Source): "instagram" | "tiktok" | undefined {
-  if (source.sourceId === "instagram-reel") return "instagram";
-  if (source.sourceId === "tiktok-post") return "tiktok";
-  return undefined;
-}
-
 /** A named entry of the Source's `scoring` record, `undefined` when unscored. */
 export function scoreOf(source: Source, key: string): number | undefined {
   return source.scoring?.[key];

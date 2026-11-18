@@ -90,7 +90,7 @@ export async function ingestSources(
         marketing: common.marketing,
         raw: common.raw,
         analysis,
-      });
+      }, resolved.declaration.platform);
       if (completed.ok) {
         accepted.push(key);
         ids.set(index, completed.id);
@@ -124,7 +124,7 @@ export async function ingestSources(
     // older one stays, with its score and its Missions.
     // An origin that is not a web page (a search keyword) has no key: it is
     // matched as written.
-    const originKey = originKeyOf(common.origin);
+    const originKey = originKeyOf(common.origin, resolved.declaration.platform);
     const samePost =
       originKey === undefined
         ? await ctx.db
@@ -160,7 +160,7 @@ export async function ingestSources(
       marketing: common.marketing,
       raw: common.raw,
       analysis,
-    });
+    }, resolved.declaration.platform);
     accepted.push(key);
     ids.set(index, insertedId);
   }

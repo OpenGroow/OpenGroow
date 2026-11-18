@@ -5,6 +5,8 @@
  * `loadTemplate`) and at workspace provisioning.
  */
 
+import { isValidIcon } from "@opengroow/publisher-sdk";
+
 function isPlainObject(raw: unknown): raw is Record<string, unknown> {
   return !!raw && typeof raw === "object" && !Array.isArray(raw);
 }
@@ -82,6 +84,61 @@ export function findUnsupportedSchemaKeyword(schema: unknown, path = "$"): strin
   return undefined;
 }
 
+const MAX_ORIGIN_PATTERN_LENGTH = 200;
+const MEDIA_KINDS = new Set(["video", "image", "carousel"]);
+// A public domain name: dotted lowercase labels, a letter in the last one. It
+// leaves out IPs, `localhost`, single-label hosts, ports and schemes, so a
+// Template cannot point the server's fetches at an internal address.
+const DOMAIN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+const isDomain = (raw: unknown): boolean => typeof raw === "string" && DOMAIN.test(raw);
+
+function validateDomains(raw: unknown, at: string): string | undefined {
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every(isDomain)) {
+    return `${at} must be a non-empty list of domains such as "example.com" (no scheme, port, IP address or single-label host)`;
+  }
+  return undefined;
+}
+
+/** Number of capture groups of a regex: an empty alternative always matches, and the match lists one slot per group. */
+const captureGroupsOf = (pattern: string): number => new RegExp(`${pattern}|`).exec("")!.length - 1;
+
+/** Reason why `platform` is not a valid Source platform declaration, or undefined. */
+function validatePlatform(platform: unknown, at: string): string | undefined {
+  if (!isPlainObject(platform)) return `${at} must be an object`;
+  if (!isNonEmptyString(platform.name)) return `${at}.name must be a non-empty string`;
+  const hosts = validateDomains(platform.pageHosts, `${at}.pageHosts`);
+  if (hosts) return hosts;
+  if (platform.icon !== undefined && !isValidIcon(platform.icon)) {
+    return `${at}.icon must be a png, webp, jpeg or svg data URI`;
+  }
+  if (platform.originPattern !== undefined) {
+    const pattern = platform.originPattern;
+    if (!isNonEmptyString(pattern) || pattern.length > MAX_ORIGIN_PATTERN_LENGTH) {
+      return `${at}.originPattern must be a regex of at most ${MAX_ORIGIN_PATTERN_LENGTH} characters`;
+    }
+    try {
+      new RegExp(pattern);
+    } catch {
+      return `${at}.originPattern is not a valid regular expression`;
+    }
+    if (captureGroupsOf(pattern) !== 1) return `${at}.originPattern must have exactly one capture group (the post's identity)`;
+  }
+  if (platform.thumbnail !== undefined && platform.thumbnail !== "og-image") {
+    return `${at}.thumbnail must be "og-image" (the only strategy there is)`;
+  }
+  if (platform.thumbnail !== undefined || platform.imageHosts !== undefined) {
+    const images = validateDomains(platform.imageHosts, `${at}.imageHosts`);
+    if (images) return `${images}${platform.thumbnail !== undefined ? " — required with a thumbnail strategy" : ""}`;
+  }
+  if (platform.mediaLabels !== undefined) {
+    const labels = platform.mediaLabels;
+    if (!isPlainObject(labels) || !Object.entries(labels).every(([kind, label]) => MEDIA_KINDS.has(kind) && isNonEmptyString(label))) {
+      return `${at}.mediaLabels must map "video", "image" or "carousel" to a non-empty label`;
+    }
+  }
+  return undefined;
+}
+
 function isNonEmptyString(raw: unknown): raw is string {
   return typeof raw === "string" && raw.length > 0;
 }
@@ -130,6 +187,10 @@ export function validateSourceDeclarations(
       }
       const unsupported = findUnsupportedSchemaKeyword(schema);
       if (unsupported) return `${at}.analysisSchema ${unsupported}`;
+      if (entry.platform !== undefined) {
+        const reason = validatePlatform(entry.platform, `${at}.platform`);
+        if (reason) return reason;
+      }
     }
   }
 

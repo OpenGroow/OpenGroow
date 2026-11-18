@@ -24,6 +24,7 @@ vi.mock("@convex/_generated/api", () => ({
     sources: { get: "sources.get", retry: "sources.retry" },
     source_routing: { forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
+    source_platforms: { forInstance: "source_platforms.forInstance" },
   },
 }));
 
@@ -65,8 +66,12 @@ describe("SourceDetailContent", () => {
     container.remove();
   });
 
+  // What the Instagram Template declares (ADR-077).
+  const INSTAGRAM_ICON = "data:image/svg+xml;base64,PHN2Zy9pZy8+";
+  const PLATFORMS = [{ templateId: "@opengroow/seo", sourceId: "instagram-reel", name: "Instagram", icon: INSTAGRAM_ICON, mediaLabels: { video: "Reel" } }];
+
   async function render(result: unknown) {
-    useQueryMock.mockReturnValue(result);
+    useQueryMock.mockImplementation((key: string) => (key === "source_platforms.forInstance" ? PLATFORMS : result));
     await act(async () => {
       root.render(<SourceDetailContent instanceId="instance-1" sourceId="src-1" />);
     });
@@ -301,7 +306,7 @@ describe("SourceDetailContent", () => {
       const badge = document.querySelector("[title='Instagram Reel']")!;
       // It sits right after the status pill, in the same row.
       expect(badge.previousElementSibling?.textContent).toBe("Ready");
-      expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(badge.querySelector("img")!.getAttribute("src")).toBe(INSTAGRAM_ICON);
       expect(badge.querySelectorAll("svg")).toHaveLength(1);
       expect(badge.querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
       expect(text()).not.toContain("Social Video"); // the family is not shown

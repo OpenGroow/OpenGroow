@@ -207,7 +207,9 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
 
   it("keeps one Source per post, whatever the share link or the Instagram path", async () => {
     const t = convexTest(schema, modules);
-    const post = (origin: string, capturedAt: number) => keyword({ common: { ...keyword().common, origin, capturedAt } });
+    const post = (origin: string, capturedAt: number) => ({
+      templateId: TEMPLATE, sourceId: "post", common: { ...keyword().common, origin, capturedAt }, analysis: { hook: "Watch this" },
+    });
     await runJob(t, success([
       post("https://www.instagram.com/reel/DfMymnjh1v0/?psln=aaa", 1_700_000_000_000),
       // Four days later: another share link, then the `/p/` form of the same post.
@@ -218,9 +220,9 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
     ]));
 
     const sources = await allSources(t);
-    expect(sources.map((s) => s.originKey).sort()).toEqual(["instagram.com/p/DfMymnjh1v0", "instagram.com/p/OtherPost123"]);
+    expect(sources.map((s) => s.originKey).sort()).toEqual(["instagram/DfMymnjh1v0", "instagram/OtherPost123"]);
     // The first capture is the one kept.
-    expect(sources.find((s) => s.originKey === "instagram.com/p/DfMymnjh1v0")?.capturedAt).toBe(1_700_000_000_000);
+    expect(sources.find((s) => s.originKey === "instagram/DfMymnjh1v0")?.capturedAt).toBe(1_700_000_000_000);
   });
 
   it("stores the optional raw capture and normalizes the topics", async () => {

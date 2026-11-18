@@ -26,8 +26,18 @@ vi.mock("@convex/_generated/api", () => ({
     sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany", counts: "sources.counts" },
     source_routing: { listTargets: "source_routing.listTargets", setRouteTarget: "source_routing.setRouteTarget", forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
+    source_platforms: { forInstance: "source_platforms.forInstance" },
   },
 }));
+
+// What the Instagram and TikTok Templates declare (ADR-077).
+const INSTAGRAM_ICON = "data:image/svg+xml;base64,PHN2Zy9pZy8+";
+const TIKTOK_ICON = "data:image/svg+xml;base64,PHN2Zy90dC8+";
+const PLATFORMS = [
+  { templateId: "@opengroow/seo", sourceId: "no-logo-post", name: "Reddit" },
+  { templateId: "@opengroow/seo", sourceId: "instagram-reel", name: "Instagram", icon: INSTAGRAM_ICON, mediaLabels: { video: "Reel" } },
+  { templateId: "@opengroow/seo", sourceId: "tiktok-post", name: "TikTok", icon: TIKTOK_ICON, mediaLabels: { video: "video" } },
+];
 
 function makeSource(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -74,7 +84,7 @@ describe("InstanceSourcesContent", () => {
     { status = "Exhausted", families, tab = "other", targets = [], counts }: { status?: string; families?: string[]; tab?: "other" | "ready"; targets?: unknown[]; counts?: unknown } = {},
   ) {
     const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
-    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : key === "sources.counts" ? counts : familyList));
+    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : key === "sources.counts" ? counts : key === "source_platforms.forInstance" ? PLATFORMS : familyList));
     usePaginatedQueryMock.mockReturnValue({ results, status, loadMore });
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
@@ -138,8 +148,15 @@ describe("InstanceSourcesContent", () => {
   it("shows the same platform logo and media icon on the Other rows", async () => {
     await render([makeSource({ sourceId: "tiktok-post", analysis: { creativeFeatures: { mediaType: "video" } } })]);
     const badge = document.querySelector("ul li [title='TikTok video']")!;
-    expect(badge.querySelector("img")!.getAttribute("src")).toBe("/platforms/tiktok.svg");
+    expect(badge.querySelector("img")!.getAttribute("src")).toBe(TIKTOK_ICON);
     expect(badge.querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("names a platform that ships no logo, so the badge still says where the Source comes from", async () => {
+    await render([makeSource({ sourceId: "no-logo-post", analysis: { creativeFeatures: { mediaType: "image" } } })]);
+    const badge = document.querySelector("ul li [title='Reddit image']")!;
+    expect(badge.querySelector("img")).toBeNull();
+    expect(badge.textContent).toBe("Reddit");
   });
 
   it("shows an hourglass with the way to score a Source that is not scored yet", async () => {
@@ -361,10 +378,10 @@ describe("InstanceSourcesContent", () => {
       );
       const badge = (title: string) => document.querySelector(`[aria-label='Ready sources'] [title='${title}']`)!;
       // Instagram video: the logo is an image, the media an icon, and the words are for screen readers only.
-      expect(badge("Instagram Reel").querySelector("img")!.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(badge("Instagram Reel").querySelector("img")!.getAttribute("src")).toBe(INSTAGRAM_ICON);
       expect(badge("Instagram Reel").querySelectorAll("svg")).toHaveLength(1);
       expect(badge("Instagram Reel").querySelector(".sr-only")!.textContent).toBe("Instagram Reel");
-      expect(badge("TikTok carousel").querySelector("img")!.getAttribute("src")).toBe("/platforms/tiktok.svg");
+      expect(badge("TikTok carousel").querySelector("img")!.getAttribute("src")).toBe(TIKTOK_ICON);
       expect(badge("TikTok carousel").querySelectorAll("svg")).toHaveLength(1);
       expect(badge("Instagram image").querySelectorAll("svg")).toHaveLength(1);
       // Unknown platform and media: the declared label, as text.

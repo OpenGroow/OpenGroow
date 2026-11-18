@@ -3,7 +3,9 @@ import { convexTest } from "convex-test";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { insertInstance } from "./instance_fixture";
-import { isThumbnailPage, ogImageOf } from "../source_thumbnails";
+import type { SourcePlatformDeclaration } from "@opengroow/agent-templates";
+import { ogImageOf, thumbnailPlatformOf } from "../source_thumbnails";
+import { fixtureTemplate, installTemplateRegistry } from "./helpers/template_registry.helpers";
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
@@ -11,62 +13,92 @@ const modules = {
   "../instances.ts": () => import("../instances.js"),
   "../source_thumbnails.ts": () => import("../source_thumbnails.js"),
   "../sources.ts": () => import("../sources.js"),
+  "../source_enrichment.ts": () => import("../source_enrichment.js"),
 };
 
 const INSTANCE = "thumbnails-instance";
 const OWNER = { name: "Owner", email: "owner@example.com", tokenIdentifier: "test|thumbnails", subject: "owner-thumbnails" };
 const NOW = 1_800_000_000_000;
 
+// What the Instagram and TikTok Templates declare (ADR-077).
+const INSTAGRAM: SourcePlatformDeclaration = {
+  name: "Instagram",
+  pageHosts: ["instagram.com"],
+  thumbnail: "og-image",
+  imageHosts: ["cdninstagram.com", "fbcdn.net"],
+};
+const TIKTOK: SourcePlatformDeclaration = {
+  name: "TikTok",
+  pageHosts: ["tiktok.com"],
+  thumbnail: "og-image",
+  imageHosts: ["tiktokcdn.com", "tiktokcdn-eu.com", "tiktokcdn-us.com"],
+};
+
 describe("ogImageOf", () => {
-  it("reads the og:image of an Instagram page and decodes its entities", () => {
+  it("reads the og:image of a page and decodes its entities", () => {
     const html = '<head><meta property="og:title" content="x"><meta property="og:image" content="https://scontent-mad2-1.cdninstagram.com/v/a.jpg?stp=1&amp;oe=2"></head>';
-    expect(ogImageOf(html)).toBe("https://scontent-mad2-1.cdninstagram.com/v/a.jpg?stp=1&oe=2");
+    expect(ogImageOf(html, INSTAGRAM.imageHosts!)).toBe("https://scontent-mad2-1.cdninstagram.com/v/a.jpg?stp=1&oe=2");
   });
 
-  it("accepts TikTok CDN hosts", () => {
-    expect(ogImageOf('<meta property="og:image" content="https://p16-common-sign.tiktokcdn-eu.com/a.jpeg">')).toBe("https://p16-common-sign.tiktokcdn-eu.com/a.jpeg");
+  it("accepts the image hosts a Template declares, subdomains included", () => {
+    expect(ogImageOf('<meta property="og:image" content="https://p16-common-sign.tiktokcdn-eu.com/a.jpeg">', TIKTOK.imageHosts!)).toBe("https://p16-common-sign.tiktokcdn-eu.com/a.jpeg");
   });
 
-  it("ignores the placeholder TikTok serves when a video has no cover to show", () => {
-    // What a private video's page returns, for the short link and for the video page.
-    expect(ogImageOf('<meta property="og:image" content="https://sf16-sg.tiktokcdn.com/obj/eden-sg/kvyweh7vhohpqbog/cover-fallback.png"/>')).toBeUndefined();
-    expect(ogImageOf('<meta property="og:image" content="https://lf16-tiktok-common.ibytedtos.com/obj/tiktok-web-common-sg/mtact/static/images/tiktok-logo/poster-square.png"/>')).toBeUndefined();
-    // A real cover still passes.
-    expect(ogImageOf('<meta property="og:image" content="https://p16-sharing-sign.tiktokcdn-eu.com/tos-useast2a-i-photomode-euttp/ee606537a4d64c879be054d83b93b7a8~tplv.jpeg?x=1"/>')).toContain("tiktokcdn-eu.com");
+  it("ignores the placeholder a platform serves when a video has no cover to show", () => {
+    const hosts = ["tiktokcdn.com", "ibytedtos.com", "tiktokcdn-eu.com"];
+    expect(ogImageOf('<meta property="og:image" content="https://sf16-sg.tiktokcdn.com/obj/eden-sg/kvyweh7vhohpqbog/cover-fallback.png"/>', hosts)).toBeUndefined();
+    expect(ogImageOf('<meta property="og:image" content="https://lf16-tiktok-common.ibytedtos.com/obj/tiktok-web-common-sg/mtact/static/images/tiktok-logo/poster-square.png"/>', hosts)).toBeUndefined();
+    expect(ogImageOf('<meta property="og:image" content="https://p16-sharing-sign.tiktokcdn-eu.com/tos-useast2a-i-photomode-euttp/ee606537a4d64c879be054d83b93b7a8~tplv.jpeg?x=1"/>', hosts)).toContain("tiktokcdn-eu.com");
   });
 
-  it("ignores an image from any other host, or over http", () => {
-    expect(ogImageOf('<meta property="og:image" content="https://evil.example/a.jpg">')).toBeUndefined();
-    expect(ogImageOf('<meta property="og:image" content="http://x.cdninstagram.com/a.jpg">')).toBeUndefined();
-    expect(ogImageOf("<p>no meta</p>")).toBeUndefined();
+  it("ignores an image from an undeclared host, or over http", () => {
+    expect(ogImageOf('<meta property="og:image" content="https://evil.example/a.jpg">', INSTAGRAM.imageHosts!)).toBeUndefined();
+    expect(ogImageOf('<meta property="og:image" content="http://x.cdninstagram.com/a.jpg">', INSTAGRAM.imageHosts!)).toBeUndefined();
+    expect(ogImageOf('<meta property="og:image" content="https://x.cdninstagram.com/a.jpg">', TIKTOK.imageHosts!)).toBeUndefined();
+    expect(ogImageOf("<p>no meta</p>", INSTAGRAM.imageHosts!)).toBeUndefined();
+  });
+});
+
+describe("thumbnailPlatformOf", () => {
+  it("only reads the pages of the declared platform", () => {
+    expect(thumbnailPlatformOf(INSTAGRAM, "https://www.instagram.com/reel/abc/")).toBe(INSTAGRAM);
+    expect(thumbnailPlatformOf(INSTAGRAM, "https://example.com/reel/abc/")).toBeUndefined();
+    expect(thumbnailPlatformOf(INSTAGRAM, "https://instagram.com.evil.example/")).toBeUndefined();
+    expect(thumbnailPlatformOf(INSTAGRAM, "http://www.instagram.com/reel/abc/")).toBeUndefined();
   });
 
-  it("only reads the pages of Instagram and TikTok", () => {
-    expect(isThumbnailPage("https://www.instagram.com/reel/abc/")).toBe(true);
-    expect(isThumbnailPage("https://www.tiktok.com/@a/photo/1")).toBe(true);
-    expect(isThumbnailPage("https://example.com/reel/abc/")).toBe(false);
-    expect(isThumbnailPage("https://instagram.com.evil.example/")).toBe(false);
-    expect(isThumbnailPage("http://www.instagram.com/reel/abc/")).toBe(false);
+  it("reads nothing without a declared thumbnail strategy", () => {
+    expect(thumbnailPlatformOf(undefined, "https://www.instagram.com/reel/abc/")).toBeUndefined();
+    const { thumbnail: _strategy, ...withoutStrategy } = INSTAGRAM;
+    expect(thumbnailPlatformOf(withoutStrategy, "https://www.instagram.com/reel/abc/")).toBeUndefined();
   });
 });
 
 describe("source thumbnails", () => {
+  let restoreRegistry: () => void;
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
+    const declaration = (type: string, platform?: SourcePlatformDeclaration) => ({
+      type, label: type, family: "social-video", agentsMd: `sources/${type}.md`, analysisSchema: { type: "object" as const }, ...(platform ? { platform } : {}),
+    });
+    restoreRegistry = installTemplateRegistry([INSTANCE], [
+      fixtureTemplate("@opengroow/engagement", { sources: [declaration("instagram-reel", INSTAGRAM), declaration("plain")] }),
+    ]);
   });
   afterEach(() => {
+    restoreRegistry();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  async function seed(t: ReturnType<typeof convexTest>, origin: string) {
+  async function seed(t: ReturnType<typeof convexTest>, origin: string, sourceId = "instagram-reel") {
     await t.run((ctx) => insertInstance(ctx, {
       jobId: "job-thumbnails", status: "running", runtimeStatus: "linked", runtimeReady: true,
       createdAt: new Date(NOW).toISOString(), openclawId: INSTANCE, updatedAt: new Date(NOW).toISOString(), userId: OWNER.subject,
     }));
     return await t.run((ctx) => ctx.db.insert("sources", {
-      instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "@opengroow/engagement", sourceId: "instagram-reel", label: "Reel", family: "social-video",
+      instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "@opengroow/engagement", sourceId, label: "Reel", family: "social-video",
       status: "ready", origin, capturedAt: NOW, createdAt: NOW, marketing: {}, analysis: {},
     }));
   }
@@ -103,7 +135,7 @@ describe("source thumbnails", () => {
     expect(row?.thumbnailTriedAt).toBe(NOW);
   });
 
-  it("never requests a page outside Instagram and TikTok", async () => {
+  it("never requests a page outside the declared pages", async () => {
     const t = convexTest(schema, modules);
     const sourceId = await seed(t, "https://example.com/post/1");
     const fetchMock = vi.fn();
@@ -114,6 +146,27 @@ describe("source thumbnails", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect((await t.run((ctx) => ctx.db.get(sourceId)))?.thumbnailTriedAt).toBeUndefined();
+  });
+
+  it("never requests a Source whose Template declares no platform, or is gone", async () => {
+    const t = convexTest(schema, modules);
+    const noPlatform = await seed(t, "https://www.instagram.com/reel/abc/", "plain");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await t.action(internal.source_thumbnails.fetchThumbnail, { sourceId: noPlatform });
+    await t.withIdentity(OWNER).mutation(api.source_thumbnails.request, { instanceId: INSTANCE, sourceIds: [noPlatform] });
+    restoreRegistry();
+    restoreRegistry = installTemplateRegistry([INSTANCE], []);
+    const gone = await t.run((ctx) => ctx.db.insert("sources", {
+      instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "@opengroow/engagement", sourceId: "instagram-reel", label: "Reel", family: "social-video",
+      status: "ready", origin: "https://www.instagram.com/reel/abc/", capturedAt: NOW, createdAt: NOW, marketing: {}, analysis: {},
+    }));
+    await t.withIdentity(OWNER).mutation(api.source_thumbnails.request, { instanceId: INSTANCE, sourceIds: [gone] });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect((await t.run((ctx) => ctx.db.get(noPlatform)))?.thumbnailTriedAt).toBeUndefined();
+    expect((await t.run((ctx) => ctx.db.get(gone)))?.thumbnailTriedAt).toBeUndefined();
   });
 
   it("request marks a Source once, so a second render does not ask again", async () => {
