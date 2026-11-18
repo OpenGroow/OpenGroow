@@ -22,15 +22,6 @@ export type VisualSource = {
   thumbnailTriedAt?: number;
 };
 
-// The Source family reads as words: `social-video` is "Social Video".
-export function humanize(value: string): string {
-  return value
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 // The leading tile of a Source with no image: the kind of content its family names.
 export function SourceGlyph({ family, className = "size-14" }: { family: string; className?: string }) {
   const Icon = /tiktok|music|audio/i.test(family) ? Music2 : Video;
