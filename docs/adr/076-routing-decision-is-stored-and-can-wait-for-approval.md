@@ -17,6 +17,6 @@
 ### Consequences
 
 - Only the Top-1 of the day is routed by the router unprompted, so most Ready rows show "Auto" until Produce is pressed. Predicting a producer for every scored Source would need one routing run per Source.
-- A Ready row shows the page's own image. It is the `og:image` of the Source's Instagram or TikTok page, read with a link-preview crawler user agent and copied into Convex storage by `source_thumbnails` (the CDN URLs are signed and expire within days). It is fetched when the Scored tab shows a Source that never had one, and is best effort: any other host, a blocked request or a page without an image keeps the family glyph. This is an unofficial scrape: it may stop working or be blocked from a server IP. ADR-077 moves the hosts and the strategy into the Template's declaration.
+- A Ready row shows the page's own image. It is the `og:image` of the Source's Instagram or TikTok page, read with a link-preview crawler user agent and copied into Convex storage by `source_thumbnails` (the CDN URLs are signed and expire within days). It is fetched when the Scored tab shows a Source that never had one, and is best effort: any other host, a blocked request or a page without an image keeps the family glyph. This is an unofficial scrape: it may stop working or be blocked from a server IP.
 - Changing the producer after a `proposed` decision discards that proposal: Produce routes again to the new producer.
 - `sources.routing.payload` of a `create_reel` already carries `observationId` (ADR-071).

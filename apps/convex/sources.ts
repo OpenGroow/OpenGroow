@@ -7,6 +7,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { sourceMarketingV } from "./source_schema.js";
 import { originKeyOf } from "./source_origin.js";
+import { declaredPlatformOf } from "./source_platform.js";
 
 /** A Source's thumbnail is a stored file: the URL a page can load, or null. */
 async function thumbnailUrlOf(ctx: Pick<QueryCtx, "storage">, source: Doc<"sources">): Promise<string | null> {
@@ -48,17 +49,9 @@ export async function insertSource(ctx: MutationCtx, args: ObjectType<typeof ins
   return await ctx.db.insert("sources", { ...args, ...(originKey !== undefined ? { originKey } : {}), createdAt: Date.now() });
 }
 
-/** The platform the Template declares for a Source type, for callers that have not resolved the declaration. */
-async function platformOfSource(
-  ctx: MutationCtx,
-  source: { instanceId: string; templateId: string; sourceId: string },
-): Promise<SourcePlatformDeclaration | undefined> {
-  return (await resolveSource(ctx, source.instanceId, source.templateId, source.sourceId))?.declaration.platform;
-}
-
 export const insert = internalMutation({
   args: insertArgs,
-  handler: async (ctx, args) => await insertSource(ctx, args, await platformOfSource(ctx, args)),
+  handler: async (ctx, args) => await insertSource(ctx, args, await declaredPlatformOf(ctx, args)),
 });
 
 const completeArgs = {
@@ -75,7 +68,7 @@ const completeArgs = {
 
 export const complete = internalMutation({
   args: completeArgs,
-  handler: async (ctx, args) => await completeSource(ctx, args, await platformOfSource(ctx, args)),
+  handler: async (ctx, args) => await completeSource(ctx, args, await declaredPlatformOf(ctx, args)),
 });
 
 /**

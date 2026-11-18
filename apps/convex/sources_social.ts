@@ -51,6 +51,7 @@ export function creativeFeaturesOf(source: Source): Record<string, unknown> | un
     : undefined;
 }
 
+/** A named entry of the Source's `scoring` record, `undefined` when unscored. */
 export function scoreOf(source: Source, key: string): number | undefined {
   return source.scoring?.[key];
 }

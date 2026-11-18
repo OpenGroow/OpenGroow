@@ -34,6 +34,7 @@ vi.mock("@convex/_generated/api", () => ({
 const INSTAGRAM_ICON = "data:image/svg+xml;base64,PHN2Zy9pZy8+";
 const TIKTOK_ICON = "data:image/svg+xml;base64,PHN2Zy90dC8+";
 const PLATFORMS = [
+  { templateId: "@opengroow/seo", sourceId: "no-logo-post", name: "Reddit" },
   { templateId: "@opengroow/seo", sourceId: "instagram-reel", name: "Instagram", icon: INSTAGRAM_ICON, mediaLabels: { video: "Reel" } },
   { templateId: "@opengroow/seo", sourceId: "tiktok-post", name: "TikTok", icon: TIKTOK_ICON, mediaLabels: { video: "video" } },
 ];
@@ -149,6 +150,13 @@ describe("InstanceSourcesContent", () => {
     const badge = document.querySelector("ul li [title='TikTok video']")!;
     expect(badge.querySelector("img")!.getAttribute("src")).toBe(TIKTOK_ICON);
     expect(badge.querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("names a platform that ships no logo, so the badge still says where the Source comes from", async () => {
+    await render([makeSource({ sourceId: "no-logo-post", analysis: { creativeFeatures: { mediaType: "image" } } })]);
+    const badge = document.querySelector("ul li [title='Reddit image']")!;
+    expect(badge.querySelector("img")).toBeNull();
+    expect(badge.textContent).toBe("Reddit");
   });
 
   it("shows an hourglass with the way to score a Source that is not scored yet", async () => {

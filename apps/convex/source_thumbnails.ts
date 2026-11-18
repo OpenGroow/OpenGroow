@@ -1,11 +1,9 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
-import type { Id } from "./_generated/dataModel.js";
 import type { SourcePlatformDeclaration } from "@opengroow/agent-templates";
-import type { Doc } from "./_generated/dataModel.js";
-import { internalAction, internalMutation, internalQuery, mutation, type QueryCtx } from "./_generated/server.js";
-import { resolveSource } from "./source_enrichment.js";
-import { isHttpsOn } from "./source_platform.js";
+import type { Id } from "./_generated/dataModel.js";
+import { internalAction, internalMutation, internalQuery, mutation } from "./_generated/server.js";
+import { declaredPlatformOf, isHttpsOn } from "./source_platform.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 
 // A Source's thumbnail is the image of its public page. Which pages and which
@@ -47,11 +45,6 @@ export function ogImageOf(html: string, imageHosts: readonly string[]): string |
     if (isHttpsOn(url, imageHosts) && !PLACEHOLDER_IMAGE.test(url)) return url;
   }
   return undefined;
-}
-
-/** The platform a Source's Template declares for it (none when the Template is gone or no longer declares it). */
-async function declaredPlatformOf(ctx: QueryCtx, source: Doc<"sources">): Promise<SourcePlatformDeclaration | undefined> {
-  return (await resolveSource(ctx, source.instanceId, source.templateId, source.sourceId))?.declaration.platform;
 }
 
 export const getForFetch = internalQuery({

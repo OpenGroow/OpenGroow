@@ -1,8 +1,7 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server.js";
 import type { CarouselPlanningSourceInfo } from "./mission_dispatcher/context_providers.js";
-import { originKeyPrefixOf } from "./source_platform.js";
-import { resolveSource } from "./source_enrichment.js";
+import { declaredPlatformOf, originKeyPrefixOf } from "./source_platform.js";
 import { creativeFeaturesOf, deepAnalysisOf, stringOf } from "./sources_social.js";
 
 /**
@@ -16,7 +15,7 @@ export const getCarouselPlanningContext = internalQuery({
     const source = await ctx.db.get(args.observationId);
     if (!source || source.instanceId !== args.instanceId) return null;
     // The platform is what the Source's Template declares (ADR-077).
-    const declared = (await resolveSource(ctx, source.instanceId, source.templateId, source.sourceId))?.declaration.platform;
+    const declared = await declaredPlatformOf(ctx, source);
     const platform = declared ? originKeyPrefixOf(declared) : undefined;
     const features = creativeFeaturesOf(source);
     const mediaType = features?.mediaType;

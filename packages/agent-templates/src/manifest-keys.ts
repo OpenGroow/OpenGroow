@@ -182,6 +182,13 @@ function eachEntry(
 }
 
 /** First message among the given lazily evaluated checks. */
+function checkSource(source: unknown, at: string): string | undefined {
+  return firstOf(
+    () => unknownKeyIn(source, SOURCE, at),
+    () => unknownKeyIn(isObj(source) ? source.platform : undefined, SOURCE_PLATFORM, `${at}.platform`),
+  );
+}
+
 function firstOf(...checks: Array<() => string | undefined>): string | undefined {
   for (const check of checks) {
     const found = check();
@@ -276,7 +283,7 @@ export function findUnknownManifestKey(manifest: unknown): string | undefined {
       eachEntry(manifest.externalJobsByMissionType, "externalJobsByMissionType", (jobs, at) =>
         eachEntry(jobs, at, checkMissionJob),
       ),
-    () => eachItem(manifest.sources, "sources", (source, at) => firstOf(() => unknownKeyIn(source, SOURCE, at), () => unknownKeyIn(isObj(source) ? source.platform : undefined, SOURCE_PLATFORM, `${at}.platform`)), byType),
+    () => eachItem(manifest.sources, "sources", checkSource, byType),
     () => eachItem(manifest.jobTypes, "jobTypes", (job, at) => unknownKeyIn(job, JOB_TYPE, at), byType),
     () =>
       eachEntry(manifest.externalJobsBySource, "externalJobsBySource", (jobs, at) =>

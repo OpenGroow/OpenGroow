@@ -19,7 +19,7 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { sourceScore } from "@/src/lib/source-score";
-import { FormatBadge, NotScoredHint, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
+import { FormatBadge, NotScoredHint, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { cn } from "@/lib/utils";
 
@@ -140,6 +140,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
     </div>
   );
   useThumbnailRequests(instanceId, tab === "other" ? visible : []);
+  const platformFor = useSourcePlatforms(instanceId);
 
   return (
     <div className="grid gap-8">
@@ -232,6 +233,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
                       key={source._id}
                       source={source}
                       instanceId={instanceId}
+                      platform={platformFor(source)}
                       selecting={selection.selecting}
                       selected={selection.selected.has(source._id)}
                       onToggle={() => selection.toggleOne(source._id)}
@@ -413,12 +415,14 @@ const SELECT_ROW_GRID =
 function SourceRowItem({
   source,
   instanceId,
+  platform,
   selecting,
   selected,
   onToggle,
 }: {
   source: SourceRow;
   instanceId: string;
+  platform?: SourcePlatform;
   selecting: boolean;
   selected: boolean;
   onToggle: () => void;
@@ -428,7 +432,6 @@ function SourceRowItem({
   // already the title.
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
-  const platformOf = useSourcePlatforms(instanceId);
   return (
     <li>
       <Card
@@ -459,7 +462,7 @@ function SourceRowItem({
               {title}
             </Link>
             <div>
-              <FormatBadge source={source} platform={platformOf(source)} />
+              <FormatBadge source={source} platform={platform} />
             </div>
           </div>
         </div>
@@ -515,6 +518,7 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
   const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
   const selection = useSourceSelection(ready);
   useThumbnailRequests(instanceId, ready);
+  const platformFor = useSourcePlatforms(instanceId);
 
   return (
     <section aria-label="Ready sources" className="grid gap-5">
@@ -552,6 +556,7 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
                 key={source._id}
                 source={source}
                 instanceId={instanceId}
+                platform={platformFor(source)}
                 targets={targets}
                 selecting={selection.selecting}
                 selected={selection.selected.has(source._id)}
@@ -575,16 +580,16 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
   );
 }
 
-function ReadySourceRow({ source, instanceId, targets, selecting, selected, onToggle }: {
+function ReadySourceRow({ source, instanceId, platform, targets, selecting, selected, onToggle }: {
   source: SourceRow;
   instanceId: string;
+  platform?: SourcePlatform;
   targets: ReturnType<typeof useRouteTargets>;
   selecting: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
   const { produce, busy } = useProduceSource(source._id);
-  const platformOf = useSourcePlatforms(instanceId);
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
   // What Produce will use: the producer chosen by hand, else the router's own
@@ -623,7 +628,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
               <span className="hidden lg:inline">{title}</span>
             </Link>
             <div className="flex flex-wrap items-center gap-2">
-              <FormatBadge source={source} platform={platformOf(source)} />
+              <FormatBadge source={source} platform={platform} />
               {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
             </div>
           </div>

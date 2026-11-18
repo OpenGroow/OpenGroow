@@ -106,11 +106,13 @@ export function FormatBadge({ source, platform }: { source: VisualSource; platfo
   const { media, label } = formatOf(source, platform);
   if (!platform?.icon && !media) return <Badge variant="outline">{label}</Badge>;
   const MediaIcon = media ? MEDIA_ICONS[media] : undefined;
+  // A platform without a logo is named in words, or the badge would hide where the Source comes from.
+  const named = platform && !platform.icon;
   return (
     <Badge variant="outline" title={label} className="gap-2">
       <PlatformMark platform={platform} />
       {MediaIcon ? <MediaIcon aria-hidden="true" className="size-4" /> : null}
-      <span className="sr-only">{label}</span>
+      <span className={named ? undefined : "sr-only"}>{named ? platform.name : label}</span>
     </Badge>
   );
 }

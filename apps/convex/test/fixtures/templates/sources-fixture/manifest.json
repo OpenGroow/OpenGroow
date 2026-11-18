@@ -1,7 +1,7 @@
 {
   "id": "sources-fixture",
   "name": "Sources fixture",
-  "description": "Test fixture: a Template declaring two Sources, one with enrichment.",
+  "description": "Test fixture: a Template declaring three Sources, one with enrichment and one with a platform.",
   "category": "test",
   "visibility": "development",
   "mcpServers": [
@@ -14,7 +14,14 @@
   ],
   "missionTypes": [],
   "jobTypes": [
-    { "type": "source_ingestion", "sourceTypes": ["keyword", "reel"] }
+    {
+      "type": "source_ingestion",
+      "sourceTypes": [
+        "keyword",
+        "post",
+        "reel"
+      ]
+    }
   ],
   "sources": [
     {
@@ -22,19 +29,44 @@
       "label": "Search keyword",
       "family": "search",
       "agentsMd": "sources/keyword.md",
+      "analysisSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "volume": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "type": "post",
+      "label": "Social post",
+      "family": "social-video",
+      "agentsMd": "sources/post.md",
       "platform": {
         "name": "Instagram",
-        "pageHosts": ["instagram.com"],
+        "pageHosts": [
+          "instagram.com"
+        ],
         "originPattern": "^instagram\\.com/(?:[^/]+/)?(?:p|reels?|tv)/([A-Za-z0-9_-]+)"
       },
       "analysisSchema": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "minLength": 1, "maxLength": 50 },
-          "volume": { "type": "integer", "minimum": 0 }
-        },
-        "required": ["query"],
-        "additionalProperties": false
+          "hook": {
+            "type": "string"
+          }
+        }
       }
     },
     {
@@ -44,8 +76,14 @@
       "agentsMd": "sources/reel.md",
       "analysisSchema": {
         "type": "object",
-        "properties": { "hook": { "type": "string" } },
-        "required": ["hook"]
+        "properties": {
+          "hook": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hook"
+        ]
       }
     }
   ],
@@ -55,7 +93,14 @@
         "server": "analysis-mcp",
         "mcpTool": "get_status",
         "statusField": "status",
-        "terminalStates": { "completed": ["completed"], "failed": ["failed"] }
+        "terminalStates": {
+          "completed": [
+            "completed"
+          ],
+          "failed": [
+            "failed"
+          ]
+        }
       }
     }
   }

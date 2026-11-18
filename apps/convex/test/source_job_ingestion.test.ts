@@ -207,7 +207,9 @@ describe("SourceJob ingestion of the result file's Sources (#564)", () => {
 
   it("keeps one Source per post, whatever the share link or the Instagram path", async () => {
     const t = convexTest(schema, modules);
-    const post = (origin: string, capturedAt: number) => keyword({ common: { ...keyword().common, origin, capturedAt } });
+    const post = (origin: string, capturedAt: number) => ({
+      templateId: TEMPLATE, sourceId: "post", common: { ...keyword().common, origin, capturedAt }, analysis: { hook: "Watch this" },
+    });
     await runJob(t, success([
       post("https://www.instagram.com/reel/DfMymnjh1v0/?psln=aaa", 1_700_000_000_000),
       // Four days later: another share link, then the `/p/` form of the same post.
