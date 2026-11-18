@@ -34,10 +34,10 @@ vi.mock("@convex/_generated/api", () => ({
 
 type Target = {
   target: string; mapped: true; channelId: string; channelName: string; channelService: string; channelProfile: string;
-  settings?: Record<string, unknown>;
+  settings?: Record<string, unknown>; analytics: { linked: false; options: never[] };
 };
 const target = (service: string, id: string, settings?: Record<string, unknown>): Target => ({
-  target: `${service}:${id}`, mapped: true, channelId: id, channelName: `${service} name`, channelService: service, channelProfile: id, settings,
+  target: `${service}:${id}`, mapped: true, channelId: id, channelName: `${service} name`, channelService: service, channelProfile: id, settings, analytics: { linked: false, options: [] },
 });
 const publisher = (targets: Target[]) => ({ adapter: "postiz", url: "https://postiz.example.com", hasApiKey: true, targets });
 
@@ -213,7 +213,7 @@ describe("PublishTargetsCard", () => {
   it("does not make a channel without options expandable", async () => {
     listChannels.mockResolvedValue({ ok: true, channels: [] });
     await render([target("threads", "me")]);
-    expect(document.body.querySelector("[aria-expanded]")).toBeNull();
+    expect(document.body.querySelector('button[aria-expanded]:not([data-slot="select-trigger"])')).toBeNull();
     expect(text()).toContain("@me");
   });
 });

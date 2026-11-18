@@ -28,7 +28,7 @@ vi.mock("@convex/_generated/api", () => {
     Object.fromEntries(fns.map((f) => [f, `${group}.${f}`]));
   return {
     api: {
-      publishers: names("publishers", ["list", "save", "remove", "addChannel", "updateSettings", "removeTarget"]),
+      publishers: names("publishers", ["list", "save", "remove", "addChannel", "updateSettings", "removeTarget", "setAnalyticsLink"]),
       publishers_node: names("publishers_node", ["testConnection", "listChannels"]),
       hub_packages_node: names("hub_packages_node", ["catalogue", "install"]),
       publisher_packages: names("publisher_packages", ["list"]),
@@ -48,8 +48,8 @@ const PUBLISHER = {
   url: "https://postiz.example.com",
   hasApiKey: true,
   targets: [
-    { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta" },
-    { target: "threads:me", mapped: true, channelId: "c2", channelName: "Me", channelService: "threads", channelProfile: "me" },
+    { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "My IG", channelService: "instagram", channelProfile: "myinsta", analytics: { linked: false, options: [] } },
+    { target: "threads:me", mapped: true, channelId: "c2", channelName: "Me", channelService: "threads", channelProfile: "me", analytics: { linked: false, options: [] } },
   ],
 };
 
@@ -283,7 +283,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
 
   it("installs the chosen package, then shows its connection form under the package's name", async () => {
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
-    actions["hub_packages_node.install"] = vi.fn(async () => {
+    actions["hub_packages_node.install"] = vi.fn<any[], any>(async () => {
       installedPublishers = INSTALLED_PUBLISHERS; // the reactive query now serves the installed package
       return { status: "installed", packageId: HUB_ENTRY.packageId, version: "1.0.0" };
     });
@@ -329,7 +329,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
 
     it("offers to install the package the hub lists for it, keeping the connection and the channels", async () => {
       actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
-      actions["hub_packages_node.install"] = vi.fn(async () => {
+      actions["hub_packages_node.install"] = vi.fn<any[], any>(async () => {
         installedPublishers = INSTALLED_PUBLISHERS;
         return { status: "installed", packageId: HUB_ENTRY.packageId, version: "1.0.0" };
       });
@@ -344,7 +344,7 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     it("does not test the connection before the package is installed, then does", async () => {
       actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [HUB_ENTRY] }));
       actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
-      actions["hub_packages_node.install"] = vi.fn(async () => {
+      actions["hub_packages_node.install"] = vi.fn<any[], any>(async () => {
         installedPublishers = INSTALLED_PUBLISHERS;
         return { status: "installed" };
       });
@@ -370,6 +370,68 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
       await click(byText("Install Postiz"));
       expect(text()).toContain("Digest mismatch");
       expect(document.querySelector('[data-testid="package-missing"]')).not.toBeNull();
+    });
+  });
+
+  describe("Analytics link of a channel (ADR-078)", () => {
+    const OPTIONS = [
+      { id: "postiz-analytics", name: "Postiz analytics" },
+      { id: "web-analytics", name: "Web analytics" },
+    ];
+    const withAnalytics = (analytics: unknown) => ({
+      ...PUBLISHER,
+      targets: [{ ...PUBLISHER.targets[0], analytics }],
+    });
+    const select = () => document.getElementById("analytics-instagram:myinsta") as HTMLSelectElement;
+    const choose = async (value: string) => {
+      await act(async () => {
+        const el = select();
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(el, value);
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    };
+
+    it("shows the adapter a channel is linked to, marking the Publisher's own default", async () => {
+      useQueryMock.mockReturnValue(withAnalytics({ linked: true, adapterId: "postiz-analytics", name: "Postiz analytics", isDefault: true, options: OPTIONS }));
+      await render();
+      await click(byText("Channels"));
+      expect(select().value).toBe("postiz-analytics");
+      expect(text()).toContain("Default");
+      expect(text()).not.toContain("Analytics unavailable");
+    });
+
+    it("says Analytics unavailable for an unlinked channel", async () => {
+      useQueryMock.mockReturnValue(withAnalytics({ linked: false, options: OPTIONS }));
+      await render();
+      await click(byText("Channels"));
+      expect(text()).toContain("Analytics unavailable");
+      expect(select().value).toBe("");
+    });
+
+    it("links to another adapter, and unlinks", async () => {
+      useQueryMock.mockReturnValue(withAnalytics({ linked: true, adapterId: "postiz-analytics", name: "Postiz analytics", isDefault: true, options: OPTIONS }));
+      await render();
+      await click(byText("Channels"));
+      await choose("web-analytics");
+      expect(mutations["publishers.setAnalyticsLink"]).toHaveBeenCalledWith({
+        instanceId: "inst-1",
+        adapter: "postiz",
+        target: "instagram:myinsta",
+        analyticsAdapter: "web-analytics",
+      });
+      await choose("");
+      expect(mutations["publishers.setAnalyticsLink"]).toHaveBeenLastCalledWith(expect.objectContaining({ analyticsAdapter: null }));
+    });
+
+    it("shows the reason when the link is refused", async () => {
+      useQueryMock.mockReturnValue(withAnalytics({ linked: false, options: OPTIONS }));
+      mutations["publishers.setAnalyticsLink"] = vi.fn<any[], any>(async () => {
+        throw new Error("only works with the Publisher other");
+      });
+      await render();
+      await click(byText("Channels"));
+      await choose("web-analytics");
+      expect(text()).toContain("only works with the Publisher other");
     });
   });
 });
