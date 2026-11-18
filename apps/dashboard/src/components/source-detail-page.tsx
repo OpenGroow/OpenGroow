@@ -127,8 +127,8 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <Link2 aria-hidden="true" className="size-4 shrink-0" />
             {/^https?:\/\//.test(origin) ? (
-              <a href={origin} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline">
-                <span className="truncate">{origin}</span>
+              <a href={origin} target="_blank" rel="noreferrer" title={origin} className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline">
+                <span>Link</span>
                 <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
               </a>
             ) : (
