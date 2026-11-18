@@ -5,12 +5,17 @@ import { use } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CalendarDays, ExternalLink, Link2, Sparkles, Tag, Users, Workflow } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { sourceScore } from "@/src/lib/source-score";
+import { formatOf, humanize, NotScoredHint, PlatformMark, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
-import { formatSourceDate, SourcePipelinePill } from "@/src/components/source-status-pill";
+import { formatSourceDate, SourceStatusPill } from "@/src/components/source-status-pill";
 import { Card } from "@/components/ui/card";
 
 export { deriveSourcePipelineState } from "@/src/lib/source-pipeline";
@@ -29,35 +34,22 @@ export function SourceDetailPage({ params }: Props) {
 export function SourceDetailContent({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
-  const forceProduction = useMutation(api.source_routing.forceProduction);
+  const targets = useRouteTargets(instanceId);
+  const { produce, busy: producing } = useProduceSource(sourceId);
+  useThumbnailRequests(instanceId, result ? [{ ...result.source, thumbnailUrl: result.thumbnailUrl }] : []);
 
   if (result === undefined) return <Message>Loading…</Message>;
   if (result === null) return <Message>Source not found.</Message>;
 
-  const { source, analysisSchema, workspaceKey } = result;
+  const { source, analysisSchema, workspaceKey, thumbnailUrl } = result;
   const marketing = source.marketing as Record<string, unknown>;
   const scoring = (source.scoring ?? {}) as Record<string, unknown>;
   const analysis = (source.analysis ?? {}) as Record<string, unknown>;
   const pipeline = deriveSourcePipelineState(source);
 
-  // `routing` only produces something for `video`/
-  // `carousel` social Sources — an `image` one, or one not yet enriched (so
-  // there are no creative features yet), silently no-ops. Gating the button on
-  // the same condition avoids a click that looks like it worked but produced
-  // nothing.
-  const creativeFeatures = analysis.creativeFeatures as { mediaType?: unknown } | undefined;
-  const canForceProduction =
-    source.templateId === "@opengroow/social-engagement" &&
-    source.status === "ready" &&
-    (creativeFeatures?.mediaType === "video" || creativeFeatures?.mediaType === "carousel");
-
-  async function handleForceProduction(): Promise<void> {
-    try {
-      await forceProduction({ sourceId: sourceId as Id<"sources"> });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Failed to start production."));
-    }
-  }
+  const format = formatOf(source);
+  const score = sourceScore(source.scoring);
+  const origin = String(source.origin);
 
   async function handleRetry(): Promise<void> {
     try {
@@ -69,34 +61,60 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
 
   return (
     <div className="grid max-w-[920px] gap-8" data-testid="source-detail">
-      <header className="grid gap-3">
+      <header className="grid gap-5">
         <Link
           href={`/projects/${encodeURIComponent(instanceId)}/sources`}
           className="w-fit text-xs font-semibold text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           ← Sources
         </Link>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="grid gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">
-              {source.label} · {source.family}
-            </span>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+          <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
+          <div className="grid min-w-0 flex-1 gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="gap-2" data-testid="source-format">
+                  <PlatformMark platform={format.platform} />
+                  {format.label}
+                </Badge>
+                <Badge variant="outline" className="gap-2">
+                  <Tag aria-hidden="true" className="size-3.5" />
+                  {humanize(source.family)}
+                </Badge>
+              </div>
+              {source.status === "ready" ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users aria-hidden="true" className="size-4" />
+                    Agent:
+                    <RouteTargetSelect source={source} targets={targets} className="h-10 w-56" />
+                  </label>
+                  <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
+                    <Sparkles />
+                    {source.selectedAt !== undefined ? "Produce again" : "Produce"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
             <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}
             </h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SourcePipelinePill source={source} />
-            {source.status === "failed" ? (
-              <Button type="button" variant="outline" onClick={() => void handleRetry()}>
-                Retry
-              </Button>
-            ) : null}
-            {canForceProduction ? (
-              <Button type="button" variant="outline" onClick={() => void handleForceProduction()}>
-                {source.selectedAt !== undefined ? "Produce again" : "Force production"}
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <SourceStatusPill status={source.status} />
+              {score !== undefined ? (
+                <Badge variant="outline" className="gap-2 tabular-nums" data-testid="source-score">
+                  <Sparkles aria-hidden="true" className="size-3.5" />
+                  Score {score}
+                </Badge>
+              ) : source.status === "ready" ? (
+                <NotScoredHint />
+              ) : null}
+              {source.status === "failed" ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleRetry()}>
+                  Retry
+                </Button>
+              ) : null}
+            </div>
           </div>
         </div>
         {source.status === "processing" && source.retryRequested ? (
@@ -104,13 +122,26 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
             Retry requested. It is picked up at the next run of the Agent&apos;s job.
           </p>
         ) : null}
-        <p className="m-0 text-sm text-muted-foreground">
-          Observed {formatSourceDate(source.capturedAt)} ·{" "}
-          <SchemaValue value={source.origin} />
-        </p>
-        {source.runId || source.sourceJobId ? (
-          <p className="m-0 text-sm text-muted-foreground">
-            {source.runId && workspaceKey ? (
+        <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarDays aria-hidden="true" className="size-4" />
+            Observed {formatSourceDate(source.capturedAt)}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <Link2 aria-hidden="true" className="size-4 shrink-0" />
+            {/^https?:\/\//.test(origin) ? (
+              <a href={origin} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline">
+                <span className="truncate">{origin}</span>
+                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+              </a>
+            ) : (
+              <span className="truncate">{origin}</span>
+            )}
+          </span>
+          {source.runId && workspaceKey ? (
+            <>
+              <span aria-hidden="true">·</span>
               <Link
                 data-testid="source-run-link"
                 href={runLogsHref(instanceId, source.templateId, source.runId)}
@@ -118,11 +149,18 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
               >
                 View Run
               </Link>
-            ) : null}
-            {source.runId && workspaceKey && source.sourceJobId ? " · " : null}
-            {source.sourceJobId ? <>Job {source.sourceJobId}</> : null}
-          </p>
-        ) : null}
+            </>
+          ) : null}
+          {source.sourceJobId ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1.5">
+                <Workflow aria-hidden="true" className="size-4" />
+                Job {source.sourceJobId}
+              </span>
+            </>
+          ) : null}
+        </p>
         {source.productionMissionId ? (
           <Link
             data-testid="source-production-mission-link"

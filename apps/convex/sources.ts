@@ -199,6 +199,7 @@ export const get = query({
       source,
       analysisSchema: declaration?.analysisSchema ?? null,
       workspaceKey: agent?.workspaceKey ?? null,
+      thumbnailUrl: source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null,
     };
   },
 });

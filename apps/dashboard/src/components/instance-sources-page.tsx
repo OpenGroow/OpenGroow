@@ -1,11 +1,11 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Hourglass, Image as ImageIcon, Images, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,9 +17,9 @@ import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { InstagramLogo, TikTokLogo } from "@/src/components/social-platform-icons";
-import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { sourceScore } from "@/src/lib/source-score";
+import { FormatBadge, NotScoredHint, SourceThumbnail, useThumbnailRequests } from "@/src/components/source-visuals";
+import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -396,90 +396,8 @@ const DELETE_CHUNK = 100;
 const ROW_GRID =
   "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
 
-// The Agent id is `@scope/slug`; the slug reads as the Agent's name.
-function agentLabel(templateId: string): string {
-  const slug = templateId.split("/").pop() ?? templateId;
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-// Scores are 0..1. `replicationScore` only exists once the daily engagement
-// job has run; before that a scored Source only has its three rubric scores,
-// so their mean stands in. Shown on a 0..100 scale.
-function sourceScore(scoring: SourceRow["scoring"]): number | undefined {
-  if (scoring === undefined) return undefined;
-  const { replicationScore, productFit, replicability, creativeStrength } = scoring;
-  const value =
-    replicationScore ??
-    (productFit !== undefined && replicability !== undefined && creativeStrength !== undefined
-      ? (productFit + replicability + creativeStrength) / 3
-      : undefined);
-  return value === undefined ? undefined : Math.round(value * 100);
-}
-
 function isWebUrl(value: string): boolean {
   return /^https?:\/\//.test(value);
-}
-
-// No thumbnail is stored on a Source, so the leading tile shows the kind of
-// content its family names.
-function SourceGlyph({ family, className = "size-14" }: { family: string; className?: string }) {
-  const Icon = /tiktok|music|audio/i.test(family) ? Music2 : Video;
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("flex shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground", className)}
-    >
-      <Icon className="size-6" />
-    </span>
-  );
-}
-
-// Asks the server for the thumbnails of the rows on screen that never had one
-// (images are copied server side; a Source without one keeps its glyph).
-function useThumbnailRequests(instanceId: string, rows: SourceRow[]): void {
-  const requestThumbnails = useMutation(api.source_thumbnails.request);
-  const missingKey = rows
-    .filter((source) => !source.thumbnailUrl && source.thumbnailTriedAt === undefined)
-    .map((source) => source._id)
-    .join(",");
-  useEffect(() => {
-    if (missingKey === "") return;
-    void requestThumbnails({ instanceId, sourceIds: missingKey.split(",") as Id<"sources">[] }).catch(() => undefined);
-  }, [missingKey, instanceId, requestThumbnails]);
-}
-
-const NOT_SCORED_HINT = "Not scored yet. Run the Source scoring job to score it.";
-
-// Stands where the score will be: hover (or focus) it to read what to do.
-function NotScoredHint() {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        delay={100}
-        aria-label={NOT_SCORED_HINT}
-        data-testid="not-scored-hint"
-        // Above the row's full-size link, or that link takes the hover.
-        render={<span tabIndex={0} className="relative z-10 inline-flex text-muted-foreground" />}
-      >
-        <Hourglass className="size-4" />
-      </TooltipTrigger>
-      <TooltipContent>{NOT_SCORED_HINT}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-// The page's own image when one was fetched, else the glyph of its family.
-function SourceThumbnail({ source, className = "size-14" }: { source: SourceRow; className?: string }) {
-  const [broken, setBroken] = useState(false);
-  if (!source.thumbnailUrl || broken) return <SourceGlyph family={source.family} className={className} />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={source.thumbnailUrl} alt="" className={cn("shrink-0 rounded-xl object-cover", className)} loading="lazy" onError={() => setBroken(true)} />
-  );
 }
 
 // Select mode adds a leading checkbox column.
@@ -563,41 +481,6 @@ function SourceRowItem({
   );
 }
 
-type Target = { templateId: string; agentName: string; missionType: string; label: string; description: string };
-
-const AUTO_TARGET = "auto";
-const targetKey = (target: { templateId: string; missionType: string }) => `${target.templateId}::${target.missionType}`;
-
-type SourceFormat = { platform?: "Instagram" | "TikTok"; media?: "video" | "image" | "carousel"; label: string };
-
-// The platform the Source came from and the kind of media it is, as the badge's
-// two icons ("Instagram Reel" = the Instagram logo and a video icon). `label` is
-// the same in words, for the tooltip and screen readers; it falls back to the
-// declared label when the platform or media is not known.
-function formatOf(source: SourceRow): SourceFormat {
-  const platform = source.sourceId === "instagram-reel" ? "Instagram" : source.sourceId === "tiktok-post" ? "TikTok" : undefined;
-  const features = (source.analysis as { creativeFeatures?: { mediaType?: unknown } } | undefined)?.creativeFeatures;
-  const media = features?.mediaType === "video" || features?.mediaType === "image" || features?.mediaType === "carousel" ? features.mediaType : undefined;
-  if (!platform || !media) return { ...(platform ? { platform } : {}), ...(media ? { media } : {}), label: source.label };
-  const noun = media === "video" ? (platform === "Instagram" ? "Reel" : "video") : media;
-  return { platform, media, label: `${platform} ${noun}` };
-}
-
-const MEDIA_ICONS = { video: Video, image: ImageIcon, carousel: Images } as const;
-
-function FormatBadge({ source }: { source: SourceRow }) {
-  const { platform, media, label } = formatOf(source);
-  if (!platform && !media) return <Badge variant="outline">{label}</Badge>;
-  const MediaIcon = media ? MEDIA_ICONS[media] : undefined;
-  return (
-    <Badge variant="outline" title={label} className="gap-2">
-      {platform === "Instagram" ? <InstagramLogo /> : platform === "TikTok" ? <TikTokLogo /> : null}
-      {MediaIcon ? <MediaIcon aria-hidden="true" className="size-4" /> : null}
-      <span className="sr-only">{label}</span>
-    </Badge>
-  );
-}
-
 type ReadySort = "score" | "newest";
 
 // Below the `lg` breakpoint a Ready title is cut at this many characters.
@@ -615,7 +498,7 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
   const [sort, setSort] = useState<ReadySort>("score");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  const targets = (useQuery(api.source_routing.listTargets, { instanceId }) ?? []) as Target[];
+  const targets = useRouteTargets(instanceId);
   const needle = search.trim().toLowerCase();
   const ready = sources
     .filter((source) => stageOf(source) === READY_TAB_STAGE)
@@ -688,41 +571,17 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
 function ReadySourceRow({ source, instanceId, targets, selecting, selected, onToggle }: {
   source: SourceRow;
   instanceId: string;
-  targets: Target[];
+  targets: ReturnType<typeof useRouteTargets>;
   selecting: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
-  const setRouteTarget = useMutation(api.source_routing.setRouteTarget);
-  const produce = useMutation(api.source_routing.forceProduction);
-  const [busy, setBusy] = useState(false);
+  const { produce, busy } = useProduceSource(source._id);
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
   // What Produce will use: the producer chosen by hand, else the router's own
   // proposal, else the router decides when Produce is pressed.
   const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
-  const current = source.routeTo ?? proposal;
-  const value = current ? targetKey(current) : AUTO_TARGET;
-
-  async function onRouteChange(next: string): Promise<void> {
-    const target = targets.find((entry) => targetKey(entry) === next);
-    try {
-      await setRouteTarget({ sourceId: source._id as Id<"sources">, target: target ? { templateId: target.templateId, missionType: target.missionType } : null });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Could not change where the Source is routed to."));
-    }
-  }
-
-  async function onProduce(): Promise<void> {
-    setBusy(true);
-    try {
-      await produce({ sourceId: source._id as Id<"sources"> });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Failed to start production."));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <li>
@@ -764,16 +623,9 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
         <div className="relative z-10 flex flex-wrap items-end gap-3 lg:justify-end">
           <label className="flex flex-col items-start gap-1 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
             Routed to:
-            <NativeSelect aria-label="Routed to" className="h-10 w-56" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
-              <option value={AUTO_TARGET}>Auto (router decides)</option>
-              {targets.map((target) => (
-                <option key={targetKey(target)} value={targetKey(target)}>
-                  {agentLabel(target.templateId)} · {target.label}
-                </option>
-              ))}
-            </NativeSelect>
+            <RouteTargetSelect source={source} targets={targets} className="h-10 w-56" />
           </label>
-          <Button type="button" variant="accent" className="h-10" disabled={busy} onClick={() => void onProduce()}>
+          <Button type="button" variant="accent" className="h-10" disabled={busy} onClick={() => void produce()}>
             <Sparkles />
             Produce
           </Button>

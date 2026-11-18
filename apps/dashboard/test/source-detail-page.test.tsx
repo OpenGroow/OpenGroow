@@ -11,16 +11,30 @@ import { deriveSourcePipelineState, SourceDetailContent } from "../src/component
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
 const forceProductionMock = vi.fn();
+const setRouteTargetMock = vi.fn();
+const requestThumbnailsMock = vi.fn();
+let targets: unknown[] = [];
 
 vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useMutation: (ref: string) => (ref === "source_routing.forceProduction" ? forceProductionMock : retryMock),
+  // The Source page asks for the Source, and for the producers it can be routed to.
+  useQuery: (ref: string, ...rest: unknown[]) => (ref === "source_routing.listTargets" ? targets : useQueryMock(ref, ...rest)),
+  useMutation: (ref: string) =>
+    ({
+      "source_routing.forceProduction": forceProductionMock,
+      "source_routing.setRouteTarget": setRouteTargetMock,
+      "source_thumbnails.request": requestThumbnailsMock,
+    })[ref] ?? retryMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { get: "sources.get", retry: "sources.retry" },
-  source_routing: { forceProduction: "source_routing.forceProduction" },
+    source_routing: {
+      forceProduction: "source_routing.forceProduction",
+      setRouteTarget: "source_routing.setRouteTarget",
+      listTargets: "source_routing.listTargets",
+    },
+    source_thumbnails: { request: "source_thumbnails.request" },
   },
 }));
 
@@ -49,6 +63,9 @@ describe("SourceDetailContent", () => {
     useQueryMock.mockReset();
     retryMock.mockReset();
     forceProductionMock.mockReset();
+    setRouteTargetMock.mockReset();
+    requestThumbnailsMock.mockReset().mockResolvedValue(undefined);
+    targets = [];
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -255,21 +272,14 @@ describe("SourceDetailContent", () => {
     expect(retryMock).toHaveBeenCalledWith({ sourceId: "src-1" });
   });
 
-  describe("Force production (issue #535: scoring/planning now read Sources)", () => {
-    const socialSource = (overrides: Partial<Record<string, unknown>> = {}) =>
-      makeSource({
-        templateId: "@opengroow/social-engagement",
-        sourceId: "instagram-reel",
-        analysis: { creativeFeatures: { mediaType: "video" } },
-        ...overrides,
-      });
-    const button = () =>
-      Array.from(document.querySelectorAll("button")).find((b) => /Force production|Produce again/.test(b.textContent ?? ""));
+  describe("Produce and the producer it routes to", () => {
+    const readySource = (overrides: Partial<Record<string, unknown>> = {}) => makeSource({ sourceId: "instagram-reel", ...overrides });
+    const button = () => Array.from(document.querySelectorAll("button")).find((b) => /^Produce( again)?$/.test(b.textContent?.trim() ?? ""));
 
-    it("starts production for a ready video or carousel social Source, by Source id", async () => {
+    it("produces a ready Source, by Source id", async () => {
       forceProductionMock.mockResolvedValue(undefined);
-      await render({ source: socialSource(), analysisSchema: null });
-      expect(button()?.textContent).toBe("Force production");
+      await render({ source: readySource(), analysisSchema: null });
+      expect(button()?.textContent?.trim()).toBe("Produce");
       await act(async () => {
         button()!.click();
       });
@@ -277,19 +287,57 @@ describe("SourceDetailContent", () => {
     });
 
     it("offers to produce again once selected", async () => {
-      await render({ source: socialSource({ selectedAt: 1 }), analysisSchema: null });
-      expect(button()?.textContent).toBe("Produce again");
+      await render({ source: readySource({ selectedAt: 1 }), analysisSchema: null });
+      expect(button()?.textContent?.trim()).toBe("Produce again");
     });
 
-    it("is not offered for an image, an unenriched, a non-ready or a non-social Source", async () => {
-      await render({ source: socialSource({ analysis: { creativeFeatures: { mediaType: "image" } } }), analysisSchema: null });
+    it("is only offered for a ready Source", async () => {
+      await render({ source: readySource({ status: "processing" }), analysisSchema: null });
       expect(button()).toBeUndefined();
-      await render({ source: socialSource({ analysis: {} }), analysisSchema: null });
+      await render({ source: readySource({ status: "failed" }), analysisSchema: null });
       expect(button()).toBeUndefined();
-      await render({ source: socialSource({ status: "processing" }), analysisSchema: null });
-      expect(button()).toBeUndefined();
-      await render({ source: makeSource({ analysis: { creativeFeatures: { mediaType: "video" } } }), analysisSchema: null });
-      expect(button()).toBeUndefined();
+    });
+
+    it("lets the producer be chosen next to Produce", async () => {
+      targets = [{ templateId: "@opengroow/content-creator", agentName: "c", missionType: "create_image", label: "Create image", description: "" }];
+      await render({ source: readySource(), analysisSchema: null });
+      const select = document.querySelector("select")!;
+      expect(select.value).toBe("auto");
+      const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+      await act(async () => {
+        setValue.call(select, "@opengroow/content-creator::create_image");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(setRouteTargetMock).toHaveBeenCalledWith({ sourceId: "src-1", target: { templateId: "@opengroow/content-creator", missionType: "create_image" } });
+    });
+  });
+
+  describe("header", () => {
+    it("shows the platform, family, status and score like the Sources list", async () => {
+      await render({
+        source: makeSource({ sourceId: "instagram-reel", family: "social-video", analysis: { creativeFeatures: { mediaType: "video" } }, scoring: { replicationScore: 0.92 } }),
+        analysisSchema: null,
+        thumbnailUrl: "https://storage.example/t.jpg",
+      });
+      expect(document.querySelector("[data-testid='source-format']")?.textContent).toContain("Instagram Reel");
+      expect(document.querySelector("[data-testid='source-format'] img")?.getAttribute("src")).toBe("/platforms/instagram.svg");
+      expect(text()).toContain("Social Video");
+      expect(text()).toContain("Ready");
+      expect(document.querySelector("[data-testid='source-score']")?.textContent).toContain("Score 92");
+      expect(document.querySelector("img[src='https://storage.example/t.jpg']")).not.toBeNull();
+    });
+
+    it("shows the not-scored hourglass instead of a score, and asks for a missing thumbnail", async () => {
+      await render({ source: makeSource(), analysisSchema: null, thumbnailUrl: null });
+      expect(document.querySelector("[data-testid='source-score']")).toBeNull();
+      expect(document.querySelector("[data-testid='not-scored-hint']")).not.toBeNull();
+      expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["src-1"] });
+    });
+
+    it("links the origin to the original post", async () => {
+      await render({ source: makeSource({ origin: "https://www.instagram.com/reel/abc/" }), analysisSchema: null });
+      const link = Array.from(document.querySelectorAll("a")).find((a) => a.getAttribute("href") === "https://www.instagram.com/reel/abc/");
+      expect(link?.getAttribute("target")).toBe("_blank");
     });
   });
 
