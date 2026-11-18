@@ -135,10 +135,10 @@ describe("InstanceSourcesContent", () => {
     expect(links()).toEqual(["alpha reel"]);
   });
 
-  it("offers a short list of statuses and no Scored or Excluded option", async () => {
+  it("offers a short list of statuses, without Scored, Published or Excluded", async () => {
     await render([makeSource()]);
     const options = Array.from(document.querySelectorAll("select")[0]!.querySelectorAll("option")).map((o) => o.textContent);
-    expect(options).toEqual(["All statuses", "Processing", "Not scored yet", "Published", "Failed"]);
+    expect(options).toEqual(["All statuses", "Processing", "Not scored yet", "Failed"]);
   });
 
   it("keeps the Scored Sources on the Ready tab, out of Other", async () => {
