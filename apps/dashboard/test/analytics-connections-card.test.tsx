@@ -64,7 +64,7 @@ describe("Analytics connections card", () => {
 
   it("says an unconfigured adapter reads through its Publisher's connection", async () => {
     await render();
-    expect(container.textContent).toContain("reads through the postiz Publisher's connection");
+    expect(container.textContent).toContain("Reads through the postiz Publisher's connection");
   });
 
   it("saves the URL, the key and the options the package declares", async () => {
@@ -72,7 +72,7 @@ describe("Analytics connections card", () => {
     await type("analytics-url-postiz", "https://postiz.example.com");
     await type("analytics-key-postiz", "secret");
     await type("analytics-option-postiz-lookbackDays", "30");
-    await act(async () => button("Save connection").click());
+    await act(async () => button("Save changes").click());
     expect(save).toHaveBeenCalledWith({
       instanceId: "inst-1",
       adapter: "postiz",
@@ -87,7 +87,7 @@ describe("Analytics connections card", () => {
     await render();
     expect((document.getElementById("analytics-key-postiz") as HTMLInputElement).value).toBe("");
     expect((document.getElementById("analytics-option-postiz-lookbackDays") as HTMLInputElement).value).toBe("14");
-    await act(async () => button("Save connection").click());
+    await act(async () => button("Save changes").click());
     expect(save).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz", url: "https://p.example.com", options: { lookbackDays: 14 } });
   });
 

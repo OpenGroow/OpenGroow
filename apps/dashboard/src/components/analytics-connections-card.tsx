@@ -8,6 +8,7 @@ import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -73,65 +74,62 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
     }
   }
 
+  const publisherNote = adapter.configured
+    ? null
+    : adapter.publisher
+      ? `Reads through the ${adapter.publisher} Publisher's connection until you set one here.`
+      : "Not configured: nothing is measured with it yet.";
   return (
-    <Card className="grid gap-4 p-5" aria-label={`${adapter.name} analytics connection`}>
-      <div className="flex items-center gap-3">
-        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-10 rounded-lg object-contain" />
-        <div className="grid gap-1">
-        <h3 className="m-0 text-base font-semibold">{adapter.name}</h3>
-        <p className="m-0 text-sm text-muted-foreground">
-          {adapter.configured
-            ? "Reads with this connection."
-            : adapter.publisher
-              ? `Not configured: it reads through the ${adapter.publisher} Publisher's connection. Set one here to use another instance or key.`
-              : "Not configured: nothing is measured with it yet."}
-        </p>
+    <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
+      <header className="flex items-center gap-4">
+        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
+        <div className="grid flex-1 gap-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>
+            {adapter.configured ? <StatusBadge tone="active" label="Own connection" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="warning" label="Not configured" />}
+          </div>
+          {publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
         </div>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor={`analytics-url-${adapter.adapter}`}>{adapter.name} URL</Label>
-          <Input id={`analytics-url-${adapter.adapter}`} autoComplete="off" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor={`analytics-key-${adapter.adapter}`}>API key</Label>
-          <Input
+      </header>
+      <Card className="gap-4 p-5">
+        <h4 className="m-0 text-base font-semibold">Connection</h4>
+        <div className="grid gap-4 md:grid-cols-2">
+          <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
+          <ConnectionKeyField
             id={`analytics-key-${adapter.adapter}`}
-            type="password"
-            autoComplete="off"
             placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={setApiKey}
           />
-        </div>
-        {adapter.optionDecls.map((decl) => (
-          <div key={decl.key} className="grid gap-2">
-            <Label htmlFor={`analytics-option-${adapter.adapter}-${decl.key}`}>{decl.label}</Label>
-            <Input
-              id={`analytics-option-${adapter.adapter}-${decl.key}`}
+          {adapter.optionDecls.map((decl) => (
+            <div key={decl.key} className="grid gap-2">
+              <Label htmlFor={`analytics-option-${adapter.adapter}-${decl.key}`}>{decl.label}</Label>
+              <Input
+                id={`analytics-option-${adapter.adapter}-${decl.key}`}
                 type={decl.type === "number" ? "number" : "text"}
-              {...(decl.min !== undefined ? { min: decl.min } : {})}
-              {...(decl.max !== undefined ? { max: decl.max } : {})}
-              value={options[decl.key] ?? ""}
-              onChange={(e) => setOptions((prev) => ({ ...prev, [decl.key]: e.target.value }))}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" size="lg" disabled={!url.trim() || busy} onClick={() => void handleSave()}>
-          {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
-          Save connection
-        </Button>
-        {adapter.configured ? (
-          <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void handleRemove()}>
-            <Trash2 aria-hidden="true" />
-            Remove
+                {...(decl.min !== undefined ? { min: decl.min } : {})}
+                {...(decl.max !== undefined ? { max: decl.max } : {})}
+                value={options[decl.key] ?? ""}
+                onChange={(e) => setOptions((prev) => ({ ...prev, [decl.key]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" size="lg" disabled={!url.trim() || busy} onClick={() => void handleSave()}>
+            {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
+            Save changes
           </Button>
-        ) : null}
-        {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
-      </div>
-    </Card>
+          {adapter.configured ? (
+            <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void handleRemove()}>
+              <Trash2 aria-hidden="true" />
+              Remove
+            </Button>
+          ) : null}
+          {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
+        </div>
+      </Card>
+    </section>
   );
 }
 

@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PanelIcon } from "@/components/opengroow/settings-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
@@ -251,7 +252,6 @@ function PublisherPanel({
   // The outcome of the last check: the hub is read only when the user asks.
   const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels">("configuration");
-  const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -454,45 +454,13 @@ function PublisherPanel({
         <Card className="gap-4 p-5">
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor={`publisher-url-${adapterId}`}>{installedPackage?.connectionUrlLabel ?? `${serviceName} URL`}</Label>
-              <div className={FIELD_CLASS}>
-                <Link2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <input
-                  id={`publisher-url-${adapterId}`}
-                  name="url"
-                  className={BARE_INPUT_CLASS}
-                  autoComplete="off"
-                  placeholder="https://"
-                  value={urlValue}
-                  onChange={(event) => setUrl(event.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`publisher-api-key-${adapterId}`}>API key</Label>
-              <div className={FIELD_CLASS}>
-                <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <input
-                  id={`publisher-api-key-${adapterId}`}
-                  name="apiKey"
-                  className={BARE_INPUT_CLASS}
-                  type={showKey ? "text" : "password"}
-                  autoComplete="off"
-                  placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : `${serviceName} API key`}
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <button
-                  type="button"
-                  aria-label={showKey ? "Hide API key" : "Show API key"}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowKey((v) => !v)}
-                >
-                  {showKey ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-                </button>
-              </div>
-            </div>
+            <ConnectionUrlField id={`publisher-url-${adapterId}`} label={installedPackage?.connectionUrlLabel ?? `${serviceName} URL`} value={urlValue} onChange={setUrl} />
+            <ConnectionKeyField
+              id={`publisher-api-key-${adapterId}`}
+              placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : `${serviceName} API key`}
+              value={apiKey}
+              onChange={setApiKey}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" size="lg" disabled={!urlValue.trim() || busy !== null} onClick={() => void handleSave()}>
