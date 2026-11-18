@@ -691,7 +691,7 @@ function ReadySourceRow({ source, instanceId, targets, selecting, selected, onTo
             </div>
           ) : null}
           <SourceThumbnail source={source} className="size-24" />
-          <div className="grid min-w-0 gap-2">
+          <div className="grid min-w-0 max-w-lg gap-2">
             <Link
               href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
               title={title}
