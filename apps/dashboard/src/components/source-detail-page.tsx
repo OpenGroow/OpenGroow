@@ -69,15 +69,6 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <SourceThumbnail source={{ ...source, thumbnailUrl }} className="h-36 w-28" />
           <div className="grid min-w-0 flex-1 gap-3">
-            {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists. */}
-            {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
-              <div className="flex justify-end">
-                <Button type="button" variant="accent" className="h-10" disabled={producing} onClick={() => void produce()}>
-                  <Sparkles />
-                  Produce
-                </Button>
-              </div>
-            ) : null}
             <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
               {source.marketing.summary ?? source.origin}
             </h1>
@@ -99,6 +90,14 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
               ) : null}
             </div>
           </div>
+          {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists.
+              Its own column, so the thumbnail, the title and the button start on the same line. */}
+          {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
+            <Button type="button" variant="accent" className="h-10 shrink-0 sm:self-start" disabled={producing} onClick={() => void produce()}>
+              <Sparkles />
+              Produce
+            </Button>
+          ) : null}
         </div>
         {source.status === "processing" && source.retryRequested ? (
           <p className="m-0 text-sm text-muted-foreground">
