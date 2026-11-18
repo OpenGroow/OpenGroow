@@ -122,21 +122,23 @@ export async function ingestSources(
     // The same post, captured again (another day, another share link): one
     // Source per post and Agent, so it is not scored and routed twice. The
     // older one stays, with its score and its Missions.
+    // An origin that is not a web page (a search keyword) has no key: it is
+    // matched as written.
     const originKey = originKeyOf(common.origin);
-    const sameOrigin = await ctx.db
-      .query("sources")
-      .withIndex("by_instance_template_origin_capturedAt", (q) =>
-        q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("origin", common.origin),
-      )
-      .first();
-    const samePost = sameOrigin ?? (originKey === undefined
-      ? null
-      : await ctx.db
-          .query("sources")
-          .withIndex("by_instance_template_originKey", (q) =>
-            q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("originKey", originKey),
-          )
-          .first());
+    const samePost =
+      originKey === undefined
+        ? await ctx.db
+            .query("sources")
+            .withIndex("by_instance_template_origin_capturedAt", (q) =>
+              q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("origin", common.origin),
+            )
+            .first()
+        : await ctx.db
+            .query("sources")
+            .withIndex("by_instance_template_originKey", (q) =>
+              q.eq("instanceId", run.instanceId).eq("templateId", run.templateId).eq("originKey", originKey),
+            )
+            .first();
     if (samePost) {
       accepted.push(key);
       ids.set(index, samePost._id);
