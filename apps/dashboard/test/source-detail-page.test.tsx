@@ -288,6 +288,7 @@ describe("SourceDetailContent", () => {
       expect(link?.getAttribute("target")).toBe("_blank");
       expect(link?.className).not.toContain("text-primary"); // underline on hover, no blue
       expect(link?.textContent).toBe("Link"); // the URL itself is the tooltip
+      expect(link?.querySelector("svg")).toBeNull(); // no external-link icon
       expect(link?.getAttribute("title")).toBe("https://www.instagram.com/reel/abc/");
     });
   });
