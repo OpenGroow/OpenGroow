@@ -325,6 +325,16 @@ describe("InstanceSourcesContent", () => {
       expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel" });
     });
 
+    it("deletes a Ready Source after a confirmation", async () => {
+      await render([reel()], { tab: "ready", targets });
+      const button = (name: string, scope: ParentNode = document.body) => Array.from(scope.querySelectorAll("button")).find((b) => b.textContent?.trim() === name)!;
+      await act(async () => { button("Delete", document.querySelector("[aria-label='Ready sources'] li")!).click(); });
+      expect(removeManyMock).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Delete this Source?");
+      await act(async () => { button("Delete", document.querySelector("[role='dialog']")!).click(); });
+      expect(removeManyMock).toHaveBeenCalledWith({ sourceIds: ["s-reel"] });
+    });
+
     it("preselects the router's proposal", async () => {
       await render([reel({ routing: { state: "proposed", templateId: "@opengroow/social-engagement", missionType: "create_reel", rationale: "Fits" } })], { tab: "ready", targets });
       expect(routedToSelect().value).toBe("@opengroow/social-engagement::create_reel");
