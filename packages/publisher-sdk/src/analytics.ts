@@ -21,6 +21,11 @@ export function metricKindOf(publishableKind: string | undefined): MetricKind {
   return publishableKind === "article" ? "article" : "social";
 }
 
+/** Whether `metric` belongs to the vocabulary of `kind`. */
+export function isMetricOfKind(kind: MetricKind, metric: unknown): boolean {
+  return (METRIC_VOCABULARY[kind] as readonly unknown[]).includes(metric);
+}
+
 /** Keeps the metrics of the vocabulary of `kind` whose value is a finite number >= 0; ignores the rest. */
 export function pickMetrics(kind: MetricKind, raw: Record<string, unknown>): Record<string, number> {
   const out: Record<string, number> = {};
