@@ -128,16 +128,16 @@ describe("InstanceSourcesContent", () => {
       makeSource({ _id: "b", status: "failed", marketing: { summary: "beta reel" }, templateId: "@opengroow/social" }),
       makeSource({ _id: "c", status: "unavailable", marketing: { summary: "gamma reel" }, templateId: "@opengroow/social" }),
     ]);
-    await choose(1, "failed");
+    await choose(0, "failed");
     expect(links()).toEqual(["beta reel", "gamma reel"]); // Failed covers Unavailable
-    await choose(1, "all");
-    await choose(0, "@opengroow/seo");
+    await choose(0, "all");
+    await choose(1, "@opengroow/seo");
     expect(links()).toEqual(["alpha reel"]);
   });
 
   it("offers a short list of statuses and no Scored or Excluded option", async () => {
     await render([makeSource()]);
-    const options = Array.from(document.querySelectorAll("select")[1]!.querySelectorAll("option")).map((o) => o.textContent);
+    const options = Array.from(document.querySelectorAll("select")[0]!.querySelectorAll("option")).map((o) => o.textContent);
     expect(options).toEqual(["All statuses", "Processing", "Not scored yet", "Published", "Failed"]);
   });
 
@@ -147,9 +147,9 @@ describe("InstanceSourcesContent", () => {
       makeSource({ _id: "b", status: "processing", marketing: { summary: "beta reel" } }),
     ]);
     expect(links()).toEqual(["beta reel"]);
-    await choose(1, "processing");
+    await choose(0, "processing");
     expect(links()).toEqual(["beta reel"]);
-    await choose(1, "not-scored");
+    await choose(0, "not-scored");
     expect(links()).toEqual([]);
   });
 
