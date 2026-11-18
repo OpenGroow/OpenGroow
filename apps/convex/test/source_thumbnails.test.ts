@@ -27,6 +27,14 @@ describe("ogImageOf", () => {
     expect(ogImageOf('<meta property="og:image" content="https://p16-common-sign.tiktokcdn-eu.com/a.jpeg">')).toBe("https://p16-common-sign.tiktokcdn-eu.com/a.jpeg");
   });
 
+  it("ignores the placeholder TikTok serves when a video has no cover to show", () => {
+    // What a private video's page returns, for the short link and for the video page.
+    expect(ogImageOf('<meta property="og:image" content="https://sf16-sg.tiktokcdn.com/obj/eden-sg/kvyweh7vhohpqbog/cover-fallback.png"/>')).toBeUndefined();
+    expect(ogImageOf('<meta property="og:image" content="https://lf16-tiktok-common.ibytedtos.com/obj/tiktok-web-common-sg/mtact/static/images/tiktok-logo/poster-square.png"/>')).toBeUndefined();
+    // A real cover still passes.
+    expect(ogImageOf('<meta property="og:image" content="https://p16-sharing-sign.tiktokcdn-eu.com/tos-useast2a-i-photomode-euttp/ee606537a4d64c879be054d83b93b7a8~tplv.jpeg?x=1"/>')).toContain("tiktokcdn-eu.com");
+  });
+
   it("ignores an image from any other host, or over http", () => {
     expect(ogImageOf('<meta property="og:image" content="https://evil.example/a.jpg">')).toBeUndefined();
     expect(ogImageOf('<meta property="og:image" content="http://x.cdninstagram.com/a.jpg">')).toBeUndefined();
@@ -93,6 +101,21 @@ describe("source thumbnails", () => {
     const row = await t.run((ctx) => ctx.db.get(sourceId));
     expect(row?.thumbnailStorageId).toBeUndefined();
     expect(row?.thumbnailTriedAt).toBe(NOW);
+  });
+
+  it("clear drops a stored thumbnail and its file, and keeps the attempt recorded", async () => {
+    const t = convexTest(schema, modules);
+    const sourceId = await seed(t, "https://vm.tiktok.com/ZN8rwQB9j/");
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([1])], { type: "image/png" })));
+    await t.run((ctx) => ctx.db.patch(sourceId, { thumbnailStorageId: storageId, thumbnailTriedAt: 1 }));
+
+    expect(await t.mutation(internal.source_thumbnails.clear, { sourceId })).toEqual({ cleared: true });
+
+    const row = await t.run((ctx) => ctx.db.get(sourceId));
+    expect(row?.thumbnailStorageId).toBeUndefined();
+    expect(row?.thumbnailTriedAt).toBe(NOW);
+    expect(await t.run((ctx) => ctx.storage.get(storageId))).toBeNull();
+    expect(await t.mutation(internal.source_thumbnails.clear, { sourceId })).toEqual({ cleared: false });
   });
 
   it("never requests a page outside Instagram and TikTok", async () => {
