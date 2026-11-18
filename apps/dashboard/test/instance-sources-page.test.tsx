@@ -23,8 +23,8 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany", listBoard: "sources.listBoard" },
-    source_routing: { forceProduction: "source_routing.forceProduction", approveRouting: "source_routing.approveRouting", rejectRouting: "source_routing.rejectRouting" },
+    sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany" },
+    source_routing: { listTargets: "source_routing.listTargets", setRouteTarget: "source_routing.setRouteTarget", forceProduction: "source_routing.forceProduction" },
   },
 }));
 
@@ -70,14 +70,17 @@ describe("InstanceSourcesContent", () => {
 
   async function render(
     results: Array<ReturnType<typeof makeSource>>,
-    { status = "Exhausted", families, board }: { status?: string; families?: string[]; board?: unknown } = {},
+    { status = "Exhausted", families, tab = "all", targets = [] }: { status?: string; families?: string[]; tab?: "all" | "ready"; targets?: unknown[] } = {},
   ) {
     const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
-    useQueryMock.mockImplementation((key: string) => (key === "sources.listBoard" ? board : familyList));
+    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : familyList));
     usePaginatedQueryMock.mockReturnValue({ results, status, loadMore });
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
     });
+    // The Ready tab opens first; the exhaustive list lives on All.
+    const all = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("All") && b.getAttribute("aria-pressed") !== null);
+    if (tab === "all" && all) await act(async () => { all.click(); });
   }
 
   it("shows loading then empty states", async () => {
@@ -274,14 +277,57 @@ describe("InstanceSourcesContent", () => {
     });
   });
 
-  it("shows the production queue above the list once the board has something to show", async () => {
-    await render([makeSource()], { board: { ideas: [{ _id: "s-idea", label: "TikTok post", family: "social", origin: "https://example.com/a", summary: "A strong hook", score: 0.8, capturedAt: 1 }], toRoute: [], reviewRouting: false } });
-    expect(document.body.querySelector("[aria-label='Production queue'] [data-column='ideas']")?.textContent).toContain("A strong hook");
-    expect(document.body.querySelector("[data-column='to_route']")).not.toBeNull();
-  });
+  describe("Ready tab", () => {
+    const scored = { productFit: 0.9, replicability: 0.9, creativeStrength: 0.9 };
+    const targets = [
+      { templateId: "@opengroow/social-engagement", agentName: "social", missionType: "create_reel", label: "Create reel", description: "" },
+      { templateId: "@opengroow/content-creator", agentName: "content", missionType: "create_image", label: "Create image", description: "" },
+    ];
+    const reel = (overrides: Partial<Record<string, unknown>> = {}) =>
+      makeSource({ _id: "s-reel", sourceId: "instagram-reel", family: "social-video", marketing: { summary: "A Christmas reel" }, analysis: { creativeFeatures: { mediaType: "video" } }, scoring: { ...scored, replicationScore: 0.92 }, ...overrides });
 
-  it("hides the production queue when there is nothing in it", async () => {
-    await render([makeSource()], { board: { ideas: [], toRoute: [], reviewRouting: false } });
-    expect(document.body.querySelector("[aria-label='Production queue']")).toBeNull();
+    // The last native select of a row is "Routed to" (the two before it are the sort and the agent filter).
+    const routedToSelect = () => Array.from(document.querySelectorAll("[aria-label='Ready sources'] li select")).at(-1) as HTMLSelectElement;
+
+    it("lists the scored Sources by score with their format and a Produce button", async () => {
+      await render(
+        [reel(), makeSource({ _id: "s-low", marketing: { summary: "Lower" }, scoring: { ...scored, replicationScore: 0.5 } }), makeSource({ _id: "s-new", marketing: { summary: "Not scored yet" } })],
+        { tab: "ready", targets },
+      );
+      const rows = Array.from(document.body.querySelectorAll("[aria-label='Ready sources'] li"));
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.textContent).toContain("A Christmas reel");
+      expect(rows[0]!.textContent).toContain("Instagram Reel");
+      expect(rows[0]!.textContent).toContain("Score 92");
+      expect(rows[0]!.textContent).toContain("Produce");
+      expect(document.body.textContent).not.toContain("Not scored yet");
+    });
+
+    it("leaves out Sources already picked for production", async () => {
+      await render([reel(), makeSource({ _id: "s-picked", marketing: { summary: "Picked" }, scoring: scored, selectedAt: 1 })], { tab: "ready", targets });
+      expect(document.body.textContent).not.toContain("Picked");
+    });
+
+    it("saves the producer chosen in Routed to, and Produce calls forceProduction", async () => {
+      await render([reel()], { tab: "ready", targets });
+      const select = routedToSelect();
+      expect(select.value).toBe("auto");
+      const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+      await act(async () => {
+        setValue.call(select, "@opengroow/content-creator::create_image");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel", target: { templateId: "@opengroow/content-creator", missionType: "create_image" } });
+
+      removeManyMock.mockClear();
+      const produce = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.includes("Produce"))!;
+      await act(async () => { produce.click(); });
+      expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel" });
+    });
+
+    it("preselects the router's proposal", async () => {
+      await render([reel({ routing: { state: "proposed", templateId: "@opengroow/social-engagement", missionType: "create_reel", rationale: "Fits" } })], { tab: "ready", targets });
+      expect(routedToSelect().value).toBe("@opengroow/social-engagement::create_reel");
+    });
   });
 });

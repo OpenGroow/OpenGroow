@@ -315,7 +315,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
               </p>
               {reviewRouting ? (
                 <p className="m-0 text-sm text-muted-foreground">
-                  Each routing choice waits for your approval in the Sources page before production starts.
+                  Each routing choice waits on the Sources page until you press Produce.
                 </p>
               ) : null}
               <Outcome job={job} />

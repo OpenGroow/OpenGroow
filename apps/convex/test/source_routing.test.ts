@@ -523,31 +523,47 @@ describe("Source routing Job", () => {
       expect(state.job).toMatchObject({ lastOutcome: "succeeded" });
     });
 
-    it("approving creates the Mission, with an edited publication text", async () => {
+    it("Produce on a proposal creates the Mission from it, without another routing run", async () => {
       const t = convexTest(schema, modules);
       const { sourceId } = await routeReel(t, true);
 
-      await t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId, publish: { title: "Edited" } });
+      const result = await t.withIdentity(OWNER).mutation(api.source_routing.forceProduction, { sourceId });
 
-      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
+      expect(result.status).toBe("created");
+      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect(), runs: await ctx.db.query("runs").collect() }));
       expect(state.missions).toHaveLength(1);
-      expect(state.missions[0]).toMatchObject({ type: "create_reel", payload: { publish: { ...publish, title: "Edited" }, observationId: sourceId } });
+      expect(state.missions[0]).toMatchObject({ type: "create_reel", payload: { publish, observationId: sourceId } });
       expect(state.source?.productionMissionId).toBe(state.missions[0]!._id);
       expect(state.source?.routing).toMatchObject({ state: "approved", decidedBy: "user" });
-      await expect(t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId })).rejects.toThrow("No routing proposal");
+      expect(state.runs).toHaveLength(2);
     });
 
-    it("rejecting creates no Mission and keeps the Source out of the pool", async () => {
+    it("a producer chosen by hand makes Produce route to it, whatever the proposal was", async () => {
+      const t = convexTest(schema, modules);
+      await activateAgent(t, "@opengroow/visual-social");
+      const { sourceId, job } = await routeReel(t, true);
+      await t.withIdentity(OWNER).mutation(api.source_routing.setRouteTarget, { sourceId, target: { templateId: "@opengroow/visual-social", missionType: "create_carousel" } });
+
+      const result = await t.withIdentity(OWNER).mutation(api.source_routing.forceProduction, { sourceId });
+
+      expect(result.status).toBe("queued");
+      expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
+      await t.mutation(internal.source_routing.reserveWinner, { jobId: job._id, sourceId });
+      const runtime = (await t.run((ctx) => ctx.db.get(job._id)))?.runtime as { candidates: Array<{ templateId: string; missionType: string }> };
+      expect(runtime.candidates).toEqual([expect.objectContaining({ templateId: "@opengroow/visual-social", missionType: "create_carousel" })]);
+    });
+
+    it("refuses a producer that is not a candidate", async () => {
       const t = convexTest(schema, modules);
       const { sourceId } = await routeReel(t, true);
+      await expect(t.withIdentity(OWNER).mutation(api.source_routing.setRouteTarget, { sourceId, target: { templateId: "@nobody/none", missionType: "x" } })).rejects.toThrow("not available");
+    });
 
-      await t.withIdentity(OWNER).mutation(api.source_routing.rejectRouting, { sourceId });
-
-      const state = await t.run(async (ctx) => ({ source: await ctx.db.get(sourceId), missions: await ctx.db.query("missions").collect() }));
-      expect(state.missions).toHaveLength(0);
-      expect(state.source?.selectedAt).toBe(NOW);
-      expect(state.source?.routing).toMatchObject({ state: "rejected", decidedBy: "user" });
-      await expect(t.withIdentity(OWNER).mutation(api.source_routing.approveRouting, { sourceId })).rejects.toThrow("No routing proposal");
+    it("lists the producers a Source can be routed to", async () => {
+      const t = convexTest(schema, modules);
+      await routeReel(t, true);
+      const targets = await t.withIdentity(OWNER).query(api.source_routing.listTargets, { instanceId: INSTANCE });
+      expect(targets).toEqual(expect.arrayContaining([expect.objectContaining({ templateId: "@opengroow/openmontage-agent", missionType: "create_reel" })]));
     });
 
     it("auto mode still records the decision as approved by the agent", async () => {

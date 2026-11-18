@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Trash2, Video } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Music2, Sparkles, Trash2, Users, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,7 +16,8 @@ import { PageHeader } from "@/components/opengroow/page-header";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Card } from "@/components/ui/card";
-import { UpstreamColumns } from "@/src/components/source-board-columns";
+import { Badge } from "@/components/ui/badge";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -44,9 +45,17 @@ type SourceRow = Pick<
   | "producedAt"
   | "publishedAt"
   | "excluded"
+  | "sourceId"
+  | "analysis"
+  | "routing"
+  | "routeTo"
 > & { _id: string };
 
 const PAGE_SIZE = 50;
+
+// The Ready tab lists the Sources the pipeline calls Scored: analysed, scored
+// and not picked for production yet.
+const READY_TAB_STAGE = "Scored";
 
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
@@ -87,12 +96,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const removeMany = useMutation(api.sources.removeMany);
-  // The two steps before a Mission exists (ADR-076): once a Source is routed and
-  // approved, its production Mission lands in "To do" on the Missions board.
-  const board = useQuery(api.sources.listBoard, { instanceId });
-  const forceProduction = useMutation(api.source_routing.forceProduction);
-  const approveRouting = useMutation(api.source_routing.approveRouting);
-  const rejectRouting = useMutation(api.source_routing.rejectRouting);
+  const [tab, setTab] = useState<"ready" | "all">("ready");
   const {
     results: sources,
     status,
@@ -175,21 +179,27 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             <StatTile icon={Ban} label="Unavailable" value={count((s) => s.status === "unavailable")} />
           </section>
 
-          {board !== undefined && (board.ideas.length > 0 || board.toRoute.length > 0 || board.reviewRouting) ? (
-            <section aria-label="Production queue" className="grid gap-4 md:grid-cols-2">
-              <UpstreamColumns
-                projectId={instanceId}
-                query={needle}
-                ideas={board.ideas}
-                toRoute={board.toRoute}
-                reviewRouting={board.reviewRouting}
-                onProduce={async (sourceId) => { await forceProduction({ sourceId: sourceId as Id<"sources"> }); }}
-                onApprove={async (sourceId) => { await approveRouting({ sourceId: sourceId as Id<"sources"> }); }}
-                onReject={async (sourceId) => { await rejectRouting({ sourceId: sourceId as Id<"sources"> }); }}
-              />
-            </section>
+          <FilterChips
+            label="Sources view"
+            value={tab}
+            onChange={(id) => setTab(id === "all" ? "all" : "ready")}
+            options={[
+              { id: "ready", label: "Ready", count: count((source) => stageOf(source) === READY_TAB_STAGE) },
+              { id: "all", label: "All", count: sources.length },
+            ]}
+          />
+
+          {tab === "ready" ? (
+            <ReadySources
+              sources={sources}
+              instanceId={instanceId}
+              hasMore={hasMore}
+              loadingMore={status === "LoadingMore"}
+              onLoadMore={() => loadMore(PAGE_SIZE)}
+            />
           ) : null}
 
+          {tab === "all" ? (
           <section className="grid gap-5">
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
               <div className="flex flex-wrap gap-3">
@@ -305,6 +315,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
               ) : null}
             </div>
           </section>
+          ) : null}
         </>
       )}
 
@@ -468,6 +479,158 @@ function SourceRowItem({
               <ExternalLink />
             </Button>
           ) : null}
+        </div>
+      </Card>
+    </li>
+  );
+}
+
+type Target = { templateId: string; agentName: string; missionType: string; label: string; description: string };
+
+const AUTO_TARGET = "auto";
+const targetKey = (target: { templateId: string; missionType: string }) => `${target.templateId}::${target.missionType}`;
+
+// "Instagram Reel", "TikTok video", "Instagram image"…: the platform the Source
+// came from and the kind of media it is. Falls back to the declared label.
+function formatLabel(source: SourceRow): string {
+  const platform = source.sourceId === "instagram-reel" ? "Instagram" : source.sourceId === "tiktok-post" ? "TikTok" : undefined;
+  const features = (source.analysis as { creativeFeatures?: { mediaType?: unknown } } | undefined)?.creativeFeatures;
+  const media = features?.mediaType;
+  if (!platform || typeof media !== "string") return source.label;
+  const noun = media === "video" ? (platform === "Instagram" ? "Reel" : "video") : media;
+  return `${platform} ${noun}`;
+}
+
+type ReadySort = "score" | "newest";
+
+function ReadySources({ sources, instanceId, hasMore, loadingMore, onLoadMore }: {
+  sources: SourceRow[];
+  instanceId: string;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
+}) {
+  const [sort, setSort] = useState<ReadySort>("score");
+  const [agent, setAgent] = useState("all");
+  const [search, setSearch] = useState("");
+  const targets = (useQuery(api.source_routing.listTargets, { instanceId }) ?? []) as Target[];
+  const needle = search.trim().toLowerCase();
+  const ready = sources
+    .filter((source) => stageOf(source) === READY_TAB_STAGE)
+    .filter((source) => agent === "all" || source.templateId === agent)
+    .filter((source) => needle === "" || `${source.marketing.summary ?? ""} ${source.origin}`.toLowerCase().includes(needle))
+    .sort((a, b) => (sort === "score" ? (sourceScore(b.scoring) ?? -1) - (sourceScore(a.scoring) ?? -1) : b.createdAt - a.createdAt));
+  const agents = [...new Set(sources.filter((source) => stageOf(source) === READY_TAB_STAGE).map((source) => source.templateId))].sort();
+
+  return (
+    <section aria-label="Ready sources" className="grid gap-5">
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+        <p className="m-0 text-sm text-muted-foreground">
+          Scored Sources waiting for production. Pick where each one is routed to, then Produce.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <SearchField value={search} onChange={setSearch} label="Search ready sources" placeholder="Search sources…" />
+          <NativeSelect aria-label="Sort ready sources" className="h-11 sm:w-44" value={sort} onChange={(event) => setSort(event.target.value === "newest" ? "newest" : "score")}>
+            <option value="score">Highest score</option>
+            <option value="newest">Newest first</option>
+          </NativeSelect>
+          <NativeSelect aria-label="Filter ready sources by agent" className="h-11 sm:w-48" value={agent} onChange={(event) => setAgent(event.target.value)}>
+            <option value="all">All agents</option>
+            {agents.map((templateId) => (
+              <option key={templateId} value={templateId}>{agentLabel(templateId)}</option>
+            ))}
+          </NativeSelect>
+        </div>
+      </div>
+
+      {ready.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No scored Sources waiting for production.</p>
+      ) : (
+        <ul className="grid gap-3">
+          {ready.map((source) => (
+            <ReadySourceRow key={source._id} source={source} instanceId={instanceId} targets={targets} />
+          ))}
+        </ul>
+      )}
+
+      {hasMore ? (
+        <div>
+          <Button type="button" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
+            Load more
+          </Button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ReadySourceRow({ source, instanceId, targets }: { source: SourceRow; instanceId: string; targets: Target[] }) {
+  const setRouteTarget = useMutation(api.source_routing.setRouteTarget);
+  const produce = useMutation(api.source_routing.forceProduction);
+  const [busy, setBusy] = useState(false);
+  const title = source.marketing.summary ?? source.origin;
+  const score = sourceScore(source.scoring);
+  // What Produce will use: the producer chosen by hand, else the router's own
+  // proposal, else the router decides when Produce is pressed.
+  const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
+  const current = source.routeTo ?? proposal;
+  const value = current ? targetKey(current) : AUTO_TARGET;
+
+  async function onRouteChange(next: string): Promise<void> {
+    const target = targets.find((entry) => targetKey(entry) === next);
+    try {
+      await setRouteTarget({ sourceId: source._id as Id<"sources">, target: target ? { templateId: target.templateId, missionType: target.missionType } : null });
+    } catch (error: unknown) {
+      window.alert(extractConvexErrorMessage(error, "Could not change where the Source is routed to."));
+    }
+  }
+
+  async function onProduce(): Promise<void> {
+    setBusy(true);
+    try {
+      await produce({ sourceId: source._id as Id<"sources"> });
+    } catch (error: unknown) {
+      window.alert(extractConvexErrorMessage(error, "Failed to start production."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li>
+      <Card className="flex flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <SourceGlyph family={source.family} />
+          <div className="grid min-w-0 gap-2">
+            <Link
+              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
+              className="m-0 break-words text-base font-semibold text-foreground line-clamp-2"
+            >
+              {title}
+            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{formatLabel(source)}</Badge>
+              {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
+            <Users aria-hidden="true" className="size-4" />
+            Routed to:
+            <NativeSelect aria-label="Routed to" className="h-10 w-56" value={value} onChange={(event) => void onRouteChange(event.target.value)}>
+              <option value={AUTO_TARGET}>Auto (router decides)</option>
+              {targets.map((target) => (
+                <option key={targetKey(target)} value={targetKey(target)}>
+                  {agentLabel(target.templateId)} · {target.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+          <Button type="button" variant="accent" disabled={busy} onClick={() => void onProduce()}>
+            <Sparkles />
+            Produce
+          </Button>
         </div>
       </Card>
     </li>
