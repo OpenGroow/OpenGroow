@@ -4,7 +4,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AnalyticsConnectionsCard } from "../src/components/analytics-connections-card";
+import { AddAnalyticsButton, AnalyticsConnectionsCard } from "../src/components/analytics-connections-card";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -101,8 +101,9 @@ describe("Analytics connections card", () => {
   it("offers the hub's adapters that are not installed", async () => {
     adapters = [];
     catalogue.mockResolvedValueOnce({ entries: [{ packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "Postiz statistics" }] });
-    await render();
-    await act(async () => button("Install").click());
+    await act(async () => root.render(<AddAnalyticsButton instanceId="inst-1" />));
+    await act(async () => button("Add analytics").click());
+    await act(async () => button("Postiz analytics").click());
     expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
   });
 });

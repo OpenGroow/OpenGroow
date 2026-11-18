@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Download, Loader2, Save, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -121,16 +122,21 @@ function AdapterForm({ instanceId, adapter }: { instanceId: string; adapter: Ada
   );
 }
 
-/** The hub's Analytics Adapters that are not installed yet, with an install button. */
-function InstallFromHub({ installedNames }: { installedNames: string[] }) {
+/** The "Add analytics" button of the page header: a dialog listing the hub's Analytics Adapters not installed yet. */
+export function AddAnalyticsButton({ instanceId }: { instanceId: string | undefined }) {
+  const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
   const catalogue = useAction(api.hub_packages_node.catalogue);
   const install = useAction(api.hub_packages_node.install);
+  const [open, setOpen] = useState(false);
   const [entries, setEntries] = useState<Array<{ packageId: string; name: string; description: string }> | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
+    setEntries(null);
+    setError(null);
     void catalogue({ kind: "analytics" })
       .then((result) => {
         if (cancelled) return;
@@ -141,54 +147,81 @@ function InstallFromHub({ installedNames }: { installedNames: string[] }) {
     return () => {
       cancelled = true;
     };
-  }, [catalogue]);
+  }, [open, catalogue]);
 
+  const installedNames = (adapters ?? []).map((a) => a.name);
   const available = (entries ?? []).filter((entry) => !installedNames.includes(entry.name));
-  if (available.length === 0 && !error) return null;
+
   return (
-    <div className="grid gap-2">
-      {available.map((entry) => (
-        <Card key={entry.packageId} className="flex flex-row items-center gap-3 p-4">
-          <span className="grid flex-1">
-            <span className="font-medium">{entry.name} analytics</span>
-            {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={installing !== null}
-            onClick={() => {
-              setInstalling(entry.packageId);
-              setError(null);
-              install({ kind: "analytics", packageId: entry.packageId })
-                .then((result) => {
-                  if (result.status === "error") setError(result.errorMessage);
-                })
-                .catch((e) => setError(extractConvexErrorMessage(e, "The adapter could not be installed")))
-                .finally(() => setInstalling(null));
-            }}
-          >
-            {installing === entry.packageId ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
-            Install
-          </Button>
-        </Card>
-      ))}
-      {error ? <p className="m-0 text-sm text-destructive">{error}</p> : null}
-    </div>
+    <>
+      <Button type="button" size="lg" onClick={() => setOpen(true)}>
+        <Plus aria-hidden="true" />
+        Add analytics
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add analytics</DialogTitle>
+            <DialogDescription>Choose the service that will measure how your posts performed.</DialogDescription>
+          </DialogHeader>
+          {entries === null && !error ? (
+            <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Reading the hub
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {available.map((entry) => (
+                <button
+                  key={entry.packageId}
+                  type="button"
+                  disabled={installing !== null}
+                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
+                  onClick={() => {
+                    setInstalling(entry.packageId);
+                    setError(null);
+                    install({ kind: "analytics", packageId: entry.packageId })
+                      .then((result) => {
+                        if (result.status === "error") setError(result.errorMessage);
+                        else setOpen(false);
+                      })
+                      .catch((e) => setError(extractConvexErrorMessage(e, "The adapter could not be installed")))
+                      .finally(() => setInstalling(null));
+                  }}
+                >
+                  <span className="grid flex-1">
+                    <span className="text-base font-medium">{entry.name} analytics</span>
+                    {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
+                  </span>
+                  {installing === entry.packageId ? (
+                    <Loader2 className="size-4 animate-spin" aria-label="Installing" />
+                  ) : (
+                    <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
+                  )}
+                </button>
+              ))}
+              {available.length === 0 && entries !== null ? (
+                <p className="m-0 text-sm text-muted-foreground">Every analytics service of the hub is already added.</p>
+              ) : null}
+            </div>
+          )}
+          {error ? <p className="m-0 text-sm text-destructive">{error}</p> : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 /** The Analytics Adapters of the Project: installed ones to configure, and the hub's to install. Nothing while loading. */
 export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | undefined }) {
   const adapters = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
-  if (!instanceId || adapters === undefined) return null;
+  if (!instanceId || adapters === undefined || adapters.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">
       <h2 className="m-0 text-xl font-semibold">Connections</h2>
       {adapters.map((adapter) => (
         <AdapterForm key={adapter.adapter} instanceId={instanceId} adapter={adapter} />
       ))}
-      <InstallFromHub installedNames={adapters.map((a) => a.name)} />
     </section>
   );
 }
