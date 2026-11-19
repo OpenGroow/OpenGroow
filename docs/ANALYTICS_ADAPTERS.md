@@ -1,6 +1,6 @@
 # Writing an Analytics Adapter
 
-An Analytics Adapter reads how one Publication performed at a measuring service (ADR-078, terms in `docs/domain/publishing.md`). It is separate from a Publisher: the service that publishes a post is not always the one that measures it. The core owns the schedule, the retries, the Performance Snapshots and the closed metric vocabulary; the adapter only answers "what are the numbers of this post right now". Reference implementation: `packages/analytics/postiz` in the hub (groowhub), published as `@opengroow/analytics-postiz`. Contract: `packages/publisher-sdk/src/analytics.ts` (`ANALYTICS_CONTRACT_VERSION = 1`, versioned on its own, independent of the Publisher contract).
+An Analytics Adapter reads how one Publication performed at a measuring service (ADR-078, terms in `docs/domain/publishing.md`). It is separate from a Publisher: the service that publishes a post is not always the one that measures it. The core owns the schedule, the retries, the Performance Snapshots and the closed metric vocabulary; the adapter only answers "what are the numbers of this post right now". Reference implementation: `packages/analytics/postiz` in the hub (groowhub), published as `@opengroow/analytics-postiz`. Contract: `packages/publisher-sdk/src/analytics.ts` (`ANALYTICS_CONTRACT_VERSION = 2`, versioned on its own, independent of the Publisher contract).
 
 Only official packages verified by the hub may contain code, as for a Publisher (ADR-070, ADR-072). There is no isolation: the code runs in the core's Node actions with its rights.
 
