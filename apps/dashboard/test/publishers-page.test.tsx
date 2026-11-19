@@ -126,10 +126,32 @@ describe("Publishers page", () => {
     actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "" }] }));
     await render();
     await click(byText("Add provider"));
-    expect(text()).toContain("Analytics providers");
+    expect(text()).toContain("Analytics only providers");
     expect(text()).toContain("Google");
     expect(text()).not.toContain("Google analytics");
     expect(text()).not.toContain("Postiz analytics");
+  });
+
+  it("groups the Add provider dialog: publishers with analytics, publishers only, analytics only", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [];
+    hubAnalytics = [{ packageId: "@opengroow/analytics-both", name: "Both", description: "" }, { packageId: "@opengroow/analytics-seo", name: "Seo", description: "" }];
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [
+        { packageId: "@opengroow/publisher-both", name: "Both", description: "" },
+        { packageId: "@opengroow/publisher-blog", name: "Blog", description: "" },
+      ],
+    }));
+    await render();
+    await click(byText("Add provider"));
+    const page = text();
+    const at = (s: string) => page.indexOf(s);
+    expect(at("Analytics & Publish providers")).toBeGreaterThanOrEqual(0);
+    expect(at("Analytics & Publish providers")).toBeLessThan(at("Both"));
+    expect(at("Both")).toBeLessThan(at("Publishers only providers"));
+    expect(at("Publishers only providers")).toBeLessThan(at("Blog"));
+    expect(at("Blog")).toBeLessThan(at("Analytics only providers"));
+    expect(at("Analytics only providers")).toBeLessThan(at("Seo"));
   });
 
   it("has no Analytics tab when the Publisher has no analytics adapter", async () => {

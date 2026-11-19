@@ -170,6 +170,36 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     }
   }
 
+  // Publishers that come with an analytics package of the hub (or are already measured), and those that publish only.
+  const measuredAdapters = new Set([...analyticsCatalogue.map((e) => analyticsAdapterOf(e.packageId)), ...(analyticsProviders ?? []).map((a) => a.adapter)]);
+  const adapterOfChoice = (packageId: string) => installed?.find((p) => p.packageId === packageId)?.adapter ?? adapterOf(packageId);
+  const both = choices.filter((entry) => measuredAdapters.has(adapterOfChoice(entry.packageId)));
+  const publishOnly = choices.filter((entry) => !measuredAdapters.has(adapterOfChoice(entry.packageId)));
+
+  function choiceButton(entry: (typeof choices)[number]) {
+    const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
+    return (
+      <button
+        key={entry.packageId}
+        type="button"
+        disabled={installing !== null}
+        className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
+        onClick={() => void choose(entry.packageId)}
+      >
+        <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+        <span className="grid flex-1">
+          <span className="text-base font-medium">{entry.name}</span>
+          {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
+        </span>
+        {installing === entry.packageId ? (
+          <Loader2 className="size-4 animate-spin" aria-label="Installing" />
+        ) : isInstalled ? null : (
+          <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
+        )}
+      </button>
+    );
+  }
+
   const showAdding = adding !== null && !configured.has(adding);
   const empty = (publishers ?? []).length === 0 && !showAdding;
 
@@ -200,30 +230,10 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           ) : (
             <div className="grid gap-2">
               {catalogue.error ? <p className="m-0 text-sm text-destructive">The hub could not be read: {catalogue.error}</p> : null}
-              {analyticsChoices.length > 0 ? <h3 className="m-0 mt-1 text-sm font-medium text-muted-foreground">Publishers</h3> : null}
-              {choices.map((entry) => {
-                const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
-                return (
-                  <button
-                    key={entry.packageId}
-                    type="button"
-                    disabled={installing !== null}
-                    className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
-                    onClick={() => void choose(entry.packageId)}
-                  >
-                    <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
-                    <span className="grid flex-1">
-                      <span className="text-base font-medium">{entry.name}</span>
-                      {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
-                    </span>
-                    {installing === entry.packageId ? (
-                      <Loader2 className="size-4 animate-spin" aria-label="Installing" />
-                    ) : isInstalled ? null : (
-                      <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />
-                    )}
-                  </button>
-                );
-              })}
+              {both.length > 0 ? <h3 className="m-0 mt-1 text-sm font-medium text-muted-foreground">Analytics &amp; Publish providers</h3> : null}
+              {both.map(choiceButton)}
+              {publishOnly.length > 0 ? <h3 className="m-0 mt-3 text-sm font-medium text-muted-foreground">Publishers only providers</h3> : null}
+              {publishOnly.map(choiceButton)}
               {choices.length === 0 && !catalogue.error ? (
                 <p className="m-0 text-sm text-muted-foreground">
                   {catalogue.entries.length === 0 && (installed ?? []).length === 0 ? "The hub lists no publisher." : "Every publisher of the hub is already added."}
@@ -231,7 +241,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
               ) : null}
               {analyticsChoices.length > 0 ? (
                 <>
-                  <h3 className="m-0 mt-3 text-sm font-medium text-muted-foreground">Analytics providers</h3>
+                  <h3 className="m-0 mt-3 text-sm font-medium text-muted-foreground">Analytics only providers</h3>
                   {analyticsChoices.map((entry) => (
                     <button
                       key={entry.packageId}
