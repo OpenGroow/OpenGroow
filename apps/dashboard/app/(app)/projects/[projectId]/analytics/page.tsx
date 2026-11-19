@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Crown, Eye, ExternalLink, Layers, Loader2, RefreshCw, Users } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Crown, Eye, ExternalLink, Layers, Loader2, RefreshCw, Users } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -26,9 +26,11 @@ import {
   LEGACY_DECLARATION,
   bestPost,
   byRank,
+  changeOf,
   compact,
   currentReadings,
   formatValue,
+  formatVariation,
   latestMetrics,
   rankValue,
   shownMetrics,
@@ -98,6 +100,24 @@ function Thumbnail({ row, className }: { row: AnalyticsRow; className: string })
   return !row.thumbnailUrl && row.videoUrl ? <VideoFrame url={row.videoUrl} className={className} fallback={thumbnail} /> : thumbnail;
 }
 
+/** How a metric moved since the previous reading: "+34" under a counter, an arrow (green improving, red worsening) for a level. */
+function Change({ metric, row }: { metric: MetricDecl; row: AnalyticsRow }) {
+  const change = changeOf(metric, row);
+  if (!change) return null;
+  if (change.kind === "variation") {
+    const text = formatVariation(metric, change.delta);
+    return text ? <span className="ml-1 text-sm text-muted-foreground">{text}</span> : null;
+  }
+  const Icon = change.direction === "up" ? ArrowUpRight : change.direction === "down" ? ArrowDownRight : ArrowRight;
+  const tone = change.verdict === "improving" ? "text-emerald-600" : change.verdict === "worsening" ? "text-destructive" : "text-muted-foreground";
+  const label = change.verdict === "improving" ? "Improving" : change.verdict === "worsening" ? "Worsening" : "Steady";
+  return (
+    <span role="img" aria-label={label} data-trend={change.verdict} className={cn("ml-1 inline-flex align-middle", tone)}>
+      <Icon aria-hidden="true" className="size-4" />
+    </span>
+  );
+}
+
 /** One metric over the readings, with its dates: the shape of how the post grew. */
 function Trend({ metric, row }: { metric: string; row: AnalyticsRow }) {
   const points = currentReadings(row).flatMap((s) => (s.metrics[metric] === undefined ? [] : [{ at: s.takenAt, value: s.metrics[metric] }]));
@@ -157,7 +177,7 @@ function PostDetail({ row, declaration }: { row: AnalyticsRow; declaration: Decl
         <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {metrics.map((metric) => (
             <div key={metric.key} className="grid gap-0.5 rounded-xl border border-border p-3">
-              <dd className={cn("m-0 text-2xl tabular-nums", metric.key === declaration.primary ? "font-semibold" : "")}>{formatValue(metric, valueOf(metric, latest))}</dd>
+              <dd className={cn("m-0 text-2xl tabular-nums", metric.key === declaration.primary ? "font-semibold" : "")}>{formatValue(metric, valueOf(metric, latest))}<Change metric={metric} row={row} /></dd>
               <dt className="text-sm text-muted-foreground">{metric.label}</dt>
             </div>
           ))}
@@ -203,7 +223,7 @@ function PostRow({ row, columns, selected, onSelect }: { row: AnalyticsRow; colu
         ) : (
           <>
             {columns.map((metric) => (
-              <span key={metric.key} className="tabular-nums">{formatValue(metric, valueOf(metric, latest))}</span>
+              <span key={metric.key} className="tabular-nums">{formatValue(metric, valueOf(metric, latest))}<Change metric={metric} row={row} /></span>
             ))}
           </>
         )}

@@ -65,6 +65,25 @@ export function shownMetrics(declaration: Declaration, post: MeasuredPost): Metr
   return declaration.metrics.filter((m) => valueOf(m, latest) !== undefined);
 }
 
+export type Change =
+  | { kind: "variation"; delta: number }
+  | { kind: "trend"; direction: "up" | "down" | "flat"; verdict: "improving" | "worsening" | "steady" };
+
+/**
+ * How a metric moved since the previous reading of the post's current series: a counter has its variation,
+ * a level its trend, oriented by `better` (a lower position going down is improving). Undefined with fewer
+ * than two readings having a value.
+ */
+export function changeOf(decl: MetricDecl, post: MeasuredPost): Change | undefined {
+  const readings = currentReadings(post).filter((r) => valueOf(decl, r.metrics) !== undefined);
+  if (readings.length < 2) return undefined;
+  const [before, after] = [valueOf(decl, readings.at(-2)!.metrics)!, valueOf(decl, readings.at(-1)!.metrics)!];
+  if (decl.type === "counter") return { kind: "variation", delta: after - before };
+  const direction = after > before ? "up" : after < before ? "down" : "flat";
+  const good = decl.better === "lower" ? "down" : "up";
+  return { kind: "trend", direction, verdict: direction === "flat" ? "steady" : direction === good ? "improving" : "worsening" };
+}
+
 const primaryDecl = (declaration: Declaration) => declaration.metrics.find((m) => m.key === declaration.primary);
 
 /** The number a post is ranked by: the adapter's main metric. */
@@ -122,6 +141,12 @@ export const duration = (seconds: number | undefined): string => {
   const total = Math.round(seconds);
   return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, "0")}s`;
 };
+
+/** `+34`, `-5`; nothing for a counter that did not move. */
+export function formatVariation(decl: MetricDecl, delta: number): string | undefined {
+  if (delta === 0) return undefined;
+  return `${delta > 0 ? "+" : "-"}${formatValue(decl, Math.abs(delta))}`;
+}
 
 /** A value in the format its metric declares; a dash when there is none. */
 export function formatValue(decl: MetricDecl, value: number | undefined): string {
