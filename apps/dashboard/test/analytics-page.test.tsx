@@ -148,7 +148,7 @@ describe("Analytics page", () => {
   };
 
   it("shows a counter's total with its variation since the previous Snapshot", async () => {
-    declaration = SEARCH_CONSOLE;
+    adapters = [SEARCH_CONSOLE];
     rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 }), snap(7 * DAY, { clicks: 46 })] })];
     await render();
     expect(listed()[0]).toContain("46");
@@ -157,7 +157,7 @@ describe("Analytics page", () => {
   });
 
   it("shows no variation under a counter with a single Snapshot", async () => {
-    declaration = SEARCH_CONSOLE;
+    adapters = [SEARCH_CONSOLE];
     rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 })] })];
     await render();
     expect(listed()[0]).toContain("12");
@@ -166,7 +166,7 @@ describe("Analytics page", () => {
   });
 
   it("compares only the Snapshots of the post's current series", async () => {
-    declaration = SEARCH_CONSOLE;
+    adapters = [SEARCH_CONSOLE];
     rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 500 }, 0), snap(7 * DAY, { clicks: 20 }, 1)] })];
     await render();
     expect(listed()[0]).toContain("20");
@@ -174,7 +174,7 @@ describe("Analytics page", () => {
   });
 
   it("points an improving arrow when a level where lower is better goes down", async () => {
-    declaration = SEARCH_CONSOLE;
+    adapters = [SEARCH_CONSOLE];
     rows = [
       row({ title: "Better", snapshots: [snap(3 * DAY, { clicks: 1, position: 14.2 }), snap(7 * DAY, { clicks: 2, position: 11.8 })] }),
       row({ title: "Worse", snapshots: [snap(3 * DAY, { clicks: 1, position: 11.8 }), snap(7 * DAY, { clicks: 1, position: 14.2 })] }),
