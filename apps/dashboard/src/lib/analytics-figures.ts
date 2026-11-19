@@ -2,18 +2,12 @@
 // adapter's declaration of its metrics (ADR-079): the latest value of each
 // metric, derived figures (engagement), the ranking and the totals. Pure.
 
+import type { MetricDecl } from "@opengroow/publisher-sdk";
+
 export type Reading = { postSeries: number; takenAt: number; metrics: Record<string, number> };
 export type MeasuredPost = { snapshots: Reading[] };
 
-/** A metric an adapter declares (`MetricDecl` of the Publisher SDK). */
-export type MetricDecl = {
-  key: string;
-  label: string;
-  type: "counter" | "level";
-  format: "number" | "percent" | "duration";
-  better?: "higher" | "lower";
-  derive?: { sum: string[]; per: string };
-};
+export type { MetricDecl };
 export type Declaration = { metrics: MetricDecl[]; primary: string };
 
 /** What the page shows while no adapter is activated: no metric, so no column, tile or ranking. */

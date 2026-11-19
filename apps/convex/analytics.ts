@@ -2,7 +2,7 @@ import { v, type Infer } from "convex/values";
 import { collectDelayMs, DEFAULT_COLLECT_DELAYS_MS, type AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
-import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
+import { adapterOf, installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
 import { connectionFor, projectAnalyticsConnection } from "./analytics_connections.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
@@ -207,7 +207,7 @@ export const listForProject = query({
         .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
         .collect();
       // A row made before several links has no adapter: it belongs to the channel's first link.
-      const row = seriesRows.find((r) => chosen === undefined || (r.adapter ?? links[0]?.adapter.id) === chosen);
+      const row = seriesRows.find((r) => chosen === undefined || adapterOf(r.adapter, links) === chosen);
       // A channel with no Analytics Adapter is not measured: nothing to show for it.
       if (!row || row.state === "unmeasured") continue;
       if (chosen !== undefined && !links.some((l) => l.adapter.id === chosen)) continue;
@@ -216,7 +216,7 @@ export const listForProject = query({
           .query("performanceSnapshots")
           .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
           .collect()
-      ).filter((s) => chosen === undefined || !s.adapter || s.adapter === chosen);
+      ).filter((s) => chosen === undefined || adapterOf(s.adapter, links) === chosen);
       // The adapter declares what ranks its posts (ADR-079).
       const linked = links.find((l) => l.adapter.id === chosen)?.adapter ?? links[0]?.adapter;
       const primaryMetric = linked?.primary;
@@ -327,7 +327,7 @@ async function readingItem(ctx: Pick<QueryCtx, "db">, row: ReadingRow, adapters:
   const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
   const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
   // A row made before several links has no adapter: it reads through the channel's first link.
-  const link = (row.adapter ? links.find((l) => l.adapter.id === row.adapter) : links[0]) ?? null;
+  const link = links.find((l) => l.adapter.id === adapterOf(row.adapter, links)) ?? null;
   // The Project's own connection to the adapter, else (for the adapter of the Publisher's own service) the Publisher's.
   const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
   const connection = link ? connectionFor(await projectAnalyticsConnection(ctx, row.instanceId, link.adapter.id), publisher) : undefined;

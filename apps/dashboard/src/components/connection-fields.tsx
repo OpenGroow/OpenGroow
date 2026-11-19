@@ -2,7 +2,10 @@
 
 import { useRef, useState } from "react";
 import { Eye, EyeOff, FileJson, KeyRound, Link2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 // The URL and API key fields of a service connection, the same for a Publisher
 // and an Analytics Adapter: an icon in front of each, and the key can be shown.
@@ -50,23 +53,23 @@ export function ConnectionJsonSecretField({ id, label, placeholder, value, onCha
   return (
     <div className="grid gap-2 md:col-span-2">
       <Label htmlFor={id}>{label}</Label>
-      <textarea
+      <Textarea
         id={id}
         name="apiKey"
         rows={6}
         spellCheck={false}
         autoComplete="off"
-        className="w-full rounded-lg border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="font-mono"
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
       <div className="flex items-center gap-3">
-        <button type="button" className="inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline" onClick={() => picker.current?.click()}>
-          <FileJson className="size-4" aria-hidden="true" />
+        <Button type="button" variant="link" size="sm" className="px-0" onClick={() => picker.current?.click()}>
+          <FileJson aria-hidden="true" />
           Choose a file
-        </button>
-        <input ref={picker} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} onChange={(event) => void fillFrom(event.target.files?.[0])} />
+        </Button>
+        <Input ref={picker} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} aria-label="Choose a JSON file" onChange={(event) => void fillFrom(event.target.files?.[0])} />
         {fileError ? <span className="text-sm text-destructive">{fileError}</span> : null}
       </div>
     </div>
@@ -81,9 +84,9 @@ export function ConnectionKeyField({ id, label = "API key", placeholder, value, 
       <div className={FIELD_CLASS}>
         <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input id={id} name="apiKey" className={BARE_INPUT_CLASS} type={shown ? "text" : "password"} autoComplete="off" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />
-        <button type="button" aria-label={shown ? "Hide API key" : "Show API key"} className="shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setShown((v) => !v)}>
-          {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-        </button>
+        <Button type="button" variant="ghost" size="icon-xs" aria-label={shown ? "Hide API key" : "Show API key"} className="text-muted-foreground" onClick={() => setShown((v) => !v)}>
+          {shown ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+        </Button>
       </div>
     </div>
   );

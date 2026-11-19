@@ -109,7 +109,7 @@ function Change({ metric, row }: { metric: MetricDecl; row: AnalyticsRow }) {
     return text ? <span className="ml-1 text-sm text-muted-foreground">{text}</span> : null;
   }
   const Icon = change.direction === "up" ? ArrowUpRight : change.direction === "down" ? ArrowDownRight : ArrowRight;
-  const tone = change.verdict === "improving" ? "text-emerald-600" : change.verdict === "worsening" ? "text-destructive" : "text-muted-foreground";
+  const tone = change.verdict === "improving" ? "text-status-success" : change.verdict === "worsening" ? "text-destructive" : "text-muted-foreground";
   const label = change.verdict === "improving" ? "Improving" : change.verdict === "worsening" ? "Worsening" : "Steady";
   return (
     <span role="img" aria-label={label} data-trend={change.verdict} className={cn("ml-1 inline-flex align-middle", tone)}>
@@ -195,13 +195,14 @@ function PostRow({ row, columns, selected, onSelect }: { row: AnalyticsRow; colu
   const noReading = Object.keys(latest).length === 0;
   return (
     <li>
-      <button
+      <Button
         type="button"
+        variant="outline"
         aria-pressed={selected}
         data-publication={row.publicationId}
         onClick={onSelect}
         style={gridStyle(columns.length)}
-        className={cn(GRID, "w-full rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted", selected ? "border-primary bg-primary/10" : "border-border")}
+        className={cn(GRID, "h-auto w-full justify-normal rounded-xl bg-card px-4 py-3 text-left font-normal whitespace-normal")}
       >
         <span className="flex min-w-0 items-center gap-3">
           <Thumbnail row={row} className="size-14" />
@@ -228,7 +229,7 @@ function PostRow({ row, columns, selected, onSelect }: { row: AnalyticsRow; colu
           </>
         )}
         <span aria-hidden="true" className="text-muted-foreground">›</span>
-      </button>
+      </Button>
     </li>
   );
 }

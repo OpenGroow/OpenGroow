@@ -69,7 +69,7 @@ export const analyticsTables = {
     /** The delay after `published` this reading stands for. */
     delayMs: v.number(),
     takenAt: v.number(),
-    /** Metrics of the closed vocabulary of the Publication's kind. */
+    /** The metrics the Analytics Adapter declares (ADR-079), by key. */
     metrics: v.record(v.string(), v.number()),
     /** The Analytics Adapter that took the reading. Absent on Snapshots taken before several links: the channel's first link. */
     adapter: v.optional(v.string()),

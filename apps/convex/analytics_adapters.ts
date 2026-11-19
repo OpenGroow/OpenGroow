@@ -48,9 +48,12 @@ export function linkedAdapters(
   });
 }
 
-/** The first adapter a channel is linked to, or null: what a reading made before several links belongs to. */
-export function linkedAdapter(installed: readonly AnalyticsAdapterMeta[], publisherAdapter: string, stored: StoredLink) {
-  return linkedAdapters(installed, publisherAdapter, stored)[0] ?? null;
+/**
+ * The adapter a row or Snapshot belongs to: the one it records, else (made before several links)
+ * the channel's first link. Undefined when the channel has no link.
+ */
+export function adapterOf(recorded: string | undefined, links: ReadonlyArray<{ adapter: AnalyticsAdapterMeta }>): string | undefined {
+  return recorded ?? links[0]?.adapter.id;
 }
 
 /** For Node actions: the bundle of the installed Analytics Adapter `adapter`. */
