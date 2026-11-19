@@ -127,6 +127,54 @@ describe("Analytics page", () => {
     expect(container.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toBe("Views over time: 10, 30");
   });
 
+  const SEARCH_CONSOLE = {
+    primary: "clicks",
+    metrics: [
+      { key: "clicks", label: "Clicks", type: "counter", format: "number" },
+      { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+    ],
+  };
+
+  it("shows a counter's total with its variation since the previous Snapshot", async () => {
+    declaration = SEARCH_CONSOLE;
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 }), snap(7 * DAY, { clicks: 46 })] })];
+    await render();
+    expect(listed()[0]).toContain("46");
+    expect(listed()[0]).toContain("+34");
+    expect(detail()).toContain("+34");
+  });
+
+  it("shows no variation under a counter with a single Snapshot", async () => {
+    declaration = SEARCH_CONSOLE;
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 })] })];
+    await render();
+    expect(listed()[0]).toContain("12");
+    expect(listed()[0]).not.toMatch(/[+\u2212-]\d/);
+    expect(detail()).not.toMatch(/[+\u2212]\d/);
+  });
+
+  it("compares only the Snapshots of the post's current series", async () => {
+    declaration = SEARCH_CONSOLE;
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 500 }, 0), snap(7 * DAY, { clicks: 20 }, 1)] })];
+    await render();
+    expect(listed()[0]).toContain("20");
+    expect(listed()[0]).not.toMatch(/[+\u2212-]\d/);
+  });
+
+  it("points an improving arrow when a level where lower is better goes down", async () => {
+    declaration = SEARCH_CONSOLE;
+    rows = [
+      row({ title: "Better", snapshots: [snap(3 * DAY, { clicks: 1, position: 14.2 }), snap(7 * DAY, { clicks: 2, position: 11.8 })] }),
+      row({ title: "Worse", snapshots: [snap(3 * DAY, { clicks: 1, position: 11.8 }), snap(7 * DAY, { clicks: 1, position: 14.2 })] }),
+    ];
+    await render();
+    const better = container.querySelector('button[data-publication="pub-1"]')!;
+    const worse = container.querySelector('button[data-publication="pub-2"]')!;
+    expect(better.querySelector('[data-trend="improving"]')).not.toBeNull();
+    expect(better.querySelector('[data-trend="improving"]')?.getAttribute("aria-label")).toBe("Improving");
+    expect(worse.querySelector('[data-trend="worsening"]')).not.toBeNull();
+  });
+
   it("filters the posts by the search", async () => {
     rows = [row({ title: "Rituals", snapshots: [snap(DAY, { views: 9 })] }), row({ title: "Diorama", snapshots: [snap(DAY, { views: 5 })] })];
     await render();
