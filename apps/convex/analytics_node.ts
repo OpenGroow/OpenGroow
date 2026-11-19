@@ -92,7 +92,7 @@ export const refresh = action({
     }
     if (readings.length > 0) await ctx.runMutation(internal.analytics.recordRefreshed, { readings });
     // A thumbnail that cannot be found never fails a refresh.
-    await fillThumbnails(ctx, args.instanceId).catch(() => undefined);
+    await fillThumbnails(ctx, args.instanceId).catch((error) => console.error("Looking for the articles' thumbnails failed", error));
     return { read: readings.length, unavailable, failed, ...(error ? { error } : {}) };
   },
 });
