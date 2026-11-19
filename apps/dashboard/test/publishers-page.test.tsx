@@ -144,7 +144,7 @@ describe("Publishers page", () => {
     }));
     await render();
     await click(byText("Add provider"));
-    const page = text();
+    const page = document.querySelector('[role="dialog"]')?.textContent ?? "";
     const at = (s: string) => page.indexOf(s);
     expect(at("Analytics & Publish providers")).toBeGreaterThanOrEqual(0);
     expect(at("Analytics & Publish providers")).toBeLessThan(at("Both"));
@@ -152,6 +152,29 @@ describe("Publishers page", () => {
     expect(at("Publishers only providers")).toBeLessThan(at("Blog"));
     expect(at("Blog")).toBeLessThan(at("Analytics only providers"));
     expect(at("Analytics only providers")).toBeLessThan(at("Seo"));
+  });
+
+  it("titles the providers of the page: publish and analytics, publish only, analytics only", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [
+      { adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: false },
+      { adapter: "seo", name: "Google Search Console", optionDecls: [], configured: false },
+    ];
+    await render();
+    const page = text();
+    expect(page).toContain("Analytics & Publish providers");
+    expect(page).not.toContain("Publishers only providers");
+    expect(page.indexOf("Analytics & Publish providers")).toBeLessThan(page.indexOf("Analytics only providers"));
+    expect(page).toContain("Google Search Console");
+  });
+
+  it("titles a Publisher with no analytics adapter as publish only", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [];
+    await render();
+    expect(text()).toContain("Publishers only providers");
+    expect(text()).not.toContain("Analytics & Publish providers");
+    expect(text()).not.toContain("Analytics only providers");
   });
 
   it("has no Analytics tab when the Publisher has no analytics adapter", async () => {

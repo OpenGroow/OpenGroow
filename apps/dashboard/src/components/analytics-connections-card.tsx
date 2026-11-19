@@ -198,7 +198,7 @@ export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | 
   if (!instanceId || standalone.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">
-      <h2 className="m-0 text-xl font-semibold">Analytics providers</h2>
+      <h2 className="m-0 text-xl font-semibold">Analytics only providers</h2>
       {standalone.map((adapter) => (
         <AdapterForm key={adapter.adapter} instanceId={instanceId} adapter={adapter} />
       ))}

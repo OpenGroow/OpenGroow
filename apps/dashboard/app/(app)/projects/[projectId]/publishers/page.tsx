@@ -200,6 +200,9 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     );
   }
 
+  // The Publishers of the Project that are measured by an adapter that comes with them, and those that publish only.
+  const withAnalytics = (publishers ?? []).filter((p) => (analyticsProviders ?? []).some((a) => a.publisher === p.adapter));
+  const publishOnlyAdded = (publishers ?? []).filter((p) => !withAnalytics.includes(p));
   const showAdding = adding !== null && !configured.has(adding);
   const empty = (publishers ?? []).length === 0 && !showAdding;
 
@@ -269,7 +272,12 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       {empty ? (
         <Card className="p-5 text-sm text-muted-foreground">No publisher yet. Add one to publish your Agents&apos; content.</Card>
       ) : null}
-      {(publishers ?? []).map((publisher) => (
+      {withAnalytics.length > 0 ? <h2 className="m-0 text-xl font-semibold">Analytics &amp; Publish providers</h2> : null}
+      {withAnalytics.map((publisher) => (
+        <PublisherPanel key={publisher.adapter} instanceId={id} adapter={publisher.adapter} publisher={publisher} />
+      ))}
+      {publishOnlyAdded.length > 0 ? <h2 className="m-0 text-xl font-semibold">Publishers only providers</h2> : null}
+      {publishOnlyAdded.map((publisher) => (
         <PublisherPanel key={publisher.adapter} instanceId={id} adapter={publisher.adapter} publisher={publisher} />
       ))}
       {showAdding ? (
