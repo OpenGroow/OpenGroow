@@ -190,7 +190,7 @@ export const setAnalyticsLink = mutation({
     const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     if (!publisher.targets.some((t) => t.target === args.target)) throw new Error(`Unknown channel "${args.target}"`);
     const installed = await installedAnalyticsAdapters(ctx);
-    const links = args.analyticsAdapter === null ? [] : [args.analyticsAdapter].flat();
+    const links = args.analyticsAdapter === null ? [] : [...new Set([args.analyticsAdapter].flat())];
     for (const id of links) {
       const chosen = installed.find((a) => a.id === id);
       if (!chosen) throw new Error(`The Analytics Adapter "${id}" is not installed`);
@@ -202,6 +202,8 @@ export const setAnalyticsLink = mutation({
       targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, analyticsAdapter: links } : t)),
       updatedAt: Date.now(),
     });
+    // Posts published before the channel was linked get their readings now (only the ones still to come).
+    if (links.length > 0) await ctx.scheduler.runAfter(0, internal.analytics.backfill, { instanceId: args.instanceId });
   },
 });
 

@@ -3,6 +3,7 @@ import { internalMutation, internalQuery } from "./_generated/server.js";
 import { ownerIdFor } from "./instance_ownership.js";
 import { hasPublicThumbnail, postFace } from "./analytics_face.js";
 import { publishedOf } from "./analytics.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
 
 // The thumbnail of a published article, read from its public page and cached (the Publishable has none).
 
@@ -17,12 +18,15 @@ export const pending = internalQuery({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const publications = await publishedOf(ctx, args.instanceId);
+    const publishers = await projectPublishers(ctx, args.instanceId);
     const out: Array<{ publicationId: (typeof publications)[number]["_id"]; url: string }> = [];
     for (const publication of publications) {
       if (!publication.externalUrl || out.length >= MAX_FETCHES) continue;
       const mission = await ctx.db.get(publication.missionId);
       if (!mission) continue;
-      const face = postFace(mission, publication.target.split(":")[0]);
+      // The same platform the Analytics page lists the post under.
+      const platform = channelOf(publishers, publication.target)?.channel.channelService ?? publication.target.split(":")[0];
+      const face = postFace(mission, platform);
       if (hasPublicThumbnail(face) || face.videoUrl) continue;
       const cached = await ctx.db
         .query("pageThumbnails")

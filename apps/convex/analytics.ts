@@ -130,7 +130,7 @@ export const forPublication = query({
   handler: async (ctx, args) => {
     const publication = await ctx.db.get(args.publicationId);
     if (!publication || !(await readOwnerId(ctx, publication.instanceId))) return null;
-    // Several adapters make several rows: the page shows the first.
+    // Several adapters make several rows: the page shows the first. Snapshots of every adapter are returned, each with its `adapter`.
     const [row] = await ctx.db
       .query("publicationAnalytics")
       .withIndex("by_publication_and_series", (q) => q.eq("publicationId", args.publicationId).eq("postSeries", publication.postSeries ?? 0))
@@ -206,10 +206,11 @@ export const listForProject = query({
     const publishers = await projectPublishers(ctx, args.instanceId);
     const adapters = await installedAnalyticsAdapters(ctx);
     const chosen = args.adapter ?? (await activatedAdapters(ctx, args.instanceId, adapters, publishers))[0]?.id;
-    const rows = [];
-    for (const publication of publications) {
+    // The reads of one Publication do not depend on another's: they run together.
+    const rows = await Promise.all(
+      publications.map(async (publication) => {
       const mission = await ctx.db.get(publication.missionId);
-      if (!mission) continue;
+      if (!mission) return null;
       const found = channelOf(publishers, publication.target);
       const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
       const series = publication.postSeries ?? 0;
@@ -219,8 +220,8 @@ export const listForProject = query({
         .collect();
       const row = seriesRows.find((r) => chosen === undefined || r.adapter === chosen);
       // A channel with no Analytics Adapter is not measured: nothing to show for it.
-      if (!row || row.state === "unmeasured") continue;
-      if (chosen !== undefined && !links.some((l) => l.adapter.id === chosen)) continue;
+      if (!row || row.state === "unmeasured") return null;
+      if (chosen !== undefined && !links.some((l) => l.adapter.id === chosen)) return null;
       const snapshots = (
         await ctx.db
           .query("performanceSnapshots")
@@ -237,7 +238,7 @@ export const listForProject = query({
       const pageImage = hasPublicThumbnail(face)
         ? undefined
         : (await ctx.db.query("pageThumbnails").withIndex("by_publication", (q) => q.eq("publicationId", publication._id)).first())?.url;
-      rows.push({
+      return {
         ...face,
         ...(pageImage ? { thumbnailUrl: pageImage } : {}),
         publishedAt: row.publishedAt,
@@ -256,9 +257,10 @@ export const listForProject = query({
         ...(row.reason ? { reason: row.reason } : {}),
         ...(!row.done ? { nextAt: row.nextAt } : {}),
         snapshots: snapshotView(snapshots),
-      });
-    }
-    return rows;
+      };
+      }),
+    );
+    return rows.filter((r) => r !== null);
   },
 });
 

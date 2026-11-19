@@ -14,7 +14,7 @@ function check(value: unknown, id: string): AnalyticsAdapter {
   const adapter = value as Partial<AnalyticsAdapter> | undefined;
   if (!adapter || typeof adapter.read !== "function") throw new Error(`The Analytics Adapter "${id}" does not export an adapter`);
   if (adapter.id !== id) throw new Error(`The Analytics Adapter "${id}" declares the id "${String(adapter.id)}"`);
-  if (typeof adapter.contractVersion !== "number" || adapter.contractVersion !== ANALYTICS_CONTRACT_VERSION) {
+  if (adapter.contractVersion !== ANALYTICS_CONTRACT_VERSION) {
     throw new Error(`The Analytics Adapter "${id}" implements contract ${String(adapter.contractVersion)}, this OpenGroow reads contract ${ANALYTICS_CONTRACT_VERSION}`);
   }
   if (adapter.needs !== "externalId" && adapter.needs !== "url") throw new Error(`The Analytics Adapter "${id}" declares an unknown key`);
