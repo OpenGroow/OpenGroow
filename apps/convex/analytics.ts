@@ -157,8 +157,9 @@ function postFace(mission: Doc<"missions">, platform: string | undefined) {
 const LIST_LIMIT = 200;
 
 /**
- * The Analytics Adapters a Project's channels are linked to, the first activated first: an adapter
- * is activated by the connection the Project made to it, else by the Publisher it comes with.
+ * The Analytics Adapters of a Project, the first activated first: those its channels are linked to
+ * and those it is connected to. An adapter is activated by the connection the Project made to it,
+ * else by the Publisher it comes with.
  */
 async function activatedAdapters(ctx: Pick<QueryCtx, "db">, instanceId: string, installed: AnalyticsAdapterMeta[], publishers: Doc<"publishers">[]) {
   const activatedAt = new Map<string, { at: number; adapter: AnalyticsAdapterMeta }>();
@@ -171,6 +172,12 @@ async function activatedAdapters(ctx: Pick<QueryCtx, "db">, instanceId: string, 
         if (!known || at < known.at) activatedAt.set(adapter.id, { at, adapter });
       }
     }
+  }
+  // An adapter the Project is connected to is activated too, whether or not a channel is linked to it yet.
+  for (const adapter of installed) {
+    const connection = await projectAnalyticsConnection(ctx, instanceId, adapter.id);
+    const known = activatedAt.get(adapter.id);
+    if (connection && (!known || connection._creationTime < known.at)) activatedAt.set(adapter.id, { at: connection._creationTime, adapter });
   }
   return [...activatedAt.values()].sort((a, b) => a.at - b.at || a.adapter.id.localeCompare(b.adapter.id)).map((x) => x.adapter);
 }

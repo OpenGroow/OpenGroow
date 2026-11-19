@@ -149,12 +149,25 @@ describe("several Analytics Adapters on one channel (ADR-079)", () => {
     const s = await seed();
     expect(await s.owner.query(api.analytics.adaptersForProject, { instanceId: INSTANCE_ID })).toEqual([
       { adapter: "postiz-analytics", name: "Postiz analytics", metrics: [views], primary: "views" },
+      { adapter: "web-analytics", name: "Web analytics", metrics: [clicks], primary: "clicks" },
     ]);
     await s.link(["postiz-analytics", "web-analytics"]);
     const adapters = await s.owner.query(api.analytics.adaptersForProject, { instanceId: INSTANCE_ID });
     expect(adapters.map((a) => a.adapter)).toEqual(["postiz-analytics", "web-analytics"]);
     const stranger = s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" });
     expect(await stranger.query(api.analytics.adaptersForProject, { instanceId: INSTANCE_ID })).toEqual([]);
+  });
+
+  it("offers an adapter the Project is connected to even when no channel is linked to it yet, and not another Project's", async () => {
+    const s = await seed();
+    await s.t.run(async (ctx) => {
+      await ctx.db.insert("analyticsConnections", { instanceId: "other-instance", adapter: "postiz-analytics", url: "", updatedAt: Date.now() });
+    });
+    // The seed links no channel: web-analytics is offered by its connection alone, after the Publisher's own.
+    const adapters = await s.owner.query(api.analytics.adaptersForProject, { instanceId: INSTANCE_ID });
+    expect(adapters.map((a) => a.adapter)).toEqual(["postiz-analytics", "web-analytics"]);
+    // Linked to no channel: its page lists no post.
+    expect(await s.owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, adapter: "web-analytics" })).toEqual([]);
   });
 
   it("shows every link on the channel and keeps a single-string link working", async () => {
