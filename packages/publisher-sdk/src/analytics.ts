@@ -29,6 +29,11 @@ export type AnalyticsSecretDecl = { label: string; kind: "text" | "json"; fields
 
 const DURATION_PATTERN = /^[1-9]\d*[hd]$/;
 
+/** A `collect` duration (`3d`, `12h`) in milliseconds. */
+export function collectDelayMs(duration: string): number {
+  return Number.parseInt(duration, 10) * (duration.endsWith("d") ? 24 : 1) * 3_600_000;
+}
+
 /** The closed metric vocabulary per kind of content, owned by OpenGroow. */
 export const METRIC_VOCABULARY = {
   social: ["views", "reach", "likes", "comments", "shares", "saves"],
