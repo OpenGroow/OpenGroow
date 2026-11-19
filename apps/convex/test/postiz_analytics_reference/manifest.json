@@ -1,10 +1,64 @@
 {
   "id": "postiz",
   "name": "Postiz",
-  "contractVersion": 1,
+  "contractVersion": 2,
   "needs": "externalId",
   "publisher": "postiz",
   "earliestDelayMs": 3600000,
+  "metrics": [
+    {
+      "key": "views",
+      "label": "Views",
+      "type": "counter",
+      "format": "number"
+    },
+    {
+      "key": "likes",
+      "label": "Likes",
+      "type": "counter",
+      "format": "number"
+    },
+    {
+      "key": "comments",
+      "label": "Comments",
+      "type": "counter",
+      "format": "number"
+    },
+    {
+      "key": "engagement",
+      "label": "Engagement",
+      "type": "level",
+      "format": "percent",
+      "derive": {
+        "sum": [
+          "likes",
+          "comments",
+          "shares",
+          "saves"
+        ],
+        "per": "views"
+      }
+    },
+    {
+      "key": "reach",
+      "label": "Reach",
+      "type": "counter",
+      "format": "number"
+    },
+    {
+      "key": "shares",
+      "label": "Shares",
+      "type": "counter",
+      "format": "number"
+    },
+    {
+      "key": "saves",
+      "label": "Saves",
+      "type": "counter",
+      "format": "number"
+    }
+  ],
+  "primary": "views",
   "options": [
     {
       "key": "lookbackDays",
