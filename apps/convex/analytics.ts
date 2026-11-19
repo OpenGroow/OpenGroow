@@ -39,15 +39,21 @@ export function readingDelays(templateDays: number[] | undefined, adapter: Analy
 /**
  * Called when a Publication becomes `published`: schedules its readings, once.
  * `backfill`: a Publication published before it was measured (or before its Mission type declared
- * `analytics`): its delays count from when it was published, only the ones still to come are
+ * `analytics`, in the Template version its Mission was made with): its delays count from when it was published, only the ones still to come are
  * scheduled, so no reading is recorded under a delay it does not stand for.
  */
 export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publications">, options: { backfill?: boolean } = {}): Promise<void> {
   // Only a Mission type that declares `analytics` is measured (ADR-078): none, no reading.
   const mission = await ctx.db.get(publication.missionId);
   if (!mission) return;
-  const template = await getTemplateRegistry(ctx).resolve(publication.instanceId, mission.templateId, mission.templateVersion);
-  const declaration = analyticsDeclarationFor(template?.manifest, mission.type);
+  const registry = getTemplateRegistry(ctx);
+  const pinned = await registry.resolve(publication.instanceId, mission.templateId, mission.templateVersion);
+  let declaration = analyticsDeclarationFor(pinned?.manifest, mission.type);
+  // A Publication made before its Mission type declared `analytics` was made under a version that does not: a backfill
+  // asks the Template the Project has now, since only how to measure is at stake, not how the Mission ran.
+  if (!declaration && options.backfill && mission.templateVersion !== undefined) {
+    declaration = analyticsDeclarationFor((await registry.resolve(publication.instanceId, mission.templateId))?.manifest, mission.type);
+  }
   if (!declaration) return;
   const now = Date.now();
   const publishedAt = options.backfill ? publication.updatedAt : now;

@@ -7,6 +7,7 @@ import { installPostiz } from "./postiz_fixture";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+import { setTemplateRegistryForTests } from "../template_registry";
 
 // ADR-078, issue #88: a Publication that becomes `published` receives
 // append-only Performance Snapshots 1, 3 and 7 days after. Driven through the
@@ -84,7 +85,7 @@ let answer: Answer;
 let reads: string[];
 const connections: AnalyticsConnection[] = [];
 
-async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled"; type?: string } = {}) {
+async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled"; type?: string; templateVersion?: string } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
   await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
@@ -108,6 +109,7 @@ async function seed(opts: { externalId?: string | null; externalUrl?: string; st
       ownerId: OWNER.subject,
       instanceId: INSTANCE_ID,
       templateId: "@test/social",
+      ...(opts.templateVersion ? { templateVersion: opts.templateVersion } : {}),
       type: opts.type ?? "make_image",
       payload: { publishTargets: ["instagram:love_youmake"] },
       status: "approved",
@@ -558,6 +560,32 @@ describe("Performance Snapshots (ADR-078)", () => {
     vi.advanceTimersByTime(DAY);
     await s.tick();
     expect((await s.view()).snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 3 * DAY]);
+  });
+
+  it("measures on Refresh a post whose Mission was made with a Template version that did not declare analytics, using the Project's current one", async () => {
+    const OLD = fixtureTemplate("@test/social", {
+      missionTypes: [{ type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" } }],
+    } as never);
+    const s = await seed({ status: "published", templateVersion: "1.0.0" });
+    // The Project has since installed a version that declares analytics; the Mission stays pinned to the old one.
+    setTemplateRegistryForTests({
+      resolve: async (_project, _id, version) => (version === "1.0.0" ? OLD : MEASURED),
+      list: async () => [MEASURED],
+    });
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result.read).toBe(1);
+    expect((await s.view()).snapshots).toHaveLength(1);
+  });
+
+  it("leaves unmeasured, even on Refresh, a post whose Mission type no Template version of the Project declares measured", async () => {
+    const OLD = fixtureTemplate("@test/social", {
+      missionTypes: [{ type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" } }],
+    } as never);
+    const s = await seed({ status: "published", templateVersion: "1.0.0" });
+    setTemplateRegistryForTests({ resolve: async () => OLD, list: async () => [OLD] });
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 0, unavailable: 0, failed: 0 });
+    expect((await s.view()).state).toBe("unmeasured");
   });
 
   it("reads a post older than every delay once, on Refresh, and keeps it complete", async () => {
