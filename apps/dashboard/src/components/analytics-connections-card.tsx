@@ -163,7 +163,8 @@ export function useInstallPublishersAnalytics(installedAdapters: string[] | unde
   const have = installedAdapters?.slice().sort().join(",");
   useEffect(() => {
     if (wanted === undefined || have === undefined || wanted === "") return;
-    const missing = wanted.split(",").filter((adapter) => !have.split(",").includes(adapter) && !tried.current.has(adapter));
+    const installed = new Set(have.split(","));
+    const missing = wanted.split(",").filter((adapter) => !installed.has(adapter) && !tried.current.has(adapter));
     if (missing.length === 0) return;
     missing.forEach((adapter) => tried.current.add(adapter));
     void catalogue({ kind: "analytics" })

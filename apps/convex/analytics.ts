@@ -60,7 +60,7 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
     delays,
     taken: 0,
     state: finished ? "no_data" : "waiting",
-    nextAt: finished ? publishedAt : publishedAt + delays[0],
+    nextAt: publishedAt + (delays[0] ?? 0),
     done: finished,
     updatedAt: now,
   });
@@ -80,6 +80,13 @@ export const backfill = internalMutation({
   },
 });
 
+/** Snapshots oldest first, as the pages read them. */
+function snapshotView(rows: Doc<"performanceSnapshots">[]) {
+  return [...rows]
+    .sort((a, b) => a.takenAt - b.takenAt)
+    .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source }));
+}
+
 /** The readings of a Publication: the state of its current post's series, why, when the next one is due, and all its Snapshots (oldest first, each with its `postSeries`). */
 export const forPublication = query({
   args: { publicationId: v.id("publications") },
@@ -98,27 +105,26 @@ export const forPublication = query({
       state: row?.state ?? ("unmeasured" as const),
       ...(row?.reason ? { reason: row.reason } : {}),
       ...(row && !row.done ? { nextAt: row.nextAt } : {}),
-      snapshots: snapshots
-        .sort((a, b) => a.takenAt - b.takenAt)
-        .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source })),
+      snapshots: snapshotView(snapshots),
     };
   },
 });
+
+const httpUrl = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined);
 
 /** What the Analytics page shows of the post: its title, its kind and an image to recognise it by. */
 function postFace(mission: Doc<"missions">, platform: string | undefined) {
   const base = publishableOf(mission);
   const served = base ? publishableForPlatform(base, platform) : undefined;
   const p = served?.ok ? served.publishable : base;
-  const str = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined);
-  const slides = Array.isArray(p?.slideUrls) ? str(p.slideUrls[0]) : undefined;
-  const thumbnailUrl = str(p?.coverUrl) ?? str(p?.imageUrl) ?? slides;
+  const slides = Array.isArray(p?.slideUrls) ? httpUrl(p.slideUrls[0]) : undefined;
+  const thumbnailUrl = httpUrl(p?.coverUrl) ?? httpUrl(p?.imageUrl) ?? slides;
   return {
     ...(typeof p?.title === "string" && p.title.trim() ? { title: p.title.trim() } : {}),
     ...(typeof p?.kind === "string" ? { kind: p.kind } : {}),
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     // A video with no cover: the page shows its first frame.
-    ...(!thumbnailUrl && p?.kind === "video" && str(p.videoUrl) ? { videoUrl: str(p.videoUrl) } : {}),
+    ...(!thumbnailUrl && p?.kind === "video" && httpUrl(p.videoUrl) ? { videoUrl: httpUrl(p.videoUrl) } : {}),
   };
 }
 
@@ -152,14 +158,14 @@ export const listForProject = query({
         .query("publicationAnalytics")
         .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
         .unique();
+      // A channel with no Analytics Adapter is not measured: nothing to show for it.
+      if (!row || row.state === "unmeasured") continue;
       const snapshots = await ctx.db
         .query("performanceSnapshots")
         .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
         .collect();
       const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
       const primaryMetric = analyticsDeclarationFor(template?.manifest, mission.type)?.primaryMetric;
-      // A channel with no Analytics Adapter is not measured: nothing to show for it.
-      if (!row || row.state === "unmeasured") continue;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
       rows.push({
@@ -170,7 +176,7 @@ export const listForProject = query({
         missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
         missionType: mission.type,
         target: publication.target,
-        platform: found?.channel.channelService ?? publication.target.split(":")[0],
+        platform,
         ...(found?.channel.channelName ? { channelName: found.channel.channelName } : {}),
         ...(found?.channel.channelProfile ? { channelProfile: found.channel.channelProfile } : {}),
         ...(found ? { publisherAdapter: found.publisher.adapter } : {}),
@@ -179,14 +185,25 @@ export const listForProject = query({
         state: row.state,
         ...(row.reason ? { reason: row.reason } : {}),
         ...(!row.done ? { nextAt: row.nextAt } : {}),
-        snapshots: snapshots
-          .sort((a, b) => a.takenAt - b.takenAt)
-          .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics })),
+        snapshots: snapshotView(snapshots),
       });
     }
     return rows;
   },
 });
+
+async function insertSnapshot(
+  ctx: MutationCtx,
+  row: Doc<"publicationAnalytics">,
+  snapshot: { delayMs: number; takenAt: number; metrics: Record<string, number>; source: "adapter" | "refresh" },
+) {
+  await ctx.db.insert("performanceSnapshots", {
+    publicationId: row.publicationId,
+    postSeries: row.postSeries,
+    instanceId: row.instanceId,
+    ...snapshot,
+  });
+}
 
 type ReadingRow = Doc<"publicationAnalytics">;
 
@@ -267,15 +284,7 @@ export const recordRefreshed = internalMutation({
     for (const { id, metrics } of args.readings) {
       const row = await ctx.db.get(id);
       if (!row) continue;
-      await ctx.db.insert("performanceSnapshots", {
-        publicationId: row.publicationId,
-        postSeries: row.postSeries,
-        instanceId: row.instanceId,
-        delayMs: now - row.publishedAt,
-        takenAt: now,
-        metrics,
-        source: "refresh",
-      });
+      await insertSnapshot(ctx, row, { delayMs: now - row.publishedAt, takenAt: now, metrics, source: "refresh" });
       // A post the service now answers for is no longer failing or empty; its schedule resumes.
       if (row.state === "failed" || row.state === "no_data") {
         await ctx.db.patch(row._id, {
@@ -303,48 +312,40 @@ export const outcomeV = v.union(
 type Outcome = Infer<typeof outcomeV>;
 
 async function applyOutcome(ctx: MutationCtx, id: Id<"publicationAnalytics">, outcome: Outcome): Promise<void> {
-    const row = await ctx.db.get(id);
-    if (!row || row.done) return;
-    const now = Date.now();
-    switch (outcome.kind) {
-      case "taken": {
-        await ctx.db.insert("performanceSnapshots", {
-          publicationId: row.publicationId,
-          postSeries: row.postSeries,
-          instanceId: row.instanceId,
-          delayMs: row.delays[row.taken],
-          takenAt: now,
-          metrics: outcome.metrics,
-          source: "adapter",
-        });
-        const taken = row.taken + 1;
-        const complete = taken >= row.delays.length;
-        await ctx.db.patch(row._id, {
-          taken,
-          state: complete ? "complete" : "waiting",
-          reason: undefined,
-          done: complete,
-          nextAt: complete ? row.nextAt : row.publishedAt + row.delays[taken],
-          updatedAt: now,
-        });
-        return;
-      }
-      case "no_data":
-        await ctx.db.patch(row._id, { state: "no_data", reason: undefined, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
-        return;
-      case "failed":
-        await ctx.db.patch(row._id, { state: "failed", reason: outcome.error, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
-        return;
-      case "post_unknown":
-        await ctx.db.patch(row._id, { state: "post_unknown", reason: outcome.reason, done: true, updatedAt: now });
-        return;
-      case "postponed":
-        await ctx.db.patch(row._id, { nextAt: outcome.nextAt, updatedAt: now });
-        return;
-      case "unmeasured":
-        await ctx.db.patch(row._id, { state: "unmeasured", reason: outcome.reason, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
-        return;
+  const row = await ctx.db.get(id);
+  if (!row || row.done) return;
+  const now = Date.now();
+  switch (outcome.kind) {
+    case "taken": {
+      await insertSnapshot(ctx, row, { delayMs: row.delays[row.taken], takenAt: now, metrics: outcome.metrics, source: "adapter" });
+      const taken = row.taken + 1;
+      const complete = taken >= row.delays.length;
+      await ctx.db.patch(row._id, {
+        taken,
+        state: complete ? "complete" : "waiting",
+        reason: undefined,
+        done: complete,
+        nextAt: complete ? row.nextAt : row.publishedAt + row.delays[taken],
+        updatedAt: now,
+      });
+      return;
     }
+    case "no_data":
+      await ctx.db.patch(row._id, { state: "no_data", reason: undefined, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
+      return;
+    case "failed":
+      await ctx.db.patch(row._id, { state: "failed", reason: outcome.error, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
+      return;
+    case "post_unknown":
+      await ctx.db.patch(row._id, { state: "post_unknown", reason: outcome.reason, done: true, updatedAt: now });
+      return;
+    case "postponed":
+      await ctx.db.patch(row._id, { nextAt: outcome.nextAt, updatedAt: now });
+      return;
+    case "unmeasured":
+      await ctx.db.patch(row._id, { state: "unmeasured", reason: outcome.reason, nextAt: now + RETRY_AFTER_MS, updatedAt: now });
+      return;
+  }
 }
 
 /** Records the outcomes of the readings tried in one tick. Never touches a Publication. */

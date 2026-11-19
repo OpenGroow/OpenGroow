@@ -3,10 +3,10 @@
 import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter } from "@opengroow/publisher-sdk";
 import { internal } from "../_generated/api.js";
 import type { ActionCtx } from "../_generated/server.js";
+import { loadCachedBundle } from "../bundle_loader_node.js";
 
 // Loads an installed Analytics Adapter package (ADR-078), like the Publisher
-// loader (ADR-072): only Node actions can evaluate the bundle, which is the
-// hub's, verified by digest at install, and runs with the core's rights.
+// loader (ADR-072), through `loadCachedBundle`.
 
 const cache = new Map<string, AnalyticsAdapter>();
 
@@ -29,18 +29,5 @@ function check(value: unknown, id: string): AnalyticsAdapter {
 export async function loadAnalyticsAdapter(ctx: ActionCtx, adapterId: string): Promise<AnalyticsAdapter | null> {
   const bundle = await ctx.runQuery(internal.analytics_adapters.bundleOf, { adapter: adapterId });
   if (!bundle) return null;
-  const key = `${bundle.packageId}#${bundle.digest}`;
-  const cached = cache.get(key);
-  if (cached) return cached;
-
-  let module: { default?: unknown };
-  try {
-    module = await import(/* webpackIgnore: true */ `data:text/javascript;base64,${Buffer.from(bundle.source).toString("base64")}`);
-  } catch (error) {
-    throw new Error(`The Analytics Adapter "${adapterId}" could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  const adapter = check(module.default, adapterId);
-  for (const k of cache.keys()) if (k.startsWith(`${bundle.packageId}#`)) cache.delete(k);
-  cache.set(key, adapter);
-  return adapter;
+  return loadCachedBundle(cache, bundle, `The Analytics Adapter "${adapterId}"`, (exported) => check(exported, adapterId));
 }

@@ -8,7 +8,7 @@ import { fetchHubPackageIndex, parseLocalHubUrl, type HubPackageEntry, type HubP
 import { env } from "./env.js";
 import { messageOf } from "./error_message.js";
 import { requireAuthenticatedUser } from "./project_agents/auth.js";
-import { describe, kindV, MAX_ARCHIVE_BYTES, MAX_UNPACKED_BYTES, parseTag, problemWith, providedId } from "./hub_package_kinds.js";
+import { describe, kindV, MAX_ARCHIVE_BYTES, MAX_UNPACKED_BYTES, parseTag, problemWith } from "./hub_package_kinds.js";
 import { resolveRegistrationPolicy } from "./auth_registration_policy.js";
 
 /**
@@ -104,7 +104,7 @@ export const install = action({
       const problem = problemWith(kind, entry, files);
       if (problem) throw new Error(`${entry.name} cannot be installed: ${problem}`);
       const version = parseTag(entry.tag)!.version; // `problemWith` accepted the tag
-      const meta = describe(kind, files);
+      const { meta, provides } = describe(kind, files);
       await ctx.runMutation(internal.hub_packages.replace, {
         packageId: entry.id,
         kind,
@@ -113,7 +113,7 @@ export const install = action({
         digest: gitOrigin.archiveDigest,
         verification: entry.verification,
         meta,
-        provides: providedId(meta),
+        provides,
         files,
       });
       return { status: "installed", packageId: entry.id, version };

@@ -8,13 +8,6 @@ import { internalQuery, type QueryCtx } from "./_generated/server.js";
 // (installing from the hub comes with the adapter packages). A package of kind
 // "analytics" leaves its data in `meta` and its id in `provides`.
 
-/**
- * What an installed Analytics Adapter declares, readable without its code (its manifest): id, name, the
- * key it needs, the Publisher it belongs to (its default for that Publisher's channels; an adapter that
- * needs the service's `externalId` works only with it), its earliest delay and the options a Project can set.
- */
-export type { AnalyticsAdapterMeta };
-
 type Ctx = Pick<QueryCtx, "db">;
 
 /** More installed Analytics Adapters than this is not expected. */

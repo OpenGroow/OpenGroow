@@ -9,7 +9,8 @@ import { internal } from "./_generated/api.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { requirePublisherMeta } from "./publisher_packages.js";
 import { servesPlatform } from "@opengroow/publisher-sdk";
-import { canMeasure, installedAnalyticsAdapters, linkedAdapter, type AnalyticsAdapterMeta } from "./analytics_adapters.js";
+import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
+import { canMeasure, installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
 import { allChannels, MAX_PUBLISHERS_PER_PROJECT, projectPublisher, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 
 // Project-level Publishers (ADR-069, ADR-075): several per Project, at most one
