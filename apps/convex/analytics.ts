@@ -325,6 +325,76 @@ export const adaptersForProject = query({
   },
 });
 
+/** Names listed in an empty-state sentence: never more than this many. */
+const REASON_NAMES_CAP = 3;
+
+const capped = (names: Iterable<string>) => [...new Set(names)].slice(0, REASON_NAMES_CAP);
+
+/**
+ * Why the Analytics page has nothing to list for an adapter, the dominant reason first: the Mission
+ * types of the published posts do not declare `analytics` (`not_opted_in`), their channels are not
+ * linked to the adapter (`not_linked`), their first reading is still to come (`waiting`), else `none`.
+ * Built from the names the declarations carry, never from a specific adapter or Template.
+ */
+export const emptyReason = query({
+  args: { instanceId: v.string(), adapter: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const none = { reason: "none" as const };
+    if (!(await readOwnerId(ctx, args.instanceId))) return none;
+    const publications = await ctx.db
+      .query("publications")
+      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
+      .order("desc")
+      .take(LIST_LIMIT);
+    const publishers = await projectPublishers(ctx, args.instanceId);
+    const adapters = await installedAnalyticsAdapters(ctx);
+    const chosenId = args.adapter ?? (await activatedAdapters(ctx, args.instanceId, adapters, publishers))[0]?.id;
+    const chosen = adapters.find((a) => a.id === chosenId);
+    const registry = getTemplateRegistry(ctx);
+    const missionTypes = new Set<string>();
+    const templates = new Set<string>();
+    const unlinkedChannels = new Set<string>();
+    let waiting = 0;
+    let nextAt: number | undefined;
+    for (const publication of publications) {
+      const mission = await ctx.db.get(publication.missionId);
+      if (!mission) continue;
+      // The Mission's pinned Template version, then the Project's current one, as the backfill resolves it.
+      const pinned = (await registry.resolve(publication.instanceId, mission.templateId, mission.templateVersion))?.manifest;
+      let manifest = pinned;
+      let declaration = analyticsDeclarationFor(pinned, mission.type);
+      if (!declaration && mission.templateVersion !== undefined) {
+        manifest = (await registry.resolve(publication.instanceId, mission.templateId))?.manifest;
+        declaration = analyticsDeclarationFor(manifest, mission.type);
+      }
+      if (!declaration) {
+        missionTypes.add(manifest?.missionTypes?.find((t) => t.type === mission.type)?.label ?? mission.type);
+        templates.add(manifest?.name ?? mission.templateId);
+        continue;
+      }
+      const found = channelOf(publishers, publication.target);
+      const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
+      if (!chosenId || !links.some((l) => l.adapter.id === chosenId)) {
+        unlinkedChannels.add(found?.channel.channelName ?? publication.target);
+        continue;
+      }
+      const row = await ctx.db
+        .query("publicationAnalytics")
+        .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", publication.postSeries ?? 0))
+        .collect()
+        .then((rows) => rows.find((r) => adapterOf(r.adapter, links) === chosenId));
+      if (row && row.state === "waiting" && !row.done) {
+        waiting += 1;
+        nextAt = nextAt === undefined ? row.nextAt : Math.min(nextAt, row.nextAt);
+      }
+    }
+    if (missionTypes.size > 0) return { reason: "not_opted_in" as const, missionTypes: capped(missionTypes), templates: capped(templates) };
+    if (unlinkedChannels.size > 0) return { reason: "not_linked" as const, channels: capped(unlinkedChannels), adapterName: chosen?.name ?? chosenId ?? "an analytics provider" };
+    if (waiting > 0 && nextAt !== undefined) return { reason: "waiting" as const, count: waiting, nextAt };
+    return none;
+  },
+});
+
 async function insertSnapshot(
   ctx: MutationCtx,
   row: Doc<"publicationAnalytics">,

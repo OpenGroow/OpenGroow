@@ -15,6 +15,7 @@ const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailab
 let rows: unknown[] | undefined | ((args: { adapter?: string }) => unknown[]) = [];
 let adapters: unknown[] = [];
 let unavailable: unknown[] = [];
+let emptyReason: unknown = { reason: "none" };
 // What a social adapter declares (Postiz): the page shows exactly what the adapter declares.
 const SOCIAL_ADAPTER = {
   adapter: "postiz",
@@ -38,6 +39,7 @@ vi.mock("convex/react", () => ({
     if (name === PUBLISHER_PACKAGES_LIST) return INSTALLED_PUBLISHERS;
     if (name === "analytics.adaptersForProject") return adapters;
     if (name === "analytics.unavailableForProject") return unavailable;
+    if (name === "analytics.emptyReason") return emptyReason;
     if (name === "analytics.listForProject") {
       if (args === undefined || (args as unknown) === "skip") return undefined;
       listArgs.push(args);
@@ -48,7 +50,7 @@ vi.mock("convex/react", () => ({
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject", unavailableForProject: "analytics.unavailableForProject" },
+    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject", unavailableForProject: "analytics.unavailableForProject", emptyReason: "analytics.emptyReason" },
     analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
@@ -95,6 +97,7 @@ describe("Analytics page", () => {
     rows = [];
     adapters = [SOCIAL_ADAPTER];
     unavailable = [];
+    emptyReason = { reason: "none" };
     listArgs.length = 0;
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -130,6 +133,26 @@ describe("Analytics page", () => {
   it("says so when no post is measured yet", async () => {
     await render();
     expect(text()).toContain("No measured posts yet");
+  });
+
+  it("names the Mission types whose Template does not declare analytics", async () => {
+    emptyReason = { reason: "not_opted_in", missionTypes: ["Create article (SEO)"], templates: ["SEO"] };
+    await render();
+    expect(text()).toContain("The Template (SEO) of this Project does not declare analytics for Create article (SEO). Update the Template to measure these posts.");
+  });
+
+  it("names the channels that are not linked to the adapter and links to the publishers page", async () => {
+    emptyReason = { reason: "not_linked", channels: ["Blog", "Docs"], adapterName: "Search Console" };
+    await render();
+    expect(text()).toContain("No channel (Blog, Docs) is linked to Search Console.");
+    expect(container.querySelector('a[href="publishers"]')).not.toBeNull();
+  });
+
+  it("counts the posts waiting for a first reading and gives the next date", async () => {
+    emptyReason = { reason: "waiting", count: 2, nextAt: Date.UTC(2026, 10, 25, 12) };
+    await render();
+    expect(text()).toContain("2 posts are waiting for their first reading, the next one on ");
+    expect(text()).toContain("2026");
   });
 
   it("adds up the posts of every platform in the totals and names the top performing one", async () => {

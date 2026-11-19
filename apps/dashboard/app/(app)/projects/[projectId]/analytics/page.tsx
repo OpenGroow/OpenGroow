@@ -293,6 +293,35 @@ function RefreshButton({ instanceId }: { instanceId: string | undefined }) {
   );
 }
 
+const joined = (names: string[]) => names.join(", ");
+
+/** Why no post is listed: the sentence of the dominant reason, built from the names the declarations carry. */
+function EmptyReason({ reason }: { reason: FunctionReturnType<typeof api.analytics.emptyReason> | undefined }) {
+  const publishers = (
+    <Link href="publishers" className="underline underline-offset-4">
+      Publishers &amp; Analytics
+    </Link>
+  );
+  let body: React.ReactNode = "No measured posts yet.";
+  if (reason?.reason === "not_opted_in") {
+    body = `The Template (${joined(reason.templates)}) of this Project does not declare analytics for ${joined(reason.missionTypes)}. Update the Template to measure these posts.`;
+  } else if (reason?.reason === "not_linked") {
+    body = (
+      <>
+        No channel ({joined(reason.channels)}) is linked to {reason.adapterName}. Link one in {publishers} &rsaquo; Channels.
+      </>
+    );
+  } else if (reason?.reason === "waiting") {
+    const next = new Date(reason.nextAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    body = `${reason.count} ${reason.count === 1 ? "post is" : "posts are"} waiting for their first reading, the next one on ${next}. Refresh reads the ones that are ready.`;
+  }
+  return (
+    <Card>
+      <CardContent className="text-muted-foreground">{body}</CardContent>
+    </Card>
+  );
+}
+
 export default function AnalyticsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedInstanceId = useResolvedProjectId(params);
   const instances = useAuthenticatedInstances<InstanceRecord>();
@@ -302,6 +331,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const [adapterId, setAdapterId] = useState<string | null>(null);
   const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
   const unavailable = useQuery(api.analytics.unavailableForProject, instanceId ? { instanceId } : "skip") ?? [];
+  const emptyReason = useQuery(api.analytics.emptyReason, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const rows = useQuery(api.analytics.listForProject, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
@@ -368,12 +398,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : all.length === 0 && unavailable.length === 0 ? (
-        <Card>
-          <CardContent className="text-muted-foreground">
-            No measured posts yet. A published post is measured when its Mission type declares <code>analytics</code> in its Template and its channel has an analytics provider (see{" "}
-            <Link href="publishers" className="underline underline-offset-4">Publishers &amp; Analytics</Link>). Refresh reads the posts already published.
-          </CardContent>
-        </Card>
+        <EmptyReason reason={emptyReason} />
       ) : (
         <>
           <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
