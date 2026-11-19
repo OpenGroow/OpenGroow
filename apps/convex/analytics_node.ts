@@ -6,6 +6,7 @@ import { internal } from "./_generated/api.js";
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
 import { loadAnalyticsAdapter } from "./analytics/load_node.js";
 import { messageOf } from "./error_message.js";
+import { fillThumbnails } from "./analytics_thumbnails_node.js";
 import { RETRY_AFTER_MS, type outcomeV } from "./analytics.js";
 
 type Item = Awaited<ReturnType<typeof readingsDue>>[number];
@@ -90,6 +91,8 @@ export const refresh = action({
       } else unavailable += 1;
     }
     if (readings.length > 0) await ctx.runMutation(internal.analytics.recordRefreshed, { readings });
+    // A thumbnail that cannot be found never fails a refresh.
+    await fillThumbnails(ctx, args.instanceId).catch(() => undefined);
     return { read: readings.length, unavailable, failed, ...(error ? { error } : {}) };
   },
 });

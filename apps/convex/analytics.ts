@@ -144,7 +144,7 @@ export const forPublication = query({
 const httpUrl = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined);
 
 /** What the Analytics page shows of the post: its title, its kind and an image to recognise it by. */
-function postFace(mission: Doc<"missions">, platform: string | undefined) {
+export function postFace(mission: Doc<"missions">, platform: string | undefined) {
   const base = publishableOf(mission);
   const served = base ? publishableForPlatform(base, platform) : undefined;
   const p = served?.ok ? served.publishable : base;
@@ -235,8 +235,13 @@ export const listForProject = query({
       const primaryMetric = linked?.primary;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
+      // An article's page gives its image when the Publishable has none.
+      const pageImage = face.thumbnailUrl
+        ? undefined
+        : (await ctx.db.query("pageThumbnails").withIndex("by_publication", (q) => q.eq("publicationId", publication._id)).first())?.url;
       rows.push({
         ...face,
+        ...(pageImage ? { thumbnailUrl: pageImage } : {}),
         publishedAt: row.publishedAt,
         publicationId: publication._id,
         missionId: mission._id,

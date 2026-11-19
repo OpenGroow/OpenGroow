@@ -76,4 +76,11 @@ export const analyticsTables = {
     /** `adapter`: a scheduled reading. `refresh`: one the owner asked for, outside the schedule. */
     source: v.union(v.literal("adapter"), v.literal("refresh")),
   }).index("by_publication", ["publicationId"]),
+
+  // The image a Publication's public page declares (og:image), looked up once: `url` is null when the page has none.
+  pageThumbnails: defineTable({
+    publicationId: v.id("publications"),
+    url: v.union(v.string(), v.null()),
+    fetchedAt: v.number(),
+  }).index("by_publication", ["publicationId"]),
 };
