@@ -41,6 +41,9 @@ describe("Analytics Adapter connection per Project", () => {
         publisher: "postiz",
         optionDecls: POSTIZ.options,
         configured: false,
+        packageId: "@opengroow/analytics-postiz-analytics",
+        version: "1.0.0",
+        digest: `sha256:${"0".repeat(64)}`,
       },
     ]);
   });

@@ -165,8 +165,58 @@ describe("Analytics connections card", () => {
   it("removes a configured connection", async () => {
     adapters = [{ adapter: "postiz", name: "Postiz", optionDecls: [], configured: true, url: "https://p.example.com", hasApiKey: true, options: {} }];
     await render();
+    expect(container.textContent).toContain("Danger zone");
     await act(async () => button("Remove").click());
+    expect(remove).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("Readings already taken are kept");
+    await act(async () => button("Remove Postiz").click());
     expect(remove).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz" });
+  });
+
+  it("has no Danger zone for an adapter that is not configured, nor inside a Publisher's page", async () => {
+    adapters = [{ adapter: "ga", name: "GA", optionDecls: [], configured: false }];
+    await render();
+    expect(container.textContent).not.toContain("Danger zone");
+    adapters = [{ adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: true, url: "https://p.example.com", hasApiKey: true, options: {} }];
+    await renderEmbedded();
+    expect(container.textContent).not.toContain("Danger zone");
+    expect(container.querySelector('[data-testid="package-updates"]')).toBeNull();
+  });
+
+  describe("Version", () => {
+    const PKG = { packageId: "@opengroow/analytics-ga", version: "1.0.0", digest: `sha256:${"a".repeat(64)}` };
+    const entry = (tag: string, digest = PKG.digest) => ({ packageId: PKG.packageId, name: "GA", description: "", tag, verification: "official", digest });
+    beforeEach(() => {
+      adapters = [{ adapter: "ga", name: "GA", optionDecls: [], configured: false, ...PKG }];
+    });
+
+    it("reads the hub on Check for updates, then installs the newer version as an analytics package", async () => {
+      await render();
+      expect(container.textContent).toContain("Current version1.0.0");
+      expect(catalogue).not.toHaveBeenCalled();
+      catalogue.mockResolvedValueOnce({ entries: [entry("analytics-ga@1.1.0")] });
+      await act(async () => button("Check for updates").click());
+      expect(catalogue).toHaveBeenCalledWith({ kind: "analytics" });
+      expect(container.textContent).toContain("1.1.0 available");
+      await act(async () => button("Update to 1.1.0").click());
+      expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: PKG.packageId });
+    });
+
+    it("says Up to date when version and digest match", async () => {
+      await render();
+      catalogue.mockResolvedValueOnce({ entries: [entry("analytics-ga@1.0.0")] });
+      await act(async () => button("Check for updates").click());
+      expect(container.textContent).toContain("Up to date");
+    });
+
+    it("offers a Reinstall when the same version was republished with another digest", async () => {
+      await render();
+      catalogue.mockResolvedValueOnce({ entries: [entry("analytics-ga@1.0.0", `sha256:${"b".repeat(64)}`)] });
+      await act(async () => button("Check for updates").click());
+      expect(container.textContent).toContain("Update available");
+      await act(async () => button("Reinstall").click());
+      expect(install).toHaveBeenCalledWith({ kind: "analytics", packageId: PKG.packageId });
+    });
   });
 
   it("installs the analytics package of an installed Publisher on its own, once", async () => {

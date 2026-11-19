@@ -185,6 +185,21 @@ describe("Publishers page", () => {
     expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: entry.packageId });
   });
 
+  it("offers a Reinstall when the same version was republished with another digest", async () => {
+    installedPublishers = [{ ...INSTALLED_PUBLISHERS[0], digest: `sha256:${"a".repeat(64)}` } as (typeof INSTALLED_PUBLISHERS)[number]];
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.0", verification: "official", digest: `sha256:${"b".repeat(64)}` }],
+    }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed" }));
+    await render();
+    await click(byText("Check for updates"));
+    expect(text()).toContain("Update available");
+    await click(byText("Reinstall"));
+    expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
+  });
+
   it("says Up to date for the installed version, and reports a hub that cannot be read", async () => {
     useQueryMock.mockReturnValue(PUBLISHER);
     actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));

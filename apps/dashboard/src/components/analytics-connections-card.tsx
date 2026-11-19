@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { PackageVersionCard } from "@/src/components/package-version-card";
+import { ProviderDangerZone } from "@/src/components/provider-danger-zone";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 
 // The connection of an Analytics Adapter, once per Project (ADR-078), set up
@@ -43,6 +45,8 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
     Object.fromEntries(adapter.optionDecls.map((d) => [d.key, String(adapter.options?.[d.key] ?? d.default)])),
   );
   const [busy, setBusy] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "active" | "error"; text: string } | null>(null);
 
   async function handleSave() {
@@ -73,6 +77,9 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
       setUrl("");
       setApiKey("");
       setMessage(null);
+      setConfirmRemove(false);
+    } catch (error) {
+      setRemoveError(extractConvexErrorMessage(error, "The connection could not be removed"));
     } finally {
       setBusy(false);
     }
@@ -129,12 +136,6 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
             {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
             Save changes
           </Button>
-          {adapter.configured && !embedded ? (
-            <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void handleRemove()}>
-              <Trash2 aria-hidden="true" />
-              Remove
-            </Button>
-          ) : null}
           {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
         </div>
       </Card>
@@ -153,6 +154,23 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         </div>
       </header>
       {card}
+      {adapter.packageId && adapter.version ? <PackageVersionCard kind="analytics" packageId={adapter.packageId} version={adapter.version} digest={adapter.digest} /> : null}
+      {adapter.configured ? (
+        <ProviderDangerZone
+          name={adapter.name}
+          summary="Remove this provider's connection from the Project."
+          consequences="Its connection and its options are removed from this Project, and nothing is measured with it until you set one again. Readings already taken are kept."
+          removing={busy}
+          disabled={busy}
+          error={removeError}
+          confirming={confirmRemove}
+          onConfirming={(open) => {
+            setRemoveError(null);
+            setConfirmRemove(open);
+          }}
+          onRemove={() => void handleRemove()}
+        />
+      ) : null}
     </section>
   );
 }

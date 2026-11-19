@@ -63,6 +63,7 @@ export const list = query({
     const out = [];
     for (const adapter of await installedAnalyticsAdapters(ctx)) {
       const stored = await projectAnalyticsConnection(ctx, args.instanceId, adapter.id);
+      const pkg = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "analytics").eq("provides", adapter.id)).unique();
       out.push({
         adapter: adapter.id,
         name: adapter.name,
@@ -72,6 +73,8 @@ export const list = query({
         // Absent means the default: a one-line text secret and a URL to give.
         ...(adapter.secret ? { secret: adapter.secret } : {}),
         ...(adapter.needsUrl === false ? { needsUrl: false } : {}),
+        // The installed package behind the adapter, for the card's Version.
+        ...(pkg ? { packageId: pkg.packageId, version: pkg.version, digest: pkg.digest } : {}),
         configured: Boolean(stored?.apiKey),
         ...(stored ? { url: stored.url, hasApiKey: Boolean(stored.apiKey), options: stored.options ?? {} } : {}),
       });
