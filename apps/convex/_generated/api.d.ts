@@ -23,6 +23,7 @@ import type * as auth_registration_lock from "../auth_registration_lock.js";
 import type * as auth_registration_policy from "../auth_registration_policy.js";
 import type * as bounded_http_call from "../bounded_http_call.js";
 import type * as brand_cores from "../brand_cores.js";
+import type * as bundle_loader_node from "../bundle_loader_node.js";
 import type * as command_batching from "../command_batching.js";
 import type * as command_dispatch_utils from "../command_dispatch_utils.js";
 import type * as commands from "../commands.js";
@@ -190,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   auth_registration_policy: typeof auth_registration_policy;
   bounded_http_call: typeof bounded_http_call;
   brand_cores: typeof brand_cores;
+  bundle_loader_node: typeof bundle_loader_node;
   command_batching: typeof command_batching;
   command_dispatch_utils: typeof command_dispatch_utils;
   commands: typeof commands;
