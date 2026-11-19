@@ -6,7 +6,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { packBundle, readJson, type CheckedPackage, type PackageJson } from "./pack-common.js";
-import { parseAnalyticsManifest, parseAnalyticsMetrics, type AnalyticsPackageManifest } from "../../publisher-sdk/src/analytics.js";
+import { parseAnalyticsManifest, parseAnalyticsMetrics, strayLabelMetric, type AnalyticsPackageManifest } from "../../publisher-sdk/src/analytics.js";
 
 /** Throws a readable message when the folder is not a valid Analytics Adapter package. */
 export function checkAnalyticsFolder(dir: string): CheckedPackage<AnalyticsPackageManifest> {
@@ -21,9 +21,10 @@ export function checkAnalyticsFolder(dir: string): CheckedPackage<AnalyticsPacka
     throw new Error(`The package is named ${pkg.name} but its manifest declares the adapter "${manifest.manifest.id}": expected the name analytics-${manifest.manifest.id}`);
   }
   try {
-    if (parseAnalyticsMetrics(readJson(join(dir, "data/metrics.json"))).adapter !== manifest.manifest.id) {
-      throw new Error(`is for another adapter than "${manifest.manifest.id}"`);
-    }
+    const data = parseAnalyticsMetrics(readJson(join(dir, "data/metrics.json")));
+    if (data.adapter !== manifest.manifest.id) throw new Error(`is for another adapter than "${manifest.manifest.id}"`);
+    const stray = strayLabelMetric(manifest.manifest.metrics, data.labels);
+    if (stray) throw new Error(`maps a label to "${stray}", which the manifest does not declare as a stored metric`);
   } catch (error) {
     throw new Error(`data/metrics.json ${error instanceof Error ? error.message : String(error)}`);
   }

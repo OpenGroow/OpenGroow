@@ -5,7 +5,7 @@ import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
-import { installAnalyticsAdapter, POSTIZ_ANALYTICS, WEB_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS, SOCIAL_METRICS, WEB_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
 
 // ADR-078, issue #92: a Publish target is linked to at most one Analytics Adapter, by default
 // the Publisher's own. Driven through the public Convex functions (Seam 1).
@@ -15,7 +15,7 @@ vi.mock("../analytics/load_node.js", () => ({
   loadAnalyticsAdapter: async (_ctx: unknown, id: string) => {
     loaded.ids.push(id);
     // Reports only long after publication: the reading is postponed, never settled.
-    return { id, name: id, contractVersion: 1, needs: "url", earliestDelayMs: 100 * 24 * 3_600_000, read: async () => ({ ok: false, error: "unused" }) };
+    return { id, name: id, contractVersion: 2, needs: "url", earliestDelayMs: 100 * 24 * 3_600_000, read: async () => ({ ok: false, error: "unused" }) };
   },
 }));
 vi.mock("../publisher/load_node.js", async () => (await import("./postiz_fixture")).postizLoaderModule);
@@ -86,7 +86,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
   });
 
   it("offers only the adapters that can measure this channel", async () => {
-    const s = await seed({ adapters: [POSTIZ_ANALYTICS, WEB_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0 }] });
+    const s = await seed({ adapters: [POSTIZ_ANALYTICS, WEB_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0, metrics: SOCIAL_METRICS, primary: "views" }] });
     const { options } = await s.analytics();
     expect(options.map((o) => o.id)).toEqual(["postiz-analytics", "web-analytics"]);
   });
@@ -113,7 +113,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
   });
 
   it("refuses an adapter that needs the id of another service's Publisher", async () => {
-    const s = await seed({ adapters: [POSTIZ_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0 }] });
+    const s = await seed({ adapters: [POSTIZ_ANALYTICS, { id: "other-analytics", name: "Other", needs: "externalId", publisher: "other", earliestDelayMs: 0, metrics: SOCIAL_METRICS, primary: "views" }] });
     await expect(s.link("other-analytics")).rejects.toThrow(/other-analytics.*other/);
     expect(await s.analytics()).toMatchObject({ adapterId: "postiz-analytics" });
   });

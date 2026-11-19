@@ -16,22 +16,8 @@ export type MetricDecl = {
 };
 export type Declaration = { metrics: MetricDecl[]; primary: string };
 
-/**
- * What a contract 1 adapter measures (closed social vocabulary, ADR-078): the page for such an adapter
- * looks as it did before adapters declared their metrics.
- */
-export const LEGACY_DECLARATION: Declaration = {
-  primary: "views",
-  metrics: [
-    { key: "views", label: "Views", type: "counter", format: "number" },
-    { key: "likes", label: "Likes", type: "counter", format: "number" },
-    { key: "comments", label: "Comments", type: "counter", format: "number" },
-    { key: "engagement", label: "Engagement", type: "level", format: "percent", derive: { sum: ["likes", "comments", "shares", "saves"], per: "views" } },
-    { key: "reach", label: "Reach", type: "counter", format: "number" },
-    { key: "shares", label: "Shares", type: "counter", format: "number" },
-    { key: "saves", label: "Saves", type: "counter", format: "number" },
-  ],
-};
+/** What the page shows while no adapter is activated: no metric, so no column, tile or ranking. */
+export const NO_DECLARATION: Declaration = { metrics: [], primary: "" };
 
 /** How many metrics are columns before the Columns menu. */
 export const DEFAULT_COLUMNS = 4;

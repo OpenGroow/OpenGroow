@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
-import { installAnalyticsAdapter } from "./analytics_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
@@ -31,16 +31,17 @@ useTemplateRegistry(
   [
     fixtureTemplate(TEMPLATE_ID, {
       missionTypes: [
-        { type: "make_reel", label: "Reel", payload: "{}", agentsMd: "a.md", publish: { kind: "video" }, analytics: { primaryMetric: "views" } },
+        { type: "make_reel", label: "Reel", payload: "{}", agentsMd: "a.md", publish: { kind: "video" }, analytics: {} },
         { type: "make_note", label: "Note", payload: "{}", agentsMd: "b.md", publish: { kind: "image" } },
       ],
     } as never),
   ],
 );
 
-async function seed() {
+async function seed(options: { adapter?: boolean } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
+  if (options.adapter !== false) await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
   await t.run(async (ctx) => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: "job-al", status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.tokenIdentifier });
@@ -200,9 +201,22 @@ describe("analytics.listForProject", () => {
   });
 });
 
+describe("analytics.unavailableForProject", () => {
+  it("lists the Publications whose channel has no Analytics Adapter, so the page reads 'analytics unavailable' rather than 'no data yet'", async () => {
+    const s = await seed({ adapter: false });
+    await s.publish({ target: "instagram:me", state: "unmeasured", reason: "No Analytics Adapter is linked to this channel", name: "Unlinked reel" });
+    await s.publish({ target: "tiktok:me", state: "waiting" });
+    await s.publish({ target: "tiktok:me", type: "make_note" });
+    const rows = await s.owner.query(api.analytics.unavailableForProject, { instanceId: INSTANCE_ID });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ platform: "instagram", channelName: "My IG", missionName: "Unlinked reel", reason: "No Analytics Adapter is linked to this channel" });
+    expect(await s.t.withIdentity(STRANGER).query(api.analytics.unavailableForProject, { instanceId: INSTANCE_ID })).toEqual([]);
+  });
+});
+
 describe("analytics.adaptersForProject", () => {
   it("gives the adapter the Project's channels are linked to with its metrics and ranking metric, to the owner only", async () => {
-    const s = await seed();
+    const s = await seed({ adapter: false });
     const metrics = [
       { key: "clicks", label: "Clicks", type: "counter" as const, format: "number" as const },
       { key: "position", label: "Position", type: "level" as const, format: "number" as const, better: "lower" as const },

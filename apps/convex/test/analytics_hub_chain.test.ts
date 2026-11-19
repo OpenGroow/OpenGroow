@@ -86,7 +86,7 @@ describe("pack -> serve -> install -> load -> read", () => {
     try {
       const result = await adapter!.read(
         { url: "https://postiz.example.com", apiKey: "k", options: { lookbackDays: 7 } },
-        { externalId: "post-1", kind: "social", publishedAt: Date.now() },
+        { externalId: "post-1", publishedAt: Date.now() },
       );
       expect(result).toEqual({ ok: true, reading: { status: "taken", metrics: { views: 23, reach: 23, saves: 0, likes: 0, comments: 0, shares: 0 } } });
     } finally {

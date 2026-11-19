@@ -14,10 +14,10 @@ type Ctx = Pick<QueryCtx, "db">;
 const MAX_ADAPTERS = 200;
 const MAX_PACKAGE_FILES = 100;
 
-/** The installed Analytics Adapters, ordered by id. */
+/** The installed Analytics Adapters, ordered by id. One installed under contract 1 declares no metrics: it is not offered until it is republished (ADR-079). */
 export async function installedAnalyticsAdapters(ctx: Ctx): Promise<AnalyticsAdapterMeta[]> {
   const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "analytics")).take(MAX_ADAPTERS);
-  return rows.flatMap((row) => (row.meta ? [row.meta as AnalyticsAdapterMeta] : [])).sort((a, b) => a.id.localeCompare(b.id));
+  return rows.flatMap((row) => ((row.meta as Partial<AnalyticsAdapterMeta> | undefined)?.metrics ? [row.meta as AnalyticsAdapterMeta] : [])).sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** Whether `adapter` can measure the channels of the Publisher `publisherAdapter`. */

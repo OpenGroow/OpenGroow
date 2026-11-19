@@ -1,5 +1,5 @@
 import { v, type Infer } from "convex/values";
-import { collectDelayMs, DEFAULT_COLLECT_DELAYS_MS, metricKindOf, type AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
+import { collectDelayMs, DEFAULT_COLLECT_DELAYS_MS, type AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
@@ -193,9 +193,7 @@ export const listForProject = query({
       .order("desc")
       .take(LIST_LIMIT);
     const publishers = await projectPublishers(ctx, args.instanceId);
-    const registry = getTemplateRegistry(ctx);
     const adapters = await installedAnalyticsAdapters(ctx);
-    // No adapter activated: the closed vocabulary of contract 1, every measured post.
     const chosen = args.adapter ?? (await activatedAdapters(ctx, args.instanceId, adapters, publishers))[0]?.id;
     const rows = [];
     for (const publication of publications) {
@@ -219,10 +217,9 @@ export const listForProject = query({
           .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
           .collect()
       ).filter((s) => chosen === undefined || !s.adapter || s.adapter === chosen);
-      const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
-      // The adapter declares what ranks its posts (contract 2); a contract 1 adapter keeps the Template's.
+      // The adapter declares what ranks its posts (ADR-079).
       const linked = links.find((l) => l.adapter.id === chosen)?.adapter ?? links[0]?.adapter;
-      const primaryMetric = linked?.primary ?? analyticsDeclarationFor(template?.manifest, mission.type)?.legacyPrimaryMetric;
+      const primaryMetric = linked?.primary;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
       rows.push({
@@ -250,10 +247,50 @@ export const listForProject = query({
 });
 
 /**
+ * The published Publications that are not measured because their channel is linked to no Analytics
+ * Adapter: the Analytics page lists them as "analytics unavailable" (ADR-078), not as "no data yet".
+ */
+export const unavailableForProject = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    if (!(await readOwnerId(ctx, args.instanceId))) return [];
+    const publications = await ctx.db
+      .query("publications")
+      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
+      .order("desc")
+      .take(LIST_LIMIT);
+    const publishers = await projectPublishers(ctx, args.instanceId);
+    const adapters = await installedAnalyticsAdapters(ctx);
+    const rows = [];
+    for (const publication of publications) {
+      const found = channelOf(publishers, publication.target);
+      // A channel linked since the reading was scheduled is no longer unavailable.
+      if (found && linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter).length > 0) continue;
+      const analytics = await ctx.db
+        .query("publicationAnalytics")
+        .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", publication.postSeries ?? 0))
+        .first();
+      if (analytics?.state !== "unmeasured") continue;
+      const mission = await ctx.db.get(publication.missionId);
+      if (!mission) continue;
+      const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+      rows.push({
+        publicationId: publication._id,
+        missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
+        platform,
+        ...(found?.channel.channelName ? { channelName: found.channel.channelName } : {}),
+        publishedAt: analytics.publishedAt,
+        ...(analytics.reason ? { reason: analytics.reason } : {}),
+      });
+    }
+    return rows;
+  },
+});
+
+/**
  * What the Analytics page builds its picker, columns, tiles and ranking from (ADR-079): the
  * Analytics Adapters the Project's channels are linked to, the first activated first, each with
- * the metrics and ranking metric it declares. An adapter of contract 1 declares none: the page
- * then falls back to the closed social vocabulary.
+ * the metrics and ranking metric it declares.
  */
 export const adaptersForProject = query({
   args: { instanceId: v.string() },
@@ -261,7 +298,7 @@ export const adaptersForProject = query({
     if (!(await readOwnerId(ctx, args.instanceId))) return [];
     const installed = await installedAnalyticsAdapters(ctx);
     const activated = await activatedAdapters(ctx, args.instanceId, installed, await projectPublishers(ctx, args.instanceId));
-    return activated.map((a) => ({ adapter: a.id, name: a.name, ...(a.metrics && a.primary ? { metrics: a.metrics, primary: a.primary } : {}) }));
+    return activated.map((a) => ({ adapter: a.id, name: a.name, metrics: a.metrics, primary: a.primary }));
   },
 });
 
@@ -297,11 +334,9 @@ async function readingItem(ctx: Pick<QueryCtx, "db">, row: ReadingRow, adapters:
   return {
     id: row._id,
     analyticsAdapter: link?.adapter.id ?? null,
-    // Contract 2: the metrics the adapter declares (ADR-079); absent for contract 1, which keeps the closed vocabulary.
-    ...(link?.adapter.metrics ? { declaredMetrics: link.adapter.metrics } : {}),
+    declaredMetrics: link?.adapter.metrics ?? [],
     publishedAt: row.publishedAt,
     delayMs,
-    kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),
     externalId: publication.externalId,
     externalUrl: publication.externalUrl,
     ...(connection ? { connection } : {}),

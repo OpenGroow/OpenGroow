@@ -23,7 +23,7 @@ import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { SourceThumbnail } from "@/src/components/source-visuals";
 import {
   DEFAULT_COLUMNS,
-  LEGACY_DECLARATION,
+  NO_DECLARATION,
   bestPost,
   byRank,
   changeOf,
@@ -300,14 +300,14 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const adapters = useQuery(api.analytics.adaptersForProject, instanceId ? { instanceId } : "skip");
   const [adapterId, setAdapterId] = useState<string | null>(null);
   const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
+  const unavailable = useQuery(api.analytics.unavailableForProject, instanceId ? { instanceId } : "skip") ?? [];
   const rows = useQuery(api.analytics.listForProject, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [sort, setSort] = useState<Sort>("top");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
-  // An adapter of contract 1 declares nothing: it measures the closed social vocabulary.
-  const declaration: Declaration = current?.metrics && current.primary ? { metrics: current.metrics, primary: current.primary } : LEGACY_DECLARATION;
+  const declaration: Declaration = current ? { metrics: current.metrics, primary: current.primary } : NO_DECLARATION;
   function chooseAdapter(next: string) {
     setAdapterId(next);
     setChosen(new Set());
@@ -348,7 +348,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
       ) : null}
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>
-      ) : all.length === 0 ? (
+      ) : all.length === 0 && unavailable.length === 0 ? (
         <Card>
           <CardContent className="text-muted-foreground">
             No measured posts yet. A published post is measured when its Mission type declares <code>analytics</code> in its Template and its channel has an analytics provider (see{" "}
@@ -412,6 +412,23 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
           )}
         </>
       )}
+      {unavailable.length > 0 ? (
+        <section aria-label="Analytics unavailable" className="grid gap-3">
+          <h2 className="text-lg font-semibold">Analytics unavailable</h2>
+          <p className="text-sm text-muted-foreground">
+            These posts are not measured: their channel has no analytics provider. Link one in{" "}
+            <Link href="publishers" className="underline underline-offset-4">Publishers &amp; Analytics</Link>.
+          </p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {unavailable.map((row) => (
+              <li key={row.publicationId} className="rounded-xl border px-4 py-3 text-sm">
+                <span className="font-medium">{row.missionName}</span>
+                <span className="text-muted-foreground"> · {platformName(row.platform)}{row.channelName ? ` · ${row.channelName}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

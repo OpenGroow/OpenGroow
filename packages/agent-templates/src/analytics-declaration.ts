@@ -11,28 +11,24 @@ export const DEFAULT_ANALYTICS_COLLECT_DAYS: readonly number[] = DEFAULT_COLLECT
 export type AnalyticsDeclaration = {
   /** Days after publication at which to read; when omitted, the adapter's delays apply. */
   collect?: number[];
-  /** Ignored, with a warning (ADR-079): the adapter declares the metric that ranks its posts. */
-  primaryMetric?: string;
 };
 
 /**
  * The declaration of a Mission type, or undefined when it is not measured. `collect` is the
  * Template's own delays in days, sorted; absent when the adapter's delays apply.
- * `legacyPrimaryMetric` is only used for an adapter of contract 1, which declares no `primary`.
  */
 export function analyticsDeclarationFor(
   manifest: { missionTypes?: ReadonlyArray<{ type: string; analytics?: AnalyticsDeclaration }> } | undefined,
   missionType: string,
-): { collect?: number[]; legacyPrimaryMetric?: string } | undefined {
+): { collect?: number[] } | undefined {
   const declared = manifest?.missionTypes?.find((entry) => entry.type === missionType)?.analytics;
   if (!declared) return undefined;
   return {
     ...(declared.collect ? { collect: [...declared.collect].sort((a, b) => a - b) } : {}),
-    ...(typeof declared.primaryMetric === "string" ? { legacyPrimaryMetric: declared.primaryMetric } : {}),
   };
 }
 
-/** A warning when the declaration still names `primaryMetric`, which the adapter now declares (ADR-079). */
+/** A warning when the declaration still names `primaryMetric`, which the adapter declares (ADR-079); an old Template that still has it is accepted. */
 export function analyticsDeclarationWarning(raw: unknown, at: string): string | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || !("primaryMetric" in raw)) return undefined;
   return `${at}.analytics.primaryMetric is ignored: the Analytics Adapter declares the metric that ranks its posts (ADR-079). Remove it and keep \`analytics: { collect? }\``;

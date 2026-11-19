@@ -3,15 +3,12 @@ import { isValidIcon } from "./manifest";
 // The contract of an Analytics Adapter (ADR-078, docs/domain/publishing.md).
 // Separate from the Publisher contract and versioned on its own. An adapter
 // reads how one post performed at a service; the core owns the schedule, the
-// retries, the Snapshots and the closed metric vocabulary. Authoring guide:
+// retries and the Snapshots; the adapter declares its metrics (ADR-079). Authoring guide:
 // docs/ANALYTICS_ADAPTERS.md.
 
 export const ANALYTICS_CONTRACT_VERSION = 2;
 
-/** Contract 1 (closed vocabulary, `data/metrics.json` with a kind) keeps working beside contract 2 (ADR-079). */
-export const SUPPORTED_ANALYTICS_CONTRACTS: readonly number[] = [1, 2];
-
-/** A metric an adapter of contract 2 declares; the order of the list is the order of the columns (ADR-079). */
+/** A metric an adapter declares; the order of the list is the order of the columns (ADR-079). */
 export type MetricDecl = {
   key: string;
   label: string;
@@ -34,36 +31,8 @@ export function collectDelayMs(duration: string): number {
   return Number.parseInt(duration, 10) * (duration.endsWith("d") ? 24 : 1) * 3_600_000;
 }
 
-/** The closed metric vocabulary per kind of content, owned by OpenGroow. */
-export const METRIC_VOCABULARY = {
-  social: ["views", "reach", "likes", "comments", "shares", "saves"],
-  article: ["pageviews", "visitors", "engagementTime"],
-} as const;
-
-export type MetricKind = keyof typeof METRIC_VOCABULARY;
-
 /** Reading delays counted from the moment a Publication became `published`. */
 export const DEFAULT_COLLECT_DELAYS_MS = [1, 3, 7].map((days) => days * 24 * 60 * 60_000);
-
-/** The metric kind of a Publishable kind: `article` is measured as a page, everything else as a social post. */
-export function metricKindOf(publishableKind: string | undefined): MetricKind {
-  return publishableKind === "article" ? "article" : "social";
-}
-
-/** Whether `metric` belongs to the vocabulary of `kind`. */
-export function isMetricOfKind(kind: MetricKind, metric: unknown): boolean {
-  return (METRIC_VOCABULARY[kind] as readonly unknown[]).includes(metric);
-}
-
-/** Keeps the metrics of the vocabulary of `kind` whose value is a finite number >= 0; ignores the rest. */
-export function pickMetrics(kind: MetricKind, raw: Record<string, unknown>): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const name of METRIC_VOCABULARY[kind]) {
-    const value = raw[name];
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) out[name] = value;
-  }
-  return out;
-}
 
 /** The key an adapter needs from a Publication to find the post on its side (free for now, ADR-078). */
 export type AnalyticsKey = "externalId" | "url";
@@ -102,11 +71,10 @@ export type AnalyticsPackageManifest = {
   /** The logo, an image data URI, like a Publisher's. */
   icon?: string;
   options?: AnalyticsOptionDecl[];
-  // Contract 2 (ADR-079). A contract 1 manifest has none of these.
   /** The adapter's own metrics, in the order of the columns. */
-  metrics?: MetricDecl[];
+  metrics: MetricDecl[];
   /** The metric that ranks its posts; one of `metrics`, not derived. */
-  primary?: string;
+  primary: string;
   /** Default reading delays, durations like `3d` or `12h`. */
   collect?: string[];
   /** The secret of the connection; default a one-line text. */
@@ -126,8 +94,11 @@ export function parseAnalyticsManifest(raw: unknown): { ok: true; manifest: Anal
   const m = raw as Record<string, unknown>;
   if (typeof m.id !== "string" || !ID_PATTERN.test(m.id)) return { ok: false, error: "The manifest `id` must be lowercase letters, digits and dashes" };
   if (typeof m.name !== "string" || m.name.trim() === "") return { ok: false, error: "The manifest `name` must be a non-empty string" };
-  if (typeof m.contractVersion !== "number" || !SUPPORTED_ANALYTICS_CONTRACTS.includes(m.contractVersion)) {
-    return { ok: false, error: `${m.name} was built for Analytics contract ${String(m.contractVersion)}, this OpenGroow supports contracts ${SUPPORTED_ANALYTICS_CONTRACTS.join(" and ")}` };
+  if (m.contractVersion === 1) {
+    return { ok: false, error: `${m.name} was built for Analytics contract 1, which is no longer supported: this OpenGroow reads contract ${ANALYTICS_CONTRACT_VERSION}, where the adapter declares its own metrics (metrics, primary) in its manifest. Republish it for contract ${ANALYTICS_CONTRACT_VERSION} (docs/ANALYTICS_ADAPTERS.md)` };
+  }
+  if (m.contractVersion !== ANALYTICS_CONTRACT_VERSION) {
+    return { ok: false, error: `${m.name} was built for Analytics contract ${String(m.contractVersion)}, this OpenGroow supports contract ${ANALYTICS_CONTRACT_VERSION}` };
   }
   if (m.needs !== "externalId" && m.needs !== "url") return { ok: false, error: "The manifest `needs` must be \"externalId\" or \"url\"" };
   if (m.publisher !== undefined && (typeof m.publisher !== "string" || !ID_PATTERN.test(m.publisher))) {
@@ -165,12 +136,9 @@ export function parseAnalyticsManifest(raw: unknown): { ok: true; manifest: Anal
       });
     }
   }
-  let declared: Pick<AnalyticsPackageManifest, "metrics" | "primary" | "collect" | "secret" | "needsUrl"> = {};
-  if (m.contractVersion === 2) {
-    const read = parseDeclaration(m);
-    if (!read.ok) return read;
-    declared = read.declared;
-  }
+  const read = parseDeclaration(m);
+  if (!read.ok) return read;
+  const declared = read.declared;
   return {
     ok: true,
     manifest: {
@@ -189,7 +157,7 @@ export function parseAnalyticsManifest(raw: unknown): { ok: true; manifest: Anal
 
 const METRIC_KEY = /^[A-Za-z][A-Za-z0-9]*$/;
 
-type Declared = Pick<AnalyticsPackageManifest, "metrics" | "primary" | "collect" | "secret" | "needsUrl">;
+type Declared = Pick<AnalyticsPackageManifest, "metrics" | "primary"> & Partial<Pick<AnalyticsPackageManifest, "collect" | "secret" | "needsUrl">>;
 
 function parseDeclaration(m: Record<string, unknown>): { ok: true; declared: Declared } | { ok: false; error: string } {
   const fail = (error: string) => ({ ok: false as const, error });
@@ -270,22 +238,28 @@ export function checkConnectionSecret(secret: AnalyticsSecretDecl | undefined, v
   return missing.length > 0 ? `The ${secret.label} lacks the field${missing.length > 1 ? "s" : ""} ${missing.join(", ")}` : undefined;
 }
 
-/** `data/metrics.json`: how the labels a service returns map to the closed vocabulary of a kind (contract 1; contract 2 has no `kind`). */
-export type AnalyticsMetricsData = { adapter: string; kind?: MetricKind; labels: Record<string, string> };
+/** `data/metrics.json`: how the labels a service returns map to the metric keys the manifest declares. */
+export type AnalyticsMetricsData = { adapter: string; labels: Record<string, string> };
 
 /** Reads `data/metrics.json`; throws with the reason when it is not valid. */
 export function parseAnalyticsMetrics(raw: unknown): AnalyticsMetricsData {
   const d = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-  if (d.schemaVersion !== 1) throw new Error("must be { schemaVersion: 1, adapter, kind, labels: {...} }");
+  if (d.schemaVersion !== 1) throw new Error("must be { schemaVersion: 1, adapter, labels: {...} }");
   if (typeof d.adapter !== "string") throw new Error("`adapter` must be a string");
-  if (d.kind !== undefined && d.kind !== "social" && d.kind !== "article") throw new Error("`kind` must be \"social\" or \"article\"");
+  if (d.kind !== undefined) throw new Error("has a `kind`: the closed metric vocabulary is gone, the manifest declares the metrics (ADR-079). Remove `kind`");
   if (typeof d.labels !== "object" || d.labels === null || Array.isArray(d.labels)) throw new Error("`labels` must be an object");
   const labels: Record<string, string> = {};
   for (const [label, metric] of Object.entries(d.labels)) {
-    if (d.kind !== undefined && !isMetricOfKind(d.kind, metric)) throw new Error(`the label "${label}" maps to "${String(metric)}", which is not a ${d.kind} metric`);
-    labels[label] = metric as string;
+    if (typeof metric !== "string") throw new Error(`the label "${label}" must map to a metric key`);
+    labels[label] = metric;
   }
-  return { adapter: d.adapter, ...(d.kind ? { kind: d.kind } : {}), labels };
+  return { adapter: d.adapter, labels };
+}
+
+/** The first label target that is not a stored (declared, not derived) metric, or undefined when `labels` is consistent with the manifest. */
+export function strayLabelMetric(declared: readonly MetricDecl[], labels: Record<string, string>): string | undefined {
+  const stored = declared.filter((m) => !m.derive).map((m) => m.key);
+  return Object.values(labels).find((key) => !stored.includes(key));
 }
 
 export type ReadRequest = {
@@ -293,7 +267,6 @@ export type ReadRequest = {
   externalId?: string;
   /** The post's public URL (set when `needs` is `url`). */
   url?: string;
-  kind: MetricKind;
   /** Epoch ms when the Publication became `published`. */
   publishedAt: number;
 };

@@ -202,7 +202,7 @@ A Mission type that declares `publish` may also declare how its Publications are
 ```
 
 - `collect` (optional): delays in whole days after the Publication became `published`, distinct positive integers. Omitted: the adapter's own delays apply (ADR-079), else `[1, 3, 7]`. Delays that fall on the same moment once held back by the adapter's earliest delay become one reading and one Snapshot.
-- `analytics: {}` is enough to opt in: the Analytics Adapter declares the metrics and the one that ranks the posts, so the Mission type names no metric. A `primaryMetric` left in an old Template is ignored with a warning (`validateManifest` returns it in `warnings`).
+- `analytics: {}` is enough to opt in: the Analytics Adapter declares the metrics and the one that ranks the posts, so the Mission type names no metric. A `primaryMetric` left in an old Template is still accepted but ignored, with a warning (`validateManifest` returns it in `warnings`): remove it.
 - Any other key or `analytics` without `publish` is refused by `template:validate` and at installation. A Mission type without `analytics` is not measured, and existing Templates are unchanged.
 
 The URL is frozen at the end of the job and must stay valid until publication. The review shows the media from the `publishable` (never from `review.path`) for a Mission type that declares `publish`. A synchronous MCP is unchanged: the Agent sees the URLs in its own tool call and writes the whole `publishable`.

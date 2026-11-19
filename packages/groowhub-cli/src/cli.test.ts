@@ -88,6 +88,20 @@ describe("run", () => {
     expect(err[0]).toMatch(/expected the name analytics-postiz/);
   });
 
+  it("refuses an Analytics Adapter whose metrics.json maps a label to a metric the manifest does not store", () => {
+    const folder = join(__dirname, "../../../apps/convex/test/postiz_analytics_reference");
+    const dir = mkdtempSync(join(tmpdir(), "validator-"));
+    mkdirSync(join(dir, "data"));
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "@opengroow/analytics-postiz", version: "1.0.0" }));
+    writeFileSync(join(dir, "manifest.json"), readFileSync(join(folder, "manifest.json")));
+    writeFileSync(join(dir, "src/index.ts"), "export default {};");
+    writeFileSync(join(dir, "data/metrics.json"), JSON.stringify({ schemaVersion: 1, adapter: "postiz", labels: { Rate: "engagement", Ghost: "ghost" } }));
+    const { code, err } = runCli(["validate", "analytics", dir]);
+    expect(code).toBe(1);
+    expect(err[0]).toMatch(/data\/metrics.json maps a label to "engagement"/);
+  });
+
   it("prints usage and fails without a command", () => {
     const { code, err } = runCli([]);
     expect(code).toBe(1);

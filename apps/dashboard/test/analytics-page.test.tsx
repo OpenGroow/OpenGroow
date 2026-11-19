@@ -14,6 +14,22 @@ const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailab
 // `rows` may depend on the adapter the page asks for; `adapters` is what `analytics.adaptersForProject` answers.
 let rows: unknown[] | undefined | ((args: { adapter?: string }) => unknown[]) = [];
 let adapters: unknown[] = [];
+let unavailable: unknown[] = [];
+// What a social adapter declares (Postiz): the page shows exactly what the adapter declares.
+const SOCIAL_ADAPTER = {
+  adapter: "postiz",
+  name: "Postiz",
+  primary: "views",
+  metrics: [
+    { key: "views", label: "Views", type: "counter", format: "number" },
+    { key: "likes", label: "Likes", type: "counter", format: "number" },
+    { key: "comments", label: "Comments", type: "counter", format: "number" },
+    { key: "engagement", label: "Engagement", type: "level", format: "percent", derive: { sum: ["likes", "comments", "shares", "saves"], per: "views" } },
+    { key: "reach", label: "Reach", type: "counter", format: "number" },
+    { key: "shares", label: "Shares", type: "counter", format: "number" },
+    { key: "saves", label: "Saves", type: "counter", format: "number" },
+  ],
+};
 const listArgs: Array<{ adapter?: string }> = [];
 vi.mock("convex/react", () => ({
   useAction: () => refreshAction,
@@ -21,6 +37,7 @@ vi.mock("convex/react", () => ({
   useQuery: (name: unknown, args?: { adapter?: string }) => {
     if (name === PUBLISHER_PACKAGES_LIST) return INSTALLED_PUBLISHERS;
     if (name === "analytics.adaptersForProject") return adapters;
+    if (name === "analytics.unavailableForProject") return unavailable;
     if (name === "analytics.listForProject") {
       if (args === undefined || (args as unknown) === "skip") return undefined;
       listArgs.push(args);
@@ -31,7 +48,7 @@ vi.mock("convex/react", () => ({
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject" },
+    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject", unavailableForProject: "analytics.unavailableForProject" },
     analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
@@ -76,7 +93,8 @@ describe("Analytics page", () => {
   beforeEach(() => {
     n = 0;
     rows = [];
-    adapters = [];
+    adapters = [SOCIAL_ADAPTER];
+    unavailable = [];
     listArgs.length = 0;
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -95,6 +113,19 @@ describe("Analytics page", () => {
   const listed = () => Array.from(container.querySelectorAll("li[data-publication], button[data-publication]")).map((el) => el.textContent ?? "");
   const detail = () => container.querySelector<HTMLElement>('[aria-label="Selected post"]')?.textContent ?? "";
   const totals = () => container.querySelector<HTMLElement>('section[aria-label="Totals"]')?.textContent ?? "";
+
+  it("lists the posts whose channel has no analytics adapter as unavailable, not as waiting for data", async () => {
+    unavailable = [{ publicationId: "pub-x", missionName: "Unlinked reel", platform: "instagram", channelName: "My IG", publishedAt: Date.UTC(2026, 10, 15), reason: "No Analytics Adapter is linked to this channel" }];
+    await render();
+    expect(text()).toContain("Analytics unavailable");
+    expect(text()).toContain("Unlinked reel");
+    expect(text()).not.toContain("No measured posts yet");
+  });
+
+  it("says nothing about unavailable analytics when every channel has an adapter", async () => {
+    await render();
+    expect(text()).not.toContain("Analytics unavailable");
+  });
 
   it("says so when no post is measured yet", async () => {
     await render();
