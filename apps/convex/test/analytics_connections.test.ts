@@ -41,6 +41,9 @@ describe("Analytics Adapter connection per Project", () => {
         publisher: "postiz",
         optionDecls: POSTIZ.options,
         configured: false,
+        packageId: "@opengroow/analytics-postiz-analytics",
+        version: "1.0.0",
+        digest: `sha256:${"0".repeat(64)}`,
       },
     ]);
   });
@@ -88,5 +91,52 @@ describe("Analytics Adapter connection per Project", () => {
   it("does not show another user's Project", async () => {
     const owner = await seed();
     expect(await owner.query(api.analytics_connections.list, { instanceId: "someone-else" })).toEqual([]);
+  });
+
+  describe("an adapter of contract 2 that declares its secret and no URL (ADR-079)", () => {
+    const SC = {
+      id: "search-console",
+      name: "Search Console",
+      needs: "url" as const,
+      earliestDelayMs: 0,
+      needsUrl: false,
+      secret: { label: "Service account key", kind: "json" as const, fields: ["client_email", "private_key"] },
+      primary: "clicks",
+      metrics: [{ key: "clicks", label: "Clicks", type: "counter" as const, format: "number" as const }],
+    };
+    const KEY = JSON.stringify({ client_email: "a@b.iam", private_key: "-----BEGIN-----\nx" });
+
+    it("lists what the connection needs, and saves a connection with no URL", async () => {
+      const t = convexTest(schema, modules);
+      await installAnalyticsAdapter(t, SC);
+      await t.run(async (ctx) => {
+        const now = new Date().toISOString();
+        await insertInstance(ctx, { jobId: `job-${INSTANCE_ID}`, status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.tokenIdentifier });
+      });
+      const owner = t.withIdentity(OWNER);
+      const [before] = await owner.query(api.analytics_connections.list, { instanceId: INSTANCE_ID });
+      expect(before).toMatchObject({ needsUrl: false, secret: SC.secret });
+      await owner.mutation(api.analytics_connections.save, { instanceId: INSTANCE_ID, adapter: "search-console", apiKey: KEY });
+      const [view] = await owner.query(api.analytics_connections.list, { instanceId: INSTANCE_ID });
+      expect(view).toMatchObject({ configured: true, hasApiKey: true });
+      expect(JSON.stringify(view)).not.toContain("BEGIN");
+      // The stored secret is what the adapter reads with.
+      const stored = await t.run((ctx) => ctx.db.query("analyticsConnections").first());
+      expect(stored).toMatchObject({ adapter: "search-console", apiKey: KEY });
+    });
+
+    it("refuses a secret that is not JSON with the fields the adapter names, saving nothing", async () => {
+      const t = convexTest(schema, modules);
+      await installAnalyticsAdapter(t, SC);
+      await t.run(async (ctx) => {
+        const now = new Date().toISOString();
+        await insertInstance(ctx, { jobId: `job-${INSTANCE_ID}`, status: "running", createdAt: now, openclawId: INSTANCE_ID, updatedAt: now, userId: OWNER.tokenIdentifier });
+      });
+      const owner = t.withIdentity(OWNER);
+      const save = (apiKey: string) => owner.mutation(api.analytics_connections.save, { instanceId: INSTANCE_ID, adapter: "search-console", apiKey });
+      await expect(save("just a line")).rejects.toThrow(/not valid JSON/);
+      await expect(save(JSON.stringify({ client_email: "a@b" }))).rejects.toThrow(/private_key/);
+      expect(await t.run((ctx) => ctx.db.query("analyticsConnections").collect())).toEqual([]);
+    });
   });
 });

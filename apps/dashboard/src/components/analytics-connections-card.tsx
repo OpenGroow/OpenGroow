@@ -3,16 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { Loader2, Save, Trash2 } from "lucide-react";
+import { Loader2, Save } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
+import { ConnectionJsonSecretField, ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
+import { PackageVersionCard } from "@/src/components/package-version-card";
+import { ProviderDangerZone } from "@/src/components/provider-danger-zone";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { PackageLogo } from "@/src/components/package-logo";
 
 // The connection of an Analytics Adapter, once per Project (ADR-078), set up
 // like a Publisher's: a URL, an API key that is never read back, and the
@@ -21,26 +24,20 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 
 type AdapterView = FunctionReturnType<typeof api.analytics_connections.list>[number];
 
-/** An adapter's logo (an image data URI), or the initial of its name when it has none or the image does not load. */
-function AdapterLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
-  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
-  if (!icon || brokenIcon === icon) {
-    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
-}
-
 /** `embedded`: inside the Publisher's own page, which already names the service. */
 export function AdapterForm({ instanceId, adapter, embedded = false }: { instanceId: string; adapter: AdapterView; embedded?: boolean }) {
   const save = useMutation(api.analytics_connections.save);
   const remove = useMutation(api.analytics_connections.remove);
+  // An adapter with no URL to give (ADR-079) shows no URL field.
+  const needsUrl = adapter.needsUrl !== false;
   const [url, setUrl] = useState(adapter.url ?? "");
   const [apiKey, setApiKey] = useState("");
   const [options, setOptions] = useState<Record<string, string>>(() =>
     Object.fromEntries(adapter.optionDecls.map((d) => [d.key, String(adapter.options?.[d.key] ?? d.default)])),
   );
   const [busy, setBusy] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "active" | "error"; text: string } | null>(null);
 
   async function handleSave() {
@@ -51,7 +48,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         instanceId,
         adapter: adapter.adapter,
         // Inside the Publisher's page the connection is the Publisher's own: only the options are saved.
-        ...(embedded ? {} : { url }),
+        ...(embedded || !needsUrl ? {} : { url }),
         ...(!embedded && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         options: Object.fromEntries(adapter.optionDecls.map((d) => [d.key, d.type === "number" ? Number(options[d.key]) : (options[d.key] ?? "")])),
       });
@@ -71,6 +68,9 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
       setUrl("");
       setApiKey("");
       setMessage(null);
+      setConfirmRemove(false);
+    } catch (error) {
+      setRemoveError(extractConvexErrorMessage(error, "The connection could not be removed"));
     } finally {
       setBusy(false);
     }
@@ -88,13 +88,24 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         <div className="grid gap-4 md:grid-cols-2">
           {embedded ? null : (
             <>
-              <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
-              <ConnectionKeyField
-                id={`analytics-key-${adapter.adapter}`}
-                placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
-                value={apiKey}
-                onChange={setApiKey}
-              />
+              {needsUrl ? <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} /> : null}
+              {adapter.secret?.kind === "json" ? (
+                <ConnectionJsonSecretField
+                  id={`analytics-key-${adapter.adapter}`}
+                  label={adapter.secret.label}
+                  placeholder={adapter.hasApiKey ? "Configured. Paste a new one to replace it" : `Paste the ${adapter.secret.label} (JSON)`}
+                  value={apiKey}
+                  onChange={setApiKey}
+                />
+              ) : (
+                <ConnectionKeyField
+                  id={`analytics-key-${adapter.adapter}`}
+                  {...(adapter.secret ? { label: adapter.secret.label } : {})}
+                  placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} ${adapter.secret?.label ?? "API key"}`}
+                  value={apiKey}
+                  onChange={setApiKey}
+                />
+              )}
             </>
           )}
           {adapter.optionDecls.map((decl) => (
@@ -112,34 +123,47 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" size="lg" disabled={(!embedded && !url.trim()) || busy} onClick={() => void handleSave()}>
+          <Button type="button" size="lg" disabled={(!embedded && needsUrl && !url.trim()) || busy} onClick={() => void handleSave()}>
             {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
             Save changes
           </Button>
-          {adapter.configured && !embedded ? (
-            <Button type="button" variant="outline" size="lg" disabled={busy} onClick={() => void handleRemove()}>
-              <Trash2 aria-hidden="true" />
-              Remove
-            </Button>
-          ) : null}
           {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
         </div>
       </Card>
   );
+  // Inside the Publisher's page the Publisher's own Version card covers this package too.
+  const version = adapter.packageId && adapter.version ? <PackageVersionCard packages={[{ kind: "analytics", packageId: adapter.packageId, version: adapter.version, digest: adapter.digest }]} /> : null;
   if (embedded) return card;
   return (
     <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
       <header className="flex items-center gap-4">
-        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
+        <PackageLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
         <div className="grid flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>
-            {adapter.configured ? <StatusBadge tone="active" label="Own connection" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="warning" label="Not configured" />}
+            {adapter.configured ? <StatusBadge tone="active" label="Connected" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="error" label="Not connected" />}
           </div>
           {publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
         </div>
       </header>
       {card}
+      {version}
+      {adapter.configured ? (
+        <ProviderDangerZone
+          name={adapter.name}
+          summary="Remove this provider's connection from the Project."
+          consequences="Its connection and its options are removed from this Project, and nothing is measured with it until you set one again. Readings already taken are kept."
+          removing={busy}
+          disabled={busy}
+          error={removeError}
+          confirming={confirmRemove}
+          onConfirming={(open) => {
+            setRemoveError(null);
+            setConfirmRemove(open);
+          }}
+          onRemove={() => void handleRemove()}
+        />
+      ) : null}
     </section>
   );
 }
@@ -185,7 +209,7 @@ export function AnalyticsConnectionsCard({ instanceId }: { instanceId: string | 
   if (!instanceId || standalone.length === 0) return null;
   return (
     <section aria-label="Analytics connections" className="grid gap-3">
-      <h2 className="m-0 text-xl font-semibold">Analytics providers</h2>
+      <h2 className="m-0 text-xl font-semibold">Analytics only providers</h2>
       {standalone.map((adapter) => (
         <AdapterForm key={adapter.adapter} instanceId={instanceId} adapter={adapter} />
       ))}

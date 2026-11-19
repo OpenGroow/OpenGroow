@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "adapter": "demo-metrics",
+  "labels": { "Clicks": "clicks", "Impressions": "impressions", "Position": "position" }
+}

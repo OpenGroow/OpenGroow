@@ -11,15 +11,46 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 
 // Seam 3: `analytics.listForProject` is simulated.
 const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
-let rows: unknown[] | undefined = [];
+// `rows` may depend on the adapter the page asks for; `adapters` is what `analytics.adaptersForProject` answers.
+let rows: unknown[] | undefined | ((args: { adapter?: string }) => unknown[]) = [];
+let adapters: unknown[] = [];
+let unavailable: unknown[] = [];
+let emptyReason: unknown = { reason: "none" };
+// What a social adapter declares (Postiz): the page shows exactly what the adapter declares.
+const SOCIAL_ADAPTER = {
+  adapter: "postiz",
+  name: "Postiz",
+  primary: "views",
+  metrics: [
+    { key: "views", label: "Views", type: "counter", format: "number" },
+    { key: "likes", label: "Likes", type: "counter", format: "number" },
+    { key: "comments", label: "Comments", type: "counter", format: "number" },
+    { key: "engagement", label: "Engagement", type: "level", format: "percent", derive: { sum: ["likes", "comments", "shares", "saves"], per: "views" } },
+    { key: "reach", label: "Reach", type: "counter", format: "number" },
+    { key: "shares", label: "Shares", type: "counter", format: "number" },
+    { key: "saves", label: "Saves", type: "counter", format: "number" },
+  ],
+};
+const listArgs: Array<{ adapter?: string }> = [];
 vi.mock("convex/react", () => ({
   useAction: () => refreshAction,
   useMutation: () => async () => undefined,
-  useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : undefined),
+  useQuery: (name: unknown, args?: { adapter?: string }) => {
+    if (name === PUBLISHER_PACKAGES_LIST) return INSTALLED_PUBLISHERS;
+    if (name === "analytics.adaptersForProject") return adapters;
+    if (name === "analytics.unavailableForProject") return unavailable;
+    if (name === "analytics.emptyReason") return emptyReason;
+    if (name === "analytics.listForProject") {
+      if (args === undefined || (args as unknown) === "skip") return undefined;
+      listArgs.push(args);
+      return typeof rows === "function" ? rows(args) : rows;
+    }
+    return undefined;
+  },
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    analytics: { listForProject: "analytics.listForProject" },
+    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject", unavailableForProject: "analytics.unavailableForProject", emptyReason: "analytics.emptyReason" },
     analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
@@ -64,6 +95,10 @@ describe("Analytics page", () => {
   beforeEach(() => {
     n = 0;
     rows = [];
+    adapters = [SOCIAL_ADAPTER];
+    unavailable = [];
+    emptyReason = { reason: "none" };
+    listArgs.length = 0;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -82,9 +117,42 @@ describe("Analytics page", () => {
   const detail = () => container.querySelector<HTMLElement>('[aria-label="Selected post"]')?.textContent ?? "";
   const totals = () => container.querySelector<HTMLElement>('section[aria-label="Totals"]')?.textContent ?? "";
 
+  it("lists the posts whose channel has no analytics adapter as unavailable, not as waiting for data", async () => {
+    unavailable = [{ publicationId: "pub-x", missionName: "Unlinked reel", platform: "instagram", channelName: "My IG", publishedAt: Date.UTC(2026, 10, 15), reason: "No Analytics Adapter is linked to this channel" }];
+    await render();
+    expect(text()).toContain("Analytics unavailable");
+    expect(text()).toContain("Unlinked reel");
+    expect(text()).not.toContain("No measured posts yet");
+  });
+
+  it("says nothing about unavailable analytics when every channel has an adapter", async () => {
+    await render();
+    expect(text()).not.toContain("Analytics unavailable");
+  });
+
   it("says so when no post is measured yet", async () => {
     await render();
     expect(text()).toContain("No measured posts yet");
+  });
+
+  it("names the Mission types whose Template does not declare analytics", async () => {
+    emptyReason = { reason: "not_opted_in", missionTypes: ["Create article (SEO)"], templates: ["SEO"] };
+    await render();
+    expect(text()).toContain("The Template (SEO) of this Project does not declare analytics for Create article (SEO). Update the Template to measure these posts.");
+  });
+
+  it("names the channels that are not linked to the adapter and links to the publishers page", async () => {
+    emptyReason = { reason: "not_linked", channels: ["Blog", "Docs"], adapterName: "Search Console" };
+    await render();
+    expect(text()).toContain("No channel (Blog, Docs) is linked to Search Console.");
+    expect(container.querySelector('a[href="publishers"]')).not.toBeNull();
+  });
+
+  it("counts the posts waiting for a first reading and gives the next date", async () => {
+    emptyReason = { reason: "waiting", count: 2, nextAt: Date.UTC(2026, 10, 25, 12) };
+    await render();
+    expect(text()).toContain("2 posts are waiting for their first reading, the next one on ");
+    expect(text()).toContain("2026");
   });
 
   it("adds up the posts of every platform in the totals and names the top performing one", async () => {
@@ -123,6 +191,54 @@ describe("Analytics page", () => {
     await act(async () => second.click());
     expect(detail()).toContain("B");
     expect(container.querySelector('svg[role="img"]')?.getAttribute("aria-label")).toBe("Views over time: 10, 30");
+  });
+
+  const SEARCH_CONSOLE = {
+    primary: "clicks",
+    metrics: [
+      { key: "clicks", label: "Clicks", type: "counter", format: "number" },
+      { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+    ],
+  };
+
+  it("shows a counter's total with its variation since the previous Snapshot", async () => {
+    adapters = [SEARCH_CONSOLE];
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 }), snap(7 * DAY, { clicks: 46 })] })];
+    await render();
+    expect(listed()[0]).toContain("46");
+    expect(listed()[0]).toContain("+34");
+    expect(detail()).toContain("+34");
+  });
+
+  it("shows no variation under a counter with a single Snapshot", async () => {
+    adapters = [SEARCH_CONSOLE];
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 12 })] })];
+    await render();
+    expect(listed()[0]).toContain("12");
+    expect(listed()[0]).not.toMatch(/[+\u2212-]\d/);
+    expect(detail()).not.toMatch(/[+\u2212]\d/);
+  });
+
+  it("compares only the Snapshots of the post's current series", async () => {
+    adapters = [SEARCH_CONSOLE];
+    rows = [row({ title: "Post", snapshots: [snap(3 * DAY, { clicks: 500 }, 0), snap(7 * DAY, { clicks: 20 }, 1)] })];
+    await render();
+    expect(listed()[0]).toContain("20");
+    expect(listed()[0]).not.toMatch(/[+\u2212-]\d/);
+  });
+
+  it("points an improving arrow when a level where lower is better goes down", async () => {
+    adapters = [SEARCH_CONSOLE];
+    rows = [
+      row({ title: "Better", snapshots: [snap(3 * DAY, { clicks: 1, position: 14.2 }), snap(7 * DAY, { clicks: 2, position: 11.8 })] }),
+      row({ title: "Worse", snapshots: [snap(3 * DAY, { clicks: 1, position: 11.8 }), snap(7 * DAY, { clicks: 1, position: 14.2 })] }),
+    ];
+    await render();
+    const better = container.querySelector('button[data-publication="pub-1"]')!;
+    const worse = container.querySelector('button[data-publication="pub-2"]')!;
+    expect(better.querySelector('[data-trend="improving"]')).not.toBeNull();
+    expect(better.querySelector('[data-trend="improving"]')?.getAttribute("aria-label")).toBe("Improving");
+    expect(worse.querySelector('[data-trend="worsening"]')).not.toBeNull();
   });
 
   it("filters the posts by the search", async () => {
@@ -185,5 +301,108 @@ describe("Analytics page", () => {
     rows = [row({ title: "Clip", kind: "video", videoUrl: "https://cdn.example.com/v.mp4", snapshots: [snap(DAY, { views: 9 })] })];
     await render();
     expect(container.querySelector("li button video, button[data-publication] video")?.getAttribute("src")).toBe("https://cdn.example.com/v.mp4#t=0.1");
+  });
+
+  describe("with the declaration of the adapter (ADR-079)", () => {
+    const counter = (key: string, label: string) => ({ key, label, type: "counter", format: "number" });
+    const SEARCH = {
+      adapter: "search",
+      name: "Search",
+      primary: "clicks",
+      metrics: [
+        counter("clicks", "Clicks"),
+        counter("impressions", "Impressions"),
+        { key: "ctr", label: "CTR", type: "level", format: "percent", derive: { sum: ["clicks"], per: "impressions" } },
+        { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+        counter("sessions", "Sessions"),
+      ],
+    };
+    const headers = () => Array.from(container.querySelectorAll('[data-slot="columns-header"] > span')).map((el) => el.textContent);
+    const columnsButton = () => Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Columns")!;
+
+    it("shows the first four declared metrics as columns and offers the others in a Columns menu", async () => {
+      adapters = [SEARCH];
+      rows = [row({ title: "Page", primaryMetric: undefined, snapshots: [snap(DAY, { clicks: 40, impressions: 800, position: 3, sessions: 7 })] })];
+      await render();
+      expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions", "CTR", "Position"]));
+      expect(headers()).not.toContain("Sessions");
+      expect(listed()[0]).toContain("5.0%");
+      expect(listed()[0]).not.toContain("7");
+      await act(async () => columnsButton().click());
+      const sessions = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((c) => c.closest("label")?.textContent?.includes("Sessions"))!;
+      expect(Array.from(container.querySelectorAll('input[type="checkbox"]'))).toHaveLength(1);
+      await act(async () => sessions.click());
+      expect(headers()).toContain("Sessions");
+      expect(listed()[0]).toContain("7");
+    });
+
+    it("computes a derived figure for the totals from the summed counters, never the mean of rates", async () => {
+      adapters = [SEARCH];
+      rows = [
+        row({ title: "Small", snapshots: [snap(DAY, { clicks: 50, impressions: 100 })] }),
+        row({ title: "Big", snapshots: [snap(DAY, { clicks: 0, impressions: 900 })] }),
+      ];
+      await render();
+      expect(totals()).toContain("5.0%");
+      expect(totals()).not.toContain("25.0%");
+      expect(totals()).toContain("50Total clicks");
+    });
+
+    it("ranks the posts and picks the top post by the adapter's main metric, lowest first when lower is better", async () => {
+      adapters = [{ ...SEARCH, primary: "position" }];
+      rows = [
+        row({ title: "Deep", snapshots: [snap(DAY, { position: 30, clicks: 900 })] }),
+        row({ title: "Near top", snapshots: [snap(DAY, { position: 2, clicks: 1 })] }),
+      ];
+      await render();
+      expect(listed()[0]).toContain("Near top");
+      expect(totals()).toMatch(/Near top/);
+    });
+
+    describe("the adapter picker", () => {
+      const COUNTER_ADAPTER = { adapter: "postiz", name: "Postiz", primary: "views", metrics: [counter("views", "Views")] };
+      const picker = () => container.querySelector('[role="tablist"][aria-label="Analytics adapter"]');
+      const tabs = () => Array.from(picker()!.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+      const choose = async (name: string) => {
+        const tab = tabs().find((x) => x.textContent === name)!;
+        await act(async () => {
+          tab.click();
+        });
+      };
+
+      it("is hidden with a single adapter", async () => {
+        adapters = [SEARCH];
+        rows = [row({ title: "Page", snapshots: [snap(DAY, { clicks: 40 })] })];
+        await render();
+        expect(picker()).toBeNull();
+      });
+
+      it("lists the adapters, opens on the first one and shows the columns of the chosen one", async () => {
+        adapters = [COUNTER_ADAPTER, SEARCH];
+        rows = ({ adapter }) =>
+          adapter === "search" ? [row({ title: "Article", snapshots: [snap(DAY, { clicks: 40, impressions: 800 })] })] : [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })];
+        await render();
+        expect(picker()).not.toBeNull();
+        expect(headers()).toContain("Views");
+        expect(listed()[0]).toContain("Reel");
+        expect(tabs().map((x) => [x.textContent, x.getAttribute("aria-selected")])).toEqual([["Postiz", "true"], [SEARCH.name, "false"]]);
+        await choose(SEARCH.name);
+        expect(listArgs.at(-1)).toMatchObject({ adapter: "search" });
+        expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions"]));
+        expect(headers()).not.toContain("Views");
+        expect(listed()).toHaveLength(1);
+        expect(listed()[0]).toContain("Article");
+      });
+    });
+
+    it("shows a dash for a metric with no value, and nothing for a metric no longer declared", async () => {
+      adapters = [SEARCH];
+      rows = [row({ title: "Page", snapshots: [snap(DAY, { clicks: 40, views: 999 })] })];
+      await render();
+      expect(listed()[0]).toContain("—");
+      expect(listed()[0]).not.toContain("999");
+      expect(detail()).not.toContain("999");
+      expect(detail()).not.toContain("Views");
+    });
   });
 });

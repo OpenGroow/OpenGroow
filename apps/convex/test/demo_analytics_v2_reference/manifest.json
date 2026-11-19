@@ -1,0 +1,17 @@
+{
+  "id": "demo-metrics",
+  "name": "Demo metrics",
+  "contractVersion": 2,
+  "needs": "url",
+  "earliestDelayMs": 259200000,
+  "needsUrl": false,
+  "secret": { "label": "Service account key", "kind": "json", "fields": ["client_email", "private_key"] },
+  "metrics": [
+    { "key": "clicks", "label": "Clicks", "type": "counter", "format": "number" },
+    { "key": "impressions", "label": "Impressions", "type": "counter", "format": "number" },
+    { "key": "ctr", "label": "CTR", "type": "level", "format": "percent", "derive": { "sum": ["clicks"], "per": "impressions" } },
+    { "key": "position", "label": "Position", "type": "level", "format": "number", "better": "lower" }
+  ],
+  "primary": "clicks",
+  "collect": ["3d", "7d", "28d"]
+}

@@ -3,7 +3,7 @@ import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
 import { publishDeclarationProblem } from "./publish-declaration";
-import { analyticsDeclarationProblem } from "./analytics-declaration";
+import { analyticsDeclarationProblem, analyticsDeclarationWarning } from "./analytics-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
 import { findUnknownManifestKey } from "./manifest-keys";
@@ -449,7 +449,8 @@ function isValidActivationEffect(
  * (BoundedHttpEffect), and `externalJob.server` MUST resolve to a name declared
  * in the Template's own `mcpServers` array — no unknown external servers are allowed.
  */
-export function validateManifest(raw: unknown): { ok: true; manifest: AgentManifest } | { ok: false; reason: string } {
+export function validateManifest(raw: unknown): { ok: true; manifest: AgentManifest; warnings?: string[] } | { ok: false; reason: string } {
+  const warnings: string[] = [];
   if (!raw || typeof raw !== "object") {
     return { ok: false, reason: "manifest must be an object" };
   }
@@ -523,6 +524,8 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         (entry.publish as { kind?: string } | undefined)?.kind,
       );
       if (analyticsProblem) return { ok: false, reason: analyticsProblem };
+      const analyticsWarning = analyticsDeclarationWarning(entry.analytics, `missionTypes[${JSON.stringify(entry.type)}]`);
+      if (analyticsWarning) warnings.push(analyticsWarning);
       const jobs = (m as { externalJobsByMissionType?: Record<string, unknown> }).externalJobsByMissionType;
       if ((entry.publish as { resource?: unknown } | undefined)?.resource !== undefined && !jobs?.[entry.type as string]) {
         return {
@@ -912,7 +915,7 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
   const unknownKey = findUnknownManifestKey(m);
   if (unknownKey) return { ok: false, reason: unknownKey };
 
-  return { ok: true, manifest: m as AgentManifest };
+  return { ok: true, manifest: m as AgentManifest, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 function isValidLeafField(raw: Record<string, unknown>): boolean {

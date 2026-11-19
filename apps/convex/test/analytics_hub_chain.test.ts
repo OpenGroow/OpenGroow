@@ -66,8 +66,16 @@ describe("pack -> serve -> install -> load -> read", () => {
         publisher: "postiz",
         earliestDelayMs: 3_600_000,
         options: [expect.objectContaining({ key: "lookbackDays", default: 7 })],
+        primary: "views",
       }),
     ]);
+    // Contract 2 (ADR-079): the seven metrics in column order, engagement derived and never stored.
+    expect(adapters[0]?.metrics?.map((m) => m.key)).toEqual(["views", "likes", "comments", "engagement", "reach", "shares", "saves"]);
+    expect(adapters[0]?.metrics?.find((m) => m.key === "engagement")).toMatchObject({
+      type: "level",
+      format: "percent",
+      derive: { sum: ["likes", "comments", "shares", "saves"], per: "views" },
+    });
 
     // The core loads the stored bundle and the adapter reads Postiz.
     const bundle = await t.query(internal.analytics_adapters.bundleOf, { adapter: "postiz" });
@@ -78,7 +86,7 @@ describe("pack -> serve -> install -> load -> read", () => {
     try {
       const result = await adapter!.read(
         { url: "https://postiz.example.com", apiKey: "k", options: { lookbackDays: 7 } },
-        { externalId: "post-1", kind: "social", publishedAt: Date.now() },
+        { externalId: "post-1", publishedAt: Date.now() },
       );
       expect(result).toEqual({ ok: true, reading: { status: "taken", metrics: { views: 23, reach: 23, saves: 0, likes: 0, comments: 0, shares: 0 } } });
     } finally {

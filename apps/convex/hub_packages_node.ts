@@ -24,6 +24,8 @@ export type HubPackageCatalogueEntry = {
   description: string;
   tag: string;
   verification: HubVerification;
+  /** The digest of the release: the installed row stores the same one, so a rebuild under the same version shows. */
+  digest: string;
   icon?: string;
 };
 
@@ -59,6 +61,7 @@ const toCatalogueEntry = (entry: HubPackageEntry): HubPackageCatalogueEntry => (
   description: entry.description,
   tag: entry.tag,
   verification: entry.verification,
+  digest: entry.digest,
   ...(entry.icon ? { icon: entry.icon } : {}),
 });
 

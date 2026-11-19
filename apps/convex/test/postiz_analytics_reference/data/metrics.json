@@ -1,7 +1,6 @@
 {
   "schemaVersion": 1,
   "adapter": "postiz",
-  "kind": "social",
   "labels": {
     "Views": "views",
     "Reach": "reach",

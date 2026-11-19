@@ -6,6 +6,17 @@ import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 
 export type AnalyticsAdapterData = AnalyticsAdapterMeta;
 
+/** The metrics a social adapter declares, in column order (what Postiz declares). */
+export const SOCIAL_METRICS: AnalyticsAdapterData["metrics"] = [
+  { key: "views", label: "Views", type: "counter", format: "number" },
+  { key: "likes", label: "Likes", type: "counter", format: "number" },
+  { key: "comments", label: "Comments", type: "counter", format: "number" },
+  { key: "engagement", label: "Engagement", type: "level", format: "percent", derive: { sum: ["likes", "comments", "shares", "saves"], per: "views" } },
+  { key: "reach", label: "Reach", type: "counter", format: "number" },
+  { key: "shares", label: "Shares", type: "counter", format: "number" },
+  { key: "saves", label: "Saves", type: "counter", format: "number" },
+];
+
 /** Postiz measures its own posts: it needs the id Postiz gave and works only with the Postiz Publisher. */
 export const POSTIZ_ANALYTICS: AnalyticsAdapterData = {
   id: "postiz-analytics",
@@ -13,10 +24,12 @@ export const POSTIZ_ANALYTICS: AnalyticsAdapterData = {
   needs: "externalId",
   publisher: "postiz",
   earliestDelayMs: 0,
+  metrics: SOCIAL_METRICS,
+  primary: "views",
   options: [{ key: "lookbackDays", label: "Look-back window (days)", type: "number", default: 7, min: 1, max: 90 }],
 };
 /** A web analytics service: measures a page by its URL, whatever published it. */
-export const WEB_ANALYTICS: AnalyticsAdapterData = { id: "web-analytics", name: "Web analytics", needs: "url", earliestDelayMs: 2 * 24 * 3_600_000 };
+export const WEB_ANALYTICS: AnalyticsAdapterData = { id: "web-analytics", name: "Web analytics", needs: "url", earliestDelayMs: 2 * 24 * 3_600_000, metrics: SOCIAL_METRICS, primary: "views" };
 
 export async function installAnalyticsAdapter(t: ReturnType<typeof convexTest>, meta: AnalyticsAdapterData) {
   await t.run(async (ctx) => {

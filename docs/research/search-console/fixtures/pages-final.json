@@ -1,0 +1,242 @@
+{
+  "request": {
+    "startDate": "2026-10-10",
+    "endDate": "2026-11-19",
+    "dimensions": [
+      "page"
+    ],
+    "dataState": "final",
+    "rowLimit": 25
+  },
+  "status": 200,
+  "response": {
+    "rows": [
+      {
+        "keys": [
+          "https://example.com/"
+        ],
+        "clicks": 545,
+        "impressions": 9707,
+        "ctr": 0.056145049963943545,
+        "position": 9.989698155969919
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-1"
+        ],
+        "clicks": 42,
+        "impressions": 8187,
+        "ctr": 0.005130084279956028,
+        "position": 7.968364480273604
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-3"
+        ],
+        "clicks": 27,
+        "impressions": 2061,
+        "ctr": 0.013100436681222707,
+        "position": 11.056768558951966
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-4"
+        ],
+        "clicks": 27,
+        "impressions": 7925,
+        "ctr": 0.003406940063091483,
+        "position": 8.577160883280758
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-3"
+        ],
+        "clicks": 27,
+        "impressions": 2969,
+        "ctr": 0.009093971034018189,
+        "position": 6.171438194678343
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-1"
+        ],
+        "clicks": 21,
+        "impressions": 1901,
+        "ctr": 0.011046817464492372,
+        "position": 5.870594423987375
+      },
+      {
+        "keys": [
+          "https://example.com/page-1"
+        ],
+        "clicks": 21,
+        "impressions": 642,
+        "ctr": 0.03271028037383177,
+        "position": 6.964174454828661
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-4"
+        ],
+        "clicks": 20,
+        "impressions": 2221,
+        "ctr": 0.009004952723998198,
+        "position": 6.264295362449347
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-5"
+        ],
+        "clicks": 19,
+        "impressions": 1594,
+        "ctr": 0.01191969887076537,
+        "position": 6.1800501882057715
+      },
+      {
+        "keys": [
+          "https://example.com/page-2"
+        ],
+        "clicks": 18,
+        "impressions": 787,
+        "ctr": 0.022871664548919948,
+        "position": 6.246505717916137
+      },
+      {
+        "keys": [
+          "https://example.com/page-3"
+        ],
+        "clicks": 17,
+        "impressions": 584,
+        "ctr": 0.02910958904109589,
+        "position": 8.287671232876711
+      },
+      {
+        "keys": [
+          "https://example.com/page-4"
+        ],
+        "clicks": 15,
+        "impressions": 358,
+        "ctr": 0.04189944134078212,
+        "position": 5.337988826815643
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-6"
+        ],
+        "clicks": 13,
+        "impressions": 774,
+        "ctr": 0.016795865633074936,
+        "position": 12.062015503875969
+      },
+      {
+        "keys": [
+          "https://example.com/page-5"
+        ],
+        "clicks": 12,
+        "impressions": 479,
+        "ctr": 0.025052192066805846,
+        "position": 6.1002087682672235
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-7"
+        ],
+        "clicks": 10,
+        "impressions": 1282,
+        "ctr": 0.0078003120124804995,
+        "position": 16.96411856474259
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-8"
+        ],
+        "clicks": 10,
+        "impressions": 1716,
+        "ctr": 0.005827505827505828,
+        "position": 8.283799533799534
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-9"
+        ],
+        "clicks": 10,
+        "impressions": 2346,
+        "ctr": 0.004262574595055414,
+        "position": 9.737851662404092
+      },
+      {
+        "keys": [
+          "https://example.com/blog/article-10"
+        ],
+        "clicks": 9,
+        "impressions": 1013,
+        "ctr": 0.008884501480750246,
+        "position": 5.416584402764067
+      },
+      {
+        "keys": [
+          "https://example.com/es/blog/article-11"
+        ],
+        "clicks": 9,
+        "impressions": 1639,
+        "ctr": 0.005491153142159854,
+        "position": 5.917022574740695
+      },
+      {
+        "keys": [
+          "https://example.com/page-6"
+        ],
+        "clicks": 9,
+        "impressions": 27463,
+        "ctr": 0.0003277136510941995,
+        "position": 8.049229872919929
+      },
+      {
+        "keys": [
+          "https://example.com/page-7"
+        ],
+        "clicks": 9,
+        "impressions": 272,
+        "ctr": 0.03308823529411765,
+        "position": 6.819852941176471
+      },
+      {
+        "keys": [
+          "https://example.com/page-8"
+        ],
+        "clicks": 9,
+        "impressions": 712,
+        "ctr": 0.012640449438202247,
+        "position": 14.757022471910112
+      },
+      {
+        "keys": [
+          "https://example.com/page-9"
+        ],
+        "clicks": 9,
+        "impressions": 959,
+        "ctr": 0.009384775808133473,
+        "position": 6.257559958289885
+      },
+      {
+        "keys": [
+          "https://example.com/page-10"
+        ],
+        "clicks": 9,
+        "impressions": 382,
+        "ctr": 0.02356020942408377,
+        "position": 6.87696335078534
+      },
+      {
+        "keys": [
+          "https://example.com/page-11"
+        ],
+        "clicks": 8,
+        "impressions": 810,
+        "ctr": 0.009876543209876543,
+        "position": 8.222222222222221
+      }
+    ],
+    "responseAggregationType": "byPage"
+  }
+}

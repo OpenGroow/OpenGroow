@@ -4,9 +4,10 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsConnection, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
 import { installPostiz } from "./postiz_fixture";
-import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
+import { setTemplateRegistryForTests } from "../template_registry";
 
 // ADR-078, issue #88: a Publication that becomes `published` receives
 // append-only Performance Snapshots 1, 3 and 7 days after. Driven through the
@@ -22,6 +23,8 @@ const modules = {
   "../analytics.ts": () => import("../analytics.js"),
   "../analytics_adapters.ts": () => import("../analytics_adapters.js"),
   "../analytics_node.ts": () => import("../analytics_node.js"),
+  "../analytics_thumbnails.ts": () => import("../analytics_thumbnails.js"),
+  "../analytics_thumbnails_node.ts": () => import("../analytics_thumbnails_node.js"),
   "../analytics_connections.ts": () => import("../analytics_connections.js"),
   "../instances.ts": () => import("../instances.js"),
   "../missions.ts": () => import("../missions.js"),
@@ -40,8 +43,10 @@ const DAY = 24 * HOUR;
 const INSTANCE_ID = "openclaw-analytics";
 const MEASURED = fixtureTemplate("@test/social", {
   missionTypes: [
-    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: { primaryMetric: "views" } },
-    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { primaryMetric: "views", collect: [2] } },
+    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: {} },
+    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { collect: [2] } },
+    { type: "make_bare", label: "Bare", payload: "{}", agentsMd: "d.md", publish: { kind: "image" }, analytics: {} },
+    { type: "make_many", label: "Many", payload: "{}", agentsMd: "e.md", publish: { kind: "image" }, analytics: { collect: [1, 2, 7] } },
     { type: "make_plain", label: "Plain", payload: "{}", agentsMd: "c.md", publish: { kind: "image" } },
   ],
 } as never);
@@ -82,7 +87,7 @@ let answer: Answer;
 let reads: string[];
 const connections: AnalyticsConnection[] = [];
 
-async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled"; type?: string } = {}) {
+async function seed(opts: { externalId?: string | null; externalUrl?: string; status?: "published" | "scheduled"; type?: string; templateVersion?: string } = {}) {
   const t = convexTest(schema, modules);
   await installPostiz(t);
   await installAnalyticsAdapter(t, POSTIZ_ANALYTICS);
@@ -106,6 +111,7 @@ async function seed(opts: { externalId?: string | null; externalUrl?: string; st
       ownerId: OWNER.subject,
       instanceId: INSTANCE_ID,
       templateId: "@test/social",
+      ...(opts.templateVersion ? { templateVersion: opts.templateVersion } : {}),
       type: opts.type ?? "make_image",
       payload: { publishTargets: ["instagram:love_youmake"] },
       status: "approved",
@@ -157,7 +163,89 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const delaysAdapter = (extra: Partial<AnalyticsAdapterData> = {}): AnalyticsAdapterData => ({
+  id: "delays-adapter",
+  name: "Delays",
+  needs: "externalId",
+  publisher: "postiz",
+  earliestDelayMs: 0,
+  primary: "views",
+  metrics: [{ key: "views", label: "Views", type: "counter", format: "number" }],
+  ...extra,
+});
+
+async function seedWithAdapter(meta: AnalyticsAdapterData, type: string) {
+  const s = await seed({ type });
+  await installAnalyticsAdapter(s.t, meta);
+  await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", analyticsAdapter: meta.id });
+  await s.publish();
+  return s;
+}
+
+describe("Reading delays declared by the adapter (ADR-079, #103)", () => {
+  it("uses the adapter's delays when the Template gives none", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["2d", "5d"] }), "make_bare");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    vi.advanceTimersByTime(3 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 5 * DAY]);
+    expect(view.state).toBe("complete");
+  });
+
+  it("lets the Template's delays override the adapter's", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["2d", "5d"] }), "make_short");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY]);
+    expect(view.state).toBe("complete");
+  });
+
+  it("gives one reading and one Snapshot to delays that fall on the same moment after the adapter's earliest delay", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ earliestDelayMs: 2 * DAY }), "make_many");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    await s.tick();
+    vi.advanceTimersByTime(5 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 7 * DAY]);
+    expect(reads).toHaveLength(2);
+  });
+
+  it("keeps a Mission type without `analytics` unmeasured", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["1d"] }), "make_plain");
+    expect((await s.view()).state).toBe("unmeasured");
+  });
+});
+
 describe("Performance Snapshots (ADR-078)", () => {
+  it("stores the declared non-derived keys of a contract 2 adapter and drops the others (ADR-079)", async () => {
+    const s = await seed();
+    await installAnalyticsAdapter(s.t, {
+      id: "search-console",
+      name: "Search Console",
+      needs: "externalId",
+      publisher: "postiz",
+      earliestDelayMs: 0,
+      primary: "clicks",
+      metrics: [
+        { key: "clicks", label: "Clicks", type: "counter", format: "number" },
+        { key: "impressions", label: "Impressions", type: "counter", format: "number" },
+        { key: "ctr", label: "CTR", type: "level", format: "percent", derive: { sum: ["clicks"], per: "impressions" } },
+        { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+      ],
+    });
+    await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", analyticsAdapter: "search-console" });
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    answer = () => json({ clicks: 46, impressions: 1900, ctr: 0.024, position: 11.8, views: 5, stray: 1 });
+    await s.tick();
+    expect((await s.view()).snapshots[0].metrics).toEqual({ clicks: 46, impressions: 1900, position: 11.8 });
+  });
+
   it("takes no reading before the first delay, then one Snapshot at 1, 3 and 7 days", async () => {
     const s = await seed();
     await s.publish();
@@ -474,6 +562,32 @@ describe("Performance Snapshots (ADR-078)", () => {
     vi.advanceTimersByTime(DAY);
     await s.tick();
     expect((await s.view()).snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 3 * DAY]);
+  });
+
+  it("measures on Refresh a post whose Mission was made with a Template version that did not declare analytics, using the Project's current one", async () => {
+    const OLD = fixtureTemplate("@test/social", {
+      missionTypes: [{ type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" } }],
+    } as never);
+    const s = await seed({ status: "published", templateVersion: "1.0.0" });
+    // The Project has since installed a version that declares analytics; the Mission stays pinned to the old one.
+    setTemplateRegistryForTests({
+      resolve: async (_project, _id, version) => (version === "1.0.0" ? OLD : MEASURED),
+      list: async () => [MEASURED],
+    });
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result.read).toBe(1);
+    expect((await s.view()).snapshots).toHaveLength(1);
+  });
+
+  it("leaves unmeasured, even on Refresh, a post whose Mission type no Template version of the Project declares measured", async () => {
+    const OLD = fixtureTemplate("@test/social", {
+      missionTypes: [{ type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" } }],
+    } as never);
+    const s = await seed({ status: "published", templateVersion: "1.0.0" });
+    setTemplateRegistryForTests({ resolve: async () => OLD, list: async () => [OLD] });
+    const result = await s.owner.action(api.analytics_node.refresh, { instanceId: INSTANCE_ID });
+    expect(result).toEqual({ read: 0, unavailable: 0, failed: 0 });
+    expect((await s.view()).state).toBe("unmeasured");
   });
 
   it("reads a post older than every delay once, on Refresh, and keeps it complete", async () => {

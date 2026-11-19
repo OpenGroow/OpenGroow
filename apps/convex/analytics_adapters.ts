@@ -14,10 +14,10 @@ type Ctx = Pick<QueryCtx, "db">;
 const MAX_ADAPTERS = 200;
 const MAX_PACKAGE_FILES = 100;
 
-/** The installed Analytics Adapters, ordered by id. */
+/** The installed Analytics Adapters, ordered by id. One installed under contract 1 declares no metrics: it is not offered until it is republished (ADR-079). */
 export async function installedAnalyticsAdapters(ctx: Ctx): Promise<AnalyticsAdapterMeta[]> {
   const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "analytics")).take(MAX_ADAPTERS);
-  return rows.flatMap((row) => (row.meta ? [row.meta as AnalyticsAdapterMeta] : [])).sort((a, b) => a.id.localeCompare(b.id));
+  return rows.flatMap((row) => ((row.meta as Partial<AnalyticsAdapterMeta> | undefined)?.metrics ? [row.meta as AnalyticsAdapterMeta] : [])).sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** Whether `adapter` can measure the channels of the Publisher `publisherAdapter`. */
@@ -26,28 +26,43 @@ export function canMeasure(adapter: AnalyticsAdapterMeta, publisherAdapter: stri
   return adapter.needs !== "externalId" || adapter.publisher === publisherAdapter;
 }
 
+/** What a channel's link holds: a list of adapter ids (the first is the default shown), `[]` (unlinked) or absent (the Publisher's own adapter). */
+export type StoredLink = string[] | undefined;
+
 /**
- * The adapter a channel of `publisherAdapter` is linked to. `stored` is the channel's own choice:
- * a string is a link made by hand, `null` an unlink, absent means the Publisher's own adapter by default.
+ * The adapters a channel of `publisherAdapter` is linked to, the first being the default shown.
+ * An adapter that was removed since, or that cannot measure the channel, reads as no link.
  */
-export function linkedAdapter(
+export function linkedAdapters(
   installed: readonly AnalyticsAdapterMeta[],
   publisherAdapter: string,
-  stored: string | null | undefined,
-): { adapter: AnalyticsAdapterMeta; isDefault: boolean } | null {
+  stored: StoredLink,
+): Array<{ adapter: AnalyticsAdapterMeta; isDefault: boolean }> {
   const own = installed.find((a) => a.publisher === publisherAdapter);
-  if (stored === null) return null;
-  if (stored === undefined) return own ? { adapter: own, isDefault: true } : null;
-  const chosen = installed.find((a) => a.id === stored);
-  // A link to an adapter that was removed since reads as no link.
-  return chosen && canMeasure(chosen, publisherAdapter) ? { adapter: chosen, isDefault: chosen.id === own?.id } : null;
+  if (stored === undefined) return own ? [{ adapter: own, isDefault: true }] : [];
+  return stored.flatMap((id) => {
+    const chosen = installed.find((a) => a.id === id);
+    return chosen && canMeasure(chosen, publisherAdapter) ? [{ adapter: chosen, isDefault: chosen.id === own?.id }] : [];
+  });
 }
+
+const packageOf = (ctx: Ctx, adapter: string) =>
+  ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "analytics").eq("provides", adapter)).unique();
+
+/** For Node actions: which package (and digest) provides the installed Analytics Adapter `adapter`, without its code (a loaded adapter is cached by digest). */
+export const bundleRef = internalQuery({
+  args: { adapter: v.string() },
+  handler: async (ctx, { adapter }) => {
+    const row = await packageOf(ctx, adapter);
+    return row ? { packageId: row.packageId, digest: row.digest } : null;
+  },
+});
 
 /** For Node actions: the bundle of the installed Analytics Adapter `adapter`. */
 export const bundleOf = internalQuery({
   args: { adapter: v.string() },
   handler: async (ctx, { adapter }) => {
-    const row = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "analytics").eq("provides", adapter)).unique();
+    const row = await packageOf(ctx, adapter);
     if (!row) return null;
     const files = await ctx.db
       .query("hubPackageFiles")

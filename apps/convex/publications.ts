@@ -3,7 +3,7 @@ import { normalizePostUrl } from "./post_url.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { scheduleReadings } from "./analytics.js";
-import { publishableForPlatform } from "./publishable.js";
+import { publishableForPlatform, publishableOf } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, notConfiguredTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
 import { allChannels, channelOf, projectPublishers, publishersOf, type PublisherChannelEntry } from "./project_publishers.js";
 import { publicationAttemptContextV, publicationStatusV } from "./publisher_schema.js";
@@ -135,12 +135,6 @@ export const setPublishAt = mutation({
     });
   },
 });
-
-/** The Publishable the Mission's latest result (or last Artifact) carries. */
-export function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
-  const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
-  return (resultArtifact ?? mission.lastArtifact)?.publishable as Record<string, unknown> | undefined;
-}
 
 async function publicationFor(ctx: QueryCtx, missionId: Id<"missions">, target: string) {
   return await ctx.db

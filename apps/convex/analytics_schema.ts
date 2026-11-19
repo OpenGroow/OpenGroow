@@ -37,6 +37,8 @@ export const analyticsTables = {
     /** The Publication's `postSeries` this row measures: a retry that creates a new post starts a new row. */
     postSeries: v.number(),
     instanceId: v.string(),
+    /** The Analytics Adapter this row reads through (one row per adapter a channel is linked to). Absent on rows made before several links: the channel's first link. */
+    adapter: v.optional(v.string()),
     /** The Publisher the Publication went through (its channel's link is resolved when reading). */
     publisherAdapter: v.string(),
     /** When the Publication became `published`: the delays count from here. */
@@ -67,9 +69,18 @@ export const analyticsTables = {
     /** The delay after `published` this reading stands for. */
     delayMs: v.number(),
     takenAt: v.number(),
-    /** Metrics of the closed vocabulary of the Publication's kind. */
+    /** The metrics the Analytics Adapter declares (ADR-079), by key. */
     metrics: v.record(v.string(), v.number()),
+    /** The Analytics Adapter that took the reading. Absent on Snapshots taken before several links: the channel's first link. */
+    adapter: v.optional(v.string()),
     /** `adapter`: a scheduled reading. `refresh`: one the owner asked for, outside the schedule. */
     source: v.union(v.literal("adapter"), v.literal("refresh")),
+  }).index("by_publication", ["publicationId"]),
+
+  // The image a Publication's public page declares (og:image), looked up once: `url` is null when the page has none.
+  pageThumbnails: defineTable({
+    publicationId: v.id("publications"),
+    url: v.union(v.string(), v.null()),
+    fetchedAt: v.number(),
   }).index("by_publication", ["publicationId"]),
 };

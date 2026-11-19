@@ -8,19 +8,19 @@ import type { PublisherMeta } from "./hub_package_kinds.js";
 // Node actions, through `bundleOf`.
 
 /** The installed Publisher packages' data; `packageId` is the hub entry that provides each. */
-export async function installedPublishers(ctx: Pick<QueryCtx, "db">): Promise<Array<PublisherMeta & { packageId: string; version: string }>> {
+export async function installedPublishers(ctx: Pick<QueryCtx, "db">): Promise<Array<PublisherMeta & { packageId: string; version: string; digest: string }>> {
   const rows = await ctx.db.query("hubPackages").withIndex("by_kind", (q) => q.eq("kind", "publisher")).collect();
-  return rows.flatMap((row) => (row.meta ? [{ ...(row.meta as PublisherMeta), packageId: row.packageId, version: row.version }] : []));
+  return rows.flatMap((row) => (row.meta ? [{ ...(row.meta as PublisherMeta), packageId: row.packageId, version: row.version, digest: row.digest }] : []));
 }
 
 /** The data of the installed Publisher whose adapter id is `adapter`, or null when none is installed. */
-export async function publisherMetaOf(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<(PublisherMeta & { packageId: string; version: string }) | null> {
+export async function publisherMetaOf(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<(PublisherMeta & { packageId: string; version: string; digest: string }) | null> {
   const row = await ctx.db.query("hubPackages").withIndex("by_kind_provides", (q) => q.eq("kind", "publisher").eq("provides", adapter)).unique();
-  return row?.meta ? { ...(row.meta as PublisherMeta), packageId: row.packageId, version: row.version } : null;
+  return row?.meta ? { ...(row.meta as PublisherMeta), packageId: row.packageId, version: row.version, digest: row.digest } : null;
 }
 
 /** Throws when no installed package provides `adapter`: a Publisher cannot be saved or used without its package. */
-export async function requirePublisherMeta(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<PublisherMeta & { packageId: string; version: string }> {
+export async function requirePublisherMeta(ctx: Pick<QueryCtx, "db">, adapter: string): Promise<PublisherMeta & { packageId: string; version: string; digest: string }> {
   const meta = await publisherMetaOf(ctx, adapter);
   if (!meta) throw new Error(`The Publisher "${adapter}" is not installed`);
   return meta;

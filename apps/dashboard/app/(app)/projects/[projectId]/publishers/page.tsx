@@ -18,9 +18,12 @@ import { Label } from "@/components/ui/label";
 import { AdapterForm, analyticsAdapterOf, AnalyticsConnectionsCard, useInstallPublishersAnalytics } from "@/src/components/analytics-connections-card";
 import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { PageHeader } from "@/components/opengroow/page-header";
+import { PackageVersionCard } from "@/src/components/package-version-card";
+import { ProviderDangerZone } from "@/src/components/provider-danger-zone";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import type { ProjectPublisher } from "@/src/hooks/use-project-channels";
+import { PackageLogo } from "@/src/components/package-logo";
 
 type PublishersPageProps = {
   params: Promise<{ projectId: string }>;
@@ -34,20 +37,6 @@ const BARE_INPUT_CLASS =
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-/**
- * A Publisher package's logo: the image data URI the hub gives it (index entry
- * before the install, manifest after), or the initial of its name when it has
- * none or the image does not load.
- */
-function PublisherLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
-  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
-  if (!icon || brokenIcon === icon) {
-    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
 }
 
 /** `@opengroow/publisher-postiz` -> `postiz`: the adapter id a package is conventionally installed under (ADR-072). */
@@ -170,6 +159,9 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     }
   }
 
+  // The Publishers of the Project that are measured by an adapter that comes with them, and those that publish only.
+  const withAnalytics = (publishers ?? []).filter((p) => (analyticsProviders ?? []).some((a) => a.publisher === p.adapter));
+  const publishOnlyAdded = (publishers ?? []).filter((p) => !withAnalytics.includes(p));
   const showAdding = adding !== null && !configured.has(adding);
   const empty = (publishers ?? []).length === 0 && !showAdding;
 
@@ -211,7 +203,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                     className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                     onClick={() => void choose(entry.packageId)}
                   >
-                    <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+                    <PackageLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                     <span className="grid flex-1">
                       <span className="text-base font-medium">{entry.name}</span>
                       {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
@@ -240,9 +232,9 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                       className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                       onClick={() => void chooseAnalytics(entry.packageId)}
                     >
-                      <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+                      <PackageLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                       <span className="grid flex-1">
-                        <span className="text-base font-medium">{entry.name} analytics</span>
+                        <span className="text-base font-medium">{entry.name}</span>
                         {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
                       </span>
                       {installing === entry.packageId ? <Loader2 className="size-4 animate-spin" aria-label="Installing" /> : <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />}
@@ -259,7 +251,12 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       {empty ? (
         <Card className="p-5 text-sm text-muted-foreground">No publisher yet. Add one to publish your Agents&apos; content.</Card>
       ) : null}
-      {(publishers ?? []).map((publisher) => (
+      {withAnalytics.length > 0 ? <h2 className="m-0 text-xl font-semibold">Analytics &amp; Publish providers</h2> : null}
+      {withAnalytics.map((publisher) => (
+        <PublisherPanel key={publisher.adapter} instanceId={id} adapter={publisher.adapter} publisher={publisher} />
+      ))}
+      {publishOnlyAdded.length > 0 ? <h2 className="m-0 text-xl font-semibold">Publishers only providers</h2> : null}
+      {publishOnlyAdded.map((publisher) => (
         <PublisherPanel key={publisher.adapter} instanceId={id} adapter={publisher.adapter} publisher={publisher} />
       ))}
       {showAdding ? (
@@ -300,10 +297,6 @@ function PublisherPanel({
   const [installError, setInstallError] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
   const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
-  // A newer version of the installed package in the hub (ADR-072), found by "Check for updates": installing it again replaces the installed one.
-  const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
-  // The outcome of the last check: the hub is read only when the user asks.
-  const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
   const [tab, setTab] = useState<"configuration" | "channels" | "analytics">("configuration");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
@@ -352,35 +345,6 @@ function PublisherPanel({
 
   const installedPackageId = installedPackage?.packageId;
   const installedVersion = installedPackage?.version;
-  // A new installed version (an update just applied) makes the last check stale.
-  useEffect(() => {
-    setUpdate(null);
-    setUpdateCheck(null);
-  }, [installedPackageId, installedVersion]);
-
-  async function checkForUpdates() {
-    if (!installedPackageId || !installedVersion) return;
-    setUpdate(null);
-    setUpdateCheck({ status: "checking" });
-    try {
-      const result = await hubCatalogue({ kind: "publisher" });
-      if (result.error) {
-        setUpdateCheck({ status: "error", message: `The hub could not be read: ${result.error}` });
-        return;
-      }
-      const entry = (result.entries ?? []).find((e) => e.packageId === installedPackageId);
-      const version = entry ? versionOfHubTag(entry.tag) : undefined;
-      if (entry && version && isNewerVersion(version, installedVersion)) {
-        setUpdate({ packageId: entry.packageId, name: entry.name, version });
-        setUpdateCheck(null);
-      } else {
-        setUpdateCheck({ status: "upToDate" });
-      }
-    } catch (error) {
-      setUpdateCheck({ status: "error", message: errorMessage(error, "The hub could not be read") });
-    }
-  }
-
   const urlValue = url ?? publisher?.url ?? "";
   const serviceName = installedPackage?.name ?? adapterId;
 
@@ -452,7 +416,7 @@ function PublisherPanel({
       <section className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5" data-testid={`publisher-${adapterId}`} aria-label={serviceName}>
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
-          <PublisherLogo icon={installedPackage?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
+          <PackageLogo icon={installedPackage?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
           <div className="grid flex-1 gap-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="m-0 text-2xl font-semibold">{serviceName}</h1>
@@ -539,42 +503,19 @@ function PublisherPanel({
             {message ? <StatusBadge tone={message.tone} label={message.text} /> : null}
           </div>
         </Card>
-        {installedVersion ? (
-          <Card className="gap-4 p-5" data-testid="package-updates">
-            <h2 className="m-0 text-base font-semibold">Version</h2>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div className="grid flex-1 gap-1">
-                <span className="text-sm text-muted-foreground">Current version</span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-2xl font-semibold">{installedVersion}</span>
-                  {updateCheck?.status === "checking" ? <StatusBadge tone="progress" label="Checking…" /> : null}
-                  {updateCheck?.status === "upToDate" ? <StatusBadge tone="active" label="Up to date" /> : null}
-                  {update ? <StatusBadge tone="info" label={`${update.version} available`} /> : null}
-                  {updateCheck?.status === "error" ? <StatusBadge tone="error" label="Check failed" /> : null}
-                </div>
-              </div>
-              <div className="flex shrink-0">
-                {update ? (
-                  <Button type="button" size="lg" disabled={installing !== null} onClick={() => void installMissing(update.packageId)}>
-                    {installing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
-                    Update to {update.version}
-                  </Button>
-                ) : (
-                  <Button type="button" variant="outline" size="lg" disabled={updateCheck?.status === "checking" || installing !== null} onClick={() => void checkForUpdates()}>
-                    {updateCheck?.status === "checking" ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
-                    Check for updates
-                  </Button>
-                )}
-              </div>
-            </div>
-            {updateCheck?.status === "error" ? <p className="m-0 text-sm text-destructive">{updateCheck.message}</p> : null}
-            {update && installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
-          </Card>
+        {installedPackageId && installedVersion ? (
+          <PackageVersionCard
+            packages={[
+              { kind: "publisher", packageId: installedPackageId, version: installedVersion, digest: installedPackage?.digest },
+              ...(analyticsAdapter?.packageId && analyticsAdapter.version ? [{ kind: "analytics" as const, packageId: analyticsAdapter.packageId, version: analyticsAdapter.version, digest: analyticsAdapter.digest }] : []),
+            ]}
+          />
         ) : null}
         {publisher ? (
-          <PublisherDangerZone
+          <ProviderDangerZone
             name={serviceName}
-            channelCount={publisher.targets.length}
+            summary="Remove this publisher from the Project, with its connection and its channels."
+            consequences={`Its connection and its ${publisher.targets.length} channel(s) are removed from this Project. Missions and Schedules that publish to them will be refused until you choose other channels. Past publications are kept.`}
             removing={busy === "remove"}
             disabled={busy !== null}
             error={removeError}
@@ -595,74 +536,5 @@ function PublisherPanel({
         <Card className="p-5 text-sm text-muted-foreground">Save the connection first to list your channels.</Card>
       )}
       </section>
-  );
-}
-
-/**
- * Removing the Publisher from the Project, as the Agent page's Danger zone does:
- * the last card of the settings, confirmed in a dialog that says what it does.
- */
-function PublisherDangerZone({
-  name,
-  channelCount,
-  removing,
-  disabled,
-  error,
-  confirming,
-  onConfirming,
-  onRemove,
-}: {
-  name: string;
-  channelCount: number;
-  removing: boolean;
-  disabled: boolean;
-  error: string | null;
-  confirming: boolean;
-  onConfirming: (open: boolean) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <Card data-slot="settings-panel" aria-label="Danger zone">
-      <CardContent className="grid gap-6">
-        <div className="flex items-start gap-4">
-          <PanelIcon icon={TriangleAlert} tone="danger" />
-          <div className="grid gap-1">
-            <h2 className="m-0 text-lg font-semibold text-foreground">Danger zone</h2>
-            <p className="m-0 text-sm text-muted-foreground">Remove this publisher from the Project, with its connection and its channels.</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button className="w-32" variant="outline" size="lg" type="button" disabled={disabled} onClick={() => onConfirming(true)}>
-            <Trash2 />
-            Remove
-          </Button>
-        </div>
-        <Dialog open={confirming} onOpenChange={(open) => !open && !removing && onConfirming(false)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Remove {name}?</DialogTitle>
-              <DialogDescription>
-                Its connection and its {channelCount} channel(s) are removed from this Project. Missions and Schedules that publish to them will be
-                refused until you choose other channels. Past publications are kept.
-              </DialogDescription>
-            </DialogHeader>
-            {error ? (
-              <p role="alert" className="m-0 text-sm text-destructive">
-                {error}
-              </p>
-            ) : null}
-            <DialogFooter>
-              <Button variant="outline" type="button" disabled={removing} onClick={() => onConfirming(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" type="button" loading={removing} onClick={onRemove}>
-                {removing ? null : <Trash2 />}
-                {removing ? "Removing…" : `Remove ${name}`}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
   );
 }

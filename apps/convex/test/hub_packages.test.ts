@@ -79,7 +79,7 @@ describe("hub_packages_node.catalogue", () => {
     const t = convexTest(schema, modules);
     const result = await t.withIdentity(USER).action(api.hub_packages_node.catalogue, { kind: "publisher" });
     expect(result).toEqual({
-      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "Publish through a Postiz instance", tag: TAG, verification: "official" }],
+      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "Publish through a Postiz instance", tag: TAG, verification: "official", digest: sha(archive) }],
     });
   });
 

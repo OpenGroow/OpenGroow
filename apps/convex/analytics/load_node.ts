@@ -27,7 +27,13 @@ function check(value: unknown, id: string): AnalyticsAdapter {
  * no installed package provides it. Cached per package digest: an upgrade changes the digest.
  */
 export async function loadAnalyticsAdapter(ctx: ActionCtx, adapterId: string): Promise<AnalyticsAdapter | null> {
-  const bundle = await ctx.runQuery(internal.analytics_adapters.bundleOf, { adapter: adapterId });
-  if (!bundle) return null;
-  return loadCachedBundle(cache, bundle, `The Analytics Adapter "${adapterId}"`, (exported) => check(exported, adapterId));
+  const ref = await ctx.runQuery(internal.analytics_adapters.bundleRef, { adapter: adapterId });
+  if (!ref) return null;
+  // The code is read only when this digest is not loaded yet.
+  const source = async () => {
+    const bundle = await ctx.runQuery(internal.analytics_adapters.bundleOf, { adapter: adapterId });
+    if (!bundle) throw new Error(`The Analytics Adapter "${adapterId}" was removed while it was loaded`);
+    return bundle.source;
+  };
+  return loadCachedBundle(cache, { ...ref, source }, `The Analytics Adapter "${adapterId}"`, (exported) => check(exported, adapterId));
 }

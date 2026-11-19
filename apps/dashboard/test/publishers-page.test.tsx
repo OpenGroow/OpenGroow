@@ -127,8 +127,32 @@ describe("Publishers page", () => {
     await render();
     await click(byText("Add provider"));
     expect(text()).toContain("Analytics providers");
-    expect(text()).toContain("Google analytics");
+    expect(text()).toContain("Google");
+    expect(text()).not.toContain("Google analytics");
     expect(text()).not.toContain("Postiz analytics");
+  });
+
+  it("titles the providers of the page: publish and analytics, publish only, analytics only", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [
+      { adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: false },
+      { adapter: "seo", name: "Google Search Console", optionDecls: [], configured: false },
+    ];
+    await render();
+    const page = text();
+    expect(page).toContain("Analytics & Publish providers");
+    expect(page).not.toContain("Publishers only providers");
+    expect(page.indexOf("Analytics & Publish providers")).toBeLessThan(page.indexOf("Analytics only providers"));
+    expect(page).toContain("Google Search Console");
+  });
+
+  it("titles a Publisher with no analytics adapter as publish only", async () => {
+    useQueryMock.mockReturnValue(PUBLISHER);
+    analyticsAdapters = [];
+    await render();
+    expect(text()).toContain("Publishers only providers");
+    expect(text()).not.toContain("Analytics & Publish providers");
+    expect(text()).not.toContain("Analytics only providers");
   });
 
   it("has no Analytics tab when the Publisher has no analytics adapter", async () => {
@@ -159,6 +183,21 @@ describe("Publishers page", () => {
     expect(text()).toContain("1.0.2 available");
     await click(byText("Update to 1.0.2"));
     expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: entry.packageId });
+  });
+
+  it("offers a Reinstall when the same version was republished with another digest", async () => {
+    installedPublishers = [{ ...INSTALLED_PUBLISHERS[0], digest: `sha256:${"a".repeat(64)}` } as (typeof INSTALLED_PUBLISHERS)[number]];
+    useQueryMock.mockReturnValue(PUBLISHER);
+    actions["publishers_node.testConnection"] = vi.fn(async () => ({ ok: true }));
+    actions["hub_packages_node.catalogue"] = vi.fn(async () => ({
+      entries: [{ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag: "publisher-postiz@1.0.0", verification: "official", digest: `sha256:${"b".repeat(64)}` }],
+    }));
+    actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed" }));
+    await render();
+    await click(byText("Check for updates"));
+    expect(text()).toContain("Update available");
+    await click(byText("Reinstall"));
+    expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
   });
 
   it("says Up to date for the installed version, and reports a hub that cannot be read", async () => {
@@ -409,6 +448,73 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
       await click(byText("Install Postiz"));
       expect(text()).toContain("Digest mismatch");
       expect(document.querySelector('[data-testid="package-missing"]')).not.toBeNull();
+    });
+  });
+
+  describe("one Version for the service: the publisher package and its analytics package", () => {
+    const D = (c: string) => `sha256:${c.repeat(64)}`;
+    const ANALYTICS = { adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: false, packageId: "@opengroow/analytics-postiz", version: "1.0.0", digest: D("a") };
+    const pubEntry = (tag: string, digest = D("1")) => ({ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag, verification: "official", digest });
+    const anaEntry = (tag: string, digest = D("a")) => ({ packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "", tag, verification: "official", digest });
+    beforeEach(() => {
+      hubAnalytics = [];
+      useQueryMock.mockReturnValue(PUBLISHER);
+      installedPublishers = INSTALLED_PUBLISHERS.map((p) => ({ ...p, digest: D("1") }));
+      actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed" }));
+    });
+    const check = async () => {
+      await render();
+      await click(byText("Check for updates"));
+    };
+
+    it("flags an update when only the analytics package was rebuilt, and installs only that one", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.0.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.0.0", D("b"))];
+      await check();
+      expect(text()).toContain("Update available");
+      await click(byText("Reinstall"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledTimes(1);
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+    });
+
+    it("installs both packages when both are behind", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.1.0")];
+      await check();
+      await click(byText("Update to 1.1.0"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+    });
+
+    it("is up to date when both packages are", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.0.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.0.0")];
+      await check();
+      expect(text()).toContain("Up to date");
+    });
+
+    it("reads only the publisher kind and installs only it for a Publisher without analytics package", async () => {
+      analyticsAdapters = [];
+      const catalogue = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      actions["hub_packages_node.catalogue"] = catalogue;
+      await check();
+      expect(catalogue).toHaveBeenCalledTimes(1);
+      await click(byText("Update to 1.1.0"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledTimes(1);
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
+    });
+
+    it("reports the first install error", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.1.0")];
+      actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "error", errorMessage: "Digest mismatch" }));
+      await check();
+      await click(byText("Update to 1.1.0"));
+      expect(text()).toContain("Digest mismatch");
     });
   });
 

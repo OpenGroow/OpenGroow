@@ -1,0 +1,7 @@
+{
+  "name": "@opengroow/analytics-demo-metrics",
+  "version": "1.0.0",
+  "description": "A test Analytics Adapter of contract 2: it declares its own metrics",
+  "license": "AGPL-3.0-only",
+  "type": "module"
+}

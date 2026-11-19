@@ -1,6 +1,7 @@
 import {
   parseAnalyticsManifest,
   parseAnalyticsMetrics,
+  strayLabelMetric,
   parseCapabilities,
   parsePublisherManifest,
   type AnalyticsAdapterMeta,
@@ -146,7 +147,11 @@ function analyticsProblem(entry: { id: string }, files: readonly PackageFile[]):
   const metrics = readJson(files, "data/metrics.json");
   if (!metrics.ok) return metrics.error;
   try {
-    if (parseAnalyticsMetrics(metrics.value).adapter !== manifest.manifest.id) return `data/metrics.json is for another adapter than "${manifest.manifest.id}"`;
+    const data = parseAnalyticsMetrics(metrics.value);
+    if (data.adapter !== manifest.manifest.id) return `data/metrics.json is for another adapter than "${manifest.manifest.id}"`;
+    // The labels map to the metrics the manifest declares and stores.
+    const stray = strayLabelMetric(manifest.manifest.metrics, data.labels);
+    if (stray) return `data/metrics.json maps a label to "${stray}", which the manifest does not declare as a stored metric`;
   } catch (error) {
     return `data/metrics.json: ${error instanceof Error ? error.message : String(error)}`;
   }
