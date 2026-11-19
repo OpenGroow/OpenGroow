@@ -200,18 +200,16 @@ describe("analytics.listForProject", () => {
   });
 });
 
-describe("analytics.declarationForProject", () => {
-  it("gives the metrics and the ranking metric of the adapter the published posts are linked to, to the owner only", async () => {
+describe("analytics.adaptersForProject", () => {
+  it("gives the adapter the Project's channels are linked to with its metrics and ranking metric, to the owner only", async () => {
     const s = await seed();
     const metrics = [
       { key: "clicks", label: "Clicks", type: "counter" as const, format: "number" as const },
       { key: "position", label: "Position", type: "level" as const, format: "number" as const, better: "lower" as const },
     ];
     await installAnalyticsAdapter(s.t, { id: "postiz-v2", name: "Postiz v2", needs: "externalId", publisher: "postiz", earliestDelayMs: 0, metrics, primary: "clicks" });
-    const declaration = () => s.owner.query(api.analytics.declarationForProject, { instanceId: INSTANCE_ID });
-    expect(await declaration()).toBeNull();
-    await s.publish({ target: "instagram:me", state: "waiting" });
-    expect(await declaration()).toEqual({ adapter: "postiz-v2", name: "Postiz v2", metrics, primary: "clicks" });
-    expect(await s.t.withIdentity(STRANGER).query(api.analytics.declarationForProject, { instanceId: INSTANCE_ID })).toBeNull();
+    const adapters = (who = s.owner) => who.query(api.analytics.adaptersForProject, { instanceId: INSTANCE_ID });
+    expect(await adapters()).toEqual([{ adapter: "postiz-v2", name: "Postiz v2", metrics, primary: "clicks" }]);
+    expect(await adapters(s.t.withIdentity(STRANGER))).toEqual([]);
   });
 });

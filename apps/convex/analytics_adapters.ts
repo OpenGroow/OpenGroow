@@ -26,21 +26,31 @@ export function canMeasure(adapter: AnalyticsAdapterMeta, publisherAdapter: stri
   return adapter.needs !== "externalId" || adapter.publisher === publisherAdapter;
 }
 
+/** What a channel's link holds: a string (one link by hand), a list (several), `null` (unlinked) or absent (the Publisher's own adapter). */
+export type StoredLink = string | string[] | null | undefined;
+
 /**
- * The adapter a channel of `publisherAdapter` is linked to. `stored` is the channel's own choice:
- * a string is a link made by hand, `null` an unlink, absent means the Publisher's own adapter by default.
+ * The adapters a channel of `publisherAdapter` is linked to, the first being the default shown.
+ * An adapter that was removed since, or that cannot measure the channel, reads as no link.
  */
-export function linkedAdapter(
+export function linkedAdapters(
   installed: readonly AnalyticsAdapterMeta[],
   publisherAdapter: string,
-  stored: string | null | undefined,
-): { adapter: AnalyticsAdapterMeta; isDefault: boolean } | null {
+  stored: StoredLink,
+): Array<{ adapter: AnalyticsAdapterMeta; isDefault: boolean }> {
   const own = installed.find((a) => a.publisher === publisherAdapter);
-  if (stored === null) return null;
-  if (stored === undefined) return own ? { adapter: own, isDefault: true } : null;
-  const chosen = installed.find((a) => a.id === stored);
-  // A link to an adapter that was removed since reads as no link.
-  return chosen && canMeasure(chosen, publisherAdapter) ? { adapter: chosen, isDefault: chosen.id === own?.id } : null;
+  if (stored === null) return [];
+  if (stored === undefined) return own ? [{ adapter: own, isDefault: true }] : [];
+  const ids = typeof stored === "string" ? [stored] : stored;
+  return ids.flatMap((id) => {
+    const chosen = installed.find((a) => a.id === id);
+    return chosen && canMeasure(chosen, publisherAdapter) ? [{ adapter: chosen, isDefault: chosen.id === own?.id }] : [];
+  });
+}
+
+/** The first adapter a channel is linked to, or null: what a reading made before several links belongs to. */
+export function linkedAdapter(installed: readonly AnalyticsAdapterMeta[], publisherAdapter: string, stored: StoredLink) {
+  return linkedAdapters(installed, publisherAdapter, stored)[0] ?? null;
 }
 
 /** For Node actions: the bundle of the installed Analytics Adapter `adapter`. */

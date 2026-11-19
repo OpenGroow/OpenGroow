@@ -10,7 +10,7 @@ import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { requirePublisherMeta } from "./publisher_packages.js";
 import { servesPlatform } from "@opengroow/publisher-sdk";
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
-import { canMeasure, installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
+import { canMeasure, installedAnalyticsAdapters, linkedAdapters, type StoredLink } from "./analytics_adapters.js";
 import { allChannels, MAX_PUBLISHERS_PER_PROJECT, projectPublisher, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 
 // Project-level Publishers (ADR-069, ADR-075): several per Project, at most one
@@ -47,10 +47,19 @@ async function requirePublisher(ctx: MutationCtx, instanceId: string, adapter: s
 /** What the dashboard sees of a Publisher: never its API key. */
 function view(publisher: ProjectPublisher, analyticsAdapters: readonly AnalyticsAdapterMeta[]) {
   const options = analyticsAdapters.filter((a) => canMeasure(a, publisher.adapter)).map((a) => ({ id: a.id, name: a.name }));
-  const analyticsOf = (stored: string | null | undefined) => {
-    const link = linkedAdapter(analyticsAdapters, publisher.adapter, stored);
+  const analyticsOf = (stored: StoredLink) => {
+    const links = linkedAdapters(analyticsAdapters, publisher.adapter, stored);
+    const [link] = links;
     return link
-      ? { linked: true as const, adapterId: link.adapter.id, name: link.adapter.name, isDefault: link.isDefault, options }
+      ? {
+          linked: true as const,
+          adapterId: link.adapter.id,
+          name: link.adapter.name,
+          isDefault: link.isDefault,
+          // Every adapter the channel is linked to, the first being the one above.
+          adapters: links.map((l) => ({ adapterId: l.adapter.id, name: l.adapter.name, isDefault: l.isDefault })),
+          options,
+        }
       : { linked: false as const, options };
   };
   return {
@@ -176,13 +185,14 @@ export const updateSettings = mutation({
  * unavailable"). An adapter that needs the id of a service is refused for a Publisher of another service.
  */
 export const setAnalyticsLink = mutation({
-  args: { instanceId: v.string(), adapter: v.string(), target: v.string(), analyticsAdapter: v.union(v.string(), v.null()) },
+  args: { instanceId: v.string(), adapter: v.string(), target: v.string(), analyticsAdapter: v.union(v.string(), v.array(v.string()), v.null()) },
   handler: async (ctx, args) => {
     const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     if (!publisher.targets.some((t) => t.target === args.target)) throw new Error(`Unknown channel "${args.target}"`);
-    if (args.analyticsAdapter !== null) {
-      const chosen = (await installedAnalyticsAdapters(ctx)).find((a) => a.id === args.analyticsAdapter);
-      if (!chosen) throw new Error(`The Analytics Adapter "${args.analyticsAdapter}" is not installed`);
+    const installed = await installedAnalyticsAdapters(ctx);
+    for (const id of args.analyticsAdapter === null ? [] : [args.analyticsAdapter].flat()) {
+      const chosen = installed.find((a) => a.id === id);
+      if (!chosen) throw new Error(`The Analytics Adapter "${id}" is not installed`);
       if (!canMeasure(chosen, publisher.adapter)) {
         throw new Error(`${chosen.name} ("${chosen.id}") only works with the Publisher "${chosen.publisher ?? "of its own service"}", not "${publisher.adapter}"`);
       }

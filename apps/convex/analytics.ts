@@ -2,7 +2,7 @@ import { v, type Infer } from "convex/values";
 import { collectDelayMs, DEFAULT_COLLECT_DELAYS_MS, metricKindOf, type AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
-import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
+import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
 import { connectionFor, projectAnalyticsConnection } from "./analytics_connections.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
@@ -54,34 +54,40 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
   const publishers = await projectPublishers(ctx, publication.instanceId);
   const found = channelOf(publishers, publication.target);
   const publisherAdapter = publication.attemptContext?.adapter ?? found?.publisher.adapter;
-  // The adapter the channel is linked to supplies the delays the Template does not (ADR-079).
-  const link = publisherAdapter ? linkedAdapter(await installedAnalyticsAdapters(ctx), publisherAdapter, found?.channel.analyticsAdapter) : null;
-  const all = readingDelays(declaration.collect, link?.adapter);
-  const delays = options.backfill ? all.filter((delay) => publishedAt + delay > now) : all;
+  // One row per adapter the channel is linked to (ADR-079); none: a single row that reads "analytics unavailable".
+  const links = publisherAdapter ? linkedAdapters(await installedAnalyticsAdapters(ctx), publisherAdapter, found?.channel.analyticsAdapter) : [];
   const postSeries = publication.postSeries ?? 0;
   const rows = await ctx.db
     .query("publicationAnalytics")
     .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
     .collect();
-  if (rows.some((row) => row.postSeries === postSeries)) return;
   // A retry that created a new post: the old post is no longer measured, its Snapshots stay.
-  for (const row of rows) if (!row.done) await ctx.db.patch(row._id, { done: true, updatedAt: Date.now() });
+  for (const row of rows) if (row.postSeries !== postSeries && !row.done) await ctx.db.patch(row._id, { done: true, updatedAt: Date.now() });
   if (!publisherAdapter) return;
-  // Nothing left to schedule: the post is old enough that only a refresh reads it.
-  const finished = delays.length === 0;
-  await ctx.db.insert("publicationAnalytics", {
-    publicationId: publication._id,
-    postSeries,
-    instanceId: publication.instanceId,
-    publisherAdapter,
-    publishedAt,
-    delays,
-    taken: 0,
-    state: finished ? "no_data" : "waiting",
-    nextAt: publishedAt + (delays[0] ?? 0),
-    done: finished,
-    updatedAt: now,
-  });
+  const current = rows.filter((row) => row.postSeries === postSeries);
+  const wanted = links.length > 0 ? links.map((l) => l.adapter) : [undefined];
+  for (const [index, adapter] of wanted.entries()) {
+    // A row made before several links has no adapter: it belongs to the channel's first link.
+    if (current.some((row) => (row.adapter ?? (index === 0 ? adapter?.id : undefined)) === adapter?.id)) continue;
+    const all = readingDelays(declaration.collect, adapter);
+    const delays = options.backfill ? all.filter((delay) => publishedAt + delay > now) : all;
+    // Nothing left to schedule: the post is old enough that only a refresh reads it.
+    const finished = delays.length === 0;
+    await ctx.db.insert("publicationAnalytics", {
+      publicationId: publication._id,
+      postSeries,
+      instanceId: publication.instanceId,
+      ...(adapter ? { adapter: adapter.id } : {}),
+      publisherAdapter,
+      publishedAt,
+      delays,
+      taken: 0,
+      state: finished ? "no_data" : "waiting",
+      nextAt: publishedAt + (delays[0] ?? 0),
+      done: finished,
+      updatedAt: now,
+    });
+  }
 }
 
 /** Gives the Publications of a Project that were published before they were measured the rows of their readings. */
@@ -102,7 +108,7 @@ export const backfill = internalMutation({
 function snapshotView(rows: Doc<"performanceSnapshots">[]) {
   return [...rows]
     .sort((a, b) => a.takenAt - b.takenAt)
-    .map((s) => ({ postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source }));
+    .map((s) => ({ ...(s.adapter ? { adapter: s.adapter } : {}), postSeries: s.postSeries, delayMs: s.delayMs, takenAt: s.takenAt, metrics: s.metrics, source: s.source }));
 }
 
 /** The readings of a Publication: the state of its current post's series, why, when the next one is due, and all its Snapshots (oldest first, each with its `postSeries`). */
@@ -111,10 +117,11 @@ export const forPublication = query({
   handler: async (ctx, args) => {
     const publication = await ctx.db.get(args.publicationId);
     if (!publication || !(await readOwnerId(ctx, publication.instanceId))) return null;
-    const row = await ctx.db
+    // Several adapters make several rows: the page shows the first.
+    const [row] = await ctx.db
       .query("publicationAnalytics")
       .withIndex("by_publication_and_series", (q) => q.eq("publicationId", args.publicationId).eq("postSeries", publication.postSeries ?? 0))
-      .unique();
+      .take(1);
     const snapshots = await ctx.db
       .query("performanceSnapshots")
       .withIndex("by_publication", (q) => q.eq("publicationId", args.publicationId))
@@ -150,13 +157,34 @@ function postFace(mission: Doc<"missions">, platform: string | undefined) {
 const LIST_LIMIT = 200;
 
 /**
+ * The Analytics Adapters a Project's channels are linked to, the first activated first: an adapter
+ * is activated by the connection the Project made to it, else by the Publisher it comes with.
+ */
+async function activatedAdapters(ctx: Pick<QueryCtx, "db">, instanceId: string, installed: AnalyticsAdapterMeta[], publishers: Doc<"publishers">[]) {
+  const activatedAt = new Map<string, { at: number; adapter: AnalyticsAdapterMeta }>();
+  for (const publisher of publishers) {
+    for (const target of publisher.targets) {
+      for (const { adapter } of linkedAdapters(installed, publisher.adapter, target.analyticsAdapter)) {
+        const connection = await projectAnalyticsConnection(ctx, instanceId, adapter.id);
+        const at = connection?._creationTime ?? publisher._creationTime;
+        const known = activatedAt.get(adapter.id);
+        if (!known || at < known.at) activatedAt.set(adapter.id, { at, adapter });
+      }
+    }
+  }
+  return [...activatedAt.values()].sort((a, b) => a.at - b.at || a.adapter.id.localeCompare(b.adapter.id)).map((x) => x.adapter);
+}
+
+/**
  * The Analytics page's rows: a Project's published Publications with their
- * platform, channel, Mission, Source of origin, the Mission type's primary
- * metric (what the page ranks by, within one platform) and their readings.
+ * platform, channel, Mission, Source of origin, the adapter's ranking metric
+ * and their readings. Only the Publications whose channel is linked to the
+ * chosen adapter (by default the first activated) are listed, with the
+ * Snapshots that adapter took: numbers of two adapters are never mixed.
  * Never a per-Mission total: each row is one Publication (ADR-078).
  */
 export const listForProject = query({
-  args: { instanceId: v.string() },
+  args: { instanceId: v.string(), adapter: v.optional(v.string()) },
   handler: async (ctx, args) => {
     if (!(await readOwnerId(ctx, args.instanceId))) return [];
     const publications = await ctx.db
@@ -167,25 +195,33 @@ export const listForProject = query({
     const publishers = await projectPublishers(ctx, args.instanceId);
     const registry = getTemplateRegistry(ctx);
     const adapters = await installedAnalyticsAdapters(ctx);
+    // No adapter activated: the closed vocabulary of contract 1, every measured post.
+    const chosen = args.adapter ?? (await activatedAdapters(ctx, args.instanceId, adapters, publishers))[0]?.id;
     const rows = [];
     for (const publication of publications) {
       const mission = await ctx.db.get(publication.missionId);
       if (!mission) continue;
       const found = channelOf(publishers, publication.target);
+      const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
       const series = publication.postSeries ?? 0;
-      const row = await ctx.db
+      const seriesRows = await ctx.db
         .query("publicationAnalytics")
         .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
-        .unique();
+        .collect();
+      // A row made before several links has no adapter: it belongs to the channel's first link.
+      const row = seriesRows.find((r) => chosen === undefined || (r.adapter ?? links[0]?.adapter.id) === chosen);
       // A channel with no Analytics Adapter is not measured: nothing to show for it.
       if (!row || row.state === "unmeasured") continue;
-      const snapshots = await ctx.db
-        .query("performanceSnapshots")
-        .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
-        .collect();
+      if (chosen !== undefined && !links.some((l) => l.adapter.id === chosen)) continue;
+      const snapshots = (
+        await ctx.db
+          .query("performanceSnapshots")
+          .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
+          .collect()
+      ).filter((s) => chosen === undefined || !s.adapter || s.adapter === chosen);
       const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
       // The adapter declares what ranks its posts (contract 2); a contract 1 adapter keeps the Template's.
-      const linked = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter)?.adapter : undefined;
+      const linked = links.find((l) => l.adapter.id === chosen)?.adapter ?? links[0]?.adapter;
       const primaryMetric = linked?.primary ?? analyticsDeclarationFor(template?.manifest, mission.type)?.legacyPrimaryMetric;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
@@ -214,42 +250,33 @@ export const listForProject = query({
 });
 
 /**
- * What the Analytics page builds its columns, tiles and ranking from (ADR-079): the metrics
- * and the ranking metric of the Analytics Adapter the Project's published posts are linked to.
- * The first linked adapter that declares its metrics (contract 2); null when none does, and the
- * page then falls back to the closed social vocabulary of contract 1.
+ * What the Analytics page builds its picker, columns, tiles and ranking from (ADR-079): the
+ * Analytics Adapters the Project's channels are linked to, the first activated first, each with
+ * the metrics and ranking metric it declares. An adapter of contract 1 declares none: the page
+ * then falls back to the closed social vocabulary.
  */
-export const declarationForProject = query({
+export const adaptersForProject = query({
   args: { instanceId: v.string() },
   handler: async (ctx, args) => {
-    if (!(await readOwnerId(ctx, args.instanceId))) return null;
-    const publications = await ctx.db
-      .query("publications")
-      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
-      .order("asc")
-      .take(LIST_LIMIT);
+    if (!(await readOwnerId(ctx, args.instanceId))) return [];
     const installed = await installedAnalyticsAdapters(ctx);
-    const publishers = await projectPublishers(ctx, args.instanceId);
-    for (const publication of publications) {
-      const found = channelOf(publishers, publication.target);
-      const link = found ? linkedAdapter(installed, found.publisher.adapter, found.channel.analyticsAdapter) : null;
-      const adapter = link?.adapter;
-      if (adapter?.metrics && adapter.primary) return { adapter: adapter.id, name: adapter.name, metrics: adapter.metrics, primary: adapter.primary };
-    }
-    return null;
+    const activated = await activatedAdapters(ctx, args.instanceId, installed, await projectPublishers(ctx, args.instanceId));
+    return activated.map((a) => ({ adapter: a.id, name: a.name, ...(a.metrics && a.primary ? { metrics: a.metrics, primary: a.primary } : {}) }));
   },
 });
 
 async function insertSnapshot(
   ctx: MutationCtx,
   row: Doc<"publicationAnalytics">,
-  snapshot: { delayMs: number; takenAt: number; metrics: Record<string, number>; source: "adapter" | "refresh" },
+  snapshot: { delayMs: number; takenAt: number; metrics: Record<string, number>; source: "adapter" | "refresh"; adapter?: string },
 ) {
+  const adapter = row.adapter ?? snapshot.adapter;
   await ctx.db.insert("performanceSnapshots", {
     publicationId: row.publicationId,
     postSeries: row.postSeries,
     instanceId: row.instanceId,
     ...snapshot,
+    ...(adapter ? { adapter } : {}),
   });
 }
 
@@ -261,7 +288,9 @@ async function readingItem(ctx: Pick<QueryCtx, "db">, row: ReadingRow, adapters:
   if (!publication) return null;
   // The adapter is the one the channel is linked to now (ADR-078): none reads "analytics unavailable".
   const found = channelOf(await projectPublishers(ctx, row.instanceId), publication.target);
-  const link = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : null;
+  const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
+  // A row made before several links has no adapter: it reads through the channel's first link.
+  const link = (row.adapter ? links.find((l) => l.adapter.id === row.adapter) : links[0]) ?? null;
   // The Project's own connection to the adapter, else (for the adapter of the Publisher's own service) the Publisher's.
   const publisher = found && link?.adapter.publisher === found.publisher.adapter ? found.publisher : undefined;
   const connection = link ? connectionFor(await projectAnalyticsConnection(ctx, row.instanceId, link.adapter.id), publisher) : undefined;
@@ -328,13 +357,13 @@ export const forRefresh = internalQuery({
 
 /** Records readings the owner asked for: Snapshots outside the schedule, which they never advance. */
 export const recordRefreshed = internalMutation({
-  args: { readings: v.array(v.object({ id: v.id("publicationAnalytics"), metrics: v.record(v.string(), v.number()) })) },
+  args: { readings: v.array(v.object({ id: v.id("publicationAnalytics"), metrics: v.record(v.string(), v.number()), adapter: v.optional(v.string()) })) },
   handler: async (ctx, args) => {
     const now = Date.now();
-    for (const { id, metrics } of args.readings) {
+    for (const { id, metrics, adapter } of args.readings) {
       const row = await ctx.db.get(id);
       if (!row) continue;
-      await insertSnapshot(ctx, row, { delayMs: now - row.publishedAt, takenAt: now, metrics, source: "refresh" });
+      await insertSnapshot(ctx, row, { delayMs: now - row.publishedAt, takenAt: now, metrics, source: "refresh", adapter });
       // A post the service now answers for is no longer failing or empty; its schedule resumes.
       if (row.state === "failed" || row.state === "no_data") {
         await ctx.db.patch(row._id, {
@@ -349,7 +378,7 @@ export const recordRefreshed = internalMutation({
 });
 
 export const outcomeV = v.union(
-  v.object({ kind: v.literal("taken"), metrics: v.record(v.string(), v.number()) }),
+  v.object({ kind: v.literal("taken"), metrics: v.record(v.string(), v.number()), adapter: v.optional(v.string()) }),
   v.object({ kind: v.literal("no_data") }),
   v.object({ kind: v.literal("failed"), error: v.string() }),
   v.object({ kind: v.literal("post_unknown"), reason: v.string() }),
@@ -367,10 +396,12 @@ async function applyOutcome(ctx: MutationCtx, id: Id<"publicationAnalytics">, ou
   const now = Date.now();
   switch (outcome.kind) {
     case "taken": {
-      await insertSnapshot(ctx, row, { delayMs: row.delays[row.taken], takenAt: now, metrics: outcome.metrics, source: "adapter" });
+      await insertSnapshot(ctx, row, { delayMs: row.delays[row.taken], takenAt: now, metrics: outcome.metrics, source: "adapter", adapter: outcome.adapter });
       const taken = row.taken + 1;
       const complete = taken >= row.delays.length;
       await ctx.db.patch(row._id, {
+        // From now on the row is the one of the adapter that read it.
+        ...(row.adapter || !outcome.adapter ? {} : { adapter: outcome.adapter }),
         taken,
         state: complete ? "complete" : "waiting",
         reason: undefined,

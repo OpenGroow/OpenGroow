@@ -11,16 +11,27 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 
 // Seam 3: `analytics.listForProject` is simulated.
 const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
-let rows: unknown[] | undefined = [];
-let declaration: unknown = null;
+// `rows` may depend on the adapter the page asks for; `adapters` is what `analytics.adaptersForProject` answers.
+let rows: unknown[] | undefined | ((args: { adapter?: string }) => unknown[]) = [];
+let adapters: unknown[] = [];
+const listArgs: Array<{ adapter?: string }> = [];
 vi.mock("convex/react", () => ({
   useAction: () => refreshAction,
   useMutation: () => async () => undefined,
-  useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : name === "analytics.declarationForProject" ? declaration : undefined),
+  useQuery: (name: unknown, args?: { adapter?: string }) => {
+    if (name === PUBLISHER_PACKAGES_LIST) return INSTALLED_PUBLISHERS;
+    if (name === "analytics.adaptersForProject") return adapters;
+    if (name === "analytics.listForProject") {
+      if (args === undefined || (args as unknown) === "skip") return undefined;
+      listArgs.push(args);
+      return typeof rows === "function" ? rows(args) : rows;
+    }
+    return undefined;
+  },
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    analytics: { listForProject: "analytics.listForProject", declarationForProject: "analytics.declarationForProject" },
+    analytics: { listForProject: "analytics.listForProject", adaptersForProject: "analytics.adaptersForProject" },
     analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
@@ -65,7 +76,8 @@ describe("Analytics page", () => {
   beforeEach(() => {
     n = 0;
     rows = [];
-    declaration = null;
+    adapters = [];
+    listArgs.length = 0;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -207,7 +219,7 @@ describe("Analytics page", () => {
     const columnsButton = () => Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Columns")!;
 
     it("shows the first four declared metrics as columns and offers the others in a Columns menu", async () => {
-      declaration = SEARCH;
+      adapters = [SEARCH];
       rows = [row({ title: "Page", primaryMetric: undefined, snapshots: [snap(DAY, { clicks: 40, impressions: 800, position: 3, sessions: 7 })] })];
       await render();
       expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions", "CTR", "Position"]));
@@ -223,7 +235,7 @@ describe("Analytics page", () => {
     });
 
     it("computes a derived figure for the totals from the summed counters, never the mean of rates", async () => {
-      declaration = SEARCH;
+      adapters = [SEARCH];
       rows = [
         row({ title: "Small", snapshots: [snap(DAY, { clicks: 50, impressions: 100 })] }),
         row({ title: "Big", snapshots: [snap(DAY, { clicks: 0, impressions: 900 })] }),
@@ -235,7 +247,7 @@ describe("Analytics page", () => {
     });
 
     it("ranks the posts and picks the top post by the adapter's main metric, lowest first when lower is better", async () => {
-      declaration = { ...SEARCH, primary: "position" };
+      adapters = [{ ...SEARCH, primary: "position" }];
       rows = [
         row({ title: "Deep", snapshots: [snap(DAY, { position: 30, clicks: 900 })] }),
         row({ title: "Near top", snapshots: [snap(DAY, { position: 2, clicks: 1 })] }),
@@ -245,8 +257,45 @@ describe("Analytics page", () => {
       expect(totals()).toMatch(/Near top/);
     });
 
+    describe("the adapter picker", () => {
+      const COUNTER_ADAPTER = { adapter: "postiz", name: "Postiz", primary: "views", metrics: [counter("views", "Views")] };
+      const picker = () => container.querySelector('[aria-label="Analytics adapter"]');
+      const choose = async (value: string) => {
+        const select = picker()!.closest('[data-slot="native-select-wrapper"]')!.querySelector<HTMLSelectElement>("select")!;
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      };
+
+      it("is hidden with a single adapter", async () => {
+        adapters = [SEARCH];
+        rows = [row({ title: "Page", snapshots: [snap(DAY, { clicks: 40 })] })];
+        await render();
+        expect(picker()).toBeNull();
+      });
+
+      it("lists the adapters, opens on the first one and shows the columns of the chosen one", async () => {
+        adapters = [COUNTER_ADAPTER, SEARCH];
+        rows = ({ adapter }) =>
+          adapter === "search" ? [row({ title: "Article", snapshots: [snap(DAY, { clicks: 40, impressions: 800 })] })] : [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })];
+        await render();
+        expect(picker()).not.toBeNull();
+        expect(headers()).toContain("Views");
+        expect(listed()[0]).toContain("Reel");
+        const select = picker()!.closest('[data-slot="native-select-wrapper"]')!.querySelector("select")!;
+        expect(Array.from(select.options).map((o) => o.value)).toEqual(["postiz", "search"]);
+        await choose("search");
+        expect(listArgs.at(-1)).toMatchObject({ adapter: "search" });
+        expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions"]));
+        expect(headers()).not.toContain("Views");
+        expect(listed()).toHaveLength(1);
+        expect(listed()[0]).toContain("Article");
+      });
+    });
+
     it("shows a dash for a metric with no value, and nothing for a metric no longer declared", async () => {
-      declaration = SEARCH;
+      adapters = [SEARCH];
       rows = [row({ title: "Page", snapshots: [snap(DAY, { clicks: 40, views: 999 })] })];
       await render();
       expect(listed()[0]).toContain("—");

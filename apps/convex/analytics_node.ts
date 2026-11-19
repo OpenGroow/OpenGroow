@@ -31,7 +31,7 @@ async function readOne(ctx: ActionCtx, item: Item, now: number): Promise<Infer<t
     if (result.reading.status === "unavailable") return { kind: "post_unknown", reason: result.reading.reason };
     if (result.reading.status === "no_data") return { kind: "no_data" };
     const metrics = item.declaredMetrics ? pickDeclaredMetrics(item.declaredMetrics, result.reading.metrics) : pickMetrics(item.kind, result.reading.metrics);
-    return Object.keys(metrics).length > 0 ? { kind: "taken", metrics } : { kind: "no_data" };
+    return Object.keys(metrics).length > 0 ? { kind: "taken", metrics, adapter: item.analyticsAdapter ?? undefined } : { kind: "no_data" };
   } catch (error) {
     return { kind: "failed", error: messageOf(error) };
   }
@@ -77,13 +77,13 @@ export const refresh = action({
     await ctx.runMutation(internal.analytics.backfill, { instanceId: args.instanceId });
     const items = await ctx.runQuery(internal.analytics.forRefresh, { instanceId: args.instanceId });
     const now = Date.now();
-    const readings: Array<{ id: Item["id"]; metrics: Record<string, number> }> = [];
+    const readings: Array<{ id: Item["id"]; metrics: Record<string, number>; adapter?: string }> = [];
     let unavailable = 0;
     let failed = 0;
     let error: string | undefined;
     const outcomes = await readAll(ctx, items, now);
     for (const [i, outcome] of outcomes.entries()) {
-      if (outcome.kind === "taken") readings.push({ id: items[i].id, metrics: outcome.metrics });
+      if (outcome.kind === "taken") readings.push({ id: items[i].id, metrics: outcome.metrics, adapter: outcome.adapter });
       else if (outcome.kind === "failed") {
         failed += 1;
         error ??= outcome.error;

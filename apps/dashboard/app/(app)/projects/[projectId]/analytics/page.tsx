@@ -276,15 +276,23 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const resolvedInstanceId = useResolvedProjectId(params);
   const instances = useAuthenticatedInstances<InstanceRecord>();
   const instanceId = findInstanceById(instances, resolvedInstanceId)?.openclawId;
-  const rows = useQuery(api.analytics.listForProject, instanceId ? { instanceId } : "skip");
+  // The picker lists the Project's adapters, the first activated first; numbers of two adapters are never mixed (ADR-079).
+  const adapters = useQuery(api.analytics.adaptersForProject, instanceId ? { instanceId } : "skip");
+  const [adapterId, setAdapterId] = useState<string | null>(null);
+  const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
+  const rows = useQuery(api.analytics.listForProject, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [sort, setSort] = useState<Sort>("top");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
-  const declared = useQuery(api.analytics.declarationForProject, instanceId ? { instanceId } : "skip");
   // An adapter of contract 1 declares nothing: it measures the closed social vocabulary.
-  const declaration: Declaration = declared ?? LEGACY_DECLARATION;
+  const declaration: Declaration = current?.metrics && current.primary ? { metrics: current.metrics, primary: current.primary } : LEGACY_DECLARATION;
+  function chooseAdapter(next: string) {
+    setAdapterId(next);
+    setChosen(new Set());
+    setSelectedId(null);
+  }
   const extra = declaration.metrics.slice(DEFAULT_COLUMNS);
   const columns = declaration.metrics.filter((m, i) => i < DEFAULT_COLUMNS || chosen.has(m.key));
   const toggleColumn = (key: string) =>
@@ -309,6 +317,15 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   return (
     <div className="grid gap-8">
       <PageHeader title="Analytics" description="How your published posts performed." action={<RefreshButton instanceId={instanceId} />} />
+      {adapters && adapters.length > 1 ? (
+        <NativeSelect aria-label="Analytics adapter" className="h-11 sm:w-60" value={current?.adapter} onChange={(e) => chooseAdapter(e.target.value)}>
+          {adapters.map((a) => (
+            <option key={a.adapter} value={a.adapter}>
+              {a.name}
+            </option>
+          ))}
+        </NativeSelect>
+      ) : null}
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>
       ) : all.length === 0 ? (

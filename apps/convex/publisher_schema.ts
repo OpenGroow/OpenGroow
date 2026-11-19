@@ -53,9 +53,9 @@ export const publisherTables = {
         channelName: v.optional(v.string()),
         channelService: v.optional(v.string()),
         channelProfile: v.optional(v.string()),
-        // The Analytics Adapter measuring this channel (ADR-078): a string is a link made by hand,
-        // null an unlink, absent the Publisher's own adapter when it brings one.
-        analyticsAdapter: v.optional(v.union(v.string(), v.null())),
+        // The Analytics Adapters measuring this channel (ADR-078, ADR-079): a string is one link made by hand,
+        // a list several (the first is the default shown), null an unlink, absent the Publisher's own adapter when it brings one.
+        analyticsAdapter: v.optional(v.union(v.string(), v.null(), v.array(v.string()))),
         settings: v.optional(v.record(v.string(), v.any())),
       }),
     ),
