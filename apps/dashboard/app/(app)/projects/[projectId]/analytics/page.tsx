@@ -413,7 +413,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
               <div className="grid gap-3">
                 <div aria-hidden="true" data-slot="columns-header" style={gridStyle(columns.length)} className={cn(GRID, "px-4 text-sm text-muted-foreground max-lg:hidden")}>
                   <span>Post</span>
-                  <span>Platform / Account</span>
+                  <span>Account</span>
                   <span>Published</span>
                   {columns.map((metric) => (
                     <span key={metric.key}>{metric.label}</span>
