@@ -333,13 +333,13 @@ export const describeHubPackages = migrations.define({
   migrateOne: async (ctx, row) => {
     if (row.kind !== "publisher" || (row.meta && row.provides)) return;
     const files = await ctx.db.query("hubPackageFiles").withIndex("by_package", (q) => q.eq("hubPackageId", row._id)).collect();
-    let meta;
+    let described;
     try {
-      meta = describeHubPackage("publisher", files.map(({ path, content }) => ({ path, content })));
+      described = describeHubPackage("publisher", files.map(({ path, content }) => ({ path, content })));
     } catch {
       return;
     }
-    await ctx.db.patch(row._id, { meta, provides: meta.adapter });
+    await ctx.db.patch(row._id, described);
   },
 });
 

@@ -47,6 +47,21 @@ The tracked outcome of sending one Publishable to one Publish target: one Public
 
 - **Do not confuse** with the Mission's `approved` status ("to publish"): `approved` is the human's validation of the deliverable; a Publication is what happens next.
 
+### Analytics Adapter
+
+A Project-level integration that reads how a Publication performed. It is one **adapter** (Postiz for social posts, Google Analytics for the pages of a site) plus its per-Project configuration. It is separate from the Publisher: the service that publishes a post is not always the one that measures it (a blog is published through GitHub and measured by Google Analytics), but a Publisher may also be its own Analytics Adapter (Postiz).
+
+- **Linked per channel**: each Publish target is linked to at most one Analytics Adapter. A channel whose Publisher can measure its own posts is linked to it by default; a channel with no link is "analytics unavailable", which is different from "no data yet".
+- **A key joins a Publication to what the adapter measures.** Each adapter declares which key it needs from the Publication (the id the publishing service gave it, or the public URL of the post, or another one). An adapter that needs the id of the publishing service only works with that service.
+- **Declared by the Mission type**: a Mission type that wants its Publications measured declares it, with the **primary metric** that tells how well it did. A Mission type that does not declare it is not measured.
+- _Avoid_: "analytics provider" (a Provider is an AI model route), "tracker".
+
+### Performance Snapshot
+
+A dated reading of the metrics of **one Publication** (never of a Mission: the numbers of two platforms cannot be added). Readings are only added, never rewritten, so the Analytics page shows how a post evolved. The metrics belong to a closed vocabulary per kind of content, defined by OpenGroow: for a social post `views`, `reach`, `likes`, `comments`, `shares`, `saves`; for an `article` `pageviews`, `visitors`, `engagementTime`. A metric the vocabulary does not know is ignored.
+
+- _Avoid_: "Source" (a Source is something an Agent saw in the outside world, not a reading of our own post), "Engagement Score" (it rates inspiration Sources).
+
 ### Postiz translation (V1)
 
 - `image`, `video` and `carousel` all go through Postiz `upload-from-url` then `POST /posts`. A `carousel` uploads its slides **sequentially** (the upload order is the slide order) and sends them as the media list of one post; a `video` is a post with one media.

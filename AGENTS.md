@@ -28,6 +28,7 @@ For the remote control-plane API contract, see docs/CONTROL_PLANE.md
 For Architecture conventions, see docs/ARCHITECTURE.md
 For Code conventions, see docs/CODE_CONVENTIONS.md
 For writing a Publisher plugin, see docs/PUBLISHER_PLUGINS.md
+For writing an Analytics Adapter, see docs/ANALYTICS_ADAPTERS.md
 For Template development (install from a folder, link, hub), see docs/TEMPLATE_DEVELOPMENT.md
 
 ### Domain Docs

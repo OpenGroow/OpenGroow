@@ -1,5 +1,6 @@
 import type { MachineToolInstall } from "./machine-tool";
 import type { PublishDeclaration } from "./publish-declaration";
+import type { AnalyticsDeclaration } from "./analytics-declaration";
 export type McpServerConfig = {
   name: string;
   transport: string;
@@ -413,6 +414,12 @@ export type MissionType = {
    * publishes. Absent: the Mission type behaves as before.
    */
   publish?: PublishDeclaration;
+  /**
+   * Measuring declaration (ADR-078, #90): the primary metric of the Mission
+   * type's Publications and when to read them. Needs `publish`. Absent: the
+   * Mission type is not measured.
+   */
+  analytics?: AnalyticsDeclaration;
 };
 
 /** How a human resolves a Template-declared Mission blocker. */

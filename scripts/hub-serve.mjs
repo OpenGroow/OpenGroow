@@ -5,7 +5,7 @@
  * Serves a local checkout of the hub so a deployment on this machine can read
  * Publisher packages from it instead of GitHub (set OPENGROOW_HUB_URL):
  *
- *   GET /publishers.json, /index.json       -> <hub>/publishers.json, <hub>/index.json
+ *   GET /publishers.json, /analytics.json, /index.json -> the same files of <hub>
  *   GET /releases/<tag>/<asset>.tgz         -> <hub>/dist/<asset>.tgz
  *
  * It listens on 127.0.0.1 only. A Convex running in Docker reaches the host
@@ -20,7 +20,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const INDEXES = new Set(["publishers.json", "index.json"]);
+const INDEXES = new Set(["publishers.json", "analytics.json", "index.json"]);
 const ASSET = /^[\w][\w.-]*\.tgz$/;
 const TAG = /^[\w][\w.+@-]*$/;
 

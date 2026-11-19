@@ -119,7 +119,8 @@ describe("Project layout navigation", () => {
       "Jobs",
       "Scheduler",
       "Brand",
-      "Publishers",
+      "Publish",
+      "Analytics",
       "Settings",
       "Developer",
     ]);

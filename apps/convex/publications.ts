@@ -1,6 +1,8 @@
 import { v } from "convex/values";
+import { normalizePostUrl } from "./post_url.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
+import { scheduleReadings } from "./analytics.js";
 import { publishableForPlatform } from "./publishable.js";
 import { assertChannelsSupportKind, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable, assertSchedulable, effectivePublishTargets, notConfiguredTargets, unknownChannelsMessage, unusableTargets } from "./publication_targets.js";
 import { allChannels, channelOf, projectPublishers, publishersOf, type PublisherChannelEntry } from "./project_publishers.js";
@@ -135,7 +137,7 @@ export const setPublishAt = mutation({
 });
 
 /** The Publishable the Mission's latest result (or last Artifact) carries. */
-function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
+export function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   return (resultArtifact ?? mission.lastArtifact)?.publishable as Record<string, unknown> | undefined;
 }
@@ -414,13 +416,23 @@ export const finish = internalMutation({
     const { publicationId, rejected, ...fields } = args;
     const publication = await ctx.db.get(publicationId);
     if (!publication) throw new Error("Publication not found");
+    // A retry made another post: a new id, or (when an id cannot be compared) a different normalized URL.
+    const idComparable = fields.externalId !== undefined && publication.externalId !== undefined;
+    const newPost = idComparable
+      ? fields.externalId !== publication.externalId
+      : fields.externalUrl !== undefined &&
+        publication.externalUrl !== undefined &&
+        normalizePostUrl(fields.externalUrl) !== normalizePostUrl(publication.externalUrl);
     await ctx.db.patch(publicationId, {
       ...fields,
+      ...(fields.externalUrl !== undefined ? { externalUrl: normalizePostUrl(fields.externalUrl) } : {}),
+      ...(newPost ? { postSeries: (publication.postSeries ?? 0) + 1 } : {}),
       ...(rejected ? { attemptStartedAt: undefined, attemptDate: undefined, attemptContext: undefined } : {}),
       updatedAt: Date.now(),
     });
     const updated = await ctx.db.get(publicationId);
     if (updated) await scheduleOnPublished(ctx, updated);
+    if (updated?.status === "published") await scheduleReadings(ctx, updated);
 
     const mission = await ctx.db.get(publication.missionId);
     if (mission) await completeMissionIfTargetsPublished(ctx, mission);

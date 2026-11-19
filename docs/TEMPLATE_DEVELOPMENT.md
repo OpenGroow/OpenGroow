@@ -193,6 +193,18 @@ A Mission type that declares `publish` may ask OpenGroow to call its MCP once ea
 - `responseIndexingField`: the response field mirrored on the Mission's `indexing` (ADR-015).
 - It is called once per Publication, never on a replay. It never blocks: a failed call leaves the Publication `published` and the Mission `done`, and the review shows "<Agent name> was not notified" with a button to resend it. **Make the endpoint idempotent.**
 
+#### Being measured (`analytics`, ADR-078)
+
+A Mission type that declares `publish` may also declare how its Publications are measured, next to `publish`:
+
+```json
+"analytics": { "primaryMetric": "views", "collect": [1, 3, 7] }
+```
+
+- `primaryMetric` (required): the metric Publications of this Mission type are ranked on. It must belong to the closed vocabulary of the kind published: `video`, `image`, `carousel` take `views`, `reach`, `likes`, `comments`, `shares`, `saves`; `article` takes `pageviews`, `visitors`, `engagementTime` (`packages/agent-templates/src/analytics-metrics.ts`).
+- `collect` (optional): delays in whole days after the Publication became `published`, distinct positive integers. Default `[1, 3, 7]`. The adapter's own earliest delay can push a reading later.
+- Any other key, an unknown metric, or `analytics` without `publish` is refused by `template:validate` and at installation. A Mission type without `analytics` is not measured, and existing Templates are unchanged.
+
 The URL is frozen at the end of the job and must stay valid until publication. The review shows the media from the `publishable` (never from `review.path`) for a Mission type that declares `publish`. A synchronous MCP is unchanged: the Agent sees the URLs in its own tool call and writes the whole `publishable`.
 
 ### 2. What the Agent writes

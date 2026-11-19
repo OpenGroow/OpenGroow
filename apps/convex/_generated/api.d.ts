@@ -10,6 +10,12 @@
 
 import type * as agent_deletion from "../agent_deletion.js";
 import type * as agent_hmac from "../agent_hmac.js";
+import type * as analytics from "../analytics.js";
+import type * as analytics_load_node from "../analytics/load_node.js";
+import type * as analytics_adapters from "../analytics_adapters.js";
+import type * as analytics_connections from "../analytics_connections.js";
+import type * as analytics_node from "../analytics_node.js";
+import type * as analytics_schema from "../analytics_schema.js";
 import type * as auth from "../auth.js";
 import type * as auth_config from "../auth_config.js";
 import type * as auth_node from "../auth_node.js";
@@ -17,6 +23,7 @@ import type * as auth_registration_lock from "../auth_registration_lock.js";
 import type * as auth_registration_policy from "../auth_registration_policy.js";
 import type * as bounded_http_call from "../bounded_http_call.js";
 import type * as brand_cores from "../brand_cores.js";
+import type * as bundle_loader_node from "../bundle_loader_node.js";
 import type * as command_batching from "../command_batching.js";
 import type * as command_dispatch_utils from "../command_dispatch_utils.js";
 import type * as commands from "../commands.js";
@@ -78,6 +85,7 @@ import type * as observations_ranking from "../observations_ranking.js";
 import type * as observations_scoring_daily from "../observations_scoring_daily.js";
 import type * as openclaw_usage from "../openclaw_usage.js";
 import type * as optional_plugins from "../optional_plugins.js";
+import type * as post_url from "../post_url.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
 import type * as project_agents_auth from "../project_agents/auth.js";
@@ -147,8 +155,11 @@ import type * as template_manifest_contract from "../template_manifest_contract.
 import type * as template_mcp_overrides from "../template_mcp_overrides.js";
 import type * as template_registry from "../template_registry.js";
 import type * as template_registry_store from "../template_registry_store.js";
+import type * as test_analytics_fixture from "../test/analytics_fixture.js";
 import type * as test_helpers_observation_source from "../test/helpers/observation_source.js";
 import type * as test_instance_fixture from "../test/instance_fixture.js";
+import type * as test_postiz_analytics_reference_src_index from "../test/postiz_analytics_reference/src/index.js";
+import type * as test_postiz_analytics_reference_src_postiz_analytics from "../test/postiz_analytics_reference/src/postiz_analytics.js";
 import type * as test_postiz_fixture from "../test/postiz_fixture.js";
 import type * as test_postiz_reference_src_index from "../test/postiz_reference/src/index.js";
 import type * as test_postiz_reference_src_postiz from "../test/postiz_reference/src/postiz.js";
@@ -167,6 +178,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   agent_deletion: typeof agent_deletion;
   agent_hmac: typeof agent_hmac;
+  analytics: typeof analytics;
+  "analytics/load_node": typeof analytics_load_node;
+  analytics_adapters: typeof analytics_adapters;
+  analytics_connections: typeof analytics_connections;
+  analytics_node: typeof analytics_node;
+  analytics_schema: typeof analytics_schema;
   auth: typeof auth;
   auth_config: typeof auth_config;
   auth_node: typeof auth_node;
@@ -174,6 +191,7 @@ declare const fullApi: ApiFromModules<{
   auth_registration_policy: typeof auth_registration_policy;
   bounded_http_call: typeof bounded_http_call;
   brand_cores: typeof brand_cores;
+  bundle_loader_node: typeof bundle_loader_node;
   command_batching: typeof command_batching;
   command_dispatch_utils: typeof command_dispatch_utils;
   commands: typeof commands;
@@ -235,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   observations_scoring_daily: typeof observations_scoring_daily;
   openclaw_usage: typeof openclaw_usage;
   optional_plugins: typeof optional_plugins;
+  post_url: typeof post_url;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;
   "project_agents/auth": typeof project_agents_auth;
@@ -304,8 +323,11 @@ declare const fullApi: ApiFromModules<{
   template_mcp_overrides: typeof template_mcp_overrides;
   template_registry: typeof template_registry;
   template_registry_store: typeof template_registry_store;
+  "test/analytics_fixture": typeof test_analytics_fixture;
   "test/helpers/observation_source": typeof test_helpers_observation_source;
   "test/instance_fixture": typeof test_instance_fixture;
+  "test/postiz_analytics_reference/src/index": typeof test_postiz_analytics_reference_src_index;
+  "test/postiz_analytics_reference/src/postiz_analytics": typeof test_postiz_analytics_reference_src_postiz_analytics;
   "test/postiz_fixture": typeof test_postiz_fixture;
   "test/postiz_reference/src/index": typeof test_postiz_reference_src_index;
   "test/postiz_reference/src/postiz": typeof test_postiz_reference_src_postiz;

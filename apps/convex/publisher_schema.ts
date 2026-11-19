@@ -53,6 +53,9 @@ export const publisherTables = {
         channelName: v.optional(v.string()),
         channelService: v.optional(v.string()),
         channelProfile: v.optional(v.string()),
+        // The Analytics Adapter measuring this channel (ADR-078): a string is a link made by hand,
+        // null an unlink, absent the Publisher's own adapter when it brings one.
+        analyticsAdapter: v.optional(v.union(v.string(), v.null())),
         settings: v.optional(v.record(v.string(), v.any())),
       }),
     ),
@@ -71,7 +74,11 @@ export const publisherTables = {
     status: publicationStatusV,
     // The post at the external service (its id, and its URL when it has one).
     externalId: v.optional(v.string()),
+    // Normalized (`normalizePostUrl`), so a match by URL compares like with like (ADR-078).
     externalUrl: v.optional(v.string()),
+    // Which post of this Publication is current: 0/absent at first, +1 each time a retry
+    // creates a different post (new `externalId`). A measuring series is per (Publication, postSeries).
+    postSeries: v.optional(v.number()),
     scheduledAt: v.optional(v.number()),
     error: v.optional(v.string()),
     // Media already uploaded to the service (by source URL), reused by a retry.
@@ -89,5 +96,6 @@ export const publisherTables = {
   })
     .index("by_mission", ["missionId"])
     .index("by_mission_target", ["missionId", "target"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_instance_and_status", ["instanceId", "status"]),
 };

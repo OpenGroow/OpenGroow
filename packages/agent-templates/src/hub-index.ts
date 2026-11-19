@@ -26,9 +26,9 @@ export const HUB_INDEX_PATH = "index.json";
  * a new kind of entry there would make every deployed OpenGroow refuse the
  * whole catalogue, Templates included.
  */
-import { HUB_PACKAGE_KINDS, type HubPackageKind } from "./hub-package-kinds.js";
+import { HUB_PACKAGE_KINDS, hubPackageIndexFile, type HubPackageKind } from "./hub-package-kinds.js";
 export { HUB_PACKAGE_KINDS, type HubPackageKind };
-export const hubPackageIndexPath = (kind: HubPackageKind) => `${kind}s.json`;
+export const hubPackageIndexPath = hubPackageIndexFile;
 
 const LOCAL_HUB_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "host.docker.internal"]);
 

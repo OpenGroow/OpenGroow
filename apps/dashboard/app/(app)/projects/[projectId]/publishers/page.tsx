@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
+import { BarChart3, Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -15,6 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { PanelIcon } from "@/components/opengroow/settings-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { AdapterForm, analyticsAdapterOf, AnalyticsConnectionsCard, useInstallPublishersAnalytics } from "@/src/components/analytics-connections-card";
+import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
@@ -67,6 +69,9 @@ export default function PublishersPage({ params }: PublishersPageProps) {
   const [adding, setAdding] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [catalogue, setCatalogue] = useState<{ entries: Array<{ packageId: string; name: string; description: string; icon?: string }>; error?: string } | null>(null);
+  const [analyticsCatalogue, setAnalyticsCatalogue] = useState<Array<{ packageId: string; name: string; description: string; icon?: string }>>([]);
+  const analyticsProviders = useQuery(api.analytics_connections.list, instanceId ? { instanceId } : "skip");
+  useInstallPublishersAnalytics(analyticsProviders?.map((a) => a.adapter));
   const [installing, setInstalling] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
   // A package just installed: the dialog continues once its data has arrived through the reactive query.
@@ -77,6 +82,10 @@ export default function PublishersPage({ params }: PublishersPageProps) {
     setInstallError(null);
     setCatalogue(null);
     let cancelled = false;
+    setAnalyticsCatalogue([]);
+    void hubCatalogue({ kind: "analytics" })
+      .then((result) => !cancelled && setAnalyticsCatalogue(result.entries))
+      .catch(() => undefined);
     hubCatalogue({ kind: "publisher" })
       .then((result) => {
         if (!cancelled) setCatalogue(result);
@@ -141,18 +150,38 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           .map((p) => ({ packageId: p.packageId, name: p.name, description: "", icon: p.icon })),
       ].filter((entry) => !configured.has(installed?.find((p) => p.packageId === entry.packageId)?.adapter ?? adapterOf(entry.packageId)))
     : [];
+  // The analytics providers that belong to no Publisher, not added yet: a Publisher's own comes with it.
+  const publisherAdapters = new Set([...(catalogue?.entries ?? []).map((e) => adapterOf(e.packageId)), ...(installed ?? []).map((p) => p.adapter)]);
+  const analyticsChoices = analyticsCatalogue.filter(
+    (entry) => !publisherAdapters.has(analyticsAdapterOf(entry.packageId)) && !(analyticsProviders ?? []).some((a) => a.adapter === analyticsAdapterOf(entry.packageId)),
+  );
+
+  async function chooseAnalytics(packageId: string) {
+    setInstallError(null);
+    setInstalling(packageId);
+    try {
+      const result = await installPackage({ kind: "analytics", packageId });
+      if (result.status === "error") setInstallError(result.errorMessage);
+      else setPicking(false);
+    } catch (error) {
+      setInstallError(errorMessage(error, "The analytics provider could not be installed"));
+    } finally {
+      setInstalling(null);
+    }
+  }
+
   const showAdding = adding !== null && !configured.has(adding);
   const empty = (publishers ?? []).length === 0 && !showAdding;
 
   return (
     <div className="grid gap-8">
       <PageHeader
-        title="Publishers"
-        description="Connect the services that will publish your content."
+        title="Publishers & Analytics"
+        description="Connect the services that publish your content and measure how it performs."
         action={
           <Button type="button" size="lg" disabled={showAdding} onClick={() => setPicking(true)}>
             <Plus aria-hidden="true" />
-            Add publisher
+            Add provider
           </Button>
         }
       />
@@ -160,8 +189,8 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       <Dialog open={picking} onOpenChange={setPicking}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add a publisher</DialogTitle>
-            <DialogDescription>Choose the service that will publish your content.</DialogDescription>
+            <DialogTitle>Add a provider</DialogTitle>
+            <DialogDescription>Choose a service that publishes your content or measures how it performs.</DialogDescription>
           </DialogHeader>
           {catalogue === null ? (
             <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
@@ -171,6 +200,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
           ) : (
             <div className="grid gap-2">
               {catalogue.error ? <p className="m-0 text-sm text-destructive">The hub could not be read: {catalogue.error}</p> : null}
+              {analyticsChoices.length > 0 ? <h3 className="m-0 mt-1 text-sm font-medium text-muted-foreground">Publishers</h3> : null}
               {choices.map((entry) => {
                 const isInstalled = installed?.some((p) => p.packageId === entry.packageId) ?? false;
                 return (
@@ -199,6 +229,27 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                   {catalogue.entries.length === 0 && (installed ?? []).length === 0 ? "The hub lists no publisher." : "Every publisher of the hub is already added."}
                 </p>
               ) : null}
+              {analyticsChoices.length > 0 ? (
+                <>
+                  <h3 className="m-0 mt-3 text-sm font-medium text-muted-foreground">Analytics providers</h3>
+                  {analyticsChoices.map((entry) => (
+                    <button
+                      key={entry.packageId}
+                      type="button"
+                      disabled={installing !== null}
+                      className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
+                      onClick={() => void chooseAnalytics(entry.packageId)}
+                    >
+                      <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+                      <span className="grid flex-1">
+                        <span className="text-base font-medium">{entry.name} analytics</span>
+                        {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
+                      </span>
+                      {installing === entry.packageId ? <Loader2 className="size-4 animate-spin" aria-label="Installing" /> : <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />}
+                    </button>
+                  ))}
+                </>
+              ) : null}
             </div>
           )}
           {installError ? <p className="m-0 text-sm text-destructive">{installError}</p> : null}
@@ -214,6 +265,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
       {showAdding ? (
         <PublisherPanel key={`adding-${adding}`} instanceId={id} adapter={adding} publisher={null} onCancel={() => setAdding(null)} />
       ) : null}
+      <AnalyticsConnectionsCard instanceId={instanceId} />
     </div>
   );
 }
@@ -239,6 +291,8 @@ function PublisherPanel({
   const testConnection = useAction(api.publishers_node.testConnection);
   const hubCatalogue = useAction(api.hub_packages_node.catalogue);
   const installPackage = useAction(api.hub_packages_node.install);
+  // The Analytics Adapter that belongs to this Publisher (ADR-078): its settings are a tab here.
+  const analyticsAdapter = useQuery(api.analytics_connections.list, publisher ? { instanceId: id } : "skip")?.find((a) => a.publisher === adapterId);
 
   const [url, setUrl] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -250,8 +304,7 @@ function PublisherPanel({
   const [update, setUpdate] = useState<{ packageId: string; name: string; version: string } | null>(null);
   // The outcome of the last check: the hub is read only when the user asks.
   const [updateCheck, setUpdateCheck] = useState<{ status: "checking" | "upToDate" | "error"; message?: string } | null>(null);
-  const [tab, setTab] = useState<"configuration" | "channels">("configuration");
-  const [showKey, setShowKey] = useState(false);
+  const [tab, setTab] = useState<"configuration" | "channels" | "analytics">("configuration");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -423,6 +476,12 @@ function PublisherPanel({
             <Layers className="size-4" aria-hidden="true" />
             Channels{publisher ? ` (${publisher.targets.length})` : ""}
           </button>
+          {analyticsAdapter ? (
+            <button type="button" role="tab" aria-selected={tab === "analytics"} className={tabClass(tab === "analytics")} onClick={() => setTab("analytics")}>
+              <BarChart3 className="size-4" aria-hidden="true" />
+              Analytics
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -454,45 +513,13 @@ function PublisherPanel({
         <Card className="gap-4 p-5">
           <h2 className="m-0 text-base font-semibold">Connection</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor={`publisher-url-${adapterId}`}>{installedPackage?.connectionUrlLabel ?? `${serviceName} URL`}</Label>
-              <div className={FIELD_CLASS}>
-                <Link2 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <input
-                  id={`publisher-url-${adapterId}`}
-                  name="url"
-                  className={BARE_INPUT_CLASS}
-                  autoComplete="off"
-                  placeholder="https://"
-                  value={urlValue}
-                  onChange={(event) => setUrl(event.target.value)}
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor={`publisher-api-key-${adapterId}`}>API key</Label>
-              <div className={FIELD_CLASS}>
-                <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <input
-                  id={`publisher-api-key-${adapterId}`}
-                  name="apiKey"
-                  className={BARE_INPUT_CLASS}
-                  type={showKey ? "text" : "password"}
-                  autoComplete="off"
-                  placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : `${serviceName} API key`}
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                />
-                <button
-                  type="button"
-                  aria-label={showKey ? "Hide API key" : "Show API key"}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowKey((v) => !v)}
-                >
-                  {showKey ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-                </button>
-              </div>
-            </div>
+            <ConnectionUrlField id={`publisher-url-${adapterId}`} label={installedPackage?.connectionUrlLabel ?? `${serviceName} URL`} value={urlValue} onChange={setUrl} />
+            <ConnectionKeyField
+              id={`publisher-api-key-${adapterId}`}
+              placeholder={publisher?.hasApiKey ? "Saved. Type to replace it" : `${serviceName} API key`}
+              value={apiKey}
+              onChange={setApiKey}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" size="lg" disabled={!urlValue.trim() || busy !== null} onClick={() => void handleSave()}>
@@ -560,6 +587,8 @@ function PublisherPanel({
           />
         ) : null}
         </>
+      ) : tab === "analytics" && analyticsAdapter ? (
+        <AdapterForm instanceId={id} adapter={analyticsAdapter} embedded />
       ) : publisher ? (
         <PublishTargetsCard instanceId={id} publisher={publisher} />
       ) : (
