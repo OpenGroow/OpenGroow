@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Crown, Eye, ExternalLink, Layers, Loader2, RefreshCw, Users } from "lucide-react";
+import { BarChart3, ArrowDownRight, ArrowRight, ArrowUpRight, Crown, Eye, ExternalLink, Layers, Loader2, RefreshCw, Users } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { findInstanceById } from "@/src/components/instance-workspace.utils";
@@ -339,13 +339,31 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
     <div className="grid gap-8">
       <PageHeader title="Analytics" description="How your published posts performed." action={<RefreshButton instanceId={instanceId} />} />
       {adapters && adapters.length > 1 ? (
-        <NativeSelect aria-label="Analytics adapter" className="h-11 sm:w-60" value={current?.adapter} onChange={(e) => chooseAdapter(e.target.value)}>
-          {adapters.map((a) => (
-            <option key={a.adapter} value={a.adapter}>
-              {a.name}
-            </option>
-          ))}
-        </NativeSelect>
+        <div className="flex gap-2 border-b border-border" role="tablist" aria-label="Analytics adapter">
+          {adapters.map((a) => {
+            const active = a.adapter === current?.adapter;
+            return (
+              <button
+                key={a.adapter}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`flex items-center gap-2 border-b-2 px-4 pb-3 text-sm font-medium ${
+                  active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => chooseAdapter(a.adapter)}
+              >
+                {a.icon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={a.icon} alt="" className="size-4 rounded-sm object-contain" />
+                ) : (
+                  <BarChart3 className="size-4" aria-hidden="true" />
+                )}
+                {a.name}
+              </button>
+            );
+          })}
+        </div>
       ) : null}
       {rows === undefined ? (
         <p className="text-muted-foreground">Loading...</p>

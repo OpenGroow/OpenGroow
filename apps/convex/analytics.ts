@@ -305,7 +305,7 @@ export const adaptersForProject = query({
     if (!(await readOwnerId(ctx, args.instanceId))) return [];
     const installed = await installedAnalyticsAdapters(ctx);
     const activated = await activatedAdapters(ctx, args.instanceId, installed, await projectPublishers(ctx, args.instanceId));
-    return activated.map((a) => ({ adapter: a.id, name: a.name, metrics: a.metrics, primary: a.primary }));
+    return activated.map((a) => ({ adapter: a.id, name: a.name, ...(a.icon ? { icon: a.icon } : {}), metrics: a.metrics, primary: a.primary }));
   },
 });
 

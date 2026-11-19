@@ -338,12 +338,12 @@ describe("Analytics page", () => {
 
     describe("the adapter picker", () => {
       const COUNTER_ADAPTER = { adapter: "postiz", name: "Postiz", primary: "views", metrics: [counter("views", "Views")] };
-      const picker = () => container.querySelector('[aria-label="Analytics adapter"]');
-      const choose = async (value: string) => {
-        const select = picker()!.closest('[data-slot="native-select-wrapper"]')!.querySelector<HTMLSelectElement>("select")!;
+      const picker = () => container.querySelector('[role="tablist"][aria-label="Analytics adapter"]');
+      const tabs = () => Array.from(picker()!.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+      const choose = async (name: string) => {
+        const tab = tabs().find((x) => x.textContent === name)!;
         await act(async () => {
-          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
-          select.dispatchEvent(new Event("change", { bubbles: true }));
+          tab.click();
         });
       };
 
@@ -362,9 +362,8 @@ describe("Analytics page", () => {
         expect(picker()).not.toBeNull();
         expect(headers()).toContain("Views");
         expect(listed()[0]).toContain("Reel");
-        const select = picker()!.closest('[data-slot="native-select-wrapper"]')!.querySelector("select")!;
-        expect(Array.from(select.options).map((o) => o.value)).toEqual(["postiz", "search"]);
-        await choose("search");
+        expect(tabs().map((x) => [x.textContent, x.getAttribute("aria-selected")])).toEqual([["Postiz", "true"], [SEARCH.name, "false"]]);
+        await choose(SEARCH.name);
         expect(listArgs.at(-1)).toMatchObject({ adapter: "search" });
         expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions"]));
         expect(headers()).not.toContain("Views");
