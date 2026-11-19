@@ -1,5 +1,5 @@
 import { v, type Infer } from "convex/values";
-import { metricKindOf } from "@opengroow/publisher-sdk";
+import { collectDelayMs, DEFAULT_COLLECT_DELAYS_MS, metricKindOf, type AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapter } from "./analytics_adapters.js";
@@ -22,6 +22,21 @@ export const RETRY_AFTER_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
 
 /**
+ * The delays (ms after publication, ascending) of a Publication's readings: the Template's, else
+ * the adapter's, else the default. Delays that fall on the same moment once held back by the
+ * adapter's earliest delay are one reading.
+ */
+export function readingDelays(templateDays: number[] | undefined, adapter: AnalyticsAdapterMeta | undefined): number[] {
+  const earliest = adapter?.earliestDelayMs ?? 0;
+  const wanted = templateDays
+    ? templateDays.map((days) => days * DAY_MS)
+    : adapter?.collect
+      ? adapter.collect.map(collectDelayMs)
+      : DEFAULT_COLLECT_DELAYS_MS;
+  return [...new Set(wanted.map((delay) => Math.max(delay, earliest)))].sort((a, b) => a - b);
+}
+
+/**
  * Called when a Publication becomes `published`: schedules its readings, once.
  * `backfill`: a Publication published before it was measured (or before its Mission type declared
  * `analytics`): its delays count from when it was published, only the ones still to come are
@@ -36,7 +51,12 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
   if (!declaration) return;
   const now = Date.now();
   const publishedAt = options.backfill ? publication.updatedAt : now;
-  const all = declaration.collect.map((days) => days * DAY_MS);
+  const publishers = await projectPublishers(ctx, publication.instanceId);
+  const found = channelOf(publishers, publication.target);
+  const publisherAdapter = publication.attemptContext?.adapter ?? found?.publisher.adapter;
+  // The adapter the channel is linked to supplies the delays the Template does not (ADR-079).
+  const link = publisherAdapter ? linkedAdapter(await installedAnalyticsAdapters(ctx), publisherAdapter, found?.channel.analyticsAdapter) : null;
+  const all = readingDelays(declaration.collect, link?.adapter);
   const delays = options.backfill ? all.filter((delay) => publishedAt + delay > now) : all;
   const postSeries = publication.postSeries ?? 0;
   const rows = await ctx.db
@@ -46,8 +66,6 @@ export async function scheduleReadings(ctx: MutationCtx, publication: Doc<"publi
   if (rows.some((row) => row.postSeries === postSeries)) return;
   // A retry that created a new post: the old post is no longer measured, its Snapshots stay.
   for (const row of rows) if (!row.done) await ctx.db.patch(row._id, { done: true, updatedAt: Date.now() });
-  const publishers = await projectPublishers(ctx, publication.instanceId);
-  const publisherAdapter = publication.attemptContext?.adapter ?? channelOf(publishers, publication.target)?.publisher.adapter;
   if (!publisherAdapter) return;
   // Nothing left to schedule: the post is old enough that only a refresh reads it.
   const finished = delays.length === 0;
@@ -148,6 +166,7 @@ export const listForProject = query({
       .take(LIST_LIMIT);
     const publishers = await projectPublishers(ctx, args.instanceId);
     const registry = getTemplateRegistry(ctx);
+    const adapters = await installedAnalyticsAdapters(ctx);
     const rows = [];
     for (const publication of publications) {
       const mission = await ctx.db.get(publication.missionId);
@@ -165,7 +184,9 @@ export const listForProject = query({
         .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
         .collect();
       const template = await registry.resolve(args.instanceId, mission.templateId, mission.templateVersion);
-      const primaryMetric = analyticsDeclarationFor(template?.manifest, mission.type)?.primaryMetric;
+      // The adapter declares what ranks its posts (contract 2); a contract 1 adapter keeps the Template's.
+      const linked = found ? linkedAdapter(adapters, found.publisher.adapter, found.channel.analyticsAdapter)?.adapter : undefined;
+      const primaryMetric = linked?.primary ?? analyticsDeclarationFor(template?.manifest, mission.type)?.legacyPrimaryMetric;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
       rows.push({
