@@ -12,14 +12,15 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 // Seam 3: `analytics.listForProject` is simulated.
 const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
 let rows: unknown[] | undefined = [];
+let declaration: unknown = null;
 vi.mock("convex/react", () => ({
   useAction: () => refreshAction,
   useMutation: () => async () => undefined,
-  useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : undefined),
+  useQuery: (name: unknown) => (name === PUBLISHER_PACKAGES_LIST ? INSTALLED_PUBLISHERS : name === "analytics.listForProject" ? rows : name === "analytics.declarationForProject" ? declaration : undefined),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    analytics: { listForProject: "analytics.listForProject" },
+    analytics: { listForProject: "analytics.listForProject", declarationForProject: "analytics.declarationForProject" },
     analytics_node: { refresh: "analytics_node.refresh" },
     publisher_packages: { list: "publisher_packages.list" },
     hub_packages_node: { catalogue: "hub_packages_node.catalogue", install: "hub_packages_node.install" },
@@ -64,6 +65,7 @@ describe("Analytics page", () => {
   beforeEach(() => {
     n = 0;
     rows = [];
+    declaration = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -185,5 +187,72 @@ describe("Analytics page", () => {
     rows = [row({ title: "Clip", kind: "video", videoUrl: "https://cdn.example.com/v.mp4", snapshots: [snap(DAY, { views: 9 })] })];
     await render();
     expect(container.querySelector("li button video, button[data-publication] video")?.getAttribute("src")).toBe("https://cdn.example.com/v.mp4#t=0.1");
+  });
+
+  describe("with the declaration of the adapter (ADR-079)", () => {
+    const counter = (key: string, label: string) => ({ key, label, type: "counter", format: "number" });
+    const SEARCH = {
+      adapter: "search",
+      name: "Search",
+      primary: "clicks",
+      metrics: [
+        counter("clicks", "Clicks"),
+        counter("impressions", "Impressions"),
+        { key: "ctr", label: "CTR", type: "level", format: "percent", derive: { sum: ["clicks"], per: "impressions" } },
+        { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+        counter("sessions", "Sessions"),
+      ],
+    };
+    const headers = () => Array.from(container.querySelectorAll('[data-slot="columns-header"] > span')).map((el) => el.textContent);
+    const columnsButton = () => Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Columns")!;
+
+    it("shows the first four declared metrics as columns and offers the others in a Columns menu", async () => {
+      declaration = SEARCH;
+      rows = [row({ title: "Page", primaryMetric: undefined, snapshots: [snap(DAY, { clicks: 40, impressions: 800, position: 3, sessions: 7 })] })];
+      await render();
+      expect(headers()).toEqual(expect.arrayContaining(["Clicks", "Impressions", "CTR", "Position"]));
+      expect(headers()).not.toContain("Sessions");
+      expect(listed()[0]).toContain("5.0%");
+      expect(listed()[0]).not.toContain("7");
+      await act(async () => columnsButton().click());
+      const sessions = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((c) => c.closest("label")?.textContent?.includes("Sessions"))!;
+      expect(Array.from(container.querySelectorAll('input[type="checkbox"]'))).toHaveLength(1);
+      await act(async () => sessions.click());
+      expect(headers()).toContain("Sessions");
+      expect(listed()[0]).toContain("7");
+    });
+
+    it("computes a derived figure for the totals from the summed counters, never the mean of rates", async () => {
+      declaration = SEARCH;
+      rows = [
+        row({ title: "Small", snapshots: [snap(DAY, { clicks: 50, impressions: 100 })] }),
+        row({ title: "Big", snapshots: [snap(DAY, { clicks: 0, impressions: 900 })] }),
+      ];
+      await render();
+      expect(totals()).toContain("5.0%");
+      expect(totals()).not.toContain("25.0%");
+      expect(totals()).toContain("50Total clicks");
+    });
+
+    it("ranks the posts and picks the top post by the adapter's main metric, lowest first when lower is better", async () => {
+      declaration = { ...SEARCH, primary: "position" };
+      rows = [
+        row({ title: "Deep", snapshots: [snap(DAY, { position: 30, clicks: 900 })] }),
+        row({ title: "Near top", snapshots: [snap(DAY, { position: 2, clicks: 1 })] }),
+      ];
+      await render();
+      expect(listed()[0]).toContain("Near top");
+      expect(totals()).toMatch(/Near top/);
+    });
+
+    it("shows a dash for a metric with no value, and nothing for a metric no longer declared", async () => {
+      declaration = SEARCH;
+      rows = [row({ title: "Page", snapshots: [snap(DAY, { clicks: 40, views: 999 })] })];
+      await render();
+      expect(listed()[0]).toContain("—");
+      expect(listed()[0]).not.toContain("999");
+      expect(detail()).not.toContain("999");
+      expect(detail()).not.toContain("Views");
+    });
   });
 });

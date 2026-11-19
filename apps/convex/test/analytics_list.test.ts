@@ -3,6 +3,7 @@ import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
+import { installAnalyticsAdapter } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
@@ -196,5 +197,21 @@ describe("analytics.listForProject", () => {
     await s.publish({ target: "instagram:me", state: "waiting" });
     expect(await s.list()).toHaveLength(1);
     expect(await s.t.withIdentity(STRANGER).query(api.analytics.listForProject, { instanceId: INSTANCE_ID })).toEqual([]);
+  });
+});
+
+describe("analytics.declarationForProject", () => {
+  it("gives the metrics and the ranking metric of the adapter the published posts are linked to, to the owner only", async () => {
+    const s = await seed();
+    const metrics = [
+      { key: "clicks", label: "Clicks", type: "counter" as const, format: "number" as const },
+      { key: "position", label: "Position", type: "level" as const, format: "number" as const, better: "lower" as const },
+    ];
+    await installAnalyticsAdapter(s.t, { id: "postiz-v2", name: "Postiz v2", needs: "externalId", publisher: "postiz", earliestDelayMs: 0, metrics, primary: "clicks" });
+    const declaration = () => s.owner.query(api.analytics.declarationForProject, { instanceId: INSTANCE_ID });
+    expect(await declaration()).toBeNull();
+    await s.publish({ target: "instagram:me", state: "waiting" });
+    expect(await declaration()).toEqual({ adapter: "postiz-v2", name: "Postiz v2", metrics, primary: "clicks" });
+    expect(await s.t.withIdentity(STRANGER).query(api.analytics.declarationForProject, { instanceId: INSTANCE_ID })).toBeNull();
   });
 });

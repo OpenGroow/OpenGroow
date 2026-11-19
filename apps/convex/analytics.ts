@@ -192,6 +192,33 @@ export const listForProject = query({
   },
 });
 
+/**
+ * What the Analytics page builds its columns, tiles and ranking from (ADR-079): the metrics
+ * and the ranking metric of the Analytics Adapter the Project's published posts are linked to.
+ * The first linked adapter that declares its metrics (contract 2); null when none does, and the
+ * page then falls back to the closed social vocabulary of contract 1.
+ */
+export const declarationForProject = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    if (!(await readOwnerId(ctx, args.instanceId))) return null;
+    const publications = await ctx.db
+      .query("publications")
+      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
+      .order("asc")
+      .take(LIST_LIMIT);
+    const installed = await installedAnalyticsAdapters(ctx);
+    const publishers = await projectPublishers(ctx, args.instanceId);
+    for (const publication of publications) {
+      const found = channelOf(publishers, publication.target);
+      const link = found ? linkedAdapter(installed, found.publisher.adapter, found.channel.analyticsAdapter) : null;
+      const adapter = link?.adapter;
+      if (adapter?.metrics && adapter.primary) return { adapter: adapter.id, name: adapter.name, metrics: adapter.metrics, primary: adapter.primary };
+    }
+    return null;
+  },
+});
+
 async function insertSnapshot(
   ctx: MutationCtx,
   row: Doc<"publicationAnalytics">,

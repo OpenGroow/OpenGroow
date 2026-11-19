@@ -14,13 +14,29 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { SourceThumbnail } from "@/src/components/source-visuals";
-import { compact, currentReadings, engagementRate, latestMetrics, percent, rankValue, totalsOf } from "@/src/lib/analytics-figures";
+import {
+  DEFAULT_COLUMNS,
+  LEGACY_DECLARATION,
+  bestPost,
+  byRank,
+  compact,
+  currentReadings,
+  formatValue,
+  latestMetrics,
+  rankValue,
+  shownMetrics,
+  totalsOf,
+  valueOf,
+  type Declaration,
+  type MetricDecl,
+} from "@/src/lib/analytics-figures";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +70,9 @@ const titleOf = (row: AnalyticsRow) => row.title ?? row.missionName;
 const accountOf = (row: AnalyticsRow) => (row.channelProfile ? `@${row.channelProfile}` : (row.channelName ?? row.target));
 const dateOf = (row: AnalyticsRow) => new Date(row.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-const GRID = "grid grid-cols-[minmax(0,2.4fr)_minmax(0,1.4fr)_minmax(0,1fr)_repeat(4,minmax(0,0.8fr))_1.5rem] items-center gap-4";
+const GRID = "grid items-center gap-4";
+/** The post, the platform, the date, one column per shown metric, the chevron. */
+const gridStyle = (columns: number) => ({ gridTemplateColumns: `minmax(0,2.4fr) minmax(0,1.4fr) minmax(0,1fr) repeat(${columns},minmax(0,0.8fr)) 1.5rem` });
 
 /** The first frame of a video that has no cover: the browser loads the video itself, from its own URL. */
 function VideoFrame({ url, className, fallback }: { url: string; className: string; fallback: React.ReactNode }) {
@@ -110,10 +128,12 @@ function Trend({ metric, row }: { metric: string; row: AnalyticsRow }) {
   );
 }
 
-function PostDetail({ row }: { row: AnalyticsRow }) {
+function PostDetail({ row, declaration }: { row: AnalyticsRow; declaration: Declaration }) {
   const latest = latestMetrics(row);
-  const metrics = Object.keys(latest);
-  const trended = row.primaryMetric && latest[row.primaryMetric] !== undefined ? row.primaryMetric : (metrics.includes("views") ? "views" : metrics[0]);
+  const metrics = shownMetrics(declaration, row);
+  // Derived figures are never stored, so only a stored metric has a curve over time.
+  const stored = metrics.filter((m) => !m.derive);
+  const trended = (stored.find((m) => m.key === declaration.primary) ?? stored[0])?.key;
   return (
     <Card aria-label="Selected post" className="grid content-start gap-5 p-6">
       <div className="flex gap-4">
@@ -136,17 +156,11 @@ function PostDetail({ row }: { row: AnalyticsRow }) {
       {metrics.length > 0 ? (
         <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {metrics.map((metric) => (
-            <div key={metric} className="grid gap-0.5 rounded-xl border border-border p-3">
-              <dd className={cn("m-0 text-2xl tabular-nums", metric === row.primaryMetric ? "font-semibold" : "")}>{compact(latest[metric])}</dd>
-              <dt className="text-sm text-muted-foreground">{metricLabel(metric)}</dt>
+            <div key={metric.key} className="grid gap-0.5 rounded-xl border border-border p-3">
+              <dd className={cn("m-0 text-2xl tabular-nums", metric.key === declaration.primary ? "font-semibold" : "")}>{formatValue(metric, valueOf(metric, latest))}</dd>
+              <dt className="text-sm text-muted-foreground">{metric.label}</dt>
             </div>
           ))}
-          {engagementRate(latest) !== undefined ? (
-            <div className="grid gap-0.5 rounded-xl border border-border p-3">
-              <dd className="m-0 text-2xl tabular-nums">{percent(engagementRate(latest))}</dd>
-              <dt className="text-sm text-muted-foreground">Engagement</dt>
-            </div>
-          ) : null}
         </dl>
       ) : null}
       {trended ? <Trend metric={trended} row={row} /> : null}
@@ -156,7 +170,7 @@ function PostDetail({ row }: { row: AnalyticsRow }) {
   );
 }
 
-function PostRow({ row, selected, onSelect }: { row: AnalyticsRow; selected: boolean; onSelect: () => void }) {
+function PostRow({ row, columns, selected, onSelect }: { row: AnalyticsRow; columns: MetricDecl[]; selected: boolean; onSelect: () => void }) {
   const latest = latestMetrics(row);
   const noReading = Object.keys(latest).length === 0;
   return (
@@ -166,6 +180,7 @@ function PostRow({ row, selected, onSelect }: { row: AnalyticsRow; selected: boo
         aria-pressed={selected}
         data-publication={row.publicationId}
         onClick={onSelect}
+        style={gridStyle(columns.length)}
         className={cn(GRID, "w-full rounded-xl border bg-card px-4 py-3 text-left transition-colors hover:bg-muted", selected ? "border-primary bg-primary/10" : "border-border")}
       >
         <span className="flex min-w-0 items-center gap-3">
@@ -184,13 +199,12 @@ function PostRow({ row, selected, onSelect }: { row: AnalyticsRow; selected: boo
         </span>
         <span className="text-sm text-muted-foreground">{dateOf(row)}</span>
         {noReading ? (
-          <span className="col-span-4 text-sm text-muted-foreground">{stateLabel(row)}</span>
+          <span className="text-sm text-muted-foreground" style={{ gridColumn: `span ${Math.max(columns.length, 1)}` }}>{stateLabel(row)}</span>
         ) : (
           <>
-            <span className="tabular-nums">{compact(latest.views)}</span>
-            <span className="tabular-nums">{compact(latest.likes)}</span>
-            <span className="tabular-nums">{compact(latest.comments)}</span>
-            <span className="tabular-nums">{percent(engagementRate(latest))}</span>
+            {columns.map((metric) => (
+              <span key={metric.key} className="tabular-nums">{formatValue(metric, valueOf(metric, latest))}</span>
+            ))}
           </>
         )}
         <span aria-hidden="true" className="text-muted-foreground">›</span>
@@ -200,6 +214,29 @@ function PostRow({ row, selected, onSelect }: { row: AnalyticsRow; selected: boo
 }
 
 type Sort = "top" | "recent";
+
+/** The metrics beyond the first four are chosen here; the choice is kept for the page's life. */
+function ColumnsMenu({ extra, chosen, onToggle }: { extra: MetricDecl[]; chosen: Set<string>; onToggle: (key: string) => void }) {
+  const [open, setOpen] = useState(false);
+  if (extra.length === 0) return null;
+  return (
+    <div className="relative">
+      <Button type="button" variant="outline" size="lg" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Columns
+      </Button>
+      {open ? (
+        <div role="group" aria-label="Columns" className="absolute right-0 z-10 mt-2 grid min-w-48 gap-2 rounded-xl border border-border bg-popover p-3 shadow-md">
+          {extra.map((metric) => (
+            <label key={metric.key} className="flex items-center gap-2 text-sm">
+              <Checkbox checked={chosen.has(metric.key)} onCheckedChange={() => onToggle(metric.key)} />
+              {metric.label}
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** Reads every post's statistics now, outside the schedule, and says how it went. */
 function RefreshButton({ instanceId }: { instanceId: string | undefined }) {
@@ -244,15 +281,29 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const [platform, setPlatform] = useState("all");
   const [sort, setSort] = useState<Sort>("top");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const declared = useQuery(api.analytics.declarationForProject, instanceId ? { instanceId } : "skip");
+  // An adapter of contract 1 declares nothing: it measures the closed social vocabulary.
+  const declaration: Declaration = declared ?? LEGACY_DECLARATION;
+  const extra = declaration.metrics.slice(DEFAULT_COLUMNS);
+  const columns = declaration.metrics.filter((m, i) => i < DEFAULT_COLUMNS || chosen.has(m.key));
+  const toggleColumn = (key: string) =>
+    setChosen((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   const all = rows ?? [];
-  const totals = totalsOf(all);
-  const best = all.reduce<AnalyticsRow | undefined>((top, row) => ((rankValue(row) ?? -1) > (top ? (rankValue(top) ?? -1) : -1) ? row : top), undefined);
+  const totals = totalsOf(declaration, all);
+  const best = bestPost(declaration, all);
+  const primary = declaration.metrics.find((m) => m.key === declaration.primary);
+  const firstDerived = declaration.metrics.find((m) => m.derive);
   const platforms = [...new Set(all.map((row) => row.platform))].sort();
   const needle = search.trim().toLowerCase();
   const visible = all
     .filter((row) => (platform === "all" || row.platform === platform) && (needle === "" || `${titleOf(row)} ${accountOf(row)}`.toLowerCase().includes(needle)))
-    .sort((a, b) => (sort === "recent" ? b.publishedAt - a.publishedAt : (rankValue(b) ?? -1) - (rankValue(a) ?? -1)));
+    .sort((a, b) => (sort === "recent" ? b.publishedAt - a.publishedAt : byRank(declaration)(a, b)));
   const selected = visible.find((row) => row.publicationId === selectedId) ?? visible[0];
 
   return (
@@ -271,13 +322,13 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
         <>
           <section aria-label="Totals" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile icon={Layers} label="Measured posts" value={totals.posts} tone="visual" />
-            <StatTile icon={Eye} label="Total views" value={compact(totals.views)} tone="research" />
-            <StatTile icon={Users} label="Engagement" value={percent(totals.engagement)} tone="engagement" />
+            {primary ? <StatTile icon={Eye} label={primary.type === "counter" ? `Total ${primary.label.toLowerCase()}` : primary.label} value={formatValue(primary, totals.values[primary.key])} tone="research" /> : null}
+            {firstDerived ? <StatTile icon={Users} label={firstDerived.label} value={formatValue(firstDerived, totals.values[firstDerived.key])} tone="engagement" /> : null}
             <Card data-slot="stat-tile" className="flex-row items-center gap-5 px-6 py-6">
               {best ? <Thumbnail row={best} className="size-14" /> : <span className="flex size-14 items-center justify-center rounded-xl bg-muted text-muted-foreground"><Crown className="size-7" /></span>}
               <div className="grid min-w-0 gap-0.5">
                 <div className="truncate text-base font-semibold">{best ? titleOf(best) : "—"}</div>
-                <div className="text-base text-muted-foreground">Top performing post{best ? ` · ${compact(rankValue(best))} ${best.primaryMetric ? metricLabel(best.primaryMetric).toLowerCase() : "views"}` : ""}</div>
+                <div className="text-base text-muted-foreground">Top performing post{best && primary ? ` · ${formatValue(primary, rankValue(declaration, best))} ${primary.label.toLowerCase()}` : ""}</div>
               </div>
             </Card>
           </section>
@@ -296,6 +347,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
               <option value="top">Top performing</option>
               <option value="recent">Most recent</option>
             </NativeSelect>
+            <ColumnsMenu extra={extra} chosen={chosen} onToggle={toggleColumn} />
           </div>
 
           {visible.length === 0 ? (
@@ -303,23 +355,22 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
           ) : (
             <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <div className="grid gap-3">
-                <div aria-hidden="true" className={cn(GRID, "px-4 text-sm text-muted-foreground max-lg:hidden")}>
+                <div aria-hidden="true" data-slot="columns-header" style={gridStyle(columns.length)} className={cn(GRID, "px-4 text-sm text-muted-foreground max-lg:hidden")}>
                   <span>Post</span>
                   <span>Platform / Account</span>
                   <span>Published</span>
-                  <span>Views</span>
-                  <span>Likes</span>
-                  <span>Comments</span>
-                  <span>Engagement</span>
+                  {columns.map((metric) => (
+                    <span key={metric.key}>{metric.label}</span>
+                  ))}
                   <span />
                 </div>
                 <ul className="m-0 grid list-none gap-3 p-0">
                   {visible.map((row) => (
-                    <PostRow key={row.publicationId} row={row} selected={row.publicationId === selected?.publicationId} onSelect={() => setSelectedId(row.publicationId)} />
+                    <PostRow key={row.publicationId} row={row} columns={columns} selected={row.publicationId === selected?.publicationId} onSelect={() => setSelectedId(row.publicationId)} />
                   ))}
                 </ul>
               </div>
-              {selected ? <PostDetail row={selected} /> : null}
+              {selected ? <PostDetail row={selected} declaration={declaration} /> : null}
             </div>
           )}
         </>
