@@ -242,7 +242,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                     >
                       <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                       <span className="grid flex-1">
-                        <span className="text-base font-medium">{entry.name} analytics</span>
+                        <span className="text-base font-medium">{entry.name}</span>
                         {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
                       </span>
                       {installing === entry.packageId ? <Loader2 className="size-4 animate-spin" aria-label="Installing" /> : <Download className="size-4 text-muted-foreground" aria-label="Will be installed" />}
