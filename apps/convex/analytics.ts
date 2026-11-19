@@ -9,6 +9,7 @@ import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { analyticsDeclarationFor } from "@opengroow/agent-templates";
 import { publishableOf } from "./publications.js";
+import { isFetchableUrl } from "./analytics_thumbnails_lib.js";
 import { publishableForPlatform } from "./publishable.js";
 
 // Performance Snapshots (ADR-078, docs/domain/publishing.md): when a
@@ -141,6 +142,9 @@ export const forPublication = query({
   },
 });
 
+/** Whether the image the Publishable gave can be loaded by anyone: not an address local to this machine. */
+export const hasPublicThumbnail = (face: { thumbnailUrl?: string; videoUrl?: string }) => Boolean(face.thumbnailUrl && isFetchableUrl(face.thumbnailUrl));
+
 const httpUrl = (value: unknown) => (typeof value === "string" && /^https?:\/\//.test(value) ? value : undefined);
 
 /** What the Analytics page shows of the post: its title, its kind and an image to recognise it by. */
@@ -235,8 +239,9 @@ export const listForProject = query({
       const primaryMetric = linked?.primary;
       const platform = found?.channel.channelService ?? publication.target.split(":")[0];
       const face = postFace(mission, platform);
-      // An article's page gives its image when the Publishable has none.
-      const pageImage = face.thumbnailUrl
+      // An article's page gives its image when the Publishable has none, or only a local one (a cover served by the
+      // MCP on this machine, which nobody else can load).
+      const pageImage = hasPublicThumbnail(face)
         ? undefined
         : (await ctx.db.query("pageThumbnails").withIndex("by_publication", (q) => q.eq("publicationId", publication._id)).first())?.url;
       rows.push({

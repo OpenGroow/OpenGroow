@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server.js";
 import { ownerIdFor } from "./instance_ownership.js";
-import { postFace } from "./analytics.js";
+import { hasPublicThumbnail, postFace } from "./analytics.js";
 
 // The thumbnail of a published article, read from its public page and cached (the Publishable has none).
 
@@ -26,7 +26,7 @@ export const pending = internalQuery({
       const mission = await ctx.db.get(publication.missionId);
       if (!mission) continue;
       const face = postFace(mission, publication.target.split(":")[0]);
-      if (face.thumbnailUrl || face.videoUrl) continue;
+      if (hasPublicThumbnail(face) || face.videoUrl) continue;
       const cached = await ctx.db
         .query("pageThumbnails")
         .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))

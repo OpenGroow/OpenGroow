@@ -203,6 +203,14 @@ describe("Thumbnail of a published article", () => {
     expect(await s.thumbnail()).toBe("https://cdn.example.com/cover.png");
   });
 
+  it("takes the page's image when the Publishable's cover is served from this machine, which nobody else can load", async () => {
+    pages[PAGE] = () => html(`<meta property="og:image" content="https://cdn.example.com/page.png">`);
+    const s = await seed({ publishable: { kind: "article", markdownUrl: "https://cdn.example.com/p.md", coverUrl: "http://localhost:4000/images/abc/cover.png", slug: "hello", title: "Hello", description: "d" } });
+    await s.refresh();
+    expect(fetched).toEqual([PAGE]);
+    expect(await s.thumbnail()).toBe("https://cdn.example.com/page.png");
+  });
+
   it("returns the cached value in the Analytics rows", async () => {
     const s = await seed();
     await s.t.mutation(internal.analytics_thumbnails.store, { entries: [{ publicationId: s.publicationId, url: "https://cdn.example.com/cached.png" }] });
