@@ -127,7 +127,8 @@ describe("Publishers page", () => {
     await render();
     await click(byText("Add provider"));
     expect(text()).toContain("Analytics providers");
-    expect(text()).toContain("Google analytics");
+    expect(text()).toContain("Google");
+    expect(text()).not.toContain("Google analytics");
     expect(text()).not.toContain("Postiz analytics");
   });
 
