@@ -451,6 +451,73 @@ describe("Publishers page: Add publisher (ADR-072)", () => {
     });
   });
 
+  describe("one Version for the service: the publisher package and its analytics package", () => {
+    const D = (c: string) => `sha256:${c.repeat(64)}`;
+    const ANALYTICS = { adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: false, packageId: "@opengroow/analytics-postiz", version: "1.0.0", digest: D("a") };
+    const pubEntry = (tag: string, digest = D("1")) => ({ packageId: "@opengroow/publisher-postiz", name: "Postiz", description: "", tag, verification: "official", digest });
+    const anaEntry = (tag: string, digest = D("a")) => ({ packageId: "@opengroow/analytics-postiz", name: "Postiz", description: "", tag, verification: "official", digest });
+    beforeEach(() => {
+      hubAnalytics = [];
+      useQueryMock.mockReturnValue(PUBLISHER);
+      installedPublishers = INSTALLED_PUBLISHERS.map((p) => ({ ...p, digest: D("1") }));
+      actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "installed" }));
+    });
+    const check = async () => {
+      await render();
+      await click(byText("Check for updates"));
+    };
+
+    it("flags an update when only the analytics package was rebuilt, and installs only that one", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.0.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.0.0", D("b"))];
+      await check();
+      expect(text()).toContain("Update available");
+      await click(byText("Reinstall"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledTimes(1);
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+    });
+
+    it("installs both packages when both are behind", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.1.0")];
+      await check();
+      await click(byText("Update to 1.1.0"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "analytics", packageId: "@opengroow/analytics-postiz" });
+    });
+
+    it("is up to date when both packages are", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.0.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.0.0")];
+      await check();
+      expect(text()).toContain("Up to date");
+    });
+
+    it("reads only the publisher kind and installs only it for a Publisher without analytics package", async () => {
+      analyticsAdapters = [];
+      const catalogue = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      actions["hub_packages_node.catalogue"] = catalogue;
+      await check();
+      expect(catalogue).toHaveBeenCalledTimes(1);
+      await click(byText("Update to 1.1.0"));
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledTimes(1);
+      expect(actions["hub_packages_node.install"]).toHaveBeenCalledWith({ kind: "publisher", packageId: "@opengroow/publisher-postiz" });
+    });
+
+    it("reports the first install error", async () => {
+      analyticsAdapters = [ANALYTICS];
+      actions["hub_packages_node.catalogue"] = vi.fn(async () => ({ entries: [pubEntry("publisher-postiz@1.1.0")] }));
+      hubAnalytics = [anaEntry("analytics-postiz@1.1.0")];
+      actions["hub_packages_node.install"] = vi.fn(async () => ({ status: "error", errorMessage: "Digest mismatch" }));
+      await check();
+      await click(byText("Update to 1.1.0"));
+      expect(text()).toContain("Digest mismatch");
+    });
+  });
+
   describe("Analytics link of a channel (ADR-078)", () => {
     const OPTIONS = [
       { id: "postiz-analytics", name: "Postiz analytics" },

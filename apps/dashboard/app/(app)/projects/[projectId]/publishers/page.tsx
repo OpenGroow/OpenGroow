@@ -517,7 +517,12 @@ function PublisherPanel({
           </div>
         </Card>
         {installedPackageId && installedVersion ? (
-          <PackageVersionCard kind="publisher" packageId={installedPackageId} version={installedVersion} digest={installedPackage?.digest} />
+          <PackageVersionCard
+            packages={[
+              { kind: "publisher", packageId: installedPackageId, version: installedVersion, digest: installedPackage?.digest },
+              ...(analyticsAdapter?.packageId && analyticsAdapter.version ? [{ kind: "analytics" as const, packageId: analyticsAdapter.packageId, version: analyticsAdapter.version, digest: analyticsAdapter.digest }] : []),
+            ]}
+          />
         ) : null}
         {publisher ? (
           <ProviderDangerZone
