@@ -40,8 +40,8 @@ const modules = {
 const INSTANCE_ID = "openclaw-link";
 const MEASURED = fixtureTemplate("@test/social", {
   missionTypes: [
-    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: { primaryMetric: "views" } },
-    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { primaryMetric: "views", collect: [2] } },
+    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: {} },
+    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { collect: [2] } },
     { type: "make_plain", label: "Plain", payload: "{}", agentsMd: "c.md", publish: { kind: "image" } },
   ],
 } as never);
@@ -161,7 +161,7 @@ describe("Analytics link of a Publish target (ADR-078)", () => {
     vi.useFakeTimers();
     try {
       await s.t.mutation(internal.publications.finish, { publicationId, status: "published" });
-      vi.advanceTimersByTime(24 * 3_600_000);
+      vi.advanceTimersByTime(2 * 24 * 3_600_000);
       await s.t.action(internal.analytics_node.collectDue, {});
       expect(loaded.ids).toEqual(["web-analytics"]);
 

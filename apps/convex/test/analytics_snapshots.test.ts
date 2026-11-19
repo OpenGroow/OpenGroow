@@ -4,7 +4,7 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { ANALYTICS_CONTRACT_VERSION, type AnalyticsAdapter, type AnalyticsConnection, type AnalyticsKey, type ReadRequest } from "@opengroow/publisher-sdk";
 import { installPostiz } from "./postiz_fixture";
-import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS, type AnalyticsAdapterData } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
@@ -40,8 +40,10 @@ const DAY = 24 * HOUR;
 const INSTANCE_ID = "openclaw-analytics";
 const MEASURED = fixtureTemplate("@test/social", {
   missionTypes: [
-    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: { primaryMetric: "views" } },
-    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { primaryMetric: "views", collect: [2] } },
+    { type: "make_image", label: "Image", payload: "{}", agentsMd: "a.md", publish: { kind: "image" }, analytics: {} },
+    { type: "make_short", label: "Short", payload: "{}", agentsMd: "b.md", publish: { kind: "image" }, analytics: { collect: [2] } },
+    { type: "make_bare", label: "Bare", payload: "{}", agentsMd: "d.md", publish: { kind: "image" }, analytics: {} },
+    { type: "make_many", label: "Many", payload: "{}", agentsMd: "e.md", publish: { kind: "image" }, analytics: { collect: [1, 2, 7] } },
     { type: "make_plain", label: "Plain", payload: "{}", agentsMd: "c.md", publish: { kind: "image" } },
   ],
 } as never);
@@ -155,6 +157,64 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+const delaysAdapter = (extra: Partial<AnalyticsAdapterData> = {}): AnalyticsAdapterData => ({
+  id: "delays-adapter",
+  name: "Delays",
+  needs: "externalId",
+  publisher: "postiz",
+  earliestDelayMs: 0,
+  primary: "views",
+  metrics: [{ key: "views", label: "Views", type: "counter", format: "number" }],
+  ...extra,
+});
+
+async function seedWithAdapter(meta: AnalyticsAdapterData, type: string) {
+  const s = await seed({ type });
+  await installAnalyticsAdapter(s.t, meta);
+  await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", analyticsAdapter: meta.id });
+  await s.publish();
+  return s;
+}
+
+describe("Reading delays declared by the adapter (ADR-079, #103)", () => {
+  it("uses the adapter's delays when the Template gives none", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["2d", "5d"] }), "make_bare");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    vi.advanceTimersByTime(3 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 5 * DAY]);
+    expect(view.state).toBe("complete");
+  });
+
+  it("lets the Template's delays override the adapter's", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["2d", "5d"] }), "make_short");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY]);
+    expect(view.state).toBe("complete");
+  });
+
+  it("gives one reading and one Snapshot to delays that fall on the same moment after the adapter's earliest delay", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ earliestDelayMs: 2 * DAY }), "make_many");
+    vi.advanceTimersByTime(2 * DAY);
+    await s.tick();
+    await s.tick();
+    vi.advanceTimersByTime(5 * DAY);
+    await s.tick();
+    const view = await s.view();
+    expect(view.snapshots.map((x) => x.delayMs)).toEqual([2 * DAY, 7 * DAY]);
+    expect(reads).toHaveLength(2);
+  });
+
+  it("keeps a Mission type without `analytics` unmeasured", async () => {
+    const s = await seedWithAdapter(delaysAdapter({ collect: ["1d"] }), "make_plain");
+    expect((await s.view()).state).toBe("unmeasured");
+  });
 });
 
 describe("Performance Snapshots (ADR-078)", () => {

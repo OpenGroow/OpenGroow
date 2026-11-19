@@ -62,7 +62,7 @@ Channel linking: each Publish target is linked to at most one adapter. By defaul
 
 ## Delays
 
-Readings are counted from the moment the Publication became `published`: 1, 3 and 7 days by default (`DEFAULT_COLLECT_DELAYS_MS`). A Mission type opts in with `analytics: { primaryMetric, collect? }` (`docs/TEMPLATE_DEVELOPMENT.md`, "Being measured"). The Template says what it wants, the adapter says what it can: a reading is not tried before `publishedAt + max(delay, earliestDelayMs)`; if it is too early it is postponed to that moment. Declare `earliestDelayMs` honestly (Postiz: 1 hour; a service that does not report before about two days: 2 days).
+Readings are counted from the moment the Publication became `published`: A Mission type opts in with `analytics: { collect? }` (`docs/TEMPLATE_DEVELOPMENT.md`, "Being measured"). The delays are the Template's `collect` if it gives one, else the adapter's `collect` (contract 2), else 1, 3 and 7 days (`DEFAULT_COLLECT_DELAYS_MS`). The adapter says what it can: no delay is shorter than `earliestDelayMs`, and delays that then fall on the same moment are one reading. Declare `earliestDelayMs` honestly (Postiz: 1 hour; a service that does not report before about two days: 2 days).
 
 ## Metric mapping
 
