@@ -180,7 +180,13 @@ describe("Analytics connections card", () => {
     adapters = [{ adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: true, url: "https://p.example.com", hasApiKey: true, options: {} }];
     await renderEmbedded();
     expect(container.textContent).not.toContain("Danger zone");
-    expect(container.querySelector('[data-testid="package-updates"]')).toBeNull();
+  });
+
+  it("offers the Version card of the analytics package inside a Publisher's page too, which the Publisher's own card does not cover", async () => {
+    adapters = [{ adapter: "postiz", name: "Postiz", publisher: "postiz", optionDecls: [], configured: true, url: "https://p.example.com", hasApiKey: true, options: {}, packageId: "@opengroow/analytics-postiz", version: "1.0.0", digest: "sha256:a" }];
+    await renderEmbedded();
+    expect(container.querySelector('[data-testid="package-updates"]')).not.toBeNull();
+    expect(container.textContent).toContain("1.0.0");
   });
 
   describe("Version", () => {

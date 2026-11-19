@@ -140,7 +140,14 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         </div>
       </Card>
   );
-  if (embedded) return card;
+  // Inside the Publisher's page the Publisher's own Version card updates the Publisher's package, not this one.
+  const version = adapter.packageId && adapter.version ? <PackageVersionCard kind="analytics" packageId={adapter.packageId} version={adapter.version} digest={adapter.digest} /> : null;
+  if (embedded) return (
+    <div className="grid gap-4">
+      {card}
+      {version}
+    </div>
+  );
   return (
     <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
       <header className="flex items-center gap-4">
@@ -154,7 +161,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         </div>
       </header>
       {card}
-      {adapter.packageId && adapter.version ? <PackageVersionCard kind="analytics" packageId={adapter.packageId} version={adapter.version} digest={adapter.digest} /> : null}
+      {version}
       {adapter.configured ? (
         <ProviderDangerZone
           name={adapter.name}
