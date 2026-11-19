@@ -67,6 +67,16 @@ describe("Analytics connections card", () => {
     expect(container.textContent).toBe("");
   });
 
+  it("says Connected or Not connected, like a Publisher's card", async () => {
+    adapters = [{ adapter: "ga", name: "Google Analytics", optionDecls: [], configured: false }];
+    await render();
+    expect(container.textContent).toContain("Not connected");
+    adapters = [{ adapter: "ga", name: "Google Analytics", optionDecls: [], configured: true, url: "https://ga.example.com", hasApiKey: true }];
+    await render();
+    expect(container.textContent).toContain("Connected");
+    expect(container.textContent).not.toContain("Own connection");
+  });
+
   it("leaves the adapters of a Publisher to that Publisher's page", async () => {
     await render();
     expect(container.textContent).toBe("");

@@ -147,7 +147,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         <div className="grid flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>
-            {adapter.configured ? <StatusBadge tone="active" label="Own connection" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="warning" label="Not configured" />}
+            {adapter.configured ? <StatusBadge tone="active" label="Connected" /> : adapter.publisher ? <StatusBadge tone="info" label="Publisher's connection" /> : <StatusBadge tone="error" label="Not connected" />}
           </div>
           {publisherNote ? <p className="m-0 text-sm text-muted-foreground">{publisherNote}</p> : null}
         </div>
