@@ -2,6 +2,13 @@
 
 OpenGroow is a platform that simplifies creating and managing projects containing agents executed through OpenClaw.
 
+## Open source: keep it anonymous
+
+This repository is public. Never put a maintainer's own projects, brands, domains, page URLs, account handles, service account names or cloud project ids in tracked files (code, tests, fixtures, docs, ADRs, commit messages, PR text).
+Use neutral placeholders: `example.com`, `article-1`, `Example`, `create_letter_video`.
+When recording real answers from a service as fixtures, anonymise them before saving.
+Keep credentials and key files outside the repository.
+
 ## Package manager
 
 This is a monorepo containing web services and CLI tools.
