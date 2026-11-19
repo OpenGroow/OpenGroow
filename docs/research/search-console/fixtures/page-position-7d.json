@@ -1,0 +1,36 @@
+{
+  "request": {
+    "startDate": "2026-11-10",
+    "endDate": "2026-11-16",
+    "dimensions": [
+      "page"
+    ],
+    "dimensionFilterGroups": [
+      {
+        "filters": [
+          {
+            "dimension": "page",
+            "operator": "equals",
+            "expression": "https://example.com/blog/article-1"
+          }
+        ]
+      }
+    ],
+    "dataState": "final"
+  },
+  "status": 200,
+  "response": {
+    "rows": [
+      {
+        "keys": [
+          "https://example.com/blog/article-1"
+        ],
+        "clicks": 4,
+        "impressions": 1422,
+        "ctr": 0.0028129395218002813,
+        "position": 8.353727144866387
+      }
+    ],
+    "responseAggregationType": "byPage"
+  }
+}

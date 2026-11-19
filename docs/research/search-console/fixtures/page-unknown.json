@@ -1,0 +1,25 @@
+{
+  "request": {
+    "startDate": "2026-10-10",
+    "endDate": "2026-11-16",
+    "dimensions": [
+      "page"
+    ],
+    "dimensionFilterGroups": [
+      {
+        "filters": [
+          {
+            "dimension": "page",
+            "operator": "equals",
+            "expression": "https://example.com/blog/unknown-page"
+          }
+        ]
+      }
+    ],
+    "dataState": "final"
+  },
+  "status": 200,
+  "response": {
+    "responseAggregationType": "byPage"
+  }
+}
