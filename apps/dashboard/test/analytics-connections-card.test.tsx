@@ -107,6 +107,51 @@ describe("Analytics connections card", () => {
     expect(save).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "postiz", url: "https://p.example.com", options: { lookbackDays: 14 } });
   });
 
+  describe("an adapter that declares a JSON secret and no URL (ADR-079)", () => {
+    const SECRET = { label: "Service account key", kind: "json", fields: ["client_email"] };
+    beforeEach(() => {
+      adapters = [{ adapter: "gsc", name: "Search Console", optionDecls: [], configured: false, needsUrl: false, secret: SECRET }];
+    });
+    const typeArea = async (id: string, value: string) => {
+      const area = document.getElementById(id) as HTMLTextAreaElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(area, value);
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    it("shows no URL field and a multi-line secret field, and saves without a URL", async () => {
+      await render();
+      expect(document.getElementById("analytics-url-gsc")).toBeNull();
+      expect(container.textContent).toContain("Service account key");
+      expect(document.getElementById("analytics-key-gsc")?.tagName).toBe("TEXTAREA");
+      await typeArea("analytics-key-gsc", '{"client_email":"a@b"}');
+      await act(async () => button("Save changes").click());
+      expect(save).toHaveBeenCalledWith({ instanceId: "inst-1", adapter: "gsc", apiKey: '{"client_email":"a@b"}', options: {} });
+    });
+
+    it("fills the field from a chosen file, in the browser only", async () => {
+      await render();
+      const file = new File(['{"client_email":"from-file"}'], "key.json", { type: "application/json" });
+      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(button("Choose a file")).toBeDefined();
+      Object.defineProperty(input, "files", { value: [file] });
+      await act(async () => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect((document.getElementById("analytics-key-gsc") as HTMLTextAreaElement).value).toBe('{"client_email":"from-file"}');
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it("never shows the saved secret, only that it is configured", async () => {
+      adapters = [{ adapter: "gsc", name: "Search Console", optionDecls: [], configured: true, hasApiKey: true, url: "", options: {}, needsUrl: false, secret: SECRET }];
+      await render();
+      expect((document.getElementById("analytics-key-gsc") as HTMLTextAreaElement).value).toBe("");
+      expect((document.getElementById("analytics-key-gsc") as HTMLTextAreaElement).placeholder).toMatch(/configured/i);
+    });
+  });
+
   it("removes a configured connection", async () => {
     adapters = [{ adapter: "postiz", name: "Postiz", optionDecls: [], configured: true, url: "https://p.example.com", hasApiKey: true, options: {} }];
     await render();

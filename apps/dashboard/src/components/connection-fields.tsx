@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, EyeOff, KeyRound, Link2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Eye, EyeOff, FileJson, KeyRound, Link2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
 // The URL and API key fields of a service connection, the same for a Publisher
@@ -24,11 +24,60 @@ export function ConnectionUrlField({ id, label, value, onChange }: { id: string;
   );
 }
 
-export function ConnectionKeyField({ id, placeholder, value, onChange }: { id: string; placeholder: string; value: string; onChange: (value: string) => void }) {
+/**
+ * The secret of a connection that is a JSON document (a service account key): a multi-line field and a
+ * "Choose a file" button that only fills the field, in the browser. The page never shows a saved value.
+ */
+export function ConnectionJsonSecretField({ id, label, placeholder, value, onChange }: { id: string; label: string; placeholder: string; value: string; onChange: (value: string) => void }) {
+  const [fileError, setFileError] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  async function fillFrom(file: File | undefined) {
+    if (!file) return;
+    try {
+      onChange(
+        await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(file);
+        }),
+      );
+      setFileError(null);
+    } catch {
+      setFileError("Could not read the file");
+    }
+  }
+  return (
+    <div className="grid gap-2 md:col-span-2">
+      <Label htmlFor={id}>{label}</Label>
+      <textarea
+        id={id}
+        name="apiKey"
+        rows={6}
+        spellCheck={false}
+        autoComplete="off"
+        className="w-full rounded-lg border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div className="flex items-center gap-3">
+        <button type="button" className="inline-flex items-center gap-2 text-sm font-medium underline-offset-4 hover:underline" onClick={() => picker.current?.click()}>
+          <FileJson className="size-4" aria-hidden="true" />
+          Choose a file
+        </button>
+        <input ref={picker} type="file" accept=".json,application/json" className="sr-only" tabIndex={-1} onChange={(event) => void fillFrom(event.target.files?.[0])} />
+        {fileError ? <span className="text-sm text-destructive">{fileError}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+export function ConnectionKeyField({ id, label = "API key", placeholder, value, onChange }: { id: string; label?: string; placeholder: string; value: string; onChange: (value: string) => void }) {
   const [shown, setShown] = useState(false);
   return (
     <div className="grid gap-2">
-      <Label htmlFor={id}>API key</Label>
+      <Label htmlFor={id}>{label}</Label>
       <div className={FIELD_CLASS}>
         <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input id={id} name="apiKey" className={BARE_INPUT_CLASS} type={shown ? "text" : "password"} autoComplete="off" placeholder={placeholder} value={value} onChange={(event) => onChange(event.target.value)} />

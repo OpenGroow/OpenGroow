@@ -220,6 +220,8 @@ async function readingItem(ctx: Pick<QueryCtx, "db">, row: ReadingRow, adapters:
   return {
     id: row._id,
     analyticsAdapter: link?.adapter.id ?? null,
+    // Contract 2: the metrics the adapter declares (ADR-079); absent for contract 1, which keeps the closed vocabulary.
+    ...(link?.adapter.metrics ? { declaredMetrics: link.adapter.metrics } : {}),
     publishedAt: row.publishedAt,
     delayMs,
     kind: metricKindOf(publication.attemptContext?.publishable?.kind as string | undefined),

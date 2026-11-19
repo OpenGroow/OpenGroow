@@ -1,7 +1,7 @@
 "use node";
 
 import { v, type Infer } from "convex/values";
-import { pickMetrics } from "@opengroow/publisher-sdk";
+import { pickDeclaredMetrics, pickMetrics } from "@opengroow/publisher-sdk";
 import { internal } from "./_generated/api.js";
 import { action, internalAction, type ActionCtx } from "./_generated/server.js";
 import { loadAnalyticsAdapter } from "./analytics/load_node.js";
@@ -30,7 +30,7 @@ async function readOne(ctx: ActionCtx, item: Item, now: number): Promise<Infer<t
     if (!result.ok) return { kind: "failed", error: result.error };
     if (result.reading.status === "unavailable") return { kind: "post_unknown", reason: result.reading.reason };
     if (result.reading.status === "no_data") return { kind: "no_data" };
-    const metrics = pickMetrics(item.kind, result.reading.metrics);
+    const metrics = item.declaredMetrics ? pickDeclaredMetrics(item.declaredMetrics, result.reading.metrics) : pickMetrics(item.kind, result.reading.metrics);
     return Object.keys(metrics).length > 0 ? { kind: "taken", metrics } : { kind: "no_data" };
   } catch (error) {
     return { kind: "failed", error: messageOf(error) };

@@ -7,7 +7,7 @@ import { Loader2, Save, Trash2 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
+import { ConnectionJsonSecretField, ConnectionKeyField, ConnectionUrlField } from "@/src/components/connection-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -35,6 +35,8 @@ function AdapterLogo({ icon, name, className }: { icon?: string; name: string; c
 export function AdapterForm({ instanceId, adapter, embedded = false }: { instanceId: string; adapter: AdapterView; embedded?: boolean }) {
   const save = useMutation(api.analytics_connections.save);
   const remove = useMutation(api.analytics_connections.remove);
+  // An adapter with no URL to give (ADR-079) shows no URL field.
+  const needsUrl = adapter.needsUrl !== false;
   const [url, setUrl] = useState(adapter.url ?? "");
   const [apiKey, setApiKey] = useState("");
   const [options, setOptions] = useState<Record<string, string>>(() =>
@@ -51,7 +53,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         instanceId,
         adapter: adapter.adapter,
         // Inside the Publisher's page the connection is the Publisher's own: only the options are saved.
-        ...(embedded ? {} : { url }),
+        ...(embedded || !needsUrl ? {} : { url }),
         ...(!embedded && apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         options: Object.fromEntries(adapter.optionDecls.map((d) => [d.key, d.type === "number" ? Number(options[d.key]) : (options[d.key] ?? "")])),
       });
@@ -88,13 +90,24 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
         <div className="grid gap-4 md:grid-cols-2">
           {embedded ? null : (
             <>
-              <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} />
-              <ConnectionKeyField
-                id={`analytics-key-${adapter.adapter}`}
-                placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} API key`}
-                value={apiKey}
-                onChange={setApiKey}
-              />
+              {needsUrl ? <ConnectionUrlField id={`analytics-url-${adapter.adapter}`} label={`${adapter.name} URL`} value={url} onChange={setUrl} /> : null}
+              {adapter.secret?.kind === "json" ? (
+                <ConnectionJsonSecretField
+                  id={`analytics-key-${adapter.adapter}`}
+                  label={adapter.secret.label}
+                  placeholder={adapter.hasApiKey ? "Configured. Paste a new one to replace it" : `Paste the ${adapter.secret.label} (JSON)`}
+                  value={apiKey}
+                  onChange={setApiKey}
+                />
+              ) : (
+                <ConnectionKeyField
+                  id={`analytics-key-${adapter.adapter}`}
+                  {...(adapter.secret ? { label: adapter.secret.label } : {})}
+                  placeholder={adapter.hasApiKey ? "Saved. Type to replace it" : `${adapter.name} ${adapter.secret?.label ?? "API key"}`}
+                  value={apiKey}
+                  onChange={setApiKey}
+                />
+              )}
             </>
           )}
           {adapter.optionDecls.map((decl) => (
@@ -112,7 +125,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" size="lg" disabled={(!embedded && !url.trim()) || busy} onClick={() => void handleSave()}>
+          <Button type="button" size="lg" disabled={(!embedded && needsUrl && !url.trim()) || busy} onClick={() => void handleSave()}>
             {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Save aria-hidden="true" />}
             Save changes
           </Button>

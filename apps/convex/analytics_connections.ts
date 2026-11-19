@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { AnalyticsOptionDecl } from "@opengroow/publisher-sdk";
+import { checkConnectionSecret, type AnalyticsOptionDecl } from "@opengroow/publisher-sdk";
 import { mutation, query, type QueryCtx } from "./_generated/server.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
@@ -69,6 +69,9 @@ export const list = query({
         ...(adapter.icon ? { icon: adapter.icon } : {}),
         ...(adapter.publisher ? { publisher: adapter.publisher } : {}),
         optionDecls: adapter.options ?? [],
+        // Absent means the default: a one-line text secret and a URL to give.
+        ...(adapter.secret ? { secret: adapter.secret } : {}),
+        ...(adapter.needsUrl === false ? { needsUrl: false } : {}),
         configured: Boolean(stored?.apiKey),
         ...(stored ? { url: stored.url, hasApiKey: Boolean(stored.apiKey), options: stored.options ?? {} } : {}),
       });
@@ -92,10 +95,16 @@ export const save = mutation({
     const meta = await requireAdapter(ctx, args.adapter);
     const existing = await projectAnalyticsConnection(ctx, args.instanceId, args.adapter);
     const url = args.url === undefined ? (existing?.url ?? "") : args.url.trim().replace(/\/+$/, "");
-    if (args.url !== undefined && !/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid URL");
+    // An adapter with no URL to give accepts an empty one.
+    const urlOptional = meta.needsUrl === false && url === "";
+    if (args.url !== undefined && !urlOptional && !/^https?:\/\/\S+$/.test(url)) throw new Error("Invalid URL");
     const options = args.options ?? {};
     checkOptions(meta.options ?? [], options);
     const apiKey = args.apiKey?.trim() || undefined;
+    if (apiKey) {
+      const problem = checkConnectionSecret(meta.secret, apiKey);
+      if (problem) throw new Error(problem);
+    }
     const now = Date.now();
     if (existing) {
       await ctx.db.patch(existing._id, { url, options, ...(apiKey ? { apiKey } : {}), updatedAt: now });

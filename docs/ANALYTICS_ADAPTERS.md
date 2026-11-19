@@ -28,7 +28,14 @@ Read at install without running the code (`parseAnalyticsManifest`):
 | Field | Meaning |
 | --- | --- |
 | `id`, `name` | Stable id (lowercase letters, digits, dashes; the value a channel is linked to), display name |
-| `contractVersion` | Must equal `ANALYTICS_CONTRACT_VERSION`; another version is refused |
+| `contractVersion` | `2` (`ANALYTICS_CONTRACT_VERSION`, ADR-079) or `1` (still read as before: closed vocabulary, `kind` in `data/metrics.json`); another version is refused |
+| `metrics` (contract 2, required) | The adapter's own metrics, in the order of the columns: `{ key, label, type: "counter" or "level", format: "number", "percent" or "duration", better?: "higher" or "lower", derive?: { sum: [keys], per: key } }`. A derived metric is a level and is never stored |
+| `primary` (contract 2, required) | The metric that ranks the posts: one of `metrics`, not derived |
+| `collect` (contract 2) | Default reading delays, durations like `3d` or `12h` |
+| `secret` (contract 2) | `{ label, kind: "text" or "json", fields? }`: what the connection's key is. A `json` secret is a multi-line field with a "Choose a file" button; the core refuses a value that is not JSON with the `fields` named |
+| `needsUrl` (contract 2) | `false` when the connection has no URL to give (default `true`) |
+
+With contract 2 the core stores, in a Snapshot, the declared non-derived keys that are finite numbers >= 0 and drops the rest (`pickDeclaredMetrics`); a Counter is returned cumulative since publication. `data/metrics.json` has no `kind`, and its labels map to declared stored metrics.
 | `needs` | The key it needs from a Publication: `externalId` or `url` |
 | `publisher` | The Publisher (its adapter id) this adapter belongs to. Required when `needs` is `externalId` |
 | `earliestDelayMs` | Earliest delay after publication at which the service can report, ms, 0 or more |

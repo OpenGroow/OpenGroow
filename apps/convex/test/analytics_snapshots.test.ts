@@ -158,6 +158,30 @@ afterEach(() => {
 });
 
 describe("Performance Snapshots (ADR-078)", () => {
+  it("stores the declared non-derived keys of a contract 2 adapter and drops the others (ADR-079)", async () => {
+    const s = await seed();
+    await installAnalyticsAdapter(s.t, {
+      id: "search-console",
+      name: "Search Console",
+      needs: "externalId",
+      publisher: "postiz",
+      earliestDelayMs: 0,
+      primary: "clicks",
+      metrics: [
+        { key: "clicks", label: "Clicks", type: "counter", format: "number" },
+        { key: "impressions", label: "Impressions", type: "counter", format: "number" },
+        { key: "ctr", label: "CTR", type: "level", format: "percent", derive: { sum: ["clicks"], per: "impressions" } },
+        { key: "position", label: "Position", type: "level", format: "number", better: "lower" },
+      ],
+    });
+    await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:love_youmake", analyticsAdapter: "search-console" });
+    await s.publish();
+    vi.advanceTimersByTime(DAY);
+    answer = () => json({ clicks: 46, impressions: 1900, ctr: 0.024, position: 11.8, views: 5, stray: 1 });
+    await s.tick();
+    expect((await s.view()).snapshots[0].metrics).toEqual({ clicks: 46, impressions: 1900, position: 11.8 });
+  });
+
   it("takes no reading before the first delay, then one Snapshot at 1, 3 and 7 days", async () => {
     const s = await seed();
     await s.publish();
