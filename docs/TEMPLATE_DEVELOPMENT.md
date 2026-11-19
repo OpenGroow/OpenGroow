@@ -98,7 +98,7 @@ Convention for Template authors:
 missionTypes:
   - type: create_article
     payload: '{"keyword":""}'        # optional override: under Extra options
-  - type: lym_create_letter_video
+  - type: create_letter_video
     payload: '{"format":"hook-plus-letter"}'
     fields:                           # asked on every Mission: inline
       - key: format

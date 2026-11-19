@@ -84,6 +84,6 @@ describe("AvailableMissionTypes", () => {
     await act(async () => checkbox(CHAT_MOCK).click());
     await act(async () => checkbox(LYM).click());
     await act(async () => applyButton().click());
-    expect(onApply).toHaveBeenCalledWith(["lym_create_letter_video"]);
+    expect(onApply).toHaveBeenCalledWith(["create_letter_video"]);
   });
 });

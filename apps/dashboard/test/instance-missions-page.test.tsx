@@ -385,7 +385,7 @@ describe("InstanceMissionsContent — mission list", () => {
     });
   });
 
-  it("submits lym_create_letter_video with both default platforms and the default format in raw JSON", async () => {
+  it("submits create_letter_video with both default platforms and the default format in raw JSON", async () => {
     const createMission = vi.fn();
     useMutationMock.mockReturnValue(createMission);
     useQueryMock.mockImplementation((key: string) => {
@@ -406,7 +406,7 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(createMission).toHaveBeenCalledWith({
       instanceId: "instance-1",
       templateId: "@opengroow/video-demo",
-      type: "lym_create_letter_video",
+      type: "create_letter_video",
       payload: { platforms: ["tiktok", "instagram"], format: "hook-plus-letter" },
       name: "",
     });
@@ -422,7 +422,7 @@ describe("InstanceMissionsContent — mission list", () => {
           templateId: "@opengroow/video-demo",
           status: "active",
           openclawAgentName: "video-demo",
-          hiddenMissionTypes: ["lym_create_letter_video"],
+          hiddenMissionTypes: ["create_letter_video"],
         },
       ];
       return undefined;
@@ -431,13 +431,13 @@ describe("InstanceMissionsContent — mission list", () => {
     await render();
 
     const options = Array.from(document.querySelectorAll("option")).map((o) => (o as HTMLOptionElement).value);
-    expect(options).not.toContain("lym_create_letter_video");
-    expect(options).toContain("lym_create_marketing_video");
+    expect(options).not.toContain("create_letter_video");
+    expect(options).toContain("create_marketing_video");
 
     const typeSelect = Array.from(document.querySelectorAll("select")).find((s) =>
-      Array.from(s.options).some((o) => o.value === "lym_create_marketing_video"),
+      Array.from(s.options).some((o) => o.value === "create_marketing_video"),
     ) as HTMLSelectElement;
-    expect(typeSelect.value).toBe("lym_create_marketing_video");
+    expect(typeSelect.value).toBe("create_marketing_video");
     expect(createMission).not.toHaveBeenCalled();
   });
 
@@ -450,7 +450,7 @@ describe("InstanceMissionsContent — mission list", () => {
           templateId: "@opengroow/video-demo",
           status: "active",
           openclawAgentName: "video-demo",
-          hiddenMissionTypes: ["lym_create_letter_video", "lym_create_marketing_video", "create_chat_mock_video"],
+          hiddenMissionTypes: ["create_letter_video", "create_marketing_video", "create_chat_mock_video"],
         },
       ];
       return undefined;
@@ -475,17 +475,17 @@ describe("InstanceMissionsContent — mission list", () => {
 
     await render();
 
-    // Select lym_create_marketing_video, the type that declares a fields schema.
+    // Select create_marketing_video, the type that declares a fields schema.
     const selects = Array.from(document.querySelectorAll("select"));
     const missionTypeSelect = selects.find((s) =>
-      Array.from(s.options).some((o) => o.value === "lym_create_marketing_video"),
+      Array.from(s.options).some((o) => o.value === "create_marketing_video"),
     ) as HTMLSelectElement;
     const nativeSelectValueSetter = Object.getOwnPropertyDescriptor(
       HTMLSelectElement.prototype,
       "value",
     )?.set;
     await act(async () => {
-      nativeSelectValueSetter?.call(missionTypeSelect, "lym_create_marketing_video");
+      nativeSelectValueSetter?.call(missionTypeSelect, "create_marketing_video");
       missionTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
@@ -498,7 +498,7 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(buttons.some((t) => t?.includes("Payload (optional)"))).toBe(false);
   });
 
-  it("blocks submission with an error when a required field is missing for lym_create_marketing_video", async () => {
+  it("blocks submission with an error when a required field is missing for create_marketing_video", async () => {
     const createMission = vi.fn();
     useMutationMock.mockReturnValue(createMission);
     useQueryMock.mockImplementation((key: string) => {
@@ -513,14 +513,14 @@ describe("InstanceMissionsContent — mission list", () => {
 
     const selects = Array.from(document.querySelectorAll("select"));
     const missionTypeSelect = selects.find((s) =>
-      Array.from(s.options).some((o) => o.value === "lym_create_marketing_video"),
+      Array.from(s.options).some((o) => o.value === "create_marketing_video"),
     ) as HTMLSelectElement;
     const nativeSelectValueSetter = Object.getOwnPropertyDescriptor(
       HTMLSelectElement.prototype,
       "value",
     )?.set;
     await act(async () => {
-      nativeSelectValueSetter?.call(missionTypeSelect, "lym_create_marketing_video");
+      nativeSelectValueSetter?.call(missionTypeSelect, "create_marketing_video");
       missionTypeSelect.dispatchEvent(new Event("change", { bubbles: true }));
     });
 

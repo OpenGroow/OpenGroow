@@ -4,7 +4,7 @@
 
 ### Context
 
-The `video` Template declares three Mission types (`lym_create_letter_video`, `lym_create_marketing_video`, `rezon_create_chat_mock_video`), each with its own MCP Manifest, payload and instructions. They cannot be merged: the Manifests differ in schema and in who writes what (the MCP generates the letter for the letter video, the Agent authors it for the marketing video). But the Template is shared by every Project, so the creation form offered every Mission type to every Project — a Rezon video on a LoveYouMake Project. `demo-video-mcp` is the only Template in this situation: its Mission types are specific to a Project's brand. The need is purely presentational — hide what a Project doesn't use — not an access rule.
+The `video` Template declares three Mission types (`create_letter_video`, `create_marketing_video`, `create_chat_mock_video`), each with its own MCP Manifest, payload and instructions. They cannot be merged: the Manifests differ in schema and in who writes what (the MCP generates the letter for the letter video, the Agent authors it for the marketing video). But the Template is shared by every Project, so the creation form offered every Mission type to every Project — a brand-specific Mission type shown on another brand's Project. `demo-video-mcp` is the only Template in this situation: its Mission types are specific to a Project's brand. The need is purely presentational — hide what a Project doesn't use — not an access rule.
 
 ### Decision
 
@@ -17,7 +17,7 @@ The `video` Template declares three Mission types (`lym_create_letter_video`, `l
 
 - **An allow-list of enabled types** (hidden by default): a type added to the Template later would be invisible until enabled, which protects a Project from another brand's new formats. Rejected for simplicity and because the feature is cosmetic; the cost is that adding a Mission type for a new brand makes it appear on other Projects until hidden there.
 - **The MCP reports which Mission types a Project supports** (a `status_check` extension, ADR-034 style): single source of truth, but it needs a change and a deployment-order constraint on `demo-video-mcp`, gates the Video Agent's Activation on a new `status_check`, and the set is only a snapshot taken at Activation/Reconfiguration. Rejected as disproportionate for a single-Template exception; a more automatic mechanism can be designed if the case recurs on other Templates.
-- **One Template per brand** (`video-lym`, `video-rezon`): duplicates the manifest and turns the brand back into a Template name, against the Agent / Mission type / Config separation rule.
+- **One Template per brand** (`video-brand-a`, `video-brand-b`): duplicates the manifest and turns the brand back into a Template name, against the Agent / Mission type / Config separation rule.
 - **A server-side guard refusing hidden types**: out of scope — the feature is not a permission.
 
 ### Consequences

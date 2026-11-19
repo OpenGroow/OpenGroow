@@ -19,21 +19,21 @@ describe("missionTypesForManifest", () => {
   it("returns the video mission types from the video manifest", () => {
     const video = { manifest: manifestFixture("video-demo") };
     const types = missionTypesForManifest(video.manifest);
-    expect(types.map((t) => t.type)).toContain("lym_create_letter_video");
+    expect(types.map((t) => t.type)).toContain("create_letter_video");
   });
 
-  it("the lym_create_letter_video payload keeps both platforms in raw JSON", () => {
+  it("the create_letter_video payload keeps both platforms in raw JSON", () => {
     const video = { manifest: manifestFixture("video-demo") };
-    const createVideo = missionTypesForManifest(video.manifest).find((t) => t.type === "lym_create_letter_video");
+    const createVideo = missionTypesForManifest(video.manifest).find((t) => t.type === "create_letter_video");
     expect(createVideo).toBeDefined();
     const payload = JSON.parse(createVideo!.payload) as Record<string, unknown>;
     expect(payload.platforms).toEqual(["tiktok", "instagram"]);
     expect(payload.concept).toBeUndefined();
   });
 
-  it("lym_create_letter_video declares a format select defaulting to hook-plus-letter", () => {
+  it("create_letter_video declares a format select defaulting to hook-plus-letter", () => {
     const video = { manifest: manifestFixture("video-demo") };
-    const letter = missionTypesForManifest(video.manifest).find((t) => t.type === "lym_create_letter_video");
+    const letter = missionTypesForManifest(video.manifest).find((t) => t.type === "create_letter_video");
     const field = letter?.fields?.find((f) => f.key === "format");
     expect(field).toMatchObject({ type: "select", required: true });
     expect(field && field.type === "select" ? field.options.map((o) => o.value) : []).toEqual([
@@ -44,7 +44,7 @@ describe("missionTypesForManifest", () => {
   });
 
   it("validateMissionPayload accepts both letter formats and refuses anything else", () => {
-    const base = { missionTypes: typesOf("video-demo"), type: "lym_create_letter_video" };
+    const base = { missionTypes: typesOf("video-demo"), type: "create_letter_video" };
     const platforms = ["tiktok", "instagram"];
     expect(validateMissionPayload({ ...base, payload: { platforms, format: "hook-plus-letter" } })).toBeNull();
     expect(validateMissionPayload({ ...base, payload: { platforms, format: "letter-only" } })).toBeNull();
@@ -52,36 +52,36 @@ describe("missionTypesForManifest", () => {
     expect(validateMissionPayload({ ...base, payload: { platforms } })).not.toBeNull();
   });
 
-  it("leaves lym_create_letter_video platform validation to the raw JSON payload", () => {
+  it("leaves create_letter_video platform validation to the raw JSON payload", () => {
     expect(
       validateMissionPayload({
         missionTypes: typesOf("video-demo"),
-        type: "lym_create_letter_video",
+        type: "create_letter_video",
         payload: { format: "hook-plus-letter" },
       }),
     ).toBeNull();
     expect(validateMissionPayload({ missionTypes: typesOf("seo"), type: "create_article", payload: { keyword: "" } })).toBeNull();
   });
 
-  it("validateMissionPayload requires lym_create_marketing_video's category (declared via manifest fields, not a switch)", () => {
+  it("validateMissionPayload requires create_marketing_video's category (declared via manifest fields, not a switch)", () => {
     expect(
       validateMissionPayload({
         missionTypes: typesOf("video-demo"),
-        type: "lym_create_marketing_video",
+        type: "create_marketing_video",
         payload: { platforms: ["tiktok", "instagram"], category: "apology", occasion: "" },
       }),
     ).toBeNull();
     expect(
       validateMissionPayload({
         missionTypes: typesOf("video-demo"),
-        type: "lym_create_marketing_video",
+        type: "create_marketing_video",
         payload: { platforms: ["tiktok", "instagram"], category: "", occasion: "" },
       }),
     ).not.toBeNull();
     expect(
       validateMissionPayload({
         missionTypes: typesOf("video-demo"),
-        type: "lym_create_marketing_video",
+        type: "create_marketing_video",
         payload: {},
       }),
     ).not.toBeNull();
@@ -168,8 +168,8 @@ describe("missionTypesForManifest", () => {
 
 describe("visibleMissionTypes", () => {
   const types = [
-    { type: "lym_create_letter_video", label: "Create letter video", payload: "{}", agentsMd: "a.md" },
-    { type: "lym_create_marketing_video", label: "Create marketing video", payload: "{}", agentsMd: "b.md" },
+    { type: "create_letter_video", label: "Create letter video", payload: "{}", agentsMd: "a.md" },
+    { type: "create_marketing_video", label: "Create marketing video", payload: "{}", agentsMd: "b.md" },
     { type: "create_chat_mock_video", label: "Create chat mock video", payload: "{}", agentsMd: "c.md" },
   ];
 
@@ -180,7 +180,7 @@ describe("visibleMissionTypes", () => {
 
   it("drops the hidden types and keeps the others in order", () => {
     const visible = visibleMissionTypes(types, ["create_chat_mock_video"]);
-    expect(visible.map((t) => t.type)).toEqual(["lym_create_letter_video", "lym_create_marketing_video"]);
+    expect(visible.map((t) => t.type)).toEqual(["create_letter_video", "create_marketing_video"]);
   });
 
   it("ignores hidden names the Template no longer declares", () => {

@@ -207,13 +207,13 @@ describe("PublishChannelPicker", () => {
       ...PUBLISHER,
       targets: [
         { target: "instagram:myinsta", mapped: true, channelId: "c1", channelName: "Love You Make", channelService: "instagram", channelProfile: "myinsta" },
-        { target: "tiktok:loveyoumake", mapped: true, channelId: "c2", channelName: "Loveyoumake Display", channelService: "tiktok" },
+        { target: "tiktok:example", mapped: true, channelId: "c2", channelName: "Example Display", channelService: "tiktok" },
       ],
     });
     await render("");
     await openList();
     expect(item("instagram:myinsta")?.textContent).toContain("@myinsta");
-    expect(item("tiktok:loveyoumake")?.textContent).toContain("@loveyoumake");
+    expect(item("tiktok:example")?.textContent).toContain("@example");
     expect(document.body.textContent).not.toContain("Love You Make");
     expect(document.body.textContent).not.toContain("Display");
   });
@@ -223,14 +223,14 @@ describe("PublishChannelPicker", () => {
       ...PUBLISHER,
       targets: [
         { target: "instagram", mapped: true, channelId: "c1", channelName: "Love You Make", channelService: "instagram" },
-        { target: "tiktok", mapped: true, channelId: "c2", channelName: "Loveyoumake", channelService: "tiktok", channelProfile: "loveyoumake4" },
+        { target: "tiktok", mapped: true, channelId: "c2", channelName: "Example", channelService: "tiktok", channelProfile: "example4" },
       ],
     });
     await render("");
     await openList();
     expect(item("instagram")?.textContent).toContain("Love You Make");
     expect(item("instagram")?.textContent).not.toContain("@");
-    expect(item("tiktok")?.textContent).toContain("@loveyoumake4");
+    expect(item("tiktok")?.textContent).toContain("@example4");
   });
 
   it("stores the live handle of a channel that has none, once, without the Publishers page", async () => {

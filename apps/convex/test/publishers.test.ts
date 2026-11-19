@@ -223,7 +223,7 @@ describe("publishers", () => {
       await ctx.db.patch(publisher!._id, {
         targets: [
           { target: "instagram", channelId: "c1", channelName: "Love You Make", channelService: "instagram" },
-          { target: "tiktok", channelId: "c2", channelName: "Loveyoumake", channelService: "tiktok", channelProfile: "kept" },
+          { target: "tiktok", channelId: "c2", channelName: "Example", channelService: "tiktok", channelProfile: "kept" },
         ],
       });
     });

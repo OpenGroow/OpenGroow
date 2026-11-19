@@ -150,7 +150,7 @@ describe("InstanceSchedulesContent", () => {
     await render([...allManifests, manifestFixture("video-demo")]);
 
     const options = Array.from(document.querySelectorAll("option")).map((o) => (o as HTMLOptionElement).value);
-    expect(options).toContain("lym_create_letter_video");
+    expect(options).toContain("create_letter_video");
     expect(options).not.toContain("create_chat_mock_video");
   });
 
