@@ -137,7 +137,7 @@ type SeedMissionOptions = {
 };
 
 function defaultMissionType(templateId: string): string {
-  if (templateId === VIDEO_TEMPLATE_ID) return "lym_create_letter_video";
+  if (templateId === VIDEO_TEMPLATE_ID) return "create_letter_video";
   return "create_article";
 }
 
@@ -475,13 +475,13 @@ describe("missions_node.performReviewAction — Video publish", () => {
     expect(body).toEqual({ platforms: ["tiktok", "instagram"] });
   });
 
-  it("sends both selected platforms under platforms for lym_create_letter_video", async () => {
+  it("sends both selected platforms under platforms for create_letter_video", async () => {
     mockFetchOk();
     const t = convexTest(schema, modules);
     await seedInstance(t);
     const missionId = await seedMission(t, {
       templateId: VIDEO_TEMPLATE_ID,
-      type: "lym_create_letter_video",
+      type: "create_letter_video",
       status: "approved",
     });
     await seedProjectAgent(t, VIDEO_TEMPLATE_ID);
@@ -502,7 +502,7 @@ describe("missions_node.performReviewAction — Video publish", () => {
     await seedInstance(t);
     const missionId = await seedMission(t, {
       templateId: VIDEO_TEMPLATE_ID,
-      type: "lym_create_marketing_video",
+      type: "create_marketing_video",
       payload: { platforms: ["tiktok"], category: "apology", occasion: "" },
       status: "approved",
       externalId: "run-tiktok-1",

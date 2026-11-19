@@ -464,7 +464,7 @@ async function seedVideoMission(
       ownerId: VIDEO_OWNER.subject,
       instanceId: VIDEO_INSTANCE_ID,
       templateId: VIDEO_TEMPLATE_ID,
-      type: "lym_create_letter_video",
+      type: "create_letter_video",
       payload: {},
       status: "to_validate",
       lastResult: {
@@ -578,7 +578,7 @@ describe("missions_node.loadReviewContent — video template", () => {
         ownerId: VIDEO_OWNER.subject,
         instanceId: VIDEO_INSTANCE_ID,
         templateId: VIDEO_TEMPLATE_ID,
-        type: "lym_create_letter_video",
+        type: "create_letter_video",
         payload: {},
         status: "to_validate",
         lastResult: {

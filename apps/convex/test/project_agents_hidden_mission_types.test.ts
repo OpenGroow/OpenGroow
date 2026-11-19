@@ -81,7 +81,7 @@ describe("setHiddenMissionTypes (ADR-053)", () => {
       t.withIdentity(STRANGER).mutation(internal.project_agents.setHiddenMissionTypes, {
         instanceId: INSTANCE,
         templateId: TEMPLATE,
-        hiddenMissionTypes: ["lym_create_letter_video"],
+        hiddenMissionTypes: ["create_letter_video"],
       }),
     ).rejects.toThrow(/not accessible/);
     expect((await agentFor(t, OWNER))?.hiddenMissionTypes).toBeUndefined();

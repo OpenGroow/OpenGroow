@@ -1,3 +1,3 @@
-# lym_create_letter_video
+# create_marketing_video
 
 Test fixture instructions.

@@ -31,8 +31,8 @@
   },
   "missionTypes": [
     {
-      "type": "lym_create_letter_video",
-      "agentsMd": "lym_create_letter_video.md",
+      "type": "create_letter_video",
+      "agentsMd": "create_letter_video.md",
       "label": "Create letter video",
       "payload": "{\"platforms\":[\"tiktok\",\"instagram\"],\"format\":\"hook-plus-letter\"}",
       "fields": [
@@ -105,8 +105,8 @@
       }
     },
     {
-      "type": "lym_create_marketing_video",
-      "agentsMd": "lym_create_marketing_video.md",
+      "type": "create_marketing_video",
+      "agentsMd": "create_marketing_video.md",
       "label": "Create marketing video",
       "payload": "{\"platforms\":[\"tiktok\",\"instagram\"],\"category\":\"\",\"occasion\":\"\"}",
       "fields": [
@@ -347,10 +347,10 @@
     }
   ],
   "generativeMcpCall": {
-    "lym_create_letter_video": {
+    "create_letter_video": {
       "toolName": "produce_video"
     },
-    "lym_create_marketing_video": {
+    "create_marketing_video": {
       "toolName": "produce_video"
     },
     "create_chat_mock_video": {
@@ -358,7 +358,7 @@
     }
   },
   "externalJobsByMissionType": {
-    "lym_create_letter_video": {
+    "create_letter_video": {
       "produce_video": {
         "server": "video-mcp",
         "mcpTool": "get_run_status",
@@ -379,7 +379,7 @@
         "onFail": "resume_mission"
       }
     },
-    "lym_create_marketing_video": {
+    "create_marketing_video": {
       "produce_video": {
         "server": "video-mcp",
         "mcpTool": "get_run_status",

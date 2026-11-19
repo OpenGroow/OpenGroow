@@ -240,7 +240,7 @@ describe("Agent page", () => {
     it("shows the Agent's Mission counts and its recent Missions with their status", async () => {
       overview = {
         recent: [
-          { _id: "m1", type: "lym_create_letter_video", status: "done", updatedAt: Date.now() - 2 * 3_600_000 },
+          { _id: "m1", type: "create_letter_video", status: "done", updatedAt: Date.now() - 2 * 3_600_000 },
           { _id: "m2", type: "unknown_type", status: "failed", updatedAt: Date.now() - 3 * 86_400_000 },
         ],
         counts: { doing: 3, toValidate: 5, failed: 42 },
@@ -496,7 +496,7 @@ describe("Agent page", () => {
       expect(applyHiddenMissionTypesMock).toHaveBeenCalledWith({
         instanceId: "instance-1",
         templateId: "@opengroow/video-demo",
-        hiddenMissionTypes: ["lym_create_letter_video", "create_chat_mock_video"],
+        hiddenMissionTypes: ["create_letter_video", "create_chat_mock_video"],
       });
     });
 
