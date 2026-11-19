@@ -7,4 +7,5 @@ export const HUB_PACKAGE_KINDS = ["publisher", "analytics"] as const;
 export type HubPackageKind = (typeof HUB_PACKAGE_KINDS)[number];
 
 /** The index file of a kind at the hub root: `publishers.json` for Publishers, `analytics.json` for Analytics Adapters (ADR-078). */
-export const hubPackageIndexFile = (kind: HubPackageKind): string => (kind === "analytics" ? "analytics.json" : `${kind}s.json`);
+const HUB_PACKAGE_INDEX_FILES = { publisher: "publishers.json", analytics: "analytics.json" } as const satisfies Record<HubPackageKind, string>;
+export const hubPackageIndexFile = (kind: HubPackageKind): string => HUB_PACKAGE_INDEX_FILES[kind];

@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import type { AnalyticsOptionDecl } from "@opengroow/publisher-sdk";
 import { mutation, query, type QueryCtx } from "./_generated/server.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { installedAnalyticsAdapters, type AnalyticsAdapterMeta } from "./analytics_adapters.js";
+import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
+import { installedAnalyticsAdapters } from "./analytics_adapters.js";
 
 // The connection of an Analytics Adapter, configured once per Project (ADR-078),
 // like a Publisher's (publishers.ts): a URL, an API key that never goes back to

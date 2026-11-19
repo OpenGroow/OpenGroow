@@ -37,6 +37,18 @@ async function readOne(ctx: ActionCtx, item: Item, now: number): Promise<Infer<t
   }
 }
 
+/** Readings run this many at a time: one slow service does not hold the others back, none floods a service. */
+const READ_CONCURRENCY = 8;
+
+/** Every item read, in bounded parallel batches, in order. */
+async function readAll(ctx: ActionCtx, items: Item[], now: number): Promise<Array<Infer<typeof outcomeV>>> {
+  const outcomes: Array<Infer<typeof outcomeV>> = [];
+  for (let i = 0; i < items.length; i += READ_CONCURRENCY) {
+    outcomes.push(...(await Promise.all(items.slice(i, i + READ_CONCURRENCY).map((item) => readOne(ctx, item, now)))));
+  }
+  return outcomes;
+}
+
 /**
  * Takes the readings that are due (ADR-078). Polling, like Publications: a
  * failing reading is recorded and retried, never raised, and never changes
@@ -47,8 +59,8 @@ export const collectDue = internalAction({
   handler: async (ctx) => {
     const now = Date.now();
     const due = await readingsDue(ctx, now);
-    const outcomes: Array<{ id: Item["id"]; outcome: Infer<typeof outcomeV> }> = [];
-    for (const item of due) outcomes.push({ id: item.id, outcome: await readOne(ctx, item, now) });
+    const read = await readAll(ctx, due, now);
+    const outcomes = due.map((item, i) => ({ id: item.id, outcome: read[i] }));
     if (outcomes.length > 0) await ctx.runMutation(internal.analytics.recordMany, { outcomes });
   },
 });
@@ -69,9 +81,9 @@ export const refresh = action({
     let unavailable = 0;
     let failed = 0;
     let error: string | undefined;
-    for (const item of items) {
-      const outcome = await readOne(ctx, item, now);
-      if (outcome.kind === "taken") readings.push({ id: item.id, metrics: outcome.metrics });
+    const outcomes = await readAll(ctx, items, now);
+    for (const [i, outcome] of outcomes.entries()) {
+      if (outcome.kind === "taken") readings.push({ id: items[i].id, metrics: outcome.metrics });
       else if (outcome.kind === "failed") {
         failed += 1;
         error ??= outcome.error;
