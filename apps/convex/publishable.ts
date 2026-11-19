@@ -1,4 +1,5 @@
 import type { Validator } from "convex/values";
+import type { Doc } from "./_generated/dataModel.js";
 import { zodToConvex } from "convex-helpers/server/zod4";
 import { z } from "zod";
 import { isMcpOwnedKind, type PublishableKind } from "@opengroow/agent-templates";
@@ -212,4 +213,10 @@ export function renderPublishableSection(
 /** The JSON Schema of the Publishable of one kind, handed to the Agent. */
 export function publishableJsonSchema(kind: PublishableKind): Record<string, unknown> {
   return z.toJSONSchema(SCHEMA_BY_KIND[kind]) as Record<string, unknown>;
+}
+
+/** The Publishable the Mission's latest result (or last Artifact) carries. */
+export function publishableOf(mission: Doc<"missions">): Record<string, unknown> | undefined {
+  const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
+  return (resultArtifact ?? mission.lastArtifact)?.publishable as Record<string, unknown> | undefined;
 }

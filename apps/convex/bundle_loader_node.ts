@@ -5,7 +5,8 @@
 // mutations does not allow). The bundle is the hub's, verified by digest at install, and runs with
 // the core's rights (no isolation). A kind brings only what it checks of the export.
 
-type Bundle = { packageId: string; digest: string; source: string };
+/** `source` may be a function: it is only called when the bundle is not cached yet, so a cache hit never ships the code. */
+type Bundle = { packageId: string; digest: string; source: string | (() => Promise<string>) };
 
 /**
  * The export of `bundle` once checked by `build`, cached per package digest in the kind's own `cache`:
@@ -17,9 +18,10 @@ export async function loadCachedBundle<T>(cache: Map<string, T>, bundle: Bundle,
   const cached = cache.get(key);
   if (cached) return cached;
 
+  const source = typeof bundle.source === "string" ? bundle.source : await bundle.source();
   let module: { default?: unknown };
   try {
-    module = await import(/* webpackIgnore: true */ `data:text/javascript;base64,${Buffer.from(bundle.source).toString("base64")}`);
+    module = await import(/* webpackIgnore: true */ `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
   } catch (error) {
     throw new Error(`${label} could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
   }

@@ -15,6 +15,7 @@ import { useInstalledPublishers } from "@/src/hooks/use-installed-publishers";
 import { PackageVersionCard } from "@/src/components/package-version-card";
 import { ProviderDangerZone } from "@/src/components/provider-danger-zone";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { PackageLogo } from "@/src/components/package-logo";
 
 // The connection of an Analytics Adapter, once per Project (ADR-078), set up
 // like a Publisher's: a URL, an API key that is never read back, and the
@@ -22,16 +23,6 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 // Publisher reads through that Publisher's connection.
 
 type AdapterView = FunctionReturnType<typeof api.analytics_connections.list>[number];
-
-/** An adapter's logo (an image data URI), or the initial of its name when it has none or the image does not load. */
-function AdapterLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
-  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
-  if (!icon || brokenIcon === icon) {
-    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
-}
 
 /** `embedded`: inside the Publisher's own page, which already names the service. */
 export function AdapterForm({ instanceId, adapter, embedded = false }: { instanceId: string; adapter: AdapterView; embedded?: boolean }) {
@@ -146,7 +137,7 @@ export function AdapterForm({ instanceId, adapter, embedded = false }: { instanc
   return (
     <section className="grid gap-4 rounded-2xl border border-border bg-card/40 p-5" aria-label={`${adapter.name} analytics connection`}>
       <header className="flex items-center gap-4">
-        <AdapterLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
+        <PackageLogo icon={adapter.icon} name={adapter.name} className="size-14 rounded-xl object-contain" />
         <div className="grid flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="m-0 text-2xl font-semibold">{adapter.name}</h3>

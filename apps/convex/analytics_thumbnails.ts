@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server.js";
 import { ownerIdFor } from "./instance_ownership.js";
-import { hasPublicThumbnail, postFace } from "./analytics.js";
+import { hasPublicThumbnail, postFace } from "./analytics_face.js";
+import { publishedOf } from "./analytics.js";
 
 // The thumbnail of a published article, read from its public page and cached (the Publishable has none).
 
@@ -15,11 +16,7 @@ export const pending = internalQuery({
   args: { instanceId: v.string(), now: v.number() },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    const publications = await ctx.db
-      .query("publications")
-      .withIndex("by_instance_and_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "published"))
-      .order("desc")
-      .take(200);
+    const publications = await publishedOf(ctx, args.instanceId);
     const out: Array<{ publicationId: (typeof publications)[number]["_id"]; url: string }> = [];
     for (const publication of publications) {
       if (!publication.externalUrl || out.length >= MAX_FETCHES) continue;

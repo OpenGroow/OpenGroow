@@ -331,8 +331,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const [adapterId, setAdapterId] = useState<string | null>(null);
   const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
   const unavailable = useQuery(api.analytics.unavailableForProject, instanceId ? { instanceId } : "skip") ?? [];
-  const emptyReason = useQuery(api.analytics.emptyReason, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const rows = useQuery(api.analytics.listForProject, instanceId ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
+  // Why the list is empty is only worked out when it is.
+  const emptyReason = useQuery(api.analytics.emptyReason, instanceId && rows?.length === 0 ? { instanceId, ...(current ? { adapter: current.adapter } : {}) } : "skip");
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("all");
   const [sort, setSort] = useState<Sort>("top");

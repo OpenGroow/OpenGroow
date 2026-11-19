@@ -190,7 +190,8 @@ export const setAnalyticsLink = mutation({
     const publisher = await requirePublisher(ctx, args.instanceId, args.adapter);
     if (!publisher.targets.some((t) => t.target === args.target)) throw new Error(`Unknown channel "${args.target}"`);
     const installed = await installedAnalyticsAdapters(ctx);
-    for (const id of args.analyticsAdapter === null ? [] : [args.analyticsAdapter].flat()) {
+    const links = args.analyticsAdapter === null ? [] : [args.analyticsAdapter].flat();
+    for (const id of links) {
       const chosen = installed.find((a) => a.id === id);
       if (!chosen) throw new Error(`The Analytics Adapter "${id}" is not installed`);
       if (!canMeasure(chosen, publisher.adapter)) {
@@ -198,7 +199,7 @@ export const setAnalyticsLink = mutation({
       }
     }
     await ctx.db.patch(publisher._id, {
-      targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, analyticsAdapter: args.analyticsAdapter } : t)),
+      targets: publisher.targets.map((t) => (t.target === args.target ? { ...t, analyticsAdapter: links } : t)),
       updatedAt: Date.now(),
     });
   },

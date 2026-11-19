@@ -92,6 +92,8 @@ async function seed(options: { adapter?: boolean } = {}) {
           publicationId,
           postSeries: opts.postSeries ?? 0,
           instanceId: INSTANCE_ID,
+          // An unmeasured row has no adapter to read through.
+          ...(opts.state === "unmeasured" ? {} : { adapter: "postiz-analytics" }),
           publisherAdapter: "postiz",
           publishedAt: now,
           delays: [DAY, 3 * DAY, 7 * DAY],
@@ -111,6 +113,7 @@ async function seed(options: { adapter?: boolean } = {}) {
           delayMs: s.delayMs,
           takenAt: now + s.delayMs,
           metrics: s.metrics,
+          adapter: "postiz-analytics",
           source: "adapter",
         });
       }

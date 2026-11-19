@@ -23,6 +23,7 @@ import { ProviderDangerZone } from "@/src/components/provider-danger-zone";
 import { PublishTargetsCard } from "@/src/components/publish-targets-card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import type { ProjectPublisher } from "@/src/hooks/use-project-channels";
+import { PackageLogo } from "@/src/components/package-logo";
 
 type PublishersPageProps = {
   params: Promise<{ projectId: string }>;
@@ -36,20 +37,6 @@ const BARE_INPUT_CLASS =
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-/**
- * A Publisher package's logo: the image data URI the hub gives it (index entry
- * before the install, manifest after), or the initial of its name when it has
- * none or the image does not load.
- */
-function PublisherLogo({ icon, name, className }: { icon?: string; name: string; className: string }) {
-  const [brokenIcon, setBrokenIcon] = useState<string | undefined>();
-  if (!icon || brokenIcon === icon) {
-    return <span className={`${className} grid place-items-center bg-muted text-sm font-semibold uppercase`} aria-hidden="true">{name.slice(0, 1)}</span>;
-  }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={icon} alt="" className={className} onError={() => setBrokenIcon(icon)} />;
 }
 
 /** `@opengroow/publisher-postiz` -> `postiz`: the adapter id a package is conventionally installed under (ADR-072). */
@@ -216,7 +203,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                     className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                     onClick={() => void choose(entry.packageId)}
                   >
-                    <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+                    <PackageLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                     <span className="grid flex-1">
                       <span className="text-base font-medium">{entry.name}</span>
                       {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
@@ -245,7 +232,7 @@ export default function PublishersPage({ params }: PublishersPageProps) {
                       className="flex items-center gap-3 rounded-lg border border-border p-3 text-left hover:bg-muted disabled:opacity-60"
                       onClick={() => void chooseAnalytics(entry.packageId)}
                     >
-                      <PublisherLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
+                      <PackageLogo icon={entry.icon} name={entry.name} className="size-10 rounded-lg object-contain" />
                       <span className="grid flex-1">
                         <span className="text-base font-medium">{entry.name}</span>
                         {entry.description ? <span className="text-sm text-muted-foreground">{entry.description}</span> : null}
@@ -429,7 +416,7 @@ function PublisherPanel({
       <section className="grid gap-6 rounded-2xl border border-border bg-card/40 p-5" data-testid={`publisher-${adapterId}`} aria-label={serviceName}>
       <header className="grid gap-4">
         <div className="flex items-center gap-4">
-          <PublisherLogo icon={installedPackage?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
+          <PackageLogo icon={installedPackage?.icon ?? missing?.entry?.icon} name={serviceName} className="size-14 rounded-xl object-contain" />
           <div className="grid flex-1 gap-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="m-0 text-2xl font-semibold">{serviceName}</h1>

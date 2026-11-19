@@ -184,41 +184,6 @@ describe("several Analytics Adapters on one channel (ADR-079)", () => {
     expect(await analytics()).toMatchObject({ adapterId: "web-analytics", adapters: [{ adapterId: "web-analytics" }] });
   });
 
-  it("keeps working for a reading made before several links: its row and Snapshots belong to the channel's first link", async () => {
-    const s = await seed();
-    const publicationId = await s.publish();
-    await s.t.run(async (ctx) => {
-      // What a Publication measured before this change left: no adapter on the row nor on the Snapshot.
-      for (const row of await ctx.db.query("publicationAnalytics").collect()) await ctx.db.patch(row._id, { adapter: undefined });
-      const row = await ctx.db.query("publicationAnalytics").first();
-      await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: INSTANCE_ID, delayMs: DAY, takenAt: Date.now(), metrics: { views: 7 }, source: "adapter" });
-      expect(row?.adapter).toBeUndefined();
-    });
-    const [post] = await s.owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID });
-    expect(post.snapshots.map((x) => x.metrics)).toEqual([{ views: 7 }]);
-    await s.link(["postiz-analytics", "web-analytics"]);
-    expect(await s.owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, adapter: "web-analytics" })).toEqual([]);
-  });
-
-  it("gives a Snapshot without adapter to the channel's first link only", async () => {
-    vi.useFakeTimers();
-    try {
-      const s = await seed();
-      await s.link(["postiz-analytics", "web-analytics"]);
-      const publicationId = await s.publish();
-      await s.tick();
-      await s.t.run(async (ctx) => {
-        await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: INSTANCE_ID, delayMs: DAY, takenAt: Date.now(), metrics: { views: 7 }, source: "adapter" });
-      });
-      const forWeb = await s.owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, adapter: "web-analytics" });
-      expect(forWeb[0].snapshots.map((x) => x.metrics)).toEqual([{ clicks: 5 }]);
-      const forPostiz = await s.owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, adapter: "postiz-analytics" });
-      expect(forPostiz[0].snapshots.map((x) => x.metrics)).toEqual(expect.arrayContaining([{ views: 100 }, { views: 7 }]));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("refuses a list holding an adapter that is not installed", async () => {
     const s = await seed();
     await expect(s.link(["postiz-analytics", "ghost"])).rejects.toThrow(/not installed/);

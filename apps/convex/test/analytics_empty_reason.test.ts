@@ -69,6 +69,7 @@ async function seed() {
           publicationId,
           postSeries: 0,
           instanceId: INSTANCE_ID,
+          adapter: "postiz-analytics",
           publisherAdapter: "postiz",
           publishedAt: now,
           delays: [DAY],
