@@ -35,7 +35,7 @@ const LIMITED = "example/limited";
 const WRITER = "example/writer";
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|owner", subject: "owner" };
 const DAY = 24 * 3_600_000;
-const ALL_TOOLS = ["get_analytics_summary", "list_publications", "list_recent_missions", "get_brand_core"];
+const ALL_TOOLS = ["get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "get_brand_core"];
 
 const internalServer = (tools: string[]) => ({ name: "opengroow", transport: "streamable-http", url: "", internal: { tools } });
 
@@ -105,7 +105,7 @@ async function seedPublishing() {
 }
 
 describe("Internal MCP read tools: declaration", () => {
-  it("lists the four tools for a Template that declares them, read-only", async () => {
+  it("lists the five tools for a Template that declares them, read-only", async () => {
     const token = await seedProject(t, PROJECT_A);
     const response = await t.fetch("/internal-mcp", {
       method: "POST",
@@ -120,7 +120,7 @@ describe("Internal MCP read tools: declaration", () => {
   it("refuses each tool to a Template that did not declare it", async () => {
     await seedProject(t, PROJECT_A);
     const token = await seedProject(t, PROJECT_A, LIMITED);
-    for (const name of ["get_analytics_summary", "list_publications", "list_recent_missions"]) {
+    for (const name of ["get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history"]) {
       expect((await (await call(t, token, name)).json()).error.code).toBe(-32602);
     }
     expect((await (await call(t, token, "get_brand_core")).json()).result).toBeDefined();
@@ -208,5 +208,51 @@ describe("get_brand_core", () => {
       await ctx.db.insert("brandCores", { instanceId: PROJECT_B, audience: "Other", updatedAt: 5 });
     });
     expect(await result(t, token, "get_brand_core")).toEqual({ audience: "Founders", tone: "Direct", updatedAt: 5 });
+  });
+});
+
+describe("list_plan_history", () => {
+  const RESULT = { status: "needs_human_review", summary: "A Plan", reviewQuestions: [] };
+  const item = (reason: string) => ({ type: "create_article", payload: { topic: reason }, reason, figures: [{ label: "Reach", value: "5k" }] });
+
+  async function plan(projectId: string, fields: Record<string, unknown>, feedback: string[] = []) {
+    return t.run(async (ctx) => {
+      const missionId = await ctx.db.insert("missions", { ownerId: "owner", instanceId: projectId, templateId: STRATEGIST, type: "plan", payload: {}, status: "done", createdAt: 1, updatedAt: 1, ...fields } as never);
+      for (const [index, humanFeedback] of feedback.entries()) {
+        await ctx.db.insert("runs", { missionId, ownerId: "owner", instanceId: projectId, templateId: STRATEGIST, agentName: "a", sessionKey: `s-${missionId}-${index}`, status: "completed", humanFeedback, createdAt: 10 + index, updatedAt: 10 + index } as never);
+      }
+      return missionId;
+    });
+  }
+
+  it("returns previous Plans with their items, declined items and the feedback of rejections", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const kept = item("Guide to onboarding");
+    const declined = item("Listicle of tips");
+    await plan(PROJECT_A, { name: "Week 1", updatedAt: 5, lastResult: { ...RESULT, summary: "Week 1", plan: [kept, declined] }, declinedPlanItems: [declined] }, ["Too many articles, propose one reel", "Fewer topics"]);
+    const history = await result(t, token, "list_plan_history");
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ name: "Week 1", status: "done", items: [kept, declined], declinedItems: [declined], feedback: ["Too many articles, propose one reel", "Fewer topics"] });
+  });
+
+  it("leaves out Missions that are not Plans and keeps newest first", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    await plan(PROJECT_A, { name: "Old", updatedAt: 2, lastResult: { ...RESULT, plan: [item("a")] } });
+    await plan(PROJECT_A, { name: "New", updatedAt: 9, status: "to_validate", lastResult: { ...RESULT, plan: [item("b")] } });
+    await plan(PROJECT_A, { name: "Article", type: "create_article", updatedAt: 20, lastResult: { ...RESULT } });
+    const history = await result(t, token, "list_plan_history");
+    expect(history.map((entry: { name: string }) => entry.name)).toEqual(["New", "Old"]);
+    expect((await result(t, token, "list_plan_history", { limit: 1 }))).toHaveLength(1);
+  });
+
+  it("returns only the Project's own history", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    await seedProject(t, PROJECT_B);
+    await plan(PROJECT_A, { name: "Mine", lastResult: { ...RESULT, plan: [item("a")] } }, ["mine"]);
+    await plan(PROJECT_B, { name: "Theirs", lastResult: { ...RESULT, plan: [item("b")] } }, ["theirs"]);
+    const history = await result(t, token, "list_plan_history");
+    expect(JSON.stringify(history)).not.toContain("Theirs");
+    expect(JSON.stringify(history)).not.toContain("theirs");
+    expect(history).toHaveLength(1);
   });
 });
