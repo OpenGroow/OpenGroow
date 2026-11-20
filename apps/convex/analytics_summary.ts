@@ -174,12 +174,25 @@ export type PublicationReading = {
   publishedAt: number;
   /** `unavailable`: the channel is linked to no adapter. `no_data`: linked, nothing read yet. `data`: at least one Snapshot. */
   status: "unavailable" | "no_data" | "data";
+  /** The payload of the Mission that produced the Publication: the brief that made it. */
+  missionPayload?: unknown;
   /** The latest Snapshot of the current post, one per adapter; adapters' numbers are never combined. */
   measurements: Array<{ adapter: string; takenAt: number; metrics: Metrics }>;
+  /** The first adapter's primary metric, with its direction: what `sort: "best"` ranks on. Absent when nothing is measured. */
+  primary?: { adapter: string; metric: string; value: number; better: "higher" | "lower" };
 };
 
+/** Best first: the primary metric, its direction respected (never compared across adapters or metrics); unmeasured last. */
+function byPerformance(a: PublicationReading, b: PublicationReading) {
+  if (a.primary && b.primary && a.primary.adapter === b.primary.adapter && a.primary.metric === b.primary.metric && a.primary.value !== b.primary.value) {
+    return a.primary.better === "lower" ? a.primary.value - b.primary.value : b.primary.value - a.primary.value;
+  }
+  if (!!a.primary !== !!b.primary) return a.primary ? -1 : 1;
+  return b.publishedAt - a.publishedAt;
+}
+
 /** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its latest measurements. */
-export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number): Promise<PublicationReading[]> {
+export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number, sort: "newest" | "best" = "newest"): Promise<PublicationReading[]> {
   const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
   const rows: PublicationReading[] = [];
   for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {
@@ -195,6 +208,11 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       return latest ? [{ adapter: adapter.id, takenAt: latest.takenAt, metrics: latest.metrics as Metrics }] : [];
     });
     const face = postFace(mission, platform);
+    const ranked = links.flatMap(({ adapter }) => {
+      const metric = adapter.metrics.find((m) => m.key === adapter.primary);
+      const value = measurements.find((m) => m.adapter === adapter.id)?.metrics[adapter.primary];
+      return metric && typeof value === "number" ? [{ adapter: adapter.id, metric: metric.key, value, better: metric.better ?? ("higher" as const) }] : [];
+    })[0];
     rows.push({
       publicationId: publication._id,
       missionId: mission._id,
@@ -207,10 +225,12 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
       publishedAt,
       status: links.length === 0 ? "unavailable" : measurements.length > 0 ? "data" : "no_data",
+      missionPayload: mission.payload,
       measurements,
+      ...(ranked ? { primary: ranked } : {}),
     });
   }
-  return rows.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
+  return rows.sort(sort === "best" ? byPerformance : (a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
 }
 
 /** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30). */

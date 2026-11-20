@@ -262,8 +262,8 @@ describe("Internal MCP endpoint: list_mission_types", () => {
     const body = await (await rpc(t, tokenA, callTool("list_mission_types"))).json();
     const types = JSON.parse(body.result.content[0].text);
     expect(types).toEqual([
-      { templateId: WRITER, templateName: "Writer", type: "create_article", label: "Create an article", description: "Writes one article." },
-      { templateId: WRITER, templateName: "Writer", type: "create_letter_video", label: "Create a letter video", description: "Writes articles." },
+      { templateId: WRITER, templateName: "Writer", type: "create_article", label: "Create an article", description: "Writes one article.", defaultPayload: {} },
+      { templateId: WRITER, templateName: "Writer", type: "create_letter_video", label: "Create a letter video", description: "Writes articles.", defaultPayload: {} },
     ]);
   });
 

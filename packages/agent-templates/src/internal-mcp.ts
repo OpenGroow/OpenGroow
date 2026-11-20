@@ -7,7 +7,7 @@
  * tool definitions live in Convex (`apps/convex/internal_mcp/catalog.ts`),
  * typed on this list so a name without a definition does not compile.
  */
-export const INTERNAL_MCP_TOOL_NAMES = ["list_mission_types", "get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "get_brand_core"] as const;
+export const INTERNAL_MCP_TOOL_NAMES = ["list_mission_types", "get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "list_sources", "get_brand_core"] as const;
 
 export type InternalMcpToolName = (typeof INTERNAL_MCP_TOOL_NAMES)[number];
 
