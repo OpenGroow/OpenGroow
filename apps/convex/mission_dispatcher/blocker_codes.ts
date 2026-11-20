@@ -18,6 +18,18 @@ export async function resolveMissionTypeBlockerCodes(
     : undefined;
 }
 
+/** The Mission type is reviewed as a Plan (`review.kind` "plan", ADR-081). */
+export async function resolveMissionTypeIsPlan(
+  registry: TemplateRegistry,
+  projectId: string,
+  templateId: string,
+  missionType: string,
+  version?: string,
+): Promise<boolean> {
+  const manifest = (await registry.resolve(projectId, templateId, version))?.manifest;
+  return manifest?.missionTypes?.find((entry) => entry.type === missionType)?.review?.kind === "plan";
+}
+
 /** The Mission type's `publish` declaration (ADR-069), or undefined when it has none. */
 export async function resolveMissionTypePublish(
   registry: TemplateRegistry,
