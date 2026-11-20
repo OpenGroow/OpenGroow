@@ -1,4 +1,5 @@
 import type { InternalMcpToolName } from "@opengroow/agent-templates";
+import { DEFAULT_WINDOW_DAYS, listPublicationReadings, summarizeProject } from "../analytics_summary.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
 
@@ -51,12 +52,102 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
   return types.sort((a, b) => a.templateId.localeCompare(b.templateId) || a.type.localeCompare(b.type));
 }
 
+const DAY_MS = 24 * 60 * 60_000;
+const MISSIONS_DEFAULT_LIMIT = 20;
+const MISSIONS_MAX_LIMIT = 50;
+const PUBLICATIONS_DEFAULT_LIMIT = 50;
+const PUBLICATIONS_MAX_LIMIT = 200;
+const MISSION_STATUSES = ["todo", "doing", "blocked", "to_validate", "approved", "done", "failed", "cancelled"] as const;
+
+/** A positive whole number from the arguments, within `max`, else the default. */
+function boundedInt(value: unknown, fallback: number, max: number) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.min(Math.floor(value), max) : fallback;
+}
+
+function windowOf(args: Record<string, unknown>) {
+  const to = Date.now();
+  return { from: to - boundedInt(args.days, DEFAULT_WINDOW_DAYS, 365) * DAY_MS, to };
+}
+
+const DAYS_PROPERTY = { type: "integer", minimum: 1, maximum: 365, description: `Look-back window in days, by publication date (default ${DEFAULT_WINDOW_DAYS}).` } as const;
+
+/** The Project's most recently updated Missions, newest first, with their status and outcome. */
+async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
+  const byStatus = await Promise.all(
+    MISSION_STATUSES.map((status) =>
+      ctx.db
+        .query("missions")
+        .withIndex("by_instance_status_updated", (q) => q.eq("instanceId", scope.instanceId).eq("status", status))
+        .order("desc")
+        .take(limit),
+    ),
+  );
+  return byStatus
+    .flat()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit)
+    .map((mission) => {
+      const summary = mission.lastResult?.summary ?? mission.summary;
+      return {
+        missionId: mission._id,
+        ...(mission.number !== undefined ? { number: mission.number } : {}),
+        ...(mission.name ? { name: mission.name } : {}),
+        type: mission.type,
+        templateId: mission.templateId,
+        status: mission.status,
+        createdAt: mission.createdAt,
+        updatedAt: mission.updatedAt,
+        outcome: { ...(summary ? { summary } : {}), ...(mission.errorMessage ? { error: mission.errorMessage } : {}) },
+      };
+    });
+}
+
+async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
+  const row = await ctx.db
+    .query("brandCores")
+    .withIndex("by_instance", (q) => q.eq("instanceId", scope.instanceId))
+    .unique();
+  if (!row) return null;
+  const { _id, _creationTime, instanceId, ...rubrics } = row;
+  return rubrics;
+}
+
 export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> = {
   list_mission_types: {
     description:
       "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label and a description of what it produces.",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => listMissionTypes(ctx, scope),
+  },
+  get_analytics_summary: {
+    description:
+      "How the Project's Publications performed, aggregated by Analytics Adapter, platform, format and Mission type: counters summed, derived levels recomputed from the sums, plus the direction (better: higher or lower) of each metric. A group with status no_data is linked to analytics but not read yet; `unavailable` lists Publications whose channel has no Analytics Adapter, which is not the same as no data.",
+    inputSchema: { type: "object", properties: { days: DAYS_PROPERTY }, additionalProperties: false },
+    run: (ctx, scope, args) => summarizeProject(ctx, scope.instanceId, windowOf(args)),
+  },
+  list_publications: {
+    description:
+      "The Project's published Publications, newest first, each with its platform, format, Mission, link and latest measurements per Analytics Adapter. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter).",
+    inputSchema: {
+      type: "object",
+      properties: { days: DAYS_PROPERTY, limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` } },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT)),
+  },
+  list_recent_missions: {
+    description: "The Project's most recent Missions, newest first, with their type, status and outcome (the Run's summary, and the error when it failed).",
+    inputSchema: {
+      type: "object",
+      properties: { limit: { type: "integer", minimum: 1, maximum: MISSIONS_MAX_LIMIT, description: `At most this many (default ${MISSIONS_DEFAULT_LIMIT}).` } },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listRecentMissions(ctx, scope, boundedInt(args.limit, MISSIONS_DEFAULT_LIMIT, MISSIONS_MAX_LIMIT)),
+  },
+  get_brand_core: {
+    description: "The Project's Brand Core: audience, tone, offer, positioning, editorial rules, constraints, what to avoid and notes. Null when none is written yet.",
+    inputSchema: NO_ARGUMENTS,
+    run: (ctx, scope) => getBrandCore(ctx, scope),
   },
 };
 
