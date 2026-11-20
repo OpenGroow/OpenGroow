@@ -541,6 +541,86 @@ describe("MissionReviewContent", () => {
     });
   });
 
+  describe("Plan review (ADR-081)", () => {
+    const planItem = (n: number) => ({
+      type: "create_article",
+      payload: { topic: `topic ${n}` },
+      reason: `Reason ${n}`,
+      figures: [{ label: "Median views", value: 1200 }],
+    });
+    const PLAN_MISSION = { ...MISSION_WITH_ARTIFACT, type: "plan", status: "to_validate", lastResult: { status: "needs_human_review", summary: "s", reviewQuestions: [] } };
+
+    beforeEach(() => {
+      useQueryMock.mockImplementation((key: string) => (key === "missions.get" ? PLAN_MISSION : undefined));
+      getReviewMock.mockImplementation(async () => ({
+        status: "to_validate",
+        reviewable: true,
+        artifact: { available: false, metadata: {} },
+        content: null,
+        plan: [planItem(1), planItem(2), planItem(3)],
+        actions: [
+          {
+            key: "approve",
+            label: "Approve",
+            requiredStatus: "to_validate",
+            inputs: [{ key: "items", label: "Items", type: "plan_selection", required: false }],
+            enabled: true,
+          },
+          { key: "reject", label: "Reject", requiredStatus: "to_validate", inputs: [{ key: "feedback", label: "Feedback", type: "text", required: true }], enabled: true },
+        ],
+        errors: [],
+      }));
+      performReviewActionMock.mockResolvedValue({ ok: true });
+    });
+
+    const checkboxes = () => Array.from(document.querySelectorAll('[data-testid="plan-item-select"]')) as HTMLElement[];
+    const isChecked = (el: HTMLElement) => el.getAttribute("aria-checked") === "true";
+    const renderPlan = async () => {
+      await act(async () => {
+        root.render(<MissionReviewContent instanceId="instance-1" missionId="mission-1" />);
+      });
+      await act(async () => {});
+    };
+    const clickApprove = async () => {
+      await act(async () => {
+        (document.querySelector('[data-testid="review-action-approve"]') as HTMLElement).click();
+      });
+    };
+
+    it("checks every item by default and does not show the selection as a text field", async () => {
+      await renderPlan();
+      expect(checkboxes().map(isChecked)).toEqual([true, true, true]);
+      expect(document.querySelector('[data-testid="action-input-items"]')).toBeNull();
+    });
+
+    it("approves every item when none was unchecked", async () => {
+      await renderPlan();
+      await clickApprove();
+      expect(performReviewActionMock).toHaveBeenCalledWith({ missionId: "mission-1", actionKey: "approve", input: { items: "[0,1,2]" } });
+    });
+
+    it("approves only the items that are still checked", async () => {
+      await renderPlan();
+      await act(async () => {
+        checkboxes()[1]!.click();
+      });
+      expect(checkboxes().map(isChecked)).toEqual([true, false, true]);
+      await clickApprove();
+      expect(performReviewActionMock).toHaveBeenCalledWith({ missionId: "mission-1", actionKey: "approve", input: { items: "[0,2]" } });
+    });
+
+    it("blocks Approve, with the reason, when every item is unchecked", async () => {
+      await renderPlan();
+      for (const box of checkboxes()) {
+        await act(async () => {
+          box.click();
+        });
+      }
+      expect(document.querySelector('[data-testid="review-action-blocked"]')?.textContent).toMatch(/at least one item/i);
+      expect(isDisabled(document.querySelector('[data-testid="review-action-approve"]')!)).toBe(true);
+    });
+  });
+
   const PUBLISHER = {
     adapter: "postiz",
     url: "https://postiz.example.com",
