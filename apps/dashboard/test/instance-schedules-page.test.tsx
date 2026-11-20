@@ -441,6 +441,24 @@ describe("InstanceSchedulesContent", () => {
     });
   });
 
+  it("Run now shows why the Mission was refused and is enabled again afterwards", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "schedules.listByInstance") return [makeSchedule({ type: "plan" })];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+    const createMission = vi.fn().mockRejectedValue(new Error("projectAgent for @opengroow/seo is not active"));
+    useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+
+    await render();
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
+    });
+
+    expect(document.querySelector('[data-testid="run-now-error"]')?.textContent).toContain("is not active");
+    expect(document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.disabled).toBe(false);
+  });
+
   it("shows a Resume button (not Pause) for a paused schedule", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "schedules.listByInstance") return [makeSchedule({ status: "paused" })];

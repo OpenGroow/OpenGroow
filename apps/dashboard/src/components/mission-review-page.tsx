@@ -466,9 +466,12 @@ export function MissionReviewContent({
   aside,
   notices,
   autoPublish,
+  typeLabel,
 }: {
   instanceId: string;
   missionId: string;
+  /** The user-facing name of a Mission type, for the Plan items; defaults to the type as a title. */
+  typeLabel?: (type: string) => string;
   /** Shown above the Publishing card, in the right column. */
   aside?: React.ReactNode;
   /** Shown at the top of the left column, so the right column starts at the same height. */
@@ -729,6 +732,7 @@ export function MissionReviewContent({
       {reviewProjection.plan !== undefined && (
         <PlanReview
           items={reviewProjection.plan}
+          {...(typeLabel ? { typeLabel } : {})}
           {...(planSelection ? { selected: planSelection, onToggle: togglePlanItem } : {})}
         />
       )}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 
@@ -42,7 +43,7 @@ export function ScheduleCadenceEditor({ schedule, onSave }: { schedule: Cadence;
 
   return (
     <div className="grid gap-2">
-      <span className="font-semibold text-muted-foreground">Cadence</span>
+      <Label className="font-semibold text-muted-foreground">Cadence</Label>
       <div className="flex flex-wrap items-end gap-3">
         <NativeSelect name="unit" aria-label="Repeat" value={unit} onChange={(e) => setUnit(e.target.value as Cadence["unit"])}>
           <option value="daily">Daily</option>

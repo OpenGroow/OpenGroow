@@ -75,19 +75,23 @@ function windowOf(args: Record<string, unknown>) {
 
 const DAYS_PROPERTY = { type: "integer", minimum: 1, maximum: 365, description: `Look-back window in days, by publication date (default ${DEFAULT_WINDOW_DAYS}).` } as const;
 
-/** The Project's most recently updated Missions, newest first, with their status and outcome. */
-async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
+/** The Project's latest Missions of each status (most recently updated first, `perStatus` each), all statuses together. */
+async function recentMissionsByStatus(ctx: QueryCtx, scope: InternalMcpScope, perStatus: number) {
   const byStatus = await Promise.all(
     MISSION_STATUSES.map((status) =>
       ctx.db
         .query("missions")
         .withIndex("by_instance_status_updated", (q) => q.eq("instanceId", scope.instanceId).eq("status", status))
         .order("desc")
-        .take(limit),
+        .take(perStatus),
     ),
   );
-  return byStatus
-    .flat()
+  return byStatus.flat();
+}
+
+/** The Project's most recently updated Missions, newest first, with their status and outcome. */
+async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
+  return (await recentMissionsByStatus(ctx, scope, limit))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit)
     .map((mission) => {
@@ -113,17 +117,7 @@ async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit:
  * propose again what was refused.
  */
 async function listPlanHistory(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
-  const byStatus = await Promise.all(
-    MISSION_STATUSES.map((status) =>
-      ctx.db
-        .query("missions")
-        .withIndex("by_instance_status_updated", (q) => q.eq("instanceId", scope.instanceId).eq("status", status))
-        .order("desc")
-        .take(PLAN_HISTORY_SCAN),
-    ),
-  );
-  const plans = byStatus
-    .flat()
+  const plans = (await recentMissionsByStatus(ctx, scope, PLAN_HISTORY_SCAN))
     .filter((mission) => Array.isArray((mission.lastResult as { plan?: unknown } | undefined)?.plan))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit);
