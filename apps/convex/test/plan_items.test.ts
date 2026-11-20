@@ -169,6 +169,27 @@ describe("basedOnNumbers", () => {
   });
 });
 
+describe("a Plan stored before basedOn existed", () => {
+  it("still matches the schema, and its items are refused as having no measured origin", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    await seedBase(t);
+    // Written by an earlier version: no `basedOn` on the item. Storage must accept it.
+    await t.run((ctx) =>
+      ctx.db.insert("missions", {
+        ownerId: "owner", instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "plan_week", name: "Old plan",
+        payload: {}, status: "to_validate", number: 1, createdAt: 1, updatedAt: 1,
+        lastResult: { status: "needs_human_review", summary: "old", reviewQuestions: [], plan: [{ type: "create_article", payload: {}, reason: "r", figures: [{ label: "x", value: 1 }] }] },
+      } as never),
+    );
+    const legacy = { type: "create_article", payload: {}, reason: "r", figures: [{ label: "x", value: 1 }] } as unknown as PlanItem;
+    const errors = await check(t, [legacy]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/plan item 1/);
+    expect(errors[0]).toMatch(/basedOn is missing/);
+  });
+});
+
 describe("planSizeError", () => {
   it("refuses more than the maximum, and says so", () => {
     expect(planSizeError(new Array(PLAN_MAX_ITEMS).fill(0))).toBeUndefined();

@@ -58,11 +58,11 @@ export const getReview = action({
     // The Plan names the Missions its items are based on by id; the review shows their numbers.
     const numbers: Record<string, number> = await ctx.runQuery(internal.plan.numbersOfMissions, {
       instanceId: mission.instanceId,
-      ids: projection.plan.map((item) => item.basedOn),
+      ids: projection.plan.flatMap((item) => (item.basedOn ? [item.basedOn] : [])),
     });
     return {
       ...projection,
-      plan: projection.plan.map((item) => (numbers[item.basedOn] !== undefined ? { ...item, basedOnNumber: numbers[item.basedOn] } : item)),
+      plan: projection.plan.map((item) => (item.basedOn && numbers[item.basedOn] !== undefined ? { ...item, basedOnNumber: numbers[item.basedOn] } : item)),
     };
   },
 });

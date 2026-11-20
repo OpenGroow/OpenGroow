@@ -24,7 +24,8 @@ export const planItemSchema = z.strictObject({
 
 export const planItemV = v.object({
   type: v.string(),
-  basedOn: v.string(),
+  // Optional in storage only: Plans stored before `basedOn` existed must still match the schema. New Plans require it (planItemSchema).
+  basedOn: v.optional(v.string()),
   payload: v.any(),
   reason: v.string(),
   figures: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number()) })),

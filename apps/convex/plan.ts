@@ -70,7 +70,10 @@ async function checkPlanItems(
     ));
   for (const { position, item } of items) {
     const at = `plan item ${position + 1} (${item.type})`;
-    const originError = await basedOnError(ctx, instanceId, item.basedOn, measuredMissionIds);
+    // A Plan stored before `basedOn` existed has none: it is refused like any item without a measured origin.
+    const originError = item.basedOn
+      ? await basedOnError(ctx, instanceId, item.basedOn, measuredMissionIds)
+      : "basedOn is missing: start from a done Mission with measured analytics";
     if (originError) {
       errors.push(`${at}: ${originError}`);
       continue;
