@@ -35,7 +35,8 @@ const LIMITED = "example/limited";
 const WRITER = "example/writer";
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|owner", subject: "owner" };
 const DAY = 24 * 3_600_000;
-const ALL_TOOLS = ["get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "get_brand_core"];
+const PRODUCER = "example/producer";
+const ALL_TOOLS = ["list_mission_types", "get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "list_sources", "get_brand_core"];
 
 const internalServer = (tools: string[]) => ({ name: "opengroow", transport: "streamable-http", url: "", internal: { tools } });
 
@@ -45,6 +46,22 @@ useTemplateRegistry(
     fixtureTemplate(STRATEGIST, { mcpServers: [internalServer(ALL_TOOLS)] }),
     fixtureTemplate(LIMITED, { mcpServers: [internalServer(["get_brand_core"])] }),
     fixtureTemplate(WRITER),
+    fixtureTemplate(PRODUCER, {
+      missionTypes: [
+        {
+          type: "make_reel",
+          label: "Make a reel",
+          description: "A short vertical video.",
+          payload: '{"topic":"","hook":""}',
+          agentsMd: "missions/make_reel.md",
+          fields: [
+            { key: "topic", label: "Topic", type: "text", required: true },
+            { key: "style", label: "Style", type: "select", options: [{ value: "calm", label: "Calm" }] },
+          ],
+        },
+        { type: "make_post", label: "Make a post", payload: "{}", agentsMd: "missions/make_post.md" },
+      ],
+    }),
   ],
 );
 
@@ -87,13 +104,13 @@ async function seedPublishing() {
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: PROJECT_A, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: PROJECT_A, channelId: "ch-2", channelName: "My TT", channelService: "tiktok", channelProfile: "me" });
   await owner.mutation(api.publishers.setAnalyticsLink, { instanceId: PROJECT_A, adapter: "postiz", target: "tiktok:me", analyticsAdapter: [] });
-  return (o: { target: string; type: string; ageDays?: number; metrics?: Record<string, number> }) =>
+  return (o: { target: string; type: string; ageDays?: number; metrics?: Record<string, number>; payload?: Record<string, unknown> }) =>
     t.run(async (ctx) => {
       const now = Date.now();
       const publishedAt = now - (o.ageDays ?? 1) * DAY;
       const missionId = await ctx.db.insert("missions", {
         ownerId: "owner", instanceId: PROJECT_A, templateId: WRITER, type: o.type, name: `Post ${o.type}`,
-        payload: {}, lastArtifact: { publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "A title" } },
+        payload: o.payload ?? {}, lastArtifact: { publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "A title" } },
         status: "done", createdAt: now, updatedAt: now,
       } as never);
       const publicationId = await ctx.db.insert("publications", { missionId, instanceId: PROJECT_A, target: o.target, status: "published", externalId: "p", externalUrl: "https://example.com/p/1", createdAt: publishedAt, updatedAt: publishedAt } as never);
@@ -105,7 +122,7 @@ async function seedPublishing() {
 }
 
 describe("Internal MCP read tools: declaration", () => {
-  it("lists the five tools for a Template that declares them, read-only", async () => {
+  it("lists the declared tools for a Template that declares them, read-only", async () => {
     const token = await seedProject(t, PROJECT_A);
     const response = await t.fetch("/internal-mcp", {
       method: "POST",
@@ -120,7 +137,7 @@ describe("Internal MCP read tools: declaration", () => {
   it("refuses each tool to a Template that did not declare it", async () => {
     await seedProject(t, PROJECT_A);
     const token = await seedProject(t, PROJECT_A, LIMITED);
-    for (const name of ["get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history"]) {
+    for (const name of ["list_mission_types", "get_analytics_summary", "list_publications", "list_recent_missions", "list_plan_history", "list_sources"]) {
       expect((await (await call(t, token, name)).json()).error.code).toBe(-32602);
     }
     expect((await (await call(t, token, "get_brand_core")).json()).result).toBeDefined();
@@ -164,6 +181,48 @@ describe("list_publications", () => {
     expect(measured.measurements).toMatchObject([{ adapter: "postiz-analytics", metrics: { views: 100 } }]);
     expect(publications[0].measurements).toEqual([]);
     expect(publications[2].measurements).toEqual([]);
+  });
+
+  it("carries the payload of the Mission that produced each Publication", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    await post({ target: "instagram:me", type: "make_reel", payload: { topic: "morning routine", hook: "pov" }, metrics: { views: 5 } });
+    const [publication] = await result(t, token, "list_publications");
+    expect(publication.missionPayload).toEqual({ topic: "morning routine", hook: "pov" });
+  });
+
+  it("ranks by the adapter's primary metric when asked, best first, and keeps the best when limited", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    await post({ target: "instagram:me", type: "low", ageDays: 1, metrics: { views: 10 } });
+    await post({ target: "instagram:me", type: "unmeasured", ageDays: 2 });
+    await post({ target: "instagram:me", type: "top", ageDays: 5, metrics: { views: 900 } });
+    await post({ target: "instagram:me", type: "mid", ageDays: 3, metrics: { views: 200 } });
+    const ranked = await result(t, token, "list_publications", { sort: "best" });
+    expect(ranked.map((p: { missionType: string }) => p.missionType)).toEqual(["top", "mid", "low", "unmeasured"]);
+    expect(ranked[0].primary).toEqual({ adapter: "postiz-analytics", metric: "views", value: 900, better: "higher" });
+    const best = await result(t, token, "list_publications", { sort: "best", limit: 2 });
+    expect(best.map((p: { missionType: string }) => p.missionType)).toEqual(["top", "mid"]);
+  });
+
+  it("respects a metric where lower is better", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    await installPostiz(t);
+    await installAnalyticsAdapter(t, { ...POSTIZ_ANALYTICS, primary: "cost", metrics: [...POSTIZ_ANALYTICS.metrics, { key: "cost", label: "Cost", type: "counter", format: "number", better: "lower" }] });
+    const owner = t.withIdentity(OWNER);
+    await owner.mutation(api.publishers.save, { instanceId: PROJECT_A, adapter: "postiz", url: "https://postiz.example.com", apiKey: "secret" });
+    await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: PROJECT_A, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      for (const [type, cost] of [["pricey", 90], ["cheap", 3]] as const) {
+        const missionId = await ctx.db.insert("missions", { ownerId: "owner", instanceId: PROJECT_A, templateId: WRITER, type, payload: {}, status: "done", createdAt: now, updatedAt: now } as never);
+        const publicationId = await ctx.db.insert("publications", { missionId, instanceId: PROJECT_A, target: "instagram:me", status: "published", externalId: type, createdAt: now - DAY, updatedAt: now - DAY } as never);
+        await ctx.db.insert("publicationAnalytics", { publicationId, postSeries: 0, instanceId: PROJECT_A, adapter: "postiz-analytics", publisherAdapter: "postiz", publishedAt: now - DAY, delays: [DAY], taken: 0, state: "waiting", nextAt: now, done: false, updatedAt: now });
+        await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: PROJECT_A, delayMs: DAY, takenAt: now, metrics: { cost }, adapter: "postiz-analytics", source: "adapter" });
+      }
+    });
+    const ranked = await result(t, token, "list_publications", { sort: "best" });
+    expect(ranked.map((p: { missionType: string }) => p.missionType)).toEqual(["cheap", "pricey"]);
   });
 
   it("never returns another Project's Publications", async () => {
@@ -213,7 +272,7 @@ describe("get_brand_core", () => {
 
 describe("list_plan_history", () => {
   const RESULT = { status: "needs_human_review", summary: "A Plan", reviewQuestions: [] };
-  const item = (reason: string) => ({ type: "create_article", payload: { topic: reason }, reason, figures: [{ label: "Reach", value: "5k" }] });
+  const item = (reason: string) => ({ type: "create_article", basedOn: "mission-base", payload: { topic: reason }, reason, figures: [{ label: "Reach", value: "5k" }] });
 
   async function plan(projectId: string, fields: Record<string, unknown>, feedback: string[] = []) {
     return t.run(async (ctx) => {
@@ -254,5 +313,76 @@ describe("list_plan_history", () => {
     expect(JSON.stringify(history)).not.toContain("Theirs");
     expect(JSON.stringify(history)).not.toContain("theirs");
     expect(history).toHaveLength(1);
+  });
+});
+
+describe("list_mission_types: payload shape", () => {
+  async function activeProducer(projectId = PROJECT_A) {
+    await seedProject(t, projectId, PRODUCER);
+    return seedProject(t, projectId);
+  }
+
+  it("gives each type its default payload and typed fields", async () => {
+    const token = await activeProducer();
+    const types = await result(t, token, "list_mission_types");
+    const reel = types.find((type: { type: string }) => type.type === "make_reel");
+    expect(reel).toMatchObject({
+      templateId: PRODUCER,
+      defaultPayload: { topic: "", hook: "" },
+      fields: [
+        { key: "topic", label: "Topic", type: "text", required: true },
+        { key: "style", label: "Style", type: "select", options: [{ value: "calm", label: "Calm" }] },
+      ],
+    });
+    expect(reel.lastSuccessfulPayload).toBeUndefined();
+  });
+
+  it("gives the payload of the last successful Mission of each type, from this Project only", async () => {
+    const token = await activeProducer();
+    await seedProject(t, PROJECT_B, PRODUCER);
+    await t.run(async (ctx) => {
+      const mission = (instanceId: string, status: string, updatedAt: number, payload: Record<string, unknown>) =>
+        ctx.db.insert("missions", { ownerId: "owner", instanceId, templateId: PRODUCER, type: "make_reel", payload, status, createdAt: 1, updatedAt } as never);
+      await mission(PROJECT_A, "done", 10, { topic: "older win" });
+      await mission(PROJECT_A, "done", 20, { topic: "latest win", hook: "pov" });
+      await mission(PROJECT_A, "failed", 30, { topic: "failed one" });
+      await mission(PROJECT_B, "done", 40, { topic: "someone else" });
+    });
+    const types = await result(t, token, "list_mission_types");
+    const reel = types.find((type: { type: string }) => type.type === "make_reel");
+    expect(reel.lastSuccessfulPayload).toEqual({ topic: "latest win", hook: "pov" });
+    expect(JSON.stringify(types)).not.toContain("someone else");
+    expect(types.find((type: { type: string }) => type.type === "make_post").lastSuccessfulPayload).toBeUndefined();
+  });
+});
+
+describe("list_sources", () => {
+  const source = (instanceId: string, fields: Record<string, unknown>) =>
+    t.run(async (ctx) => {
+      await ctx.db.insert("sources", {
+        instanceId, ownerId: "owner", templateId: WRITER, sourceId: "reel", label: "Reel", family: "video", status: "ready",
+        origin: "https://example.com/p/1", capturedAt: 1, createdAt: 1,
+        marketing: { summary: "A calm morning routine", contentPatterns: ["pov"], reproducibleElements: ["slow zoom"] },
+        analysis: { hook: "pov: you wake up" }, raw: "verbatim capture", ...fields,
+      } as never);
+    });
+
+  it("returns how the Project's Sources are made, ready ones by recency, without the raw capture", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    await source(PROJECT_A, { origin: "https://example.com/p/old", capturedAt: 5 });
+    await source(PROJECT_A, { origin: "https://example.com/p/new", capturedAt: 9, scoring: { replicability: 8 } });
+    await source(PROJECT_A, { origin: "https://example.com/p/pending", capturedAt: 20, status: "processing" });
+    const sources = await result(t, token, "list_sources");
+    expect(sources.map((s: { origin: string }) => s.origin)).toEqual(["https://example.com/p/new", "https://example.com/p/old"]);
+    expect(sources[0]).toMatchObject({ label: "Reel", family: "video", marketing: { contentPatterns: ["pov"], reproducibleElements: ["slow zoom"] }, analysis: { hook: "pov: you wake up" }, scoring: { replicability: 8 } });
+    expect(JSON.stringify(sources)).not.toContain("verbatim capture");
+    expect(await result(t, token, "list_sources", { limit: 1 })).toHaveLength(1);
+  });
+
+  it("never returns another Project's Sources", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    await seedProject(t, PROJECT_B);
+    await source(PROJECT_B, { origin: "https://example.com/p/theirs" });
+    expect(await result(t, token, "list_sources")).toEqual([]);
   });
 });

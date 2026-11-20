@@ -14,6 +14,7 @@ const CTX = {
 
 const item = (n: number) => ({
   type: "create_article",
+  basedOn: "mission-base",
   payload: { topic: `topic ${n}` },
   reason: "Articles outperform the other formats",
   figures: [{ label: "Median views", value: 1200 }],
@@ -52,6 +53,21 @@ describe("a Plan reported in the result file", () => {
     expect(noFigures).toMatchObject({ type: "markFailedRetryable", error: expect.stringMatching(/figures/) });
     const noReason = decideReconciliation(resultFile(plan([{ ...item(1), reason: undefined }])), CTX);
     expect(noReason).toMatchObject({ type: "markFailedRetryable", error: expect.stringMatching(/reason/) });
+  });
+
+  it("is refused when an item does not say which Mission it is based on", () => {
+    const decision = decideReconciliation(resultFile(plan([{ ...item(1), basedOn: undefined }])), CTX);
+    expect(decision).toMatchObject({ type: "markFailedRetryable", error: expect.stringMatching(/basedOn/) });
+  });
+
+  it("may be empty when the summary says why there is nothing to propose", () => {
+    const decision = decideReconciliation(resultFile({ ...plan([]), summary: "No Mission has measured analytics yet" }), CTX);
+    expect(decision).toMatchObject({ type: "markCompleted", result: { plan: [], summary: "No Mission has measured analytics yet" } });
+  });
+
+  it("is refused empty without an explanation, so the user is told why nothing is proposed", () => {
+    const decision = decideReconciliation(resultFile({ ...plan([]), summary: "  " }), CTX);
+    expect(decision).toMatchObject({ type: "markFailedRetryable", error: expect.stringMatching(/empty.*summary/i) });
   });
 
   it("is required from a Mission type reviewed as a Plan", () => {

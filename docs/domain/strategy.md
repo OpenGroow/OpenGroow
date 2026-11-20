@@ -12,7 +12,7 @@ _Avoid_: orchestrator, system agent. It does not run the other Agents; it only p
 
 The deliverable of a Strategy Agent Mission: a list of at most **5 Plan items**. It is reviewed like any other Artifact.
 
-- **Plan item**: one Mission the Strategy Agent proposes (type, payload, the reason, the figures that justify it). It is not a Mission until the Plan is approved.
+- **Plan item**: one Mission the Strategy Agent proposes (type, payload, the reason, the figures that justify it, and `basedOn`: the done Mission with measured Publications it starts from; nothing is proposed from nothing, an empty Plan explains why in its summary). It is not a Mission until the Plan is approved.
 - **Approve** creates and launches the Missions of the items the user left selected, exactly as if the user had created them by hand. Every item starts selected.
 - **Declined item**: an item the user unselected. It is recorded on the Plan Mission and read by the Strategy Agent at its next run.
 - **Reject** asks for a revision: the user gives a feedback and the Strategy Agent plans again, in a new Run of the same Mission (the usual reject of every reviewable Mission).

@@ -1,5 +1,6 @@
 import type { InternalMcpToolName } from "@opengroow/agent-templates";
 import { DEFAULT_WINDOW_DAYS, listPublicationReadings, summarizeProject } from "../analytics_summary.js";
+import { declaredPlatformOf } from "../source_platform.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
 
@@ -27,13 +28,50 @@ export type InternalMcpTool = {
 
 const NO_ARGUMENTS = { type: "object", properties: {}, additionalProperties: false } as const;
 
+/** A Mission type's default payload (a JSON string in the manifest), or undefined when it is not valid JSON. */
+function parsedPayload(payload: string): unknown {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Missions read (most recently updated first) to find the last successful payload of each type. */
+const LAST_WINS_SCAN = 200;
+
+/** The payload of the last `done` Mission of each Template and type in the Project, keyed `templateId\0type`. */
+async function lastSuccessfulPayloads(ctx: QueryCtx, scope: InternalMcpScope) {
+  const done = await ctx.db
+    .query("missions")
+    .withIndex("by_instance_status_updated", (q) => q.eq("instanceId", scope.instanceId).eq("status", "done"))
+    .order("desc")
+    .take(LAST_WINS_SCAN);
+  const wins = new Map<string, unknown>();
+  for (const mission of done) {
+    const key = `${mission.templateId}\u0000${mission.type}`;
+    if (!wins.has(key)) wins.set(key, mission.payload);
+  }
+  return wins;
+}
+
 async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
   const agents = await ctx.db
     .query("projectAgents")
     .withIndex("by_instance_status", (q) => q.eq("instanceId", scope.instanceId).eq("status", "active"))
     .take(100);
   const registry = getTemplateRegistry(ctx);
-  const types: { templateId: string; templateName: string; type: string; label: string; description: string }[] = [];
+  const wins = await lastSuccessfulPayloads(ctx, scope);
+  const types: {
+    templateId: string;
+    templateName: string;
+    type: string;
+    label: string;
+    description: string;
+    defaultPayload?: unknown;
+    fields?: unknown;
+    lastSuccessfulPayload?: unknown;
+  }[] = [];
   for (const agent of agents) {
     const template = await registry.resolve(scope.instanceId, agent.templateId);
     if (!template) continue;
@@ -46,6 +84,9 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
         type: missionType.type,
         label: missionType.label,
         description: missionType.description ?? template.manifest.description,
+        ...(parsedPayload(missionType.payload) !== undefined ? { defaultPayload: parsedPayload(missionType.payload) } : {}),
+        ...(missionType.fields?.length ? { fields: missionType.fields } : {}),
+        ...(wins.has(`${agent.templateId}\u0000${missionType.type}`) ? { lastSuccessfulPayload: wins.get(`${agent.templateId}\u0000${missionType.type}`) } : {}),
       });
     }
   }
@@ -61,6 +102,8 @@ const PLAN_HISTORY_MAX_LIMIT = 30;
 const PLAN_HISTORY_SCAN = 100;
 const PUBLICATIONS_DEFAULT_LIMIT = 50;
 const PUBLICATIONS_MAX_LIMIT = 200;
+const SOURCES_DEFAULT_LIMIT = 20;
+const SOURCES_MAX_LIMIT = 50;
 const MISSION_STATUSES = ["todo", "doing", "blocked", "to_validate", "approved", "done", "failed", "cancelled"] as const;
 
 /** A positive whole number from the arguments, within `max`, else the default. */
@@ -143,6 +186,45 @@ async function listPlanHistory(ctx: QueryCtx, scope: InternalMcpScope, limit: nu
   );
 }
 
+/**
+ * How the Project's content is made: its ready Sources (a reel, an image, a carousel seen elsewhere), most
+ * recently captured first, with what each teaches (marketing layer, the Template's analysis) and how it was
+ * routed or scored. Never the verbatim capture (`raw`, `rawData`).
+ */
+async function listSources(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
+  const rows = await ctx.db
+    .query("sources")
+    .withIndex("by_instance_status_capturedAt", (q) => q.eq("instanceId", scope.instanceId).eq("status", "ready"))
+    .order("desc")
+    .take(limit * 2);
+  const platforms = new Map<string, string | undefined>();
+  const out = [];
+  for (const source of rows) {
+    if (source.excluded === true) continue;
+    const key = `${source.templateId}\u0000${source.sourceId}`;
+    if (!platforms.has(key)) platforms.set(key, (await declaredPlatformOf(ctx, source))?.name);
+    const platform = platforms.get(key);
+    out.push({
+      sourceId: source._id,
+      type: source.sourceId,
+      templateId: source.templateId,
+      label: source.label,
+      family: source.family,
+      ...(platform ? { platform } : {}),
+      origin: source.origin,
+      capturedAt: source.capturedAt,
+      marketing: source.marketing,
+      analysis: source.analysis,
+      ...(source.scoring ? { scoring: source.scoring } : {}),
+      ...(source.routing ? { routing: source.routing } : {}),
+      ...(source.producedAt !== undefined ? { producedAt: source.producedAt } : {}),
+      ...(source.publishedAt !== undefined ? { publishedAt: source.publishedAt } : {}),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
   const row = await ctx.db
     .query("brandCores")
@@ -156,7 +238,7 @@ async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
 export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> = {
   list_mission_types: {
     description:
-      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label and a description of what it produces.",
+      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, and what a valid payload looks like: defaultPayload (the shape, with its keys), fields (typed, required and select options) and lastSuccessfulPayload (the payload of the last Mission of that type that succeeded, when there is one).",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => listMissionTypes(ctx, scope),
   },
@@ -168,13 +250,17 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   list_publications: {
     description:
-      "The Project's published Publications, newest first, each with its platform, format, Mission, link and latest measurements per Analytics Adapter. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter).",
+      "The Project's published Publications (newest first, or best first with sort: best), each with its platform, format, Mission, the payload of that Mission (the brief that produced it), link and latest measurements per Analytics Adapter, plus its primary metric. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter).",
     inputSchema: {
       type: "object",
-      properties: { days: DAYS_PROPERTY, limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` } },
+      properties: {
+        days: DAYS_PROPERTY,
+        limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` },
+        sort: { type: "string", enum: ["newest", "best"], description: "newest (default), or best: ranked on the adapter's primary metric, its direction respected, unmeasured last. With limit, best returns the top performers." },
+      },
       additionalProperties: false,
     },
-    run: (ctx, scope, args) => listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT)),
+    run: (ctx, scope, args) => listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT), args.sort === "best" ? "best" : "newest"),
   },
   list_recent_missions: {
     description: "The Project's most recent Missions, newest first, with their type, status and outcome (the Run's summary, and the error when it failed).",
@@ -194,6 +280,16 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
       additionalProperties: false,
     },
     run: (ctx, scope, args) => listPlanHistory(ctx, scope, boundedInt(args.limit, PLAN_HISTORY_DEFAULT_LIMIT, PLAN_HISTORY_MAX_LIMIT)),
+  },
+  list_sources: {
+    description:
+      "How the Project's content is made: its ready Sources (reels, images, carousels it analysed), most recently captured first. Each has its family, platform, origin, what it teaches (marketing: summary, topics, content patterns, reproducible elements), the Template's analysis, its scores and whether it was produced or published. Read it to say which Source a winning Publication echoes. Read-only; never the verbatim capture.",
+    inputSchema: {
+      type: "object",
+      properties: { limit: { type: "integer", minimum: 1, maximum: SOURCES_MAX_LIMIT, description: `At most this many (default ${SOURCES_DEFAULT_LIMIT}).` } },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listSources(ctx, scope, boundedInt(args.limit, SOURCES_DEFAULT_LIMIT, SOURCES_MAX_LIMIT)),
   },
   get_brand_core: {
     description: "The Project's Brand Core: audience, tone, offer, positioning, editorial rules, constraints, what to avoid and notes. Null when none is written yet.",

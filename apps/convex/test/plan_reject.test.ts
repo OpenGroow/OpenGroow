@@ -11,6 +11,7 @@ const modules = {
   "../events.ts": () => import("../events.js"),
   "../instances.ts": () => import("../instances.js"),
   "../missions.ts": () => import("../missions.js"),
+  "../plan.ts": () => import("../plan.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../runs.ts": () => import("../runs.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
@@ -49,6 +50,7 @@ useTemplateRegistry([INSTANCE_ID], [
 const plan = [
   {
     type: "create_article",
+    basedOn: "mission-base",
     payload: {},
     reason: "Articles outperform the other formats",
     figures: [{ label: "Median views", value: 1200 }],

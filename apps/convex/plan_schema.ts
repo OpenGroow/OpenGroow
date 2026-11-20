@@ -12,6 +12,8 @@ export const PLAN_MAX_ITEMS = 5;
 export const planItemSchema = z.strictObject({
   /** The Mission type to create. */
   type: z.string().min(1),
+  /** The done, measured Mission this item starts from: the `missionId` that `list_publications` returns. */
+  basedOn: z.string().min(1),
   /** The payload of the Mission, exactly as a manual creation would send it. */
   payload: z.record(z.string(), z.unknown()),
   /** Why this Mission, in a sentence a human can judge. */
@@ -22,6 +24,8 @@ export const planItemSchema = z.strictObject({
 
 export const planItemV = v.object({
   type: v.string(),
+  // Optional in storage only: Plans stored before `basedOn` existed must still match the schema. New Plans require it (planItemSchema).
+  basedOn: v.optional(v.string()),
   payload: v.any(),
   reason: v.string(),
   figures: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number()) })),
