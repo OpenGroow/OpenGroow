@@ -55,6 +55,10 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
 const DAY_MS = 24 * 60 * 60_000;
 const MISSIONS_DEFAULT_LIMIT = 20;
 const MISSIONS_MAX_LIMIT = 50;
+const PLAN_HISTORY_DEFAULT_LIMIT = 10;
+const PLAN_HISTORY_MAX_LIMIT = 30;
+/** Missions read per status before keeping the Plans: the Plan Missions are few next to the others. */
+const PLAN_HISTORY_SCAN = 100;
 const PUBLICATIONS_DEFAULT_LIMIT = 50;
 const PUBLICATIONS_MAX_LIMIT = 200;
 const MISSION_STATUSES = ["todo", "doing", "blocked", "to_validate", "approved", "done", "failed", "cancelled"] as const;
@@ -102,6 +106,49 @@ async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit:
     });
 }
 
+/**
+ * The Project's previous Plan Missions (those carrying a Plan in `lastResult.plan`), newest first: the items
+ * proposed, the items the user declined on approval, and the feedback the user gave each time a Plan was
+ * rejected (the `humanFeedback` of the Mission's revision Runs, oldest first). So the Strategy Agent does not
+ * propose again what was refused.
+ */
+async function listPlanHistory(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
+  const byStatus = await Promise.all(
+    MISSION_STATUSES.map((status) =>
+      ctx.db
+        .query("missions")
+        .withIndex("by_instance_status_updated", (q) => q.eq("instanceId", scope.instanceId).eq("status", status))
+        .order("desc")
+        .take(PLAN_HISTORY_SCAN),
+    ),
+  );
+  const plans = byStatus
+    .flat()
+    .filter((mission) => Array.isArray((mission.lastResult as { plan?: unknown } | undefined)?.plan))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit);
+  return Promise.all(
+    plans.map(async (mission) => {
+      const runs = await ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(50);
+      const feedback = runs
+        .filter((run) => run.humanFeedback !== undefined)
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((run) => run.humanFeedback);
+      return {
+        missionId: mission._id,
+        ...(mission.number !== undefined ? { number: mission.number } : {}),
+        ...(mission.name ? { name: mission.name } : {}),
+        status: mission.status,
+        createdAt: mission.createdAt,
+        updatedAt: mission.updatedAt,
+        items: (mission.lastResult as { plan: unknown[] }).plan,
+        declinedItems: mission.declinedPlanItems ?? [],
+        feedback,
+      };
+    }),
+  );
+}
+
 async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
   const row = await ctx.db
     .query("brandCores")
@@ -143,6 +190,16 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
       additionalProperties: false,
     },
     run: (ctx, scope, args) => listRecentMissions(ctx, scope, boundedInt(args.limit, MISSIONS_DEFAULT_LIMIT, MISSIONS_MAX_LIMIT)),
+  },
+  list_plan_history: {
+    description:
+      "The Project's previous Plans, newest first: the items each proposed (type, Template, payload, reason, figures), the items the user declined when approving, and the feedback the user gave when rejecting it. Read it before planning so you do not propose again what was declined or rejected.",
+    inputSchema: {
+      type: "object",
+      properties: { limit: { type: "integer", minimum: 1, maximum: PLAN_HISTORY_MAX_LIMIT, description: `At most this many Plans (default ${PLAN_HISTORY_DEFAULT_LIMIT}).` } },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listPlanHistory(ctx, scope, boundedInt(args.limit, PLAN_HISTORY_DEFAULT_LIMIT, PLAN_HISTORY_MAX_LIMIT)),
   },
   get_brand_core: {
     description: "The Project's Brand Core: audience, tone, offer, positioning, editorial rules, constraints, what to avoid and notes. Null when none is written yet.",
