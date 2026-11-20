@@ -138,6 +138,72 @@ export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: st
   };
 }
 
+export type PublicationReading = {
+  publicationId: string;
+  missionId: string;
+  missionName: string;
+  missionType: string;
+  platform: string;
+  channelName?: string;
+  /** The kind of the Publishable (`image`, `video`, `article`...). */
+  format?: string;
+  title?: string;
+  externalUrl?: string;
+  publishedAt: number;
+  /** `unavailable`: the channel is linked to no adapter. `no_data`: linked, nothing read yet. `data`: at least one Snapshot. */
+  status: "unavailable" | "no_data" | "data";
+  /** The latest Snapshot of the current post, one per adapter; adapters' numbers are never combined. */
+  measurements: Array<{ adapter: string; takenAt: number; metrics: Metrics }>;
+};
+
+/** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its latest measurements. */
+export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number): Promise<PublicationReading[]> {
+  const publications = await publishedOf(ctx, instanceId);
+  const publishers = await projectPublishers(ctx, instanceId);
+  const installed = await installedAnalyticsAdapters(ctx);
+  const rows: PublicationReading[] = [];
+  for (const publication of publications) {
+    const mission = await ctx.db.get(publication.missionId);
+    if (!mission) continue;
+    const series = publication.postSeries ?? 0;
+    const analytics = await ctx.db
+      .query("publicationAnalytics")
+      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
+      .first();
+    const publishedAt = analytics?.publishedAt ?? publication.updatedAt;
+    if (publishedAt < window.from || publishedAt > window.to) continue;
+    const found = channelOf(publishers, publication.target);
+    const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+    const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
+    const snapshots = links.length
+      ? await ctx.db
+          .query("performanceSnapshots")
+          .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
+          .collect()
+      : [];
+    const measurements = links.flatMap(({ adapter }) => {
+      const latest = snapshots.filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === series).sort((a, b) => b.takenAt - a.takenAt)[0];
+      return latest ? [{ adapter: adapter.id, takenAt: latest.takenAt, metrics: latest.metrics as Metrics }] : [];
+    });
+    const face = postFace(mission, platform);
+    rows.push({
+      publicationId: publication._id,
+      missionId: mission._id,
+      missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
+      missionType: mission.type,
+      platform,
+      ...(found?.channel.channelName ? { channelName: found.channel.channelName } : {}),
+      ...(face.kind ? { format: face.kind } : {}),
+      ...(face.title ? { title: face.title } : {}),
+      ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
+      publishedAt,
+      status: links.length === 0 ? "unavailable" : measurements.length > 0 ? "data" : "no_data",
+      measurements,
+    });
+  }
+  return rows.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
+}
+
 /** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30). */
 export const summaryForProject = query({
   args: { instanceId: v.string(), days: v.optional(v.number()) },
