@@ -1,3 +1,4 @@
+import { internalMcpProblem } from "./internal-mcp";
 import type { ActivationBodyNode, AgentManifest, AgentTemplate, McpServerConfig, RequirementField } from "./types";
 import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
@@ -200,7 +201,7 @@ function isValidMcpServerConfig(raw: unknown): raw is McpServerConfig {
   return (
     typeof s.name === "string" &&
     typeof s.transport === "string" &&
-    typeof s.url === "string" &&
+    (typeof s.url === "string" || s.internal !== undefined) &&
     (s.activationUrl === undefined || typeof s.activationUrl === "string") &&
     (s.publicBaseUrl === undefined || typeof s.publicBaseUrl === "string") &&
     (s.headers === undefined ||
@@ -469,6 +470,11 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
   if (!(m.mcpServers as unknown[]).every((s) => isValidMcpServerConfig(s))) {
     return { ok: false, reason: "one or more entries in 'mcpServers' have invalid or missing fields (required: name, transport, url)" };
   }
+
+  const internalProblem = internalMcpProblem(m.mcpServers as Record<string, unknown>[]);
+  if (internalProblem) return { ok: false, reason: internalProblem };
+  // The Template holds no URL for the Internal MCP: normalise so `url` stays a string.
+  m.mcpServers = (m.mcpServers as McpServerConfig[]).map((server) => (server.internal ? { ...server, url: "" } : server));
 
   const visibility = m.visibility;
   if (visibility !== undefined && visibility !== "production" && visibility !== "development") {
@@ -1090,3 +1096,4 @@ export function isTemplateVisible(
  * `@opengroow` scope.
  */
 export const SOURCE_AGENT_TEMPLATE_ID = "@opengroow/source";
+export { INTERNAL_MCP_TOOL_NAMES, isInternalMcpToolName, type InternalMcpToolName } from "./internal-mcp";

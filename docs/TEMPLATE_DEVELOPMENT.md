@@ -58,6 +58,22 @@ Each `bin` entry becomes a launcher in `~/.opengroow/bin`, which the paired node
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 
+## Reading OpenGroow's own data: the Internal MCP (ADR-080)
+
+An Agent reads OpenGroow data (read-only) through the MCP server OpenGroow serves from Convex. Declare it among `mcpServers` with the tools you may call, and no URL:
+
+```yaml
+mcpServers:
+  - name: opengroow
+    transport: streamable-http
+    internal:
+      tools: [list_mission_types]
+```
+
+- Validation and installation refuse a `url`, `headers`, another transport, an unknown or duplicated tool, an empty list, and any other server next to it (the Agent token is written as the Authorization header of every declared server).
+- OpenGroow derives the URL from the deployment (`CONVEX_SITE_URL`, so it follows the published Convex site port) and generates the Agent token at each activation. The token only works while the Agent has a Run `running`, only for its own Project, and only for the declared tools. It never reaches the model.
+- Tools: `list_mission_types` (the Mission types the Project can activate, with descriptions). The catalog is `apps/convex/internal_mcp/catalog.ts`; to add a tool, add its name to `INTERNAL_MCP_TOOL_NAMES` (`packages/agent-templates/src/internal-mcp.ts`) and its definition to the catalog.
+
 ## Source platform: logo, dedupe key and thumbnail (ADR-077)
 
 A Source declaration in `sources[]` may carry a `platform`. Without it the Source has no logo and no thumbnail, and two captures of one post are two Sources unless their pages are the same.
