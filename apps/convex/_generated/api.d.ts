@@ -57,6 +57,12 @@ import type * as instance_provisioning_local from "../instance_provisioning/loca
 import type * as instance_provisioning_types from "../instance_provisioning/types.js";
 import type * as instances from "../instances.js";
 import type * as instances_node from "../instances_node.js";
+import type * as internal_mcp_activation from "../internal_mcp/activation.js";
+import type * as internal_mcp_agent_token from "../internal_mcp/agent_token.js";
+import type * as internal_mcp_catalog from "../internal_mcp/catalog.js";
+import type * as internal_mcp_http from "../internal_mcp/http.js";
+import type * as internal_mcp_run_liveness from "../internal_mcp/run_liveness.js";
+import type * as internal_mcp_server from "../internal_mcp/server.js";
 import type * as jobs from "../jobs.js";
 import type * as local_folder_gate from "../local_folder_gate.js";
 import type * as mcp_activation_url from "../mcp_activation_url.js";
@@ -230,6 +236,12 @@ declare const fullApi: ApiFromModules<{
   "instance_provisioning/types": typeof instance_provisioning_types;
   instances: typeof instances;
   instances_node: typeof instances_node;
+  "internal_mcp/activation": typeof internal_mcp_activation;
+  "internal_mcp/agent_token": typeof internal_mcp_agent_token;
+  "internal_mcp/catalog": typeof internal_mcp_catalog;
+  "internal_mcp/http": typeof internal_mcp_http;
+  "internal_mcp/run_liveness": typeof internal_mcp_run_liveness;
+  "internal_mcp/server": typeof internal_mcp_server;
   jobs: typeof jobs;
   local_folder_gate: typeof local_folder_gate;
   mcp_activation_url: typeof mcp_activation_url;

@@ -62,7 +62,7 @@ type KeysOf<T> = T extends unknown ? keyof T & string : never;
 const keySetOf = <T>(names: Record<KeysOf<T>, true>): Set<string> => new Set(Object.keys(names));
 
 const MCP_SERVER = keySetOf<McpServerConfig>({
-  name: true, transport: true, url: true, activationUrl: true, publicBaseUrl: true, headers: true, callTimeout: true,
+  name: true, transport: true, url: true, activationUrl: true, publicBaseUrl: true, headers: true, callTimeout: true, internal: true,
 });
 const SELECT_OPTION = keySetOf<SelectRequirementOption>({ value: true, label: true });
 const LEAF_REQUIREMENT = keySetOf<LeafRequirementField>({
