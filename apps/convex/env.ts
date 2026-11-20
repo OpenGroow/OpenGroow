@@ -81,6 +81,9 @@ export const env = {
   get OPENGROOW_ENABLE_DEMO_AGENTS() { return optional("OPENGROOW_ENABLE_DEMO_AGENTS", "") === "1"; },
 
   // Dev-only self-host preview (ADR-033) — see instance_provisioning/index.ts.
+  // The deployment's own HTTP (site) address, set by Convex itself. The Internal MCP URL derives from it (ADR-080).
+  get CONVEX_SITE_URL() { return optional("CONVEX_SITE_URL", ""); },
+
   get IS_SELF_HOST() { return optional("IS_SELF_HOST", "") === "1"; },
 
   // Comma-separated optional OpenClaw plugins the Instances install at start
