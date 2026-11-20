@@ -4,8 +4,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx } fr
 import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { assertValidPublishAt } from "./publish_at.js";
-import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
+import { activeProjectAgent, assertMissionCreatable } from "./mission_validation.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { findLiveRunForMission } from "./runs.js";
 import { currentTemplateVersion, getTemplateRegistry } from "./template_registry.js";
@@ -24,19 +23,7 @@ async function dispatchRun(
 ): Promise<Id<"runs">> {
   const { mission, ownerId, humanFeedback } = args;
 
-  const projectAgent = await ctx.db
-    .query("projectAgents")
-    .withIndex("by_instance_template", (q) =>
-      q.eq("instanceId", mission.instanceId).eq("templateId", mission.templateId),
-    )
-    .unique();
-  if (!projectAgent || projectAgent.status !== "active") {
-    throw new Error(`projectAgent for ${mission.templateId} is not active`);
-  }
-  const openclawAgentName = projectAgent.openclawAgentName;
-  if (!openclawAgentName) {
-    throw new Error("projectAgent has no openclawAgentName");
-  }
+  const { openclawAgentName } = await activeProjectAgent(ctx, mission.instanceId, mission.templateId);
 
   const now = Date.now();
   const runId = await ctx.db.insert("runs", {
@@ -144,11 +131,8 @@ export const create = mutation({
     recipe: v.optional(recipeArgV),
   },
   handler: async (ctx, { recipe, ...args }) => {
-    assertValidPublishAt(args.payload);
     const ownerId = await ownerIdFor(ctx, args.instanceId);
-    await assertKnownPublishTargets(ctx, args.instanceId, args.payload);
-    await assertPayloadChannelsSupportMissionType(ctx, args);
-    await assertPayloadSchedulable(ctx, args.instanceId, args.payload);
+    await assertMissionCreatable(ctx, args);
     if (args.templateVersion !== undefined) {
       const installed = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.templateVersion);
       if (!installed) throw new Error(`Template ${args.templateId} version ${args.templateVersion} is not installed in this Project`);
