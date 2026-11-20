@@ -35,6 +35,7 @@ const manifest: AgentManifest = {
 const items = [
   {
     type: "create_article",
+    basedOn: "mission-base",
     payload: { topic: "pricing" },
     reason: "Articles outperform the other formats",
     figures: [{ label: "Median views", value: 1200 }],

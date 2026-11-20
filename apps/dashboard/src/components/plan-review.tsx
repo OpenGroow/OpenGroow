@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +15,10 @@ import { titleCase } from "@/src/lib/mission-type";
 
 export type PlanItemView = {
   type: string;
+  /** The id of the done, measured Mission the item starts from. */
+  basedOn: string;
+  /** Its number, when the review could resolve it. */
+  basedOnNumber?: number;
   payload: unknown;
   reason: string;
   figures: Array<{ label: string; value: string | number }>;
@@ -34,12 +39,18 @@ export function PlanFigures({ figures, testId, className }: { figures: PlanItemV
 }
 
 export function PlanReview({
+  instanceId,
+  emptyReason,
   items,
   selected,
   onToggle,
   typeLabel = titleCase,
 }: {
   items: PlanItemView[];
+  /** The Project, for the link to the Mission an item is based on. */
+  instanceId: string;
+  /** Why the Agent proposes nothing: its summary, shown when the Plan is empty. */
+  emptyReason?: string;
   /** The user-facing name of a Mission type; defaults to the type as a title. */
   typeLabel?: (type: string) => string;
   /** When given, each item has a checkbox: the Missions of the checked items are created on approval. */
@@ -50,7 +61,10 @@ export function PlanReview({
     <Card className="grid gap-4 p-6" data-testid="plan-review">
       <h2 className="m-0 text-lg font-semibold text-foreground">Proposed Missions</h2>
       {items.length === 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">The Agent has nothing to propose.</p>
+        <div className="grid gap-1 text-sm" data-testid="plan-empty">
+          <p className="m-0 text-muted-foreground">The Agent has nothing to propose.</p>
+          {emptyReason && <p className="m-0 text-foreground">{emptyReason}</p>}
+        </div>
       ) : (
         <ol className="m-0 grid list-none gap-4 p-0">
           {items.map((item, index) => (
@@ -71,6 +85,15 @@ export function PlanReview({
                 <span className="text-sm font-semibold text-muted-foreground">{index + 1}.</span>
                 <Badge variant="secondary">{typeLabel(item.type)}</Badge>
               </div>
+              <p className="m-0 text-sm text-muted-foreground" data-testid="plan-item-based-on">
+                Based on{" "}
+                <Link
+                  href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(item.basedOn)}`}
+                  className="underline"
+                >
+                  {item.basedOnNumber !== undefined ? `Mission #${item.basedOnNumber}` : "a Mission"}
+                </Link>
+              </p>
               <p className="m-0 text-sm text-foreground">{item.reason}</p>
               <PlanFigures figures={item.figures} testId="plan-item-figures" />
               <details>

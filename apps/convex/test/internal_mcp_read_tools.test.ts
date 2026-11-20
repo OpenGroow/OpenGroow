@@ -272,7 +272,7 @@ describe("get_brand_core", () => {
 
 describe("list_plan_history", () => {
   const RESULT = { status: "needs_human_review", summary: "A Plan", reviewQuestions: [] };
-  const item = (reason: string) => ({ type: "create_article", payload: { topic: reason }, reason, figures: [{ label: "Reach", value: "5k" }] });
+  const item = (reason: string) => ({ type: "create_article", basedOn: "mission-base", payload: { topic: reason }, reason, figures: [{ label: "Reach", value: "5k" }] });
 
   async function plan(projectId: string, fields: Record<string, unknown>, feedback: string[] = []) {
     return t.run(async (ctx) => {

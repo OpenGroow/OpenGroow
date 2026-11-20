@@ -49,11 +49,21 @@ export const getReview = action({
           missionId: args.missionId,
         })
       : undefined;
-    return buildMissionReviewProjection(
+    const projection = buildMissionReviewProjection(
       template?.manifest,
       { status: mission.status, missionType: mission.type, lastResult: mission.lastResult },
       publish,
     );
+    if (!projection.plan?.length) return projection;
+    // The Plan names the Missions its items are based on by id; the review shows their numbers.
+    const numbers: Record<string, number> = await ctx.runQuery(internal.plan.numbersOfMissions, {
+      instanceId: mission.instanceId,
+      ids: projection.plan.map((item) => item.basedOn),
+    });
+    return {
+      ...projection,
+      plan: projection.plan.map((item) => (numbers[item.basedOn] !== undefined ? { ...item, basedOnNumber: numbers[item.basedOn] } : item)),
+    };
   },
 });
 

@@ -192,9 +192,14 @@ export function validatePlanShape(result: RunResult, ctx: { missionType: string;
       ? `Mission type "${ctx.missionType}" is reviewed as a Plan: return status "needs_human_review" with the plan, not "success"`
       : undefined;
   }
-  return plan === undefined
-    ? `plan is required: Mission type "${ctx.missionType}" is reviewed as a Plan, return it next to the summary`
-    : planSizeError(plan);
+  if (plan === undefined) {
+    return `plan is required: Mission type "${ctx.missionType}" is reviewed as a Plan, return it next to the summary`;
+  }
+  // Nothing measured, nothing to propose: the user is told why, in the summary the review shows.
+  if (plan.length === 0 && result.summary.trim() === "") {
+    return "plan is empty: say in summary why there is nothing to propose (for example, no Mission has measured analytics yet)";
+  }
+  return planSizeError(plan);
 }
 
 /** The Agent wrote a Publishable for a kind the MCP owns (ADR-074). */

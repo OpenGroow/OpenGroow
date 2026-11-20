@@ -10,7 +10,7 @@ ADR-078 and ADR-079 measure Publications so that a Strategy Agent can decide wha
 
 - **The Strategy Agent is an ordinary Agent Template**, activated per Project, one per Project, never automatically. No "system agent" kind is added.
 - **It runs through a Schedule** (weekly by default) or "Run now". Each run is a Mission of a `plan` Mission type, in the normal cycle.
-- **It never creates Missions.** Its deliverable is a **Plan**: at most 5 items, each with a Mission type, a payload, the reason and the figures behind it. It reports the Plan in its result file and Convex validates it (ADR-052).
+- **It never creates Missions.** Its deliverable is a **Plan**: at most 5 items, each with a Mission type, a payload, the reason and the figures behind it, and `basedOn`, the done Mission with a measured Publication it starts from (checked at reception and at approval; with nothing measured the Plan is empty and its summary says why). It reports the Plan in its result file and Convex validates it (ADR-052).
 - **The Plan is reviewed like any Artifact**, in the Mission's `to_validate` stage. Approve creates and launches the Missions of the items left selected. Reject keeps its existing meaning (`revision_run`): it asks for a feedback and the Strategy Agent plans again in a new Run of the same Mission. The items the user unselects are recorded on the Plan Mission as declined.
 - **Each item is validated with the rules of a manual Mission creation**, when the Plan is received and again at approval.
 - **Its memory is the history of its Plan Missions**, with declined items and feedback. No strategy table in V1.

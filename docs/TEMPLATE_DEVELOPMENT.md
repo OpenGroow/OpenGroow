@@ -156,7 +156,7 @@ The Agent returns `status: "needs_human_review"` with a `plan` next to the summa
 
 ```json
 { "status": "needs_human_review", "summary": "Next week", "reviewQuestions": [],
-  "plan": [{ "type": "create_article", "payload": {}, "reason": "Articles outperform the other formats", "figures": [{ "label": "Median views", "value": 1200 }] }] }
+  "plan": [{ "type": "create_article", "basedOn": "<missionId from list_publications>", "payload": {}, "reason": "Articles outperform the other formats", "figures": [{ "label": "Median views", "value": 1200 }] }] }
 ```
 
 To let the human approve the Plan, declare `approve` with a `plan_selection` input and the internal `approve_plan` effect (no HTTP call, the transition is `done`):
@@ -172,7 +172,7 @@ To let the human approve the Plan, declare `approve` with a `plan_selection` inp
 
 The review shows a checkbox per item, all checked. Approving creates and launches a Mission for each checked item, as a manual creation would, and records the others as declined on the Plan Mission. Each created Mission keeps the reason and the figures of its item and a link to the Plan Mission. Every checked item is checked again at approval (the Project may have changed): if one is refused, nothing is created, the Plan stays to review and the refusal names the item. The input value is a JSON array of 0-based item positions; absent means every item.
 
-At most 5 items; each needs a `reason` and at least one figure. Each item is also checked with the rules of a manual Mission creation (an active Mission type, publishable channels, a valid schedule). A refused Plan is sent back to the Agent with the reasons and the position of each item (`plan item 2 (create_reel): ...`). A valid one is stored in the Mission's `lastResult.plan` and shown in the review.
+At most 5 items; each needs a `reason`, at least one figure and a `basedOn`: the `missionId` (as `list_publications` returns it) of the Mission it starts from. A Plan is only built on results: that Mission must belong to the Project, be `done` and have a Publication with a measurement (analytics status `data`), otherwise the item is refused with its position and the reason (a Mission of another Project is refused as an unknown id). The review shows "Based on Mission #N" on each item, linking to it. When nothing is measured the Agent returns `plan: []` and says why in `summary` (required for an empty Plan, e.g. "no Mission has measured analytics yet"); the review shows it. Each item is also checked with the rules of a manual Mission creation (an active Mission type, publishable channels, a valid schedule). A refused Plan is sent back to the Agent with the reasons and the position of each item (`plan item 2 (create_reel): ...`). A valid one is stored in the Mission's `lastResult.plan` and shown in the review.
 
 ## Publishing from a Template: the Publishable guide (ADR-069)
 

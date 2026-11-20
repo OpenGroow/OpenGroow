@@ -731,6 +731,8 @@ export function MissionReviewContent({
       {reviewBar}
       {reviewProjection.plan !== undefined && (
         <PlanReview
+          instanceId={instanceId}
+          {...(typeof mission?.lastResult?.summary === "string" ? { emptyReason: mission.lastResult.summary } : {})}
           items={reviewProjection.plan}
           {...(typeLabel ? { typeLabel } : {})}
           {...(planSelection ? { selected: planSelection, onToggle: togglePlanItem } : {})}

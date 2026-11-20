@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
-import { insertInstance } from "./instance_fixture";
+import { seedMission, seedPublishingProject } from "./helpers/measured_missions.helpers";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
 const modules = {
@@ -16,6 +16,7 @@ const modules = {
   "../plan.ts": () => import("../plan.js"),
   "../runs.ts": () => import("../runs.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
+  "../publishers.ts": () => import("../publishers.js"),
 };
 
 const INSTANCE_ID = "openclaw-plan-approve";
@@ -55,25 +56,18 @@ useTemplateRegistry([INSTANCE_ID], [
   }),
 ]);
 
+// Every item is based on a done, measured Mission of the Project, which `seed` creates and writes in.
 const items = [
-  { type: "create_article", payload: { topic: "pricing" }, reason: "Articles win", figures: [{ label: "Median views", value: 1200 }] },
-  { type: "create_reel", payload: { topic: "demo" }, reason: "Reels reach new people", figures: [{ label: "Reach", value: "5k" }] },
-  { type: "create_article", payload: { topic: "faq" }, reason: "Support asks it", figures: [{ label: "Tickets", value: 14 }] },
+  { type: "create_article", basedOn: "", payload: { topic: "pricing" }, reason: "Articles win", figures: [{ label: "Median views", value: 1200 }] },
+  { type: "create_reel", basedOn: "", payload: { topic: "demo" }, reason: "Reels reach new people", figures: [{ label: "Reach", value: "5k" }] },
+  { type: "create_article", basedOn: "", payload: { topic: "faq" }, reason: "Support asks it", figures: [{ label: "Tickets", value: 14 }] },
 ];
 
 async function seed(t: ReturnType<typeof convexTest>, options: { contentAgentStatus?: "active" | "inactive" } = {}) {
+  await seedPublishingProject(t, INSTANCE_ID);
+  const base = await seedMission(t, INSTANCE_ID, { measured: true });
+  for (const item of items) item.basedOn = base;
   return t.run(async (ctx) => {
-    const iso = new Date().toISOString();
-    await insertInstance(ctx, {
-      jobId: "job-plan",
-      status: "running",
-      runtimeStatus: "linked",
-      runtimeReady: true,
-      createdAt: iso,
-      openclawId: INSTANCE_ID,
-      updatedAt: iso,
-      userId: OWNER.subject,
-    });
     const now = Date.now();
     for (const [templateId, name, status] of [
       [STRATEGY, "strategy", "active"],
@@ -113,7 +107,7 @@ const approve = (t: ReturnType<typeof convexTest>, missionId: Id<"missions">, in
 const createdMissions = (t: ReturnType<typeof convexTest>, planMissionId: Id<"missions">) =>
   t.run(async (ctx) => {
     const all = await ctx.db.query("missions").collect();
-    return all.filter((m) => m._id !== planMissionId);
+    return all.filter((m) => m.fromPlan?.missionId === planMissionId);
   });
 
 describe("approving a Plan", () => {
@@ -209,6 +203,24 @@ describe("approving a Plan", () => {
     await expect(approve(t, planId)).rejects.toThrow(/plan item 2 \(create_podcast\).*not active in this Project/);
     expect(await createdMissions(t, planId)).toEqual([]);
 
+    await approve(t, planId, { items: "[0]" });
+    expect((await createdMissions(t, planId)).map((m) => m.type)).toEqual(["create_article"]);
+  });
+
+  it("refuses, at approval, an item whose Mission lost its measurement or is of another Project, and creates nothing", async () => {
+    const t = convexTest(schema, modules);
+    const planId = await seed(t);
+    const unmeasured = await seedMission(t, INSTANCE_ID);
+    await seedPublishingProject(t, "openclaw-elsewhere");
+    const foreign = await seedMission(t, "openclaw-elsewhere", { measured: true });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(planId, {
+        lastResult: { status: "needs_human_review", summary: "s", reviewQuestions: [], plan: [items[0]!, { ...items[1]!, basedOn: unmeasured }, { ...items[2]!, basedOn: foreign }] },
+      });
+    });
+
+    await expect(approve(t, planId)).rejects.toThrow(/plan item 2 \(create_reel\).*no measured Publication.*plan item 3 \(create_article\).*not a Mission of this Project/);
+    expect(await createdMissions(t, planId)).toEqual([]);
     await approve(t, planId, { items: "[0]" });
     expect((await createdMissions(t, planId)).map((m) => m.type)).toEqual(["create_article"]);
   });

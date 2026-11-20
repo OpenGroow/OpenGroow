@@ -45,7 +45,7 @@ export type MissionReviewProjection = {
   actions: MissionReviewAction[];
   defaultActionKey?: ReviewActionCapability["key"];
   /** Present only when the Mission type is reviewed as a Plan (ADR-081): the items the Agent proposes. */
-  plan?: PlanItem[];
+  plan?: Array<PlanItem & { basedOnNumber?: number }>;
   /** Present only when the Mission type declares `publish`. */
   publish?: MissionPublishProjection;
   errors: string[];

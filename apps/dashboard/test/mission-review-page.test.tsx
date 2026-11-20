@@ -544,6 +544,8 @@ describe("MissionReviewContent", () => {
   describe("Plan review (ADR-081)", () => {
     const planItem = (n: number) => ({
       type: "create_article",
+      basedOn: "mission-base",
+      basedOnNumber: 7,
       payload: { topic: `topic ${n}` },
       reason: `Reason ${n}`,
       figures: [{ label: "Median views", value: 1200 }],
@@ -586,6 +588,26 @@ describe("MissionReviewContent", () => {
         (document.querySelector('[data-testid="review-action-approve"]') as HTMLElement).click();
       });
     };
+
+    it("says which Mission each item is based on, with a link to it", async () => {
+      await renderPlan();
+      const links = Array.from(document.querySelectorAll('[data-testid="plan-item-based-on"] a')) as HTMLAnchorElement[];
+      expect(links).toHaveLength(3);
+      expect(links[0]!.textContent).toBe("Mission #7");
+      expect(links[0]!.getAttribute("href")).toBe("/projects/instance-1/missions/mission-base");
+      expect(document.querySelector('[data-testid="plan-item-based-on"]')!.textContent).toMatch(/^Based on Mission #7/);
+    });
+
+    it("explains an empty Plan with the Agent's summary", async () => {
+      useQueryMock.mockImplementation((key: string) =>
+        key === "missions.get"
+          ? { ...PLAN_MISSION, lastResult: { status: "needs_human_review", summary: "No Mission has measured analytics yet", reviewQuestions: [] } }
+          : undefined,
+      );
+      getReviewMock.mockImplementation(async () => ({ status: "to_validate", reviewable: true, artifact: { available: false, metadata: {} }, content: null, plan: [], actions: [], errors: [] }));
+      await renderPlan();
+      expect(document.querySelector('[data-testid="plan-empty"]')?.textContent).toContain("No Mission has measured analytics yet");
+    });
 
     it("checks every item by default and does not show the selection as a text field", async () => {
       await renderPlan();

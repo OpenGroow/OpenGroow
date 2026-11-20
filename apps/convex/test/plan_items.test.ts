@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../schema";
-import { planItemErrors } from "../plan";
+import { basedOnNumbers, planItemErrors } from "../plan";
 import { PLAN_MAX_ITEMS, planSizeError, type PlanItem } from "../plan_schema";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
-const modules = { "../_generated/api.ts": () => import("../_generated/api.js") };
+import { seedMission, seedPublishingProject } from "./helpers/measured_missions.helpers";
+
+const modules = {
+  "../_generated/api.ts": () => import("../_generated/api.js"),
+  "../publishers.ts": () => import("../publishers.js"),
+  "../instances.ts": () => import("../instances.js"),
+};
+const OTHER_INSTANCE_ID = "openclaw-plan-2";
 const INSTANCE_ID = "openclaw-plan-1";
 const TEMPLATE_ID = "@example/maker";
 
-useTemplateRegistry([INSTANCE_ID], [
+useTemplateRegistry([INSTANCE_ID, OTHER_INSTANCE_ID], [
   fixtureTemplate(TEMPLATE_ID, {
     missionTypes: [
       { type: "create_article", label: "Article", payload: "{}", agentsMd: "a.md" },
@@ -18,8 +25,9 @@ useTemplateRegistry([INSTANCE_ID], [
   }),
 ]);
 
-const item = (overrides: Partial<PlanItem> = {}): PlanItem => ({
+const item = (basedOn: string, overrides: Partial<PlanItem> = {}): PlanItem => ({
   type: "create_article",
+  basedOn,
   payload: {},
   reason: "Articles outperform the other formats",
   figures: [{ label: "Median views", value: 1200 }],
@@ -42,6 +50,12 @@ async function seedAgent(t: ReturnType<typeof convexTest>, status: "active" | "i
   });
 }
 
+/** A Project whose one Mission is done and measured: what an item may be based on. */
+async function seedBase(t: ReturnType<typeof convexTest>) {
+  await seedPublishingProject(t, INSTANCE_ID);
+  return seedMission(t, INSTANCE_ID, { measured: true });
+}
+
 const check = (t: ReturnType<typeof convexTest>, items: PlanItem[]) =>
   t.run((ctx) => planItemErrors(ctx, INSTANCE_ID, items));
 
@@ -49,13 +63,15 @@ describe("planItemErrors", () => {
   it("accepts items that a manual creation would accept", async () => {
     const t = convexTest(schema, modules);
     await seedAgent(t);
-    expect(await check(t, [item(), item()])).toEqual([]);
+    const base = await seedBase(t);
+    expect(await check(t, [item(base), item(base)])).toEqual([]);
   });
 
   it("refuses a Mission type that is not active, with the item's position", async () => {
     const t = convexTest(schema, modules);
     await seedAgent(t);
-    const errors = await check(t, [item(), item({ type: "create_reel" })]);
+    const base = await seedBase(t);
+    const errors = await check(t, [item(base), item(base, { type: "create_reel" })]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/item 2 \(create_reel\).*not active/);
   });
@@ -63,7 +79,8 @@ describe("planItemErrors", () => {
   it("refuses a Plan item that is itself a Plan-review Mission type, with the item's position", async () => {
     const t = convexTest(schema, modules);
     await seedAgent(t);
-    const errors = await check(t, [item(), item({ type: "plan_week" })]);
+    const base = await seedBase(t);
+    const errors = await check(t, [item(base), item(base, { type: "plan_week" })]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/item 2 \(plan_week\).*Plan/);
   });
@@ -71,20 +88,84 @@ describe("planItemErrors", () => {
   it("refuses a type whose agent was deactivated", async () => {
     const t = convexTest(schema, modules);
     await seedAgent(t, "inactive");
-    expect((await check(t, [item()]))[0]).toMatch(/item 1.*not active/);
+    const base = await seedBase(t);
+    expect((await check(t, [item(base)]))[0]).toMatch(/item 1.*not active/);
   });
 
   it("refuses an unpublishable channel and an invalid schedule, each with its position", async () => {
     const t = convexTest(schema, modules);
     await seedAgent(t);
+    const base = await seedBase(t);
     const errors = await check(t, [
-      item({ payload: { publishTargets: ["nowhere"] } }),
-      item(),
-      item({ payload: { publishAt: "tomorrow" } }),
+      item(base, { payload: { publishTargets: ["nowhere"] } }),
+      item(base),
+      item(base, { payload: { publishAt: "tomorrow" } }),
     ]);
     expect(errors).toHaveLength(2);
     expect(errors[0]).toMatch(/item 1.*nowhere/);
     expect(errors[1]).toMatch(/item 3.*publishAt/);
+  });
+});
+
+describe("planItemErrors: the Mission an item is based on", () => {
+  it("accepts a done Mission of the Project with a measured Publication", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    expect(await check(t, [item(await seedBase(t))])).toEqual([]);
+  });
+
+  it("refuses a Mission that is not done, naming the item and the status", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    const base = await seedBase(t);
+    const doing = await seedMission(t, INSTANCE_ID, { status: "doing", measured: true });
+    const errors = await check(t, [item(base), item(doing)]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/item 2 \(create_article\).*Mission #7.*not done.*doing/);
+  });
+
+  it("refuses a done Mission whose Publication has no measurement yet", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    await seedPublishingProject(t, INSTANCE_ID);
+    const unmeasured = await seedMission(t, INSTANCE_ID);
+    expect((await check(t, [item(unmeasured)]))[0]).toMatch(/item 1.*Mission #7.*no measured Publication/);
+  });
+
+  it("refuses a done Mission that was never published", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    await seedPublishingProject(t, INSTANCE_ID);
+    const unpublished = await seedMission(t, INSTANCE_ID, { publish: false });
+    expect((await check(t, [item(unpublished)]))[0]).toMatch(/item 1.*no measured Publication/);
+  });
+
+  it("refuses a Mission of another Project as if it did not exist, without saying anything about it", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    await seedPublishingProject(t, OTHER_INSTANCE_ID);
+    const foreign = await seedMission(t, OTHER_INSTANCE_ID, { measured: true });
+    const errors = await check(t, [item(foreign)]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/item 1.*not a Mission of this Project/);
+    expect(errors[0]).not.toMatch(/Mission #|done|measured/);
+  });
+
+  it("refuses an id that is not a Mission id", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    expect((await check(t, [item("not-an-id")]))[0]).toMatch(/item 1.*not a Mission of this Project/);
+  });
+});
+
+describe("basedOnNumbers", () => {
+  it("gives the number of the Project's Missions only, for the review to name them", async () => {
+    const t = convexTest(schema, modules);
+    const own = await seedBase(t);
+    await seedPublishingProject(t, OTHER_INSTANCE_ID);
+    const foreign = await seedMission(t, OTHER_INSTANCE_ID, { measured: true });
+    const numbers = await t.run((ctx) => basedOnNumbers(ctx, INSTANCE_ID, [own, foreign, "not-an-id"]));
+    expect(numbers).toEqual({ [own]: 7 });
   });
 });
 
