@@ -28,7 +28,8 @@ function hostOf(url: string): string {
 }
 
 export function buildInstallationPlan(manifest: AgentManifest): InstallationPlan {
-  const hosts = manifest.mcpServers.flatMap((server) =>
+  // The Internal MCP is OpenGroow's own server: it holds no URL and is no outside host.
+  const hosts = manifest.mcpServers.filter((server) => !server.internal).flatMap((server) =>
     [server.url, server.activationUrl].filter((url): url is string => typeof url === "string").map(hostOf),
   );
   return {

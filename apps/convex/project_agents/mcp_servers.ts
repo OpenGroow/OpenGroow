@@ -1,5 +1,6 @@
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import { resolveMcpActivationUrl } from "../mcp_activation_url.js";
+import { internalMcpRuntimeUrl } from "../internal_mcp/activation.js";
 
 export function deepMergeRecords(
   base: Record<string, Record<string, unknown>>,
@@ -21,8 +22,15 @@ export function resolveMcpServers(template: AgentTemplate): ResolvedMcpServers {
   const servers: Record<string, Record<string, unknown>> = {};
   const activationUrls: Record<string, string | undefined> = {};
   for (const serverConfig of template.manifest.mcpServers) {
-    const { name, activationUrl: _activationUrl, publicBaseUrl: _publicBaseUrl, headers: _headers, ...runtimeConfig } = serverConfig;
+    const { name, activationUrl: _activationUrl, publicBaseUrl: _publicBaseUrl, headers: _headers, internal, ...runtimeConfig } = serverConfig;
     // Strip Convex-only fields — they are not sent to openclaw.json
+    if (internal) {
+      // The Template holds no URL for the Internal MCP: it is derived from the deployment (ADR-080).
+      const url = internalMcpRuntimeUrl();
+      servers[name] = { ...runtimeConfig, url };
+      activationUrls[name] = url;
+      continue;
+    }
     servers[name] = runtimeConfig;
     activationUrls[name] = resolveMcpActivationUrl(serverConfig);
   }

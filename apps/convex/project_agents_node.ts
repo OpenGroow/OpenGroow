@@ -41,6 +41,7 @@ import {
   markInactiveIfNoActiveRunsMutation,
 } from "./project_agents/shared_refs.js";
 import { requireAuthenticatedUser, requireInstanceOwner } from "./project_agents/auth.js";
+import { withInternalMcpToken } from "./internal_mcp/activation.js";
 import { resolveMcpServers } from "./project_agents/mcp_servers.js";
 import {
   type ActivationResult,
@@ -245,7 +246,8 @@ async function activateAgent(
       workspaceKey,
       knownWorkspaceAbsolutePath: workspaceAbsolutePath,
       mcpServers,
-      activateConfig,
+      // A Template using the Internal MCP gets a fresh Agent token at every activation (ADR-080).
+      activateConfig: withInternalMcpToken(template, instanceId, templateId, activateConfig),
       hiddenMissionTypes: existing?.hiddenMissionTypes,
       existingSkills: existing?.skills ?? [],
     });
