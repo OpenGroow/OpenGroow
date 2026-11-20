@@ -112,6 +112,26 @@ missionTypes:
 
 Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
 
+## Reviewing a Plan (ADR-081)
+
+A Mission type whose deliverable is a list of proposed Missions (the Strategy Agent) declares `review.kind: plan`. It has no `server`, `path`, `coverPath` or `service`: there is no content to load. Declare `reject` as for any review (a `revision_run` effect with a `feedback` input).
+
+```yaml
+review:
+  kind: plan
+  actions:
+    - { key: reject, label: Reject, requiredStatus: to_validate, inputs: [{ key: feedback, label: Feedback, type: text, required: true }], effect: { kind: revision_run, feedbackKey: feedback }, transition: doing }
+```
+
+The Agent returns `status: "needs_human_review"` with a `plan` next to the summary (required for such a Mission type, refused for any other):
+
+```json
+{ "status": "needs_human_review", "summary": "Next week", "reviewQuestions": [],
+  "plan": [{ "type": "create_article", "payload": {}, "reason": "Articles outperform the other formats", "figures": [{ "label": "Median views", "value": 1200 }] }] }
+```
+
+At most 5 items; each needs a `reason` and at least one figure. Each item is also checked with the rules of a manual Mission creation (an active Mission type, publishable channels, a valid schedule). A refused Plan is sent back to the Agent with the reasons and the position of each item (`plan item 2 (create_reel): ...`). A valid one is stored in the Mission's `lastResult.plan` and shown in the review.
+
 ## Publishing from a Template: the Publishable guide (ADR-069)
 
 By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`): the Agent returns a **Publishable**, a small JSON object of references (URLs) and text, and OpenGroow posts it on the channels the human chose. This guide is the whole path for an author writing a Template for their own MCP. Opting in is per Mission type; Mission types without `publish` behave as before.

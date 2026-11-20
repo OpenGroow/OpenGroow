@@ -7,6 +7,7 @@ import {
   formatMissingOutputMessage,
   type RunResult,
 } from "../run_result.js";
+import { planSizeError } from "../plan_schema.js";
 import { MAX_RETRYABLE_JOB_FAILURES } from "./external_job_polling.js";
 import type { RunParent } from "../run_parent.js";
 import { jobResultFilePath } from "../source_jobs/job_files.js";
@@ -103,7 +104,7 @@ export type ReconcileDecision =
  * Mission's invalid-output retry budget (shared with the External Job
  * `resume_mission` budget, `MAX_RETRYABLE_JOB_FAILURES`) is exhausted.
  */
-function decideInvalidOutput(
+export function decideInvalidOutput(
   message: string,
   ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; sourceRouting?: boolean },
 ): ReconcileDecision {
@@ -177,6 +178,25 @@ export function validateDeclaredPublishable(
   return validatePublishableKind(publishable, { ...ctx, publish: ctx.publish });
 }
 
+/**
+ * A Mission type reviewed as a Plan (ADR-081) must report one with its needs_human_review result; any other
+ * Mission type must not. The per-item rules need the database: Convex applies them after this check.
+ */
+export function validatePlanShape(result: RunResult, ctx: { missionType: string; planReview?: boolean }): string | undefined {
+  const plan = result.status === "needs_human_review" ? result.plan : undefined;
+  if (ctx.planReview !== true) {
+    return plan === undefined ? undefined : `plan is not accepted: Mission type "${ctx.missionType}" is not reviewed as a Plan`;
+  }
+  if (result.status !== "needs_human_review") {
+    return result.status === "success"
+      ? `Mission type "${ctx.missionType}" is reviewed as a Plan: return status "needs_human_review" with the plan, not "success"`
+      : undefined;
+  }
+  return plan === undefined
+    ? `plan is required: Mission type "${ctx.missionType}" is reviewed as a Plan, return it next to the summary`
+    : planSizeError(plan);
+}
+
 /** The Agent wrote a Publishable for a kind the MCP owns (ADR-074). */
 function mcpOwnedPublishableError(missionType: string, kind: string): string {
   return `You must not write publishable: Mission type "${missionType}" publishes an ${kind}, and its MCP returns the whole publishable through publish.resource when the job completes. Remove publishable from your RunResult.`;
@@ -241,6 +261,8 @@ export function decideReconciliation(
     blockerCodes?: readonly string[];
     /** The Mission type's `publish` declaration, when it has one (ADR-069). */
     publish?: { kind: string; require?: readonly string[]; targets?: readonly string[]; resource?: unknown };
+    /** The Mission type is reviewed as a Plan (`review.kind` "plan", ADR-081). */
+    planReview?: boolean;
     retryableFailureCount: number;
   },
 ): ReconcileDecision {
@@ -476,6 +498,11 @@ export function decideReconciliation(
   const blockerError = validateDeclaredBlockerCode(validation.data, ctx);
   if (blockerError) {
     return decideInvalidOutput(blockerError, ctx);
+  }
+
+  const planError = validatePlanShape(validation.data, ctx);
+  if (planError) {
+    return decideInvalidOutput(planError, ctx);
   }
 
   const publishableError = validateDeclaredPublishable(validation.data, ctx);

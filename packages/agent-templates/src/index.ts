@@ -290,10 +290,15 @@ function isValidReviewActionCapability(raw: unknown): boolean {
 function isValidReviewContentContract(raw: unknown): boolean {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const r = raw as Record<string, unknown>;
-  if (!VALID_REVIEW_KINDS.has(r.kind as string)) return false;
+  if (r.kind === "plan") {
+    // A Plan has no content to load: no server, path, cover or workspace.
+    if (r.server !== undefined || r.path !== undefined || r.coverPath !== undefined || r.service !== undefined) return false;
+  } else if (!VALID_REVIEW_KINDS.has(r.kind as string)) {
+    return false;
+  }
   // Workspace variant: service === "workspace", no server/path required.
   const isWorkspace = r.service === "workspace";
-  if (!isWorkspace && (typeof r.server !== "string" || typeof r.path !== "string")) {
+  if (r.kind !== "plan" && !isWorkspace && (typeof r.server !== "string" || typeof r.path !== "string")) {
     return false;
   }
   if (r.coverPath !== undefined && typeof r.coverPath !== "string") return false;
@@ -699,20 +704,20 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
       if (!isValidReviewContentContract(review)) {
         if (review && typeof review === "object" && !Array.isArray(review)) {
           const malformed = review as Record<string, unknown>;
-          if (!VALID_REVIEW_KINDS.has(malformed.kind as string)) {
+          if (malformed.kind !== "plan" && !VALID_REVIEW_KINDS.has(malformed.kind as string)) {
             return {
               ok: false,
-              reason: `missionTypes[${JSON.stringify(missionTypeName)}].review.kind ${JSON.stringify(malformed.kind)} is not a valid Artifact content kind — must be one of: markdown, metadata, image, video`,
+              reason: `missionTypes[${JSON.stringify(missionTypeName)}].review.kind ${JSON.stringify(malformed.kind)} is not a valid Artifact content kind — must be one of: markdown, metadata, image, video, plan`,
             };
           }
         }
         return {
           ok: false,
-          reason: `missionTypes[${JSON.stringify(missionTypeName)}].review is malformed — required fields: kind ∈ {markdown,metadata,image,video}, server (string), path (string)`,
+          reason: `missionTypes[${JSON.stringify(missionTypeName)}].review is malformed — required fields: kind ∈ {markdown,metadata,image,video}, server (string), path (string); or kind "plan" alone (no server, path, coverPath or service)`,
         };
       }
       const reviewRecord = review as Record<string, unknown>;
-      if (reviewRecord.service !== "workspace") {
+      if (reviewRecord.kind !== "plan" && reviewRecord.service !== "workspace") {
         const reviewServer = reviewRecord.server as string;
         if (!declaredServers.has(reviewServer)) {
           return {

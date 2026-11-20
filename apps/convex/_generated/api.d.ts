@@ -90,6 +90,8 @@ import type * as observations_ranking from "../observations_ranking.js";
 import type * as observations_scoring_daily from "../observations_scoring_daily.js";
 import type * as openclaw_usage from "../openclaw_usage.js";
 import type * as optional_plugins from "../optional_plugins.js";
+import type * as plan from "../plan.js";
+import type * as plan_schema from "../plan_schema.js";
 import type * as post_url from "../post_url.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
@@ -264,6 +266,8 @@ declare const fullApi: ApiFromModules<{
   observations_scoring_daily: typeof observations_scoring_daily;
   openclaw_usage: typeof openclaw_usage;
   optional_plugins: typeof optional_plugins;
+  plan: typeof plan;
+  plan_schema: typeof plan_schema;
   post_url: typeof post_url;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;
