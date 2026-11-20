@@ -179,6 +179,19 @@ describe("approving a Plan", () => {
     });
   });
 
+  it("refuses a Plan item that is itself a Plan-review Mission type, with its position", async () => {
+    const t = convexTest(schema, modules);
+    const planId = await seed(t);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(planId, {
+        lastResult: { status: "needs_human_review", summary: "s", reviewQuestions: [], plan: [items[0]!, { ...items[1]!, type: "plan" }] },
+      });
+    });
+
+    await expect(approve(t, planId)).rejects.toThrow(/plan item 2 \(plan\).*Plan/);
+    expect(await createdMissions(t, planId)).toEqual([]);
+  });
+
   it("does not hold an invalid item that the user unselected against the others", async () => {
     const t = convexTest(schema, modules);
     const planId = await seed(t);

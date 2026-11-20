@@ -6,6 +6,7 @@ import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { publishedOf } from "./analytics.js";
 import { postFace } from "./analytics_face.js";
+import type { Doc } from "./_generated/dataModel.js";
 
 // Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for the Strategy
 // Agent (ADR-081): figures by platform, format and Mission type, not raw rows.
@@ -68,25 +69,46 @@ export type AnalyticsSummary = {
   unavailable: Array<{ platform: string; format?: string; missionType: string; publications: number }>;
 };
 
-/** The summary of a Project's published Publications whose publication date falls in `[from, to]`. */
-export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }): Promise<AnalyticsSummary> {
+type PublicationInWindow = {
+  publication: Doc<"publications">;
+  mission: Doc<"missions">;
+  /** The post of the Publication that is current (`postSeries`, 0 when it has no series). */
+  series: number;
+  publishedAt: number;
+  found: ReturnType<typeof channelOf>;
+  platform: string;
+};
+
+/** The Project's published Publications whose publication date falls in `[from, to]`, each with its Mission and channel. */
+async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }) {
   const publications = await publishedOf(ctx, instanceId);
   const publishers = await projectPublishers(ctx, instanceId);
   const installed = await installedAnalyticsAdapters(ctx);
-  type Acc = SummaryGroup & { latest: Metrics[] };
-  const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
-  const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
+  const inWindow: PublicationInWindow[] = [];
   for (const publication of publications) {
     const mission = await ctx.db.get(publication.missionId);
     if (!mission) continue;
+    const series = publication.postSeries ?? 0;
     const analytics = await ctx.db
       .query("publicationAnalytics")
-      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", publication.postSeries ?? 0))
+      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
       .first();
     const publishedAt = analytics?.publishedAt ?? publication.updatedAt;
     if (publishedAt < window.from || publishedAt > window.to) continue;
     const found = channelOf(publishers, publication.target);
     const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+    inWindow.push({ publication, mission, series, publishedAt, found, platform });
+  }
+  return { inWindow, installed };
+}
+
+/** The summary of a Project's published Publications whose publication date falls in `[from, to]`. */
+export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }): Promise<AnalyticsSummary> {
+  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
+  type Acc = SummaryGroup & { latest: Metrics[] };
+  const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
+  const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
+  for (const { publication, mission, series, found, platform } of inWindow) {
     const format = postFace(mission, platform).kind;
     const key = `${platform}\u0000${format ?? ""}\u0000${mission.type}`;
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
@@ -110,7 +132,7 @@ export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: st
       group.publications += 1;
       // Snapshots of other adapters, and of an earlier post of the Publication, are not this reading.
       const own = snapshots
-        .filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === (publication.postSeries ?? 0))
+        .filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === series)
         .sort((a, b) => b.takenAt - a.takenAt)[0];
       if (own) {
         group.measured += 1;
@@ -158,22 +180,9 @@ export type PublicationReading = {
 
 /** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its latest measurements. */
 export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number): Promise<PublicationReading[]> {
-  const publications = await publishedOf(ctx, instanceId);
-  const publishers = await projectPublishers(ctx, instanceId);
-  const installed = await installedAnalyticsAdapters(ctx);
+  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
   const rows: PublicationReading[] = [];
-  for (const publication of publications) {
-    const mission = await ctx.db.get(publication.missionId);
-    if (!mission) continue;
-    const series = publication.postSeries ?? 0;
-    const analytics = await ctx.db
-      .query("publicationAnalytics")
-      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
-      .first();
-    const publishedAt = analytics?.publishedAt ?? publication.updatedAt;
-    if (publishedAt < window.from || publishedAt > window.to) continue;
-    const found = channelOf(publishers, publication.target);
-    const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+  for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
     const snapshots = links.length
       ? await ctx.db
