@@ -1,8 +1,10 @@
+import { internalMcpProblem } from "./internal-mcp";
 import type { ActivationBodyNode, AgentManifest, AgentTemplate, McpServerConfig, RequirementField } from "./types";
 import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
 import { publishDeclarationProblem } from "./publish-declaration";
+import { defaultScheduleProblem } from "./default-schedule";
 import { analyticsDeclarationProblem, analyticsDeclarationWarning } from "./analytics-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
@@ -47,6 +49,7 @@ export type {
   ReviewActionTransition,
   ReviewContentContract,
   RevisionRunEffect,
+  ApprovePlanEffect,
   SourceDeclaration,
   SourceMediaKind,
   SourcePlatformDeclaration,
@@ -80,6 +83,7 @@ export {
   type OnPublishedPlaceholder,
   type PublishableKind,
 } from "./publish-declaration";
+export type { DefaultScheduleDeclaration } from "./default-schedule";
 export { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS, type AnalyticsDeclaration } from "./analytics-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
@@ -200,7 +204,7 @@ function isValidMcpServerConfig(raw: unknown): raw is McpServerConfig {
   return (
     typeof s.name === "string" &&
     typeof s.transport === "string" &&
-    typeof s.url === "string" &&
+    (typeof s.url === "string" || s.internal !== undefined) &&
     (s.activationUrl === undefined || typeof s.activationUrl === "string") &&
     (s.publicBaseUrl === undefined || typeof s.publicBaseUrl === "string") &&
     (s.headers === undefined ||
@@ -236,7 +240,7 @@ function isValidReviewActionInput(raw: unknown): boolean {
   return (
     typeof i.key === "string" &&
     typeof i.label === "string" &&
-    (i.type === "text" || i.type === "datetime-local") &&
+    (i.type === "text" || i.type === "datetime-local" || i.type === "plan_selection") &&
     typeof i.required === "boolean"
   );
 }
@@ -260,8 +264,30 @@ function isValidRevisionRunEffect(raw: unknown): boolean {
   return e.kind === "revision_run" && typeof e.feedbackKey === "string" && e.feedbackKey.length > 0;
 }
 
+function isValidApprovePlanEffect(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const e = raw as Record<string, unknown>;
+  return e.kind === "approve_plan" && typeof e.selectionKey === "string" && e.selectionKey.length > 0;
+}
+
 function isValidReviewActionEffect(raw: unknown): boolean {
-  return isValidBoundedHttpEffect(raw) || isValidRevisionRunEffect(raw);
+  return isValidBoundedHttpEffect(raw) || isValidRevisionRunEffect(raw) || isValidApprovePlanEffect(raw);
+}
+
+/** The selection input exists only to feed the approve effect of a Plan: both come together, on the `approve` action. */
+function isValidPlanApproval(a: Record<string, unknown>): boolean {
+  const inputs = Array.isArray(a.inputs) ? (a.inputs as Array<Record<string, unknown>>) : [];
+  const selections = inputs.filter((i) => i.type === "plan_selection");
+  if (!isValidApprovePlanEffect(a.effect)) return selections.length === 0;
+  const selectionKey = (a.effect as Record<string, unknown>).selectionKey;
+  const selection = inputs.find((i) => i.key === selectionKey);
+  return (
+    a.key === "approve" &&
+    a.transition === "done" &&
+    selection?.type === "plan_selection" &&
+    selection.required === false &&
+    selections.length === 1
+  );
 }
 
 function isValidReviewActionCapability(raw: unknown): boolean {
@@ -284,22 +310,32 @@ function isValidReviewActionCapability(raw: unknown): boolean {
     if (!Array.isArray(a.inputs)) return false;
     if (!(a.inputs as unknown[]).every((inp) => isValidReviewActionInput(inp))) return false;
   }
+  if (!isValidPlanApproval(a)) return false;
   return true;
 }
 
 function isValidReviewContentContract(raw: unknown): boolean {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
   const r = raw as Record<string, unknown>;
-  if (!VALID_REVIEW_KINDS.has(r.kind as string)) return false;
+  if (r.kind === "plan") {
+    // A Plan has no content to load: no server, path, cover or workspace.
+    if (r.server !== undefined || r.path !== undefined || r.coverPath !== undefined || r.service !== undefined) return false;
+  } else if (!VALID_REVIEW_KINDS.has(r.kind as string)) {
+    return false;
+  }
   // Workspace variant: service === "workspace", no server/path required.
   const isWorkspace = r.service === "workspace";
-  if (!isWorkspace && (typeof r.server !== "string" || typeof r.path !== "string")) {
+  if (r.kind !== "plan" && !isWorkspace && (typeof r.server !== "string" || typeof r.path !== "string")) {
     return false;
   }
   if (r.coverPath !== undefined && typeof r.coverPath !== "string") return false;
   if (r.actions !== undefined) {
     if (!Array.isArray(r.actions)) return false;
     if (!(r.actions as unknown[]).every((a) => isValidReviewActionCapability(a))) return false;
+    // Only a Plan has items to select and Missions to create from them.
+    if (r.kind !== "plan" && (r.actions as Array<Record<string, unknown>>).some((a) => isValidApprovePlanEffect(a.effect) || (Array.isArray(a.inputs) && a.inputs.some((i) => i?.type === "plan_selection")))) {
+      return false;
+    }
   }
   return true;
 }
@@ -465,6 +501,11 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
     return { ok: false, reason: "one or more entries in 'mcpServers' have invalid or missing fields (required: name, transport, url)" };
   }
 
+  const internalProblem = internalMcpProblem(m.mcpServers as Record<string, unknown>[]);
+  if (internalProblem) return { ok: false, reason: internalProblem };
+  // The Template holds no URL for the Internal MCP: normalise so `url` stays a string.
+  m.mcpServers = (m.mcpServers as McpServerConfig[]).map((server) => (server.internal ? { ...server, url: "" } : server));
+
   const visibility = m.visibility;
   if (visibility !== undefined && visibility !== "production" && visibility !== "development") {
     return { ok: false, reason: `invalid 'visibility' value ${JSON.stringify(visibility)} — must be "production" or "development"` };
@@ -518,6 +559,8 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         (m.mcpServers as McpServerConfig[]).map((server) => server.name),
       );
       if (problem) return { ok: false, reason: problem };
+      const scheduleProblem = defaultScheduleProblem(entry.defaultSchedule, `missionTypes[${JSON.stringify(entry.type)}]`);
+      if (scheduleProblem) return { ok: false, reason: scheduleProblem };
       const analyticsProblem = analyticsDeclarationProblem(
         entry.analytics,
         `missionTypes[${JSON.stringify(entry.type)}]`,
@@ -699,20 +742,20 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
       if (!isValidReviewContentContract(review)) {
         if (review && typeof review === "object" && !Array.isArray(review)) {
           const malformed = review as Record<string, unknown>;
-          if (!VALID_REVIEW_KINDS.has(malformed.kind as string)) {
+          if (malformed.kind !== "plan" && !VALID_REVIEW_KINDS.has(malformed.kind as string)) {
             return {
               ok: false,
-              reason: `missionTypes[${JSON.stringify(missionTypeName)}].review.kind ${JSON.stringify(malformed.kind)} is not a valid Artifact content kind — must be one of: markdown, metadata, image, video`,
+              reason: `missionTypes[${JSON.stringify(missionTypeName)}].review.kind ${JSON.stringify(malformed.kind)} is not a valid Artifact content kind — must be one of: markdown, metadata, image, video, plan`,
             };
           }
         }
         return {
           ok: false,
-          reason: `missionTypes[${JSON.stringify(missionTypeName)}].review is malformed — required fields: kind ∈ {markdown,metadata,image,video}, server (string), path (string)`,
+          reason: `missionTypes[${JSON.stringify(missionTypeName)}].review is malformed — required fields: kind ∈ {markdown,metadata,image,video}, server (string), path (string); or kind "plan" alone (no server, path, coverPath or service)`,
         };
       }
       const reviewRecord = review as Record<string, unknown>;
-      if (reviewRecord.service !== "workspace") {
+      if (reviewRecord.kind !== "plan" && reviewRecord.service !== "workspace") {
         const reviewServer = reviewRecord.server as string;
         if (!declaredServers.has(reviewServer)) {
           return {
@@ -1085,3 +1128,4 @@ export function isTemplateVisible(
  * `@opengroow` scope.
  */
 export const SOURCE_AGENT_TEMPLATE_ID = "@opengroow/source";
+export { INTERNAL_MCP_TOOL_NAMES, isInternalMcpToolName, type InternalMcpToolName } from "./internal-mcp";

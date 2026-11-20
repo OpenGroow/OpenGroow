@@ -32,12 +32,16 @@ vi.mock("@convex/_generated/api", () => ({
       getForProject: "project_templates.getForProject",
     },
     project_agents: { listByInstance: "project_agents.listByInstance" },
+    missions: { create: "missions.create" },
     schedules: {
       listByInstance: "schedules.listByInstance",
       create: "schedules.create",
       pause: "schedules.pause",
       resume: "schedules.resume",
       remove: "schedules.remove",
+      updatePayload: "schedules.updatePayload",
+      updateFrequency: "schedules.updateFrequency",
+      setAutoPublish: "schedules.setAutoPublish",
     },
   },
 }));
@@ -413,6 +417,46 @@ describe("InstanceSchedulesContent", () => {
     expect(document.querySelector('button[data-action="pause"]')).toBeTruthy();
     expect(document.querySelector('button[data-action="resume"]')).toBeFalsy();
     expect(document.querySelector('button[data-action="more"]')).toBeTruthy();
+  });
+
+  it("Run now creates a Mission from the Schedule's type and payload, without waiting for its slot", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "schedules.listByInstance") return [makeSchedule({ type: "plan", payload: { a: 1 } })];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+    const createMission = vi.fn().mockResolvedValue(undefined);
+    useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+
+    await render();
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
+    });
+
+    expect(createMission).toHaveBeenCalledWith({
+      instanceId: "instance-1",
+      templateId: "@opengroow/seo",
+      type: "plan",
+      payload: { a: 1 },
+    });
+  });
+
+  it("Run now shows why the Mission was refused and is enabled again afterwards", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "schedules.listByInstance") return [makeSchedule({ type: "plan" })];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+    const createMission = vi.fn().mockRejectedValue(new Error("projectAgent for @opengroow/seo is not active"));
+    useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+
+    await render();
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
+    });
+
+    expect(document.querySelector('[data-testid="run-now-error"]')?.textContent).toContain("is not active");
+    expect(document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.disabled).toBe(false);
   });
 
   it("shows a Resume button (not Pause) for a paused schedule", async () => {

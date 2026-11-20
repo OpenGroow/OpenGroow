@@ -21,6 +21,7 @@ import {
 } from "./validators.js";
 import { artifactV, runResultV } from "./run_result.js";
 import { indexingOutcomeV } from "./indexing.js";
+import { planItemV } from "./plan_schema.js";
 import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { routingDecisionV } from "./source_routing_decision.js";
@@ -399,6 +400,17 @@ export default defineSchema({
     // pipeline. Kept optional for Missions created before this provenance
     // marker existed and for manually-created Missions.
     sourceObservationId: v.optional(v.id("sources")),
+    // Set for Missions created by approving a Plan (ADR-080, ADR-081): the Plan Mission that proposed it, with
+    // the reason and the figures of the item, so they stay readable on the Mission itself.
+    fromPlan: v.optional(
+      v.object({
+        missionId: v.id("missions"),
+        reason: v.string(),
+        figures: v.array(v.object({ label: v.string(), value: v.union(v.string(), v.number()) })),
+      }),
+    ),
+    // On a Plan Mission once approved: the items the user left unselected.
+    declinedPlanItems: v.optional(v.array(planItemV)),
     // Opt-in to auto-chaining "approve" then "publish" once the Run reaches
     // `needs_human_review`, skipping the manual review step (issue #328,
     // PRD #326). Only meaningful for Templates whose review contract supports

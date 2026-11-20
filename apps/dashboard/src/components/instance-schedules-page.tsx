@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { ScheduleCadenceEditor } from "./schedule-cadence-editor";
 import { PublishChannelPicker } from "./publish-channel-picker";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
@@ -31,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
@@ -113,6 +115,34 @@ const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", 
 
 const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
 
+/** Creates a Mission from the Schedule now: shows it is running and says why when it is refused. */
+function RunNowButton({ run }: { run: () => Promise<unknown> }) {
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    setRunning(true);
+    setError(null);
+    try {
+      await run();
+    } catch (err) {
+      setError(extractConvexErrorMessage(err, "Failed to run the Schedule now."));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" className="rounded-full" data-action="run-now" loading={running} onClick={() => { void handleClick(); }}>
+        <Play />
+        Run now
+      </Button>
+      {error ? <span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
+    </>
+  );
+}
+
 export function InstanceSchedulesPage({ params }: Props) {
   const { instanceId } = use(params);
   return <InstanceSchedulesContent instanceId={decodeURIComponent(instanceId)} />;
@@ -127,6 +157,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const resumeSchedule = useMutation(api.schedules.resume);
   const removeSchedule = useMutation(api.schedules.remove);
   const updateSchedulePayload = useMutation(api.schedules.updatePayload);
+  const createMission = useMutation(api.missions.create);
+  const updateScheduleFrequency = useMutation(api.schedules.updateFrequency);
   const setScheduleAutoPublish = useMutation(api.schedules.setAutoPublish);
 
   const activeAgents = agents?.filter((a) => a.status === "active") ?? [];
@@ -653,6 +685,16 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                 </span>
 
                                 <div className="ml-auto flex items-center gap-2">
+                                  <RunNowButton
+                                    run={() =>
+                                      createMission({
+                                        instanceId,
+                                        templateId: schedule.templateId,
+                                        type: schedule.type,
+                                        payload: schedule.payload,
+                                      })
+                                    }
+                                  />
                                   {paused ? (
                                     <Button
                                       variant="outline"
@@ -756,6 +798,11 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                         />
                                       ) : null;
                                     })()}
+                                    <ScheduleCadenceEditor
+                                      key={`${schedule._id}-${schedule.updatedAt}`}
+                                      schedule={{ unit: schedule.unit, dayOfWeek: schedule.dayOfWeek, dayOfMonth: schedule.dayOfMonth, hour: schedule.hour, minute: schedule.minute }}
+                                      onSave={(frequency) => updateScheduleFrequency({ scheduleId: schedule._id, frequency })}
+                                    />
                                     <div className="grid gap-1">
                                       <span className="font-semibold text-muted-foreground">Payload</span>
                                       <Textarea

@@ -1,6 +1,7 @@
 import type { MachineToolInstall } from "./machine-tool";
 import type { PublishDeclaration } from "./publish-declaration";
 import type { AnalyticsDeclaration } from "./analytics-declaration";
+import type { DefaultScheduleDeclaration } from "./default-schedule";
 export type McpServerConfig = {
   name: string;
   transport: string;
@@ -12,6 +13,12 @@ export type McpServerConfig = {
   /** Convex-only: extra headers sent to the MCP server from Convex. */
   headers?: Record<string, string>;
   callTimeout?: number;
+  /**
+   * Marks the Internal MCP (ADR-080): the server OpenGroow serves itself. Lists
+   * the tools this Template may call. The Template holds no URL (`url` is "" once
+   * validated): OpenGroow derives it from the deployment.
+   */
+  internal?: { tools: string[] };
 };
 
 /**
@@ -72,6 +79,18 @@ export type RevisionRunEffect = {
 };
 
 /**
+ * The internal effect of approving a Plan (ADR-080, ADR-081): OpenGroow creates and launches the Missions of
+ * the selected Plan items, records the others as declined, and the Plan Mission is done. Declared by the
+ * `approve` action of a `review.kind: "plan"` Mission type, with a `plan_selection` input named by `selectionKey`
+ * and the `done` transition. No HTTP call: the Template declares nothing about how Missions are created.
+ */
+export type ApprovePlanEffect = {
+  kind: "approve_plan";
+  /** The key of the action's `plan_selection` input, which carries the selected items (all when empty). */
+  selectionKey: string;
+};
+
+/**
  * Mission status transition to apply after a successful action effect.
  * - "approved" → markApproved
  * - "done"     → markDone (with optional indexing outcome)
@@ -111,7 +130,7 @@ export type ReviewActionCapability = {
    * - RevisionRunEffect: create a revision Run with feedback (reject).
    * - absent: pure Mission transition with no external side-effect.
    */
-  effect?: BoundedHttpEffect | RevisionRunEffect;
+  effect?: BoundedHttpEffect | RevisionRunEffect | ApprovePlanEffect;
   /** Mission status transition applied after a successful effect (or immediately if no effect). */
   transition: ReviewActionTransition;
 };
@@ -122,8 +141,12 @@ export type ReviewActionInput = {
   key: string;
   /** UI label rendered next to the input. */
   label: string;
-  /** Input type. "datetime-local" maps to a datetime picker in the dashboard. */
-  type: "text" | "datetime-local";
+  /**
+   * Input type. "datetime-local" maps to a datetime picker in the dashboard.
+   * "plan_selection" (Plan review only) is the items of the Plan the user keeps: the dashboard shows a checkbox
+   * per item instead of a field, and sends a JSON array of the selected positions (0-based).
+   */
+  type: "text" | "datetime-local" | "plan_selection";
   /** Whether this field must be non-empty before the action can be submitted. */
   required: boolean;
 };
@@ -140,6 +163,15 @@ export type ReviewActionInput = {
  *   `mcpServers` at the given `path`.
  */
 export type ReviewContentContract =
+  | {
+      /**
+       * A Plan (ADR-081): the deliverable is the list of items the Agent
+       * reports in its result file, validated and stored by Convex. There is
+       * no content to load, hence no server, path or workspace.
+       */
+      kind: "plan";
+      actions?: ReviewActionCapability[];
+    }
   | {
       kind: "markdown" | "metadata" | "image" | "video";
       /** Signals that the deliverable lives in the agent's workspace. */
@@ -420,6 +452,11 @@ export type MissionType = {
    * Mission type is not measured.
    */
   analytics?: AnalyticsDeclaration;
+  /**
+   * Cadence of the Schedule OpenGroow creates for this Mission type when the Agent is first
+   * activated (ADR-081). The user can change or delete it. Absent: no Schedule is created.
+   */
+  defaultSchedule?: DefaultScheduleDeclaration;
 };
 
 /** How a human resolves a Template-declared Mission blocker. */

@@ -84,6 +84,8 @@ Definitions are in `docs/domain/`. Read the file of the domain you work on; do n
 | **Metric** | One measured figure of a post, declared by its Analytics Adapter (key, label, type, format, direction); there is no list of metrics owned by OpenGroow. | [docs/domain/publishing.md](docs/domain/publishing.md) |
 | **Counter** | A Metric that is a cumulative total that only grows (views, clicks); the page shows its variation since the previous Snapshot. | [docs/domain/publishing.md](docs/domain/publishing.md) |
 | **Level** | A Metric that is a value that moves (a position, a rate), possibly derived from other metrics; the page shows its trend. | [docs/domain/publishing.md](docs/domain/publishing.md) |
+| **Strategy Agent** | The Agent that decides what to do next from how published content performed; one per Project, it only proposes a Plan. Also defines: Plan, Plan item, Declined item. | [docs/domain/strategy.md](docs/domain/strategy.md) |
+| **Internal MCP** | The MCP server OpenGroow serves from Convex, read-only in V1, reached with an Agent token that only works during one of its Runs. Also defines: Agent token. | [docs/domain/strategy.md](docs/domain/strategy.md) |
 | **Android Plugin** | Local extension co-installed on the Mac host of the OpenClaw Instance. Also defines: App profiles. | [docs/domain/android.md](docs/domain/android.md) |
 | **Workspace** | File space local to the OpenClaw Instance where the Agent reads its instructions (AGENTS.md) and Mission contexts. Also defines: Workspace kind. | [docs/domain/runtime.md](docs/domain/runtime.md) |
 | **Per-mission instructions** | Mission-type-specific workflow and tools, stored as a separate .md file in the Agent Template directory. | [docs/domain/runtime.md](docs/domain/runtime.md) |

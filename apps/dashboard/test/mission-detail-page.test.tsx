@@ -234,6 +234,48 @@ describe("MissionDetailContent", () => {
     );
   });
 
+  it("shows the reason and the figures of the Plan item a Mission was created from, with a link to the Plan Mission", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "missions.get") {
+        return {
+          ...BASE_MISSION,
+          fromPlan: { missionId: "plan-1", reason: "Reels reach new people", figures: [{ label: "Reach", value: "5k" }, { label: "Posts", value: 12 }] },
+        };
+      }
+      if (key === "runs.listByMission") return [];
+      return undefined;
+    });
+
+    await render();
+
+    const card = document.querySelector("[data-testid='from-plan']")!;
+    expect(card.textContent).toContain("Reels reach new people");
+    expect(card.textContent).toContain("Reach");
+    expect(card.textContent).toContain("5k");
+    expect(card.textContent).toContain("12");
+    expect(card.querySelector("a")?.getAttribute("href")).toBe("/projects/instance-1/missions/plan-1");
+  });
+
+  it("lists the items the user declined on a Plan Mission", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "missions.get") {
+        return {
+          ...BASE_MISSION,
+          declinedPlanItems: [{ type: "create_reel", payload: {}, reason: "Reels reach new people", figures: [{ label: "Reach", value: "5k" }] }],
+        };
+      }
+      if (key === "runs.listByMission") return [];
+      return undefined;
+    });
+
+    await render();
+
+    const declined = document.querySelector("[data-testid='declined-plan-items']")!;
+    expect(declined.textContent).toContain("Create Reel");
+    expect(declined.textContent).not.toContain("create_reel");
+    expect(declined.textContent).toContain("Reels reach new people");
+  });
+
   it.each([
     ["to_validate", "video"],
     ["approved", "video"],

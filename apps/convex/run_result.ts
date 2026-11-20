@@ -1,5 +1,6 @@
 import { v, type Infer } from "convex/values";
 import { z } from "zod";
+import { planItemSchema, planItemV } from "./plan_schema.js";
 import { publishableDraftSchema, publishableSchema, publishableV } from "./publishable.js";
 
 const metadataValueZ = z.union([z.string(), z.number(), z.boolean()]);
@@ -100,6 +101,8 @@ export const runResultSchema = z.discriminatedUnion("status", [
       reviewQuestions: z.array(z.string()),
       artifact: artifactZ.optional(),
       partialArtifact: artifactZ.optional(),
+      /** A Strategy Agent's Plan (ADR-081): Mission types reviewed as a plan only. The count is checked by the reconciliation. */
+      plan: z.array(planItemSchema).optional(),
       additionalDetails: additionalDetailsZ.optional(),
     })
     .strict(),
@@ -295,6 +298,7 @@ export const runResultV = v.union(
     reviewQuestions: v.array(v.string()),
     artifact: v.optional(artifactV),
     partialArtifact: v.optional(artifactV),
+    plan: v.optional(v.array(planItemV)),
     additionalDetails: v.optional(additionalDetailsV),
   }),
   v.object({

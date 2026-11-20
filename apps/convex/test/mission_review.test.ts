@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentManifest } from "@opengroow/agent-templates";
+import type { AgentManifest, ReviewContentContract } from "@opengroow/agent-templates";
 import {
   buildMissionReviewProjection,
   type MissionReviewSnapshot,
@@ -131,11 +131,11 @@ describe("buildMissionReviewProjection", () => {
     ["image", "image"],
     ["video", "video"],
   ] as const)("keeps the declared %s content kind", (kind, expectedKind) => {
-    const kindManifest = {
+    const kindManifest: AgentManifest = {
       ...manifest,
       missionTypes: manifest.missionTypes?.map((missionType) => ({
         ...missionType,
-        review: { ...missionType.review!, kind },
+        review: { ...missionType.review!, kind } as ReviewContentContract,
       })),
     };
 

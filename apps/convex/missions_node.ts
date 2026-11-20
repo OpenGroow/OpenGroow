@@ -405,6 +405,21 @@ async function loadMissionAndTemplate(
   return { mission, template };
 }
 
+/** The items a user kept in a Plan review: a JSON array of 0-based positions. Empty or absent means every item. */
+function parsePlanSelection(raw: string | undefined): number[] | undefined {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = undefined;
+  }
+  if (!Array.isArray(parsed) || !parsed.every((n) => Number.isInteger(n))) {
+    throw new Error("The selection of Plan items must be a JSON array of item positions");
+  }
+  return parsed as number[];
+}
+
 /**
  * Resolve a Template-declared review action's contract and execute its bounded
  * HTTP effect (or its `revision_run` effect) for a Mission, then apply the
@@ -488,6 +503,15 @@ async function executeReviewAction(
       eventType,
     });
 
+    return { ok: true };
+  }
+
+  // --- Approve a Plan: create and launch the selected items as Missions, no artifact involved ---
+  if (effect && "kind" in effect && effect.kind === "approve_plan") {
+    await ctx.runMutation(internal.plan.approve, {
+      missionId: mission._id,
+      selection: parsePlanSelection(userInput[effect.selectionKey]),
+    });
     return { ok: true };
   }
 

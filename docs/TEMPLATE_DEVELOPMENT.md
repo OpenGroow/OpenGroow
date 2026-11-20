@@ -58,6 +58,22 @@ Each `bin` entry becomes a launcher in `~/.opengroow/bin`, which the paired node
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 
+## Reading OpenGroow's own data: the Internal MCP (ADR-080)
+
+An Agent reads OpenGroow data (read-only) through the MCP server OpenGroow serves from Convex. Declare it among `mcpServers` with the tools you may call, and no URL:
+
+```yaml
+mcpServers:
+  - name: opengroow
+    transport: streamable-http
+    internal:
+      tools: [list_mission_types]
+```
+
+- Validation and installation refuse a `url`, `headers`, another transport, an unknown or duplicated tool, an empty list, and any other server next to it (the Agent token is written as the Authorization header of every declared server).
+- OpenGroow derives the URL from the deployment (`CONVEX_SITE_URL`, so it follows the published Convex site port) and generates the Agent token at each activation. The token only works while the Agent has a Run `running`, only for its own Project, and only for the declared tools. It never reaches the model.
+- Tools: `list_mission_types` (the Mission types the Project can activate, with descriptions), `get_analytics_summary` (`days?`: Publications aggregated by adapter, platform, format and Mission type), `list_publications` (`days?`, `limit?`: each Publication with its latest measurements and a status `data`, `no_data` or `unavailable`), `list_recent_missions` (`limit?`: Missions with status and outcome), `list_plan_history` (`limit?`: previous Plans with their items, declined items and rejection feedback) and `get_brand_core`. The catalog is `apps/convex/internal_mcp/catalog.ts`; to add a tool, add its name to `INTERNAL_MCP_TOOL_NAMES` (`packages/agent-templates/src/internal-mcp.ts`) and its definition to the catalog.
+
 ## Source platform: logo, dedupe key and thumbnail (ADR-077)
 
 A Source declaration in `sources[]` may carry a `platform`. Without it the Source has no logo and no thumbnail, and two captures of one post are two Sources unless their pages are the same.
@@ -111,6 +127,52 @@ missionTypes:
 ```
 
 Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
+
+## A default Schedule (ADR-081)
+
+A Mission type may declare the cadence of the Schedule OpenGroow creates for it when the Agent is activated:
+
+```yaml
+missionTypes:
+  - type: plan
+    payload: '{}'
+    defaultSchedule: { unit: weekly, dayOfWeek: 1, hour: 8, minute: 0 }
+```
+
+`unit` is `daily`, `weekly` (needs `dayOfWeek`, 0-6) or `monthly` (needs `dayOfMonth`, 1-31); `hour` 0-23, `minute` 0-59. The Schedule uses the Mission type's `payload` and the user's own timezone (the dashboard sends the browser's). It is created once: a Mission type that already has a Schedule for the Agent keeps it, so reactivating does not duplicate it. The user can change its cadence, pause it, delete it or press Run now on the Schedules page.
+
+## Reviewing a Plan (ADR-081)
+
+A Mission type whose deliverable is a list of proposed Missions (the Strategy Agent) declares `review.kind: plan`. It has no `server`, `path`, `coverPath` or `service`: there is no content to load. Declare `reject` as for any review (a `revision_run` effect with a `feedback` input).
+
+```yaml
+review:
+  kind: plan
+  actions:
+    - { key: reject, label: Reject, requiredStatus: to_validate, inputs: [{ key: feedback, label: Feedback, type: text, required: true }], effect: { kind: revision_run, feedbackKey: feedback }, transition: doing }
+```
+
+The Agent returns `status: "needs_human_review"` with a `plan` next to the summary (required for such a Mission type, refused for any other):
+
+```json
+{ "status": "needs_human_review", "summary": "Next week", "reviewQuestions": [],
+  "plan": [{ "type": "create_article", "payload": {}, "reason": "Articles outperform the other formats", "figures": [{ "label": "Median views", "value": 1200 }] }] }
+```
+
+To let the human approve the Plan, declare `approve` with a `plan_selection` input and the internal `approve_plan` effect (no HTTP call, the transition is `done`):
+
+```yaml
+- key: approve
+  label: Approve
+  requiredStatus: to_validate
+  inputs: [{ key: items, label: Items, type: plan_selection, required: false }]
+  effect: { kind: approve_plan, selectionKey: items }
+  transition: done
+```
+
+The review shows a checkbox per item, all checked. Approving creates and launches a Mission for each checked item, as a manual creation would, and records the others as declined on the Plan Mission. Each created Mission keeps the reason and the figures of its item and a link to the Plan Mission. Every checked item is checked again at approval (the Project may have changed): if one is refused, nothing is created, the Plan stays to review and the refusal names the item. The input value is a JSON array of 0-based item positions; absent means every item.
+
+At most 5 items; each needs a `reason` and at least one figure. Each item is also checked with the rules of a manual Mission creation (an active Mission type, publishable channels, a valid schedule). A refused Plan is sent back to the Agent with the reasons and the position of each item (`plan item 2 (create_reel): ...`). A valid one is stored in the Mission's `lastResult.plan` and shown in the review.
 
 ## Publishing from a Template: the Publishable guide (ADR-069)
 

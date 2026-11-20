@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Card } from "@/components/ui/card";
 import type { AutoPublishControl } from "@/src/components/auto-publish-toggle";
+import { PlanReview, type PlanItemView } from "@/src/components/plan-review";
 import { PublishablePreview } from "@/src/components/publishable-preview";
 import { PublishSection, type PublishProjection } from "@/src/components/publish-section";
 
@@ -40,7 +41,7 @@ type ReviewActionDescriptor = {
   inputs: Array<{
     key: string;
     label: string;
-    type: "text" | "datetime-local";
+    type: "text" | "datetime-local" | "plan_selection";
     required: boolean;
   }>;
   enabled: boolean;
@@ -228,10 +229,14 @@ function reviewActionBlockedReason(
   actions: ReviewActionDescriptor[],
   status: string,
   disabled: boolean,
+  planSelection?: boolean[],
 ): string | undefined {
   const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
   if (!eligibleAction) return undefined;
   if (!eligibleAction.enabled) return eligibleAction.disabledReason ?? "This action is unavailable.";
+  if (planSelection && !planSelection.some(Boolean) && eligibleAction.inputs.some((i) => i.type === "plan_selection")) {
+    return "Select at least one item of the Plan, or reject it.";
+  }
   return disabled ? "This action is unavailable until the review content is complete." : undefined;
 }
 
@@ -241,12 +246,15 @@ function ReviewActionsSection({
   status,
   actions,
   disabled = false,
+  planSelection,
 }: {
   missionId: string;
   instanceId: string;
   status: string;
   actions: ReviewActionDescriptor[];
   disabled?: boolean;
+  /** The items of a Plan the user keeps; sent as the action's `plan_selection` input. */
+  planSelection?: boolean[];
 }) {
   const router = useRouter();
   const performReviewAction = useAction(api.missions_node.performReviewAction);
@@ -260,16 +268,22 @@ function ReviewActionsSection({
   // The action of this status, even when it is blocked: it is shown greyed, the bar prints the reason.
   const eligibleAction = actions.find((a) => a.requiredStatus === status && a.key !== "reject");
   if (!eligibleAction) return null;
-  const blockedReason = reviewActionBlockedReason(actions, status, disabled);
+  const blockedReason = reviewActionBlockedReason(actions, status, disabled, planSelection);
 
   async function handleAction(action: ReviewActionDescriptor) {
+    const input: Record<string, string> = { ...inputValues };
+    for (const def of action.inputs) {
+      if (def.type === "plan_selection" && planSelection) {
+        input[def.key] = JSON.stringify(planSelection.flatMap((kept, index) => (kept ? [index] : [])));
+      }
+    }
     setActiveAction(action.key);
     setActionError(null);
     try {
       await performReviewAction({
         missionId: missionId as Id<"missions">,
         actionKey: action.key,
-        ...(Object.keys(inputValues).length > 0 ? { input: inputValues } : {}),
+        ...(Object.keys(input).length > 0 ? { input } : {}),
       });
       router.push(`/projects/${encodeURIComponent(instanceId)}/missions`);
     } catch (err) {
@@ -290,7 +304,7 @@ function ReviewActionsSection({
       {/* Inputs and the action share one row: the bar stays compact. */}
       <div className="flex flex-wrap items-end gap-3">
       {/* Render declared input fields */}
-      {(eligibleAction.inputs ?? []).map((inputDef) => (
+      {(eligibleAction.inputs ?? []).filter((inputDef) => inputDef.type !== "plan_selection").map((inputDef) => (
         <div key={inputDef.key} className="grid gap-1">
           <label
             htmlFor={`action-input-${inputDef.key}`}
@@ -452,9 +466,12 @@ export function MissionReviewContent({
   aside,
   notices,
   autoPublish,
+  typeLabel,
 }: {
   instanceId: string;
   missionId: string;
+  /** The user-facing name of a Mission type, for the Plan items; defaults to the type as a title. */
+  typeLabel?: (type: string) => string;
   /** Shown above the Publishing card, in the right column. */
   aside?: React.ReactNode;
   /** Shown at the top of the left column, so the right column starts at the same height. */
@@ -469,6 +486,8 @@ export function MissionReviewContent({
 
   const [reviewContent, setReviewContent] = useState<string | null>(null);
   const [reviewKind, setReviewKind] = useState<string | null>(null);
+  // The Plan items the user unchecked: every item is kept by default (ADR-081).
+  const [unselectedPlanItems, setUnselectedPlanItems] = useState<number[]>([]);
   const [reviewCoverUrl, setReviewCoverUrl] = useState<string | null>(null);
   const [reviewProjection, setReviewProjection] = useState<{
     status: string;
@@ -486,6 +505,7 @@ export function MissionReviewContent({
       error?: string;
     } | null;
     actions: ReviewActionDescriptor[];
+    plan?: PlanItemView[];
     publish?: PublishProjection;
     errors: string[];
   } | null>(null);
@@ -621,6 +641,14 @@ export function MissionReviewContent({
     (reviewContent === null || reviewKind !== "image" || carouselReview === null || carouselReview.missingImages.length > 0);
 
   const reviewActions = reviewProjection?.actions ?? [];
+  // The items are selectable when the action of this status declares a selection input.
+  const planSelection =
+    reviewProjection.plan !== undefined &&
+    reviewActions.some((a) => a.requiredStatus === mission.status && a.inputs.some((i) => i.type === "plan_selection"))
+      ? reviewProjection.plan.map((_, index) => !unselectedPlanItems.includes(index))
+      : undefined;
+  const togglePlanItem = (index: number) =>
+    setUnselectedPlanItems((current) => (current.includes(index) ? current.filter((i) => i !== index) : [...current, index]));
   const resultArtifact = mission.lastResult && "artifact" in mission.lastResult ? mission.lastResult.artifact : undefined;
   const publishable = (mission.lastArtifact ?? resultArtifact)?.publishable;
 
@@ -644,9 +672,9 @@ export function MissionReviewContent({
     ) : null;
 
   // The primary action of a Mission waiting for a decision: first thing of the overview, not below the content.
-  const reviewBlockedReason = reviewActionBlockedReason(reviewActions, mission.status, carouselReviewBlocked);
+  const reviewBlockedReason = reviewActionBlockedReason(reviewActions, mission.status, carouselReviewBlocked, planSelection);
   const reviewBar =
-    reviewArtifact?.available && isReviewable ? (
+    (reviewArtifact?.available || reviewProjection.plan !== undefined) && isReviewable ? (
       <section
         data-testid="review-bar"
         className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-4"
@@ -671,6 +699,7 @@ export function MissionReviewContent({
             status={mission.status}
             actions={reviewActions}
             disabled={carouselReviewBlocked}
+            planSelection={planSelection}
           />
           {/* Reject is only available from to_validate, not after approval */}
           {rejectCapability && (
@@ -700,6 +729,13 @@ export function MissionReviewContent({
   const main = (
     <>
       {reviewBar}
+      {reviewProjection.plan !== undefined && (
+        <PlanReview
+          items={reviewProjection.plan}
+          {...(typeLabel ? { typeLabel } : {})}
+          {...(planSelection ? { selected: planSelection, onToggle: togglePlanItem } : {})}
+        />
+      )}
       <PublishablePreview publishable={publishable} missionId={missionId} />
       {/* A Mission type that publishes mirrors indexing from its `publish.onPublished` call (ADR-074). */}
       {publishDriven && <IndexingBadge indexing={mission.indexing} />}

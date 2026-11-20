@@ -7,13 +7,14 @@ import {
   type ReviewContentContract,
 } from "@opengroow/agent-templates";
 import type { PublicationStatus } from "./publisher_schema.js";
+import type { PlanItem } from "./plan_schema.js";
 
 export type ReviewContentKind = "markdown" | "metadata" | "image" | "video";
 
 export type MissionReviewActionInput = {
   key: string;
   label: string;
-  type: "text" | "datetime-local";
+  type: "text" | "datetime-local" | "plan_selection";
   required: boolean;
 };
 
@@ -43,6 +44,8 @@ export type MissionReviewProjection = {
   } | null;
   actions: MissionReviewAction[];
   defaultActionKey?: ReviewActionCapability["key"];
+  /** Present only when the Mission type is reviewed as a Plan (ADR-081): the items the Agent proposes. */
+  plan?: PlanItem[];
   /** Present only when the Mission type declares `publish`. */
   publish?: MissionPublishProjection;
   errors: string[];
@@ -137,6 +140,12 @@ function currentArtifact(lastResult: unknown): ArtifactSnapshot | undefined {
   };
 }
 
+/** The Plan the last result carries, when the Agent reported one. */
+function currentPlan(lastResult: unknown): PlanItem[] | undefined {
+  const plan = objectRecord(lastResult)?.plan;
+  return Array.isArray(plan) ? (plan as PlanItem[]) : undefined;
+}
+
 function safeInputs(action: ReviewActionCapability): MissionReviewActionInput[] {
   return (action.inputs ?? []).map((input) => ({
     key: input.key,
@@ -187,6 +196,7 @@ function actionEnabled(
   action: ReviewActionCapability,
   snapshot: MissionReviewSnapshot,
   artifact: ArtifactSnapshot | undefined,
+  planReviewed = false,
 ): { enabled: boolean; disabledReason?: string } {
   if (snapshot.status !== action.requiredStatus) {
     return {
@@ -197,7 +207,8 @@ function actionEnabled(
 
   const isRevisionRun =
     action.effect && "kind" in action.effect && action.effect.kind === "revision_run";
-  if (!artifact && !isRevisionRun) {
+  // A Plan is the deliverable of its Mission: it needs no Artifact.
+  if (!artifact && !isRevisionRun && !planReviewed) {
     return { enabled: false, disabledReason: "No artifact available for this mission" };
   }
   return { enabled: true };
@@ -230,9 +241,11 @@ export function buildMissionReviewProjection(
     ? resolveReviewContract(manifest, snapshot.missionType)
     : undefined;
   const errors: string[] = [];
+  const planReviewed = contract?.kind === "plan";
+  const plan = planReviewed ? currentPlan(snapshot.lastResult) : undefined;
 
   if (!manifest) errors.push("Template not found");
-  if (!contract && artifact?.external?.service !== "workspace") {
+  if (!planReviewed && !contract && artifact?.external?.service !== "workspace") {
     errors.push("Mission type does not declare a review contract");
   }
 
@@ -240,14 +253,16 @@ export function buildMissionReviewProjection(
   // (references to public media), never from a review.path HTTP route: the
   // content is not fetched, so its contract is not checked either (#26).
   const publishDriven = publish !== undefined;
-  const artifactError = publishDriven
+  const artifactError = planReviewed
+    ? undefined
+    : publishDriven
     ? artifact ? undefined : "No artifact available for this mission"
     : contentError(artifact, contract);
   if (artifactError && !errors.includes(artifactError)) errors.push(artifactError);
 
   const source = contentSource(artifact, contract);
   const content =
-    artifact && source && !publishDriven
+    artifact && source && !publishDriven && !planReviewed
       ? {
           kind: contract?.kind ?? artifact.kind ?? "metadata",
           source,
@@ -258,7 +273,7 @@ export function buildMissionReviewProjection(
 
   const declaredActions = contract?.actions ?? [];
   const actions = declaredActions.map((action) => {
-    let availability = actionEnabled(action, snapshot, artifact);
+    let availability = actionEnabled(action, snapshot, artifact, planReviewed);
     // A Publisher that cannot send (no API key) or an unmapped target blocks `publish`.
     if (publish && action.key === "publish" && availability.enabled) {
       const blocked = publishBlockedReason(publish);
@@ -285,6 +300,7 @@ export function buildMissionReviewProjection(
     content,
     actions,
     defaultActionKey: actions.find((action) => action.enabled)?.key,
+    ...(plan ? { plan } : {}),
     ...(publish ? { publish } : {}),
     errors,
   };
