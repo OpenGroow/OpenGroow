@@ -42,6 +42,7 @@ import {
 } from "./project_agents/shared_refs.js";
 import { requireAuthenticatedUser, requireInstanceOwner } from "./project_agents/auth.js";
 import { withInternalMcpToken } from "./internal_mcp/activation.js";
+import { createDefaultSchedules } from "./project_agents/default_schedules.js";
 import { resolveMcpServers } from "./project_agents/mcp_servers.js";
 import {
   type ActivationResult,
@@ -60,6 +61,8 @@ const activationArgs = {
   instanceId: v.string(),
   templateId: v.string(),
   userConfig: v.optional(v.record(v.string(), v.any())),
+  /** The user's IANA timezone (browser): the zone of the default Schedules a Template declares. UTC when absent. */
+  timezone: v.optional(v.string()),
 };
 
 export const activateProjectAgent = action({
@@ -239,7 +242,7 @@ async function activateAgent(
       }
     }
 
-    return await provisionAndActivate(ctx, {
+    const activated = await provisionAndActivate(ctx, {
       instanceId,
       templateId,
       template,
@@ -251,6 +254,10 @@ async function activateAgent(
       hiddenMissionTypes: existing?.hiddenMissionTypes,
       existingSkills: existing?.skills ?? [],
     });
+    if (activated.status === "active") {
+      await createDefaultSchedules(ctx, { ownerId: user.subject, instanceId, templateId, template, timezone: args.timezone });
+    }
+    return activated;
   } catch (error) {
     return await persistUnexpectedError(ctx, instanceId, templateId, error);
   }

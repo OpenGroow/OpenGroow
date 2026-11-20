@@ -479,6 +479,7 @@ describe("InstanceAgentsContent", () => {
     expect(activateMock).toHaveBeenCalledWith({
       instanceId: "instance-1",
       templateId: "@opengroow/hello",
+      timezone: expect.any(String),
     });
   });
 
@@ -594,6 +595,7 @@ describe("InstanceAgentsContent", () => {
       instanceId: "instance-1",
       templateId: "@opengroow/seo",
       userConfig: { apiKey: "api-key-123" },
+      timezone: expect.any(String),
     });
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
 
@@ -807,6 +809,7 @@ describe("Add Agent catalogue (#655)", () => {
       instanceId: "instance-1",
       templateId: "@opengroow/seo",
       userConfig: { apiKey: "key-123" },
+      timezone: expect.any(String),
     });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -937,6 +940,7 @@ describe("Add Agent hub entries and trust badges (#668)", () => {
       instanceId: "instance-1",
       templateId: "@alice/seo",
       userConfig: expect.objectContaining({ apiKey: "key-1" }),
+      timezone: expect.any(String),
     });
   });
 

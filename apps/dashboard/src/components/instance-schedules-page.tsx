@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { ScheduleCadenceEditor } from "./schedule-cadence-editor";
 import { PublishChannelPicker } from "./publish-channel-picker";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
@@ -127,6 +128,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const resumeSchedule = useMutation(api.schedules.resume);
   const removeSchedule = useMutation(api.schedules.remove);
   const updateSchedulePayload = useMutation(api.schedules.updatePayload);
+  const createMission = useMutation(api.missions.create);
+  const updateScheduleFrequency = useMutation(api.schedules.updateFrequency);
   const setScheduleAutoPublish = useMutation(api.schedules.setAutoPublish);
 
   const activeAgents = agents?.filter((a) => a.status === "active") ?? [];
@@ -653,6 +656,22 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                 </span>
 
                                 <div className="ml-auto flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    className="rounded-full"
+                                    data-action="run-now"
+                                    onClick={() => {
+                                      void createMission({
+                                        instanceId,
+                                        templateId: schedule.templateId,
+                                        type: schedule.type,
+                                        payload: schedule.payload,
+                                      });
+                                    }}
+                                  >
+                                    <Play />
+                                    Run now
+                                  </Button>
                                   {paused ? (
                                     <Button
                                       variant="outline"
@@ -756,6 +775,11 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                         />
                                       ) : null;
                                     })()}
+                                    <ScheduleCadenceEditor
+                                      key={`${schedule._id}-${schedule.updatedAt}`}
+                                      schedule={{ unit: schedule.unit, dayOfWeek: schedule.dayOfWeek, dayOfMonth: schedule.dayOfMonth, hour: schedule.hour, minute: schedule.minute }}
+                                      onSave={(frequency) => updateScheduleFrequency({ scheduleId: schedule._id, frequency })}
+                                    />
                                     <div className="grid gap-1">
                                       <span className="font-semibold text-muted-foreground">Payload</span>
                                       <Textarea
