@@ -392,6 +392,40 @@ export function MissionDetailContent({
         <DetailRow icon={Calendar} label="Created">{formatLocalTimestamp(mission.createdAt)}</DetailRow>
         <DetailRow icon={RefreshCw} label="Updated">{formatLocalTimestamp(mission.updatedAt)}</DetailRow>
       </dl>
+      {mission.fromPlan && (
+        <section className="grid gap-2 rounded-lg border border-border bg-background p-3 text-sm" data-testid="from-plan">
+          <p className="m-0 font-semibold text-foreground">
+            Proposed by{" "}
+            <Link
+              href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(mission.fromPlan.missionId)}`}
+              className="underline"
+            >
+              a Plan
+            </Link>
+          </p>
+          <p className="m-0 text-foreground">{mission.fromPlan.reason}</p>
+          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+            {mission.fromPlan.figures.map((figure, index) => (
+              <div key={index} className="contents">
+                <dt className="text-muted-foreground">{figure.label}</dt>
+                <dd className="m-0 text-foreground">{String(figure.value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      {mission.declinedPlanItems && mission.declinedPlanItems.length > 0 && (
+        <section className="grid gap-2 rounded-lg border border-border bg-background p-3 text-sm" data-testid="declined-plan-items">
+          <p className="m-0 font-semibold text-foreground">Declined</p>
+          <ul className="m-0 grid list-none gap-1 p-0">
+            {mission.declinedPlanItems.map((item, index) => (
+              <li key={index} className="text-muted-foreground">
+                <span className="font-semibold text-foreground">{item.type}</span>: {item.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {/* Without a Publishing card (no `publish` declared), Auto-publish stays here. */}
       {autoPublish && !declaresPublish && (
         <AutoPublishToggle

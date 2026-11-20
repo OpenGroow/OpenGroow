@@ -43,6 +43,7 @@ import type {
   ReviewActionInput,
   ReviewContentContract,
   RevisionRunEffect,
+  ApprovePlanEffect,
   SelectRequirementOption,
   SourceDeclaration,
   SourcePlatformDeclaration,
@@ -89,6 +90,7 @@ const HTTP_EFFECT = keySetOf<BoundedHttpEffect>({
   server: true, method: true, path: true, body: true, responseIndexingField: true,
 });
 const REVISION_EFFECT = keySetOf<RevisionRunEffect>({ kind: true, feedbackKey: true });
+const APPROVE_PLAN_EFFECT = keySetOf<ApprovePlanEffect>({ kind: true, selectionKey: true });
 const BLOCKER = keySetOf<AgentBlocker>({ code: true, label: true, resolutionKind: true });
 const MISSION_JOB = keySetOf<ExternalJobPollingContract>({
   server: true, mcpTool: true, statusField: true, terminalStates: true, outputIsRoot: true,
@@ -223,7 +225,9 @@ function checkReviewAction(action: unknown, path: string): string | undefined {
   if (!isObj(action)) return undefined;
   // Same discriminant as `isValidRevisionRunEffect`: only `kind: "revision_run"`
   // makes a RevisionRunEffect, so a stray `kind` on an HTTP effect is named as such.
-  const effectKeys = isObj(action.effect) && action.effect.kind === "revision_run" ? REVISION_EFFECT : HTTP_EFFECT;
+  const effectKind = isObj(action.effect) ? action.effect.kind : undefined;
+  const effectKeys =
+    effectKind === "revision_run" ? REVISION_EFFECT : effectKind === "approve_plan" ? APPROVE_PLAN_EFFECT : HTTP_EFFECT;
   return firstOf(
     () => unknownKeyIn(action, REVIEW_ACTION, path),
     () => eachItem(action.inputs, dot(path, "inputs"), (input, at) => unknownKeyIn(input, REVIEW_ACTION_INPUT, at)),

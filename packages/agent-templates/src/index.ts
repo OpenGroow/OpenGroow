@@ -48,6 +48,7 @@ export type {
   ReviewActionTransition,
   ReviewContentContract,
   RevisionRunEffect,
+  ApprovePlanEffect,
   SourceDeclaration,
   SourceMediaKind,
   SourcePlatformDeclaration,
@@ -237,7 +238,7 @@ function isValidReviewActionInput(raw: unknown): boolean {
   return (
     typeof i.key === "string" &&
     typeof i.label === "string" &&
-    (i.type === "text" || i.type === "datetime-local") &&
+    (i.type === "text" || i.type === "datetime-local" || i.type === "plan_selection") &&
     typeof i.required === "boolean"
   );
 }
@@ -261,8 +262,30 @@ function isValidRevisionRunEffect(raw: unknown): boolean {
   return e.kind === "revision_run" && typeof e.feedbackKey === "string" && e.feedbackKey.length > 0;
 }
 
+function isValidApprovePlanEffect(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const e = raw as Record<string, unknown>;
+  return e.kind === "approve_plan" && typeof e.selectionKey === "string" && e.selectionKey.length > 0;
+}
+
 function isValidReviewActionEffect(raw: unknown): boolean {
-  return isValidBoundedHttpEffect(raw) || isValidRevisionRunEffect(raw);
+  return isValidBoundedHttpEffect(raw) || isValidRevisionRunEffect(raw) || isValidApprovePlanEffect(raw);
+}
+
+/** The selection input exists only to feed the approve effect of a Plan: both come together, on the `approve` action. */
+function isValidPlanApproval(a: Record<string, unknown>): boolean {
+  const inputs = Array.isArray(a.inputs) ? (a.inputs as Array<Record<string, unknown>>) : [];
+  const selections = inputs.filter((i) => i.type === "plan_selection");
+  if (!isValidApprovePlanEffect(a.effect)) return selections.length === 0;
+  const selectionKey = (a.effect as Record<string, unknown>).selectionKey;
+  const selection = inputs.find((i) => i.key === selectionKey);
+  return (
+    a.key === "approve" &&
+    a.transition === "done" &&
+    selection?.type === "plan_selection" &&
+    selection.required === false &&
+    selections.length === 1
+  );
 }
 
 function isValidReviewActionCapability(raw: unknown): boolean {
@@ -285,6 +308,7 @@ function isValidReviewActionCapability(raw: unknown): boolean {
     if (!Array.isArray(a.inputs)) return false;
     if (!(a.inputs as unknown[]).every((inp) => isValidReviewActionInput(inp))) return false;
   }
+  if (!isValidPlanApproval(a)) return false;
   return true;
 }
 
@@ -306,6 +330,10 @@ function isValidReviewContentContract(raw: unknown): boolean {
   if (r.actions !== undefined) {
     if (!Array.isArray(r.actions)) return false;
     if (!(r.actions as unknown[]).every((a) => isValidReviewActionCapability(a))) return false;
+    // Only a Plan has items to select and Missions to create from them.
+    if (r.kind !== "plan" && (r.actions as Array<Record<string, unknown>>).some((a) => isValidApprovePlanEffect(a.effect) || (Array.isArray(a.inputs) && a.inputs.some((i) => i?.type === "plan_selection")))) {
+      return false;
+    }
   }
   return true;
 }

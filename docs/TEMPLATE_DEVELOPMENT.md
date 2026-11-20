@@ -152,6 +152,19 @@ The Agent returns `status: "needs_human_review"` with a `plan` next to the summa
   "plan": [{ "type": "create_article", "payload": {}, "reason": "Articles outperform the other formats", "figures": [{ "label": "Median views", "value": 1200 }] }] }
 ```
 
+To let the human approve the Plan, declare `approve` with a `plan_selection` input and the internal `approve_plan` effect (no HTTP call, the transition is `done`):
+
+```yaml
+- key: approve
+  label: Approve
+  requiredStatus: to_validate
+  inputs: [{ key: items, label: Items, type: plan_selection, required: false }]
+  effect: { kind: approve_plan, selectionKey: items }
+  transition: done
+```
+
+The review shows a checkbox per item, all checked. Approving creates and launches a Mission for each checked item, as a manual creation would, and records the others as declined on the Plan Mission. Each created Mission keeps the reason and the figures of its item and a link to the Plan Mission. Every checked item is checked again at approval (the Project may have changed): if one is refused, nothing is created, the Plan stays to review and the refusal names the item. The input value is a JSON array of 0-based item positions; absent means every item.
+
 At most 5 items; each needs a `reason` and at least one figure. Each item is also checked with the rules of a manual Mission creation (an active Mission type, publishable channels, a valid schedule). A refused Plan is sent back to the Agent with the reasons and the position of each item (`plan item 2 (create_reel): ...`). A valid one is stored in the Mission's `lastResult.plan` and shown in the review.
 
 ## Publishing from a Template: the Publishable guide (ADR-069)

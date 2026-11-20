@@ -78,6 +78,18 @@ export type RevisionRunEffect = {
 };
 
 /**
+ * The internal effect of approving a Plan (ADR-080, ADR-081): OpenGroow creates and launches the Missions of
+ * the selected Plan items, records the others as declined, and the Plan Mission is done. Declared by the
+ * `approve` action of a `review.kind: "plan"` Mission type, with a `plan_selection` input named by `selectionKey`
+ * and the `done` transition. No HTTP call: the Template declares nothing about how Missions are created.
+ */
+export type ApprovePlanEffect = {
+  kind: "approve_plan";
+  /** The key of the action's `plan_selection` input, which carries the selected items (all when empty). */
+  selectionKey: string;
+};
+
+/**
  * Mission status transition to apply after a successful action effect.
  * - "approved" → markApproved
  * - "done"     → markDone (with optional indexing outcome)
@@ -117,7 +129,7 @@ export type ReviewActionCapability = {
    * - RevisionRunEffect: create a revision Run with feedback (reject).
    * - absent: pure Mission transition with no external side-effect.
    */
-  effect?: BoundedHttpEffect | RevisionRunEffect;
+  effect?: BoundedHttpEffect | RevisionRunEffect | ApprovePlanEffect;
   /** Mission status transition applied after a successful effect (or immediately if no effect). */
   transition: ReviewActionTransition;
 };
@@ -128,8 +140,12 @@ export type ReviewActionInput = {
   key: string;
   /** UI label rendered next to the input. */
   label: string;
-  /** Input type. "datetime-local" maps to a datetime picker in the dashboard. */
-  type: "text" | "datetime-local";
+  /**
+   * Input type. "datetime-local" maps to a datetime picker in the dashboard.
+   * "plan_selection" (Plan review only) is the items of the Plan the user keeps: the dashboard shows a checkbox
+   * per item instead of a field, and sends a JSON array of the selected positions (0-based).
+   */
+  type: "text" | "datetime-local" | "plan_selection";
   /** Whether this field must be non-empty before the action can be submitted. */
   required: boolean;
 };

@@ -86,6 +86,7 @@ export async function insertMissionAndDispatch(
     /** Pins this installed version instead of the current one (already checked by the caller). */
     templateVersion?: string;
     recipeSnapshot?: RecipeSnapshot;
+    fromPlan?: Doc<"missions">["fromPlan"];
   },
 ): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
   const number = await nextMissionNumber(ctx, args.instanceId);
@@ -105,6 +106,7 @@ export async function insertMissionAndDispatch(
     ...(args.sourceObservationId !== undefined
       ? { sourceObservationId: args.sourceObservationId }
       : {}),
+    ...(args.fromPlan !== undefined ? { fromPlan: args.fromPlan } : {}),
     createdAt: now,
     updatedAt: now,
   });
@@ -115,6 +117,59 @@ export async function insertMissionAndDispatch(
   });
 
   return { missionId, runId };
+}
+
+/**
+ * The manual creation of a Mission, once its owner is known: the rules of `assertMissionCreatable`, the default
+ * name, then create and dispatch. Shared by `create` and by the approval of a Plan so a Mission created from a
+ * Plan item is exactly one created by hand.
+ */
+export async function createMissionLikeManual(
+  ctx: MutationCtx,
+  args: {
+    ownerId: string;
+    instanceId: string;
+    templateId: string;
+    type: string;
+    payload: unknown;
+    name?: string;
+    autoPublish?: boolean;
+    fromPlan?: Doc<"missions">["fromPlan"];
+    /** Any version installed in the Project, current or staged (ADR-083). */
+    templateVersion?: string;
+    /** The Production Recipe to resolve and freeze on the Mission (ADR-083). */
+    recipe?: Infer<typeof recipeArgV>;
+  },
+): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
+  const { recipe, ...rest } = args;
+  await assertMissionCreatable(ctx, rest);
+  if (rest.templateVersion !== undefined) {
+    const installed = await getTemplateRegistry(ctx).resolve(rest.instanceId, rest.templateId, rest.templateVersion);
+    if (!installed) throw new Error(`Template ${rest.templateId} version ${rest.templateVersion} is not installed in this Project`);
+  }
+  const recipeSnapshot = recipe
+    ? await buildRecipeSnapshot(ctx, {
+        ...rest,
+        pinnedVersion: rest.templateVersion ?? (await currentTemplateVersion(ctx, rest.instanceId, rest.templateId)),
+        recipe,
+      })
+    : undefined;
+  // When the user leaves the name field empty or whitespace-only, derive a
+  // default from the mission type and the per-project sequential number
+  // (e.g. "create_article #14") so the board always has a readable label.
+  // We peek the counter here (read-only) to predict the next number;
+  // `insertMissionAndDispatch` increments it atomically — both operations
+  // run in the same mutation transaction so the number is consistent.
+  // This default-name logic lives ONLY in this handler so scheduled missions
+  // (createForOwner) are never affected by it.
+  const trimmed = args.name?.trim() || undefined;
+  const currentCounter = await ctx.db
+    .query("projectCounters")
+    .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+    .unique();
+  const nextNumber = (currentCounter?.missionCount ?? 0) + 1;
+  const name = trimmed ?? `${args.type} #${nextNumber}`;
+  return await insertMissionAndDispatch(ctx, { ...rest, name, ...(recipeSnapshot ? { recipeSnapshot } : {}) });
 }
 
 export const create = mutation({
@@ -132,34 +187,7 @@ export const create = mutation({
   },
   handler: async (ctx, { recipe, ...args }) => {
     const ownerId = await ownerIdFor(ctx, args.instanceId);
-    await assertMissionCreatable(ctx, args);
-    if (args.templateVersion !== undefined) {
-      const installed = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.templateVersion);
-      if (!installed) throw new Error(`Template ${args.templateId} version ${args.templateVersion} is not installed in this Project`);
-    }
-    const recipeSnapshot = recipe
-      ? await buildRecipeSnapshot(ctx, {
-          ...args,
-          pinnedVersion: args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId)),
-          recipe,
-        })
-      : undefined;
-    // When the user leaves the name field empty or whitespace-only, derive a
-    // default from the mission type and the per-project sequential number
-    // (e.g. "create_article #14") so the board always has a readable label.
-    // We peek the counter here (read-only) to predict the next number;
-    // `insertMissionAndDispatch` increments it atomically — both operations
-    // run in the same mutation transaction so the number is consistent.
-    // This default-name logic lives ONLY in this handler so scheduled missions
-    // (createForOwner) are never affected by it.
-    const trimmed = args.name?.trim() || undefined;
-    const currentCounter = await ctx.db
-      .query("projectCounters")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .unique();
-    const nextNumber = (currentCounter?.missionCount ?? 0) + 1;
-    const name = trimmed ?? `${args.type} #${nextNumber}`;
-    return await insertMissionAndDispatch(ctx, { ...args, name, ownerId, ...(recipeSnapshot ? { recipeSnapshot } : {}) });
+    return await createMissionLikeManual(ctx, { ...args, recipe, ownerId });
   },
 });
 

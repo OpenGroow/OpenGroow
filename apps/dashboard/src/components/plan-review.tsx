@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 /**
  * The Plan a Strategy Agent proposes (ADR-081), read from the review projection.
@@ -16,7 +17,16 @@ export type PlanItemView = {
   figures: Array<{ label: string; value: string | number }>;
 };
 
-export function PlanReview({ items }: { items: PlanItemView[] }) {
+export function PlanReview({
+  items,
+  selected,
+  onToggle,
+}: {
+  items: PlanItemView[];
+  /** When given, each item has a checkbox: the Missions of the checked items are created on approval. */
+  selected?: boolean[];
+  onToggle?: (index: number) => void;
+}) {
   return (
     <Card className="grid gap-4 p-6" data-testid="plan-review">
       <h2 className="m-0 text-lg font-semibold text-foreground">Proposed Missions</h2>
@@ -31,6 +41,14 @@ export function PlanReview({ items }: { items: PlanItemView[] }) {
               className="grid gap-3 rounded-xl border border-border bg-background p-4"
             >
               <div className="flex flex-wrap items-center gap-2">
+                {selected && (
+                  <Checkbox
+                    checked={selected[index] ?? true}
+                    onCheckedChange={() => onToggle?.(index)}
+                    aria-label={`Create the Mission of item ${index + 1}`}
+                    data-testid="plan-item-select"
+                  />
+                )}
                 <span className="text-sm font-semibold text-muted-foreground">{index + 1}.</span>
                 <Badge variant="secondary">{item.type}</Badge>
               </div>
