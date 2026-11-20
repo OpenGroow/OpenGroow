@@ -128,6 +128,19 @@ missionTypes:
 
 Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
 
+## A default Schedule (ADR-081)
+
+A Mission type may declare the cadence of the Schedule OpenGroow creates for it when the Agent is activated:
+
+```yaml
+missionTypes:
+  - type: plan
+    payload: '{}'
+    defaultSchedule: { unit: weekly, dayOfWeek: 1, hour: 8, minute: 0 }
+```
+
+`unit` is `daily`, `weekly` (needs `dayOfWeek`, 0-6) or `monthly` (needs `dayOfMonth`, 1-31); `hour` 0-23, `minute` 0-59. The Schedule uses the Mission type's `payload` and the user's own timezone (the dashboard sends the browser's). It is created once: a Mission type that already has a Schedule for the Agent keeps it, so reactivating does not duplicate it. The user can change its cadence, pause it, delete it or press Run now on the Schedules page.
+
 ## Reviewing a Plan (ADR-081)
 
 A Mission type whose deliverable is a list of proposed Missions (the Strategy Agent) declares `review.kind: plan`. It has no `server`, `path`, `coverPath` or `service`: there is no content to load. Declare `reject` as for any review (a `revision_run` effect with a `feedback` input).

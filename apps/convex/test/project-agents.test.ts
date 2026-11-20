@@ -53,6 +53,7 @@ const modules = {
   "../project_agents.ts": () => import("../project_agents.js"),
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
   "../runs.ts": () => import("../runs.js"),
+  "../schedules.ts": () => import("../schedules.js"),
   "../runtime_commands_node.ts": () => import("../runtime_commands_node.js"),
 };
 
@@ -1448,6 +1449,44 @@ describe("activateProjectAgent", () => {
     const commands = await t.run(async (ctx) => ctx.db.query("commands").collect());
     const mergeCommand = commands.find((c) => c.type === "runtime.mcp.servers.merge");
     expect(mergeCommand).toBeUndefined();
+  });
+
+  it("creates the default Schedule a Template declares, once, in the user's timezone", async () => {
+    const STRATEGY_ID = "@opengroow/strategy-fixture";
+    const t = convexTest(schema, modules);
+    const waitForRuntimeEvent = await getWaitForRuntimeEvent();
+    await seedInstance(t);
+    const strategy = fixtureTemplate(STRATEGY_ID, {
+      visibility: "production",
+      missionTypes: [{ type: "plan", label: "Plan", payload: "{}", agentsMd: "plan.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
+    });
+    strategy.missionAgentsMd = { plan: "# Plan\n" };
+    const restore = installTemplateRegistry([INSTANCE_ID], [strategy]);
+
+    waitForRuntimeEvent
+      .mockResolvedValueOnce({
+        status: 200, found: true, type: RUNTIME_WORKSPACE_CREATE_RESULT,
+        payload: { ok: true, commandId: "cmd-1", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-strategy", label: STRATEGY_ID, absolutePath: "/home/node/.openclaw/workspace-ws-strategy" } },
+      })
+      .mockResolvedValueOnce({
+        status: 200, found: true, type: RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT,
+        payload: { ok: true, commandId: "cmd-3", instanceId: INSTANCE_ID, data: { agentId: STRATEGY_ID, registered: true, configured: false } },
+      });
+    addFileDeleteMocks(waitForRuntimeEvent, "ws-strategy");
+    waitForRuntimeEvent
+      .mockResolvedValueOnce(fileWriteResult("ws-strategy", "AGENTS.md"))
+      .mockResolvedValueOnce(fileWriteResult("ws-strategy", "plan.md"));
+    try {
+      const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.addProjectAgent, {
+        instanceId: INSTANCE_ID, templateId: STRATEGY_ID, timezone: "Europe/Paris",
+      });
+      expect(result.status).toBe("active");
+      const rows = await t.run((ctx) => ctx.db.query("schedules").collect());
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ templateId: STRATEGY_ID, type: "plan", unit: "weekly", dayOfWeek: 1, timezone: "Europe/Paris", status: "active" });
+    } finally {
+      restore();
+    }
   });
 
   it("rejects development-only template activation unless demo agents are enabled", async () => {

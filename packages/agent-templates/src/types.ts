@@ -1,6 +1,7 @@
 import type { MachineToolInstall } from "./machine-tool";
 import type { PublishDeclaration } from "./publish-declaration";
 import type { AnalyticsDeclaration } from "./analytics-declaration";
+import type { DefaultScheduleDeclaration } from "./default-schedule";
 export type McpServerConfig = {
   name: string;
   transport: string;
@@ -451,6 +452,11 @@ export type MissionType = {
    * Mission type is not measured.
    */
   analytics?: AnalyticsDeclaration;
+  /**
+   * Cadence of the Schedule OpenGroow creates for this Mission type when the Agent is first
+   * activated (ADR-081). The user can change or delete it. Absent: no Schedule is created.
+   */
+  defaultSchedule?: DefaultScheduleDeclaration;
 };
 
 /** How a human resolves a Template-declared Mission blocker. */

@@ -1,7 +1,7 @@
 import { insertInstance } from "./instance_fixture";
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 
@@ -391,5 +391,62 @@ describe("publishTargets in a Schedule payload", () => {
     await expect(
       owner.mutation(api.schedules.updatePayload, { scheduleId, payload: { publishTargets: ["tiktok"] } }),
     ).rejects.toThrow(/Unknown channel/);
+  });
+});
+
+describe("schedules.createDefaults", () => {
+  const WEEKLY = { unit: "weekly" as const, dayOfWeek: 1, hour: 8, minute: 0 };
+  const defaults = [{ type: "plan", payload: {}, frequency: WEEKLY }];
+
+  it("creates the declared weekly Schedule, in the user's timezone", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstance(t);
+
+    await t.mutation(internal.schedules.createDefaults, { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@opengroow/strategy", timezone: "Europe/Paris", defaults });
+
+    const rows = await t.run((ctx) => ctx.db.query("schedules").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ type: "plan", unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0, timezone: "Europe/Paris", status: "active", ownerId: OWNER.subject });
+    expect(rows[0]!.nextRunAt).toBeGreaterThan(Date.now());
+  });
+
+  it("creates it only once for a Mission type", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstance(t);
+    const args = { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@opengroow/strategy", timezone: "UTC", defaults };
+
+    await t.mutation(internal.schedules.createDefaults, args);
+    await t.mutation(internal.schedules.createDefaults, args);
+
+    expect(await t.run((ctx) => ctx.db.query("schedules").collect())).toHaveLength(1);
+  });
+});
+
+describe("schedules.updateFrequency", () => {
+  it("changes the cadence and recomputes the next run", async () => {
+    const t = convexTest(schema, modules);
+    await installPostiz(t);
+    await seedInstance(t);
+    const owner = t.withIdentity(OWNER);
+    const { scheduleId } = await owner.mutation(api.schedules.create, {
+      instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article", payload: {}, frequency: DAILY, timezone: "UTC",
+    });
+
+    await owner.mutation(api.schedules.updateFrequency, { scheduleId, frequency: { unit: "monthly", dayOfMonth: 1, hour: 6, minute: 30 } });
+
+    const row = await t.run((ctx) => ctx.db.get(scheduleId));
+    expect(row).toMatchObject({ unit: "monthly", dayOfMonth: 1, hour: 6, minute: 30 });
+    expect(row?.dayOfWeek).toBeUndefined();
+    expect(new Date(row!.nextRunAt).getUTCDate()).toBe(1);
+  });
+
+  it("is refused to a stranger", async () => {
+    const t = convexTest(schema, modules);
+    await installPostiz(t);
+    await seedInstance(t);
+    const { scheduleId } = await t.withIdentity(OWNER).mutation(api.schedules.create, {
+      instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, type: "create_article", payload: {}, frequency: DAILY, timezone: "UTC",
+    });
+    await expect(t.withIdentity(STRANGER).mutation(api.schedules.updateFrequency, { scheduleId, frequency: DAILY })).rejects.toThrow(/Forbidden/);
   });
 });
