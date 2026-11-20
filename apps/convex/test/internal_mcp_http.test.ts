@@ -58,7 +58,7 @@ useTemplateRegistry(
     writer,
     fixtureTemplate(PLAIN),
     // Declares a tool the catalog does not have (an old or hand-built Template skips validation).
-    fixtureTemplate(NARROW, { mcpServers: [internalServer(["get_brand_core"])] }),
+    fixtureTemplate(NARROW, { mcpServers: [internalServer(["get_weather"])] }),
   ],
 );
 
