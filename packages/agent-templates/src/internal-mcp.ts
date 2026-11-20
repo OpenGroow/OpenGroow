@@ -27,7 +27,8 @@ export function internalMcpProblem(servers: readonly Record<string, unknown>[]):
   }
   if (server.transport !== "streamable-http") return `${at}.transport must be "streamable-http" for the Internal MCP`;
   for (const forbidden of ["url", "activationUrl", "publicBaseUrl", "headers"]) {
-    if (server[forbidden] !== undefined) {
+    // `url: ""` is the form validateManifest normalises to, so a validated manifest can be validated again.
+    if (server[forbidden] !== undefined && !(forbidden === "url" && server.url === "")) {
       return `${at}.${forbidden} must not be set on the Internal MCP: OpenGroow derives its URL and token from the deployment`;
     }
   }
