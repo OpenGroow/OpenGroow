@@ -1,0 +1,149 @@
+import { v } from "convex/values";
+import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
+import { query, type QueryCtx } from "./_generated/server.js";
+import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
+import { readOwnerId } from "./instance_ownership.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
+import { publishedOf } from "./analytics.js";
+import { postFace } from "./analytics_face.js";
+
+// Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for the Strategy
+// Agent (ADR-081): figures by platform, format and Mission type, not raw rows.
+
+const DAY_MS = 24 * 60 * 60_000;
+/** The window read when none is given. */
+export const DEFAULT_WINDOW_DAYS = 30;
+
+type Metrics = Record<string, number>;
+
+/**
+ * Adds up the latest readings of several posts of one adapter. Counters are summed; a derived level
+ * is recomputed from the summed counters (never a mean of rates); another level is the mean of the
+ * posts that report it.
+ */
+export function aggregateMetrics(declared: AnalyticsAdapterMeta["metrics"], readings: Metrics[]): Metrics {
+  const out: Metrics = {};
+  for (const m of declared) {
+    if (m.derive) continue;
+    const values = readings.flatMap((r) => (typeof r[m.key] === "number" ? [r[m.key]] : []));
+    if (values.length === 0) continue;
+    const total = values.reduce((a, b) => a + b, 0);
+    out[m.key] = m.type === "counter" ? total : total / values.length;
+  }
+  for (const m of declared) {
+    if (!m.derive) continue;
+    const per = out[m.derive.per];
+    if (!per) continue;
+    out[m.key] = m.derive.sum.reduce((a, k) => a + (out[k] ?? 0), 0) / per;
+  }
+  return out;
+}
+
+export type SummaryGroup = {
+  platform: string;
+  /** The kind of the Publishable (`image`, `video`, `article`...), absent when the Mission has none. */
+  format?: string;
+  missionType: string;
+  publications: number;
+  /** `data`: at least one Publication has a Snapshot. `no_data`: the channel is linked, nothing was read yet. */
+  status: "data" | "no_data";
+  /** Publications with at least one Snapshot. */
+  measured: number;
+  metrics: Metrics;
+};
+
+export type AnalyticsSummary = {
+  from: number;
+  to: number;
+  /** One entry per adapter; its numbers are never combined with another's. */
+  adapters: Array<{
+    adapter: string;
+    name: string;
+    primary: string;
+    /** The declaration: label, type, format and `better` ("higher" or "lower") of each metric. */
+    metrics: AnalyticsAdapterMeta["metrics"];
+    groups: SummaryGroup[];
+  }>;
+  /** Publications whose channel is linked to no adapter: analytics unavailable, not "no data yet". */
+  unavailable: Array<{ platform: string; format?: string; missionType: string; publications: number }>;
+};
+
+/** The summary of a Project's published Publications whose publication date falls in `[from, to]`. */
+export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }): Promise<AnalyticsSummary> {
+  const publications = await publishedOf(ctx, instanceId);
+  const publishers = await projectPublishers(ctx, instanceId);
+  const installed = await installedAnalyticsAdapters(ctx);
+  type Acc = SummaryGroup & { latest: Metrics[] };
+  const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
+  const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
+  for (const publication of publications) {
+    const mission = await ctx.db.get(publication.missionId);
+    if (!mission) continue;
+    const analytics = await ctx.db
+      .query("publicationAnalytics")
+      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", publication.postSeries ?? 0))
+      .first();
+    const publishedAt = analytics?.publishedAt ?? publication.updatedAt;
+    if (publishedAt < window.from || publishedAt > window.to) continue;
+    const found = channelOf(publishers, publication.target);
+    const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+    const format = postFace(mission, platform).kind;
+    const key = `${platform}\u0000${format ?? ""}\u0000${mission.type}`;
+    const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
+    if (links.length === 0) {
+      const known = unavailable.get(key);
+      if (known) known.publications += 1;
+      else unavailable.set(key, { platform, ...(format ? { format } : {}), missionType: mission.type, publications: 1 });
+      continue;
+    }
+    const snapshots = await ctx.db
+      .query("performanceSnapshots")
+      .withIndex("by_publication", (q) => q.eq("publicationId", publication._id))
+      .collect();
+    for (const { adapter } of links) {
+      const entry = byAdapter.get(adapter.id) ?? { meta: adapter, groups: new Map<string, Acc>() };
+      byAdapter.set(adapter.id, entry);
+      const group =
+        entry.groups.get(key) ??
+        ({ platform, ...(format ? { format } : {}), missionType: mission.type, publications: 0, status: "no_data", measured: 0, metrics: {}, latest: [] } as Acc);
+      entry.groups.set(key, group);
+      group.publications += 1;
+      // Snapshots of other adapters, and of an earlier post of the Publication, are not this reading.
+      const own = snapshots
+        .filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === (publication.postSeries ?? 0))
+        .sort((a, b) => b.takenAt - a.takenAt)[0];
+      if (own) {
+        group.measured += 1;
+        group.latest.push(own.metrics);
+      }
+    }
+  }
+  return {
+    from: window.from,
+    to: window.to,
+    adapters: [...byAdapter.values()]
+      .sort((a, b) => a.meta.id.localeCompare(b.meta.id))
+      .map(({ meta, groups }) => ({
+        adapter: meta.id,
+        name: meta.name,
+        primary: meta.primary,
+        metrics: meta.metrics,
+        groups: [...groups.values()].map(({ latest, ...group }) => ({
+          ...group,
+          status: group.measured > 0 ? ("data" as const) : ("no_data" as const),
+          metrics: aggregateMetrics(meta.metrics, latest),
+        })),
+      })),
+    unavailable: [...unavailable.values()],
+  };
+}
+
+/** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30). */
+export const summaryForProject = query({
+  args: { instanceId: v.string(), days: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<AnalyticsSummary | null> => {
+    if (!(await readOwnerId(ctx, args.instanceId))) return null;
+    const to = Date.now();
+    return summarizeProject(ctx, args.instanceId, { from: to - (args.days ?? DEFAULT_WINDOW_DAYS) * DAY_MS, to });
+  },
+});

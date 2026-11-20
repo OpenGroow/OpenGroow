@@ -16,6 +16,7 @@ import type * as analytics_adapters from "../analytics_adapters.js";
 import type * as analytics_connections from "../analytics_connections.js";
 import type * as analytics_face from "../analytics_face.js";
 import type * as analytics_node from "../analytics_node.js";
+import type * as analytics_summary from "../analytics_summary.js";
 import type * as analytics_schema from "../analytics_schema.js";
 import type * as analytics_thumbnails from "../analytics_thumbnails.js";
 import type * as analytics_thumbnails_lib from "../analytics_thumbnails_lib.js";
@@ -195,6 +196,7 @@ declare const fullApi: ApiFromModules<{
   analytics_connections: typeof analytics_connections;
   analytics_face: typeof analytics_face;
   analytics_node: typeof analytics_node;
+  analytics_summary: typeof analytics_summary;
   analytics_schema: typeof analytics_schema;
   analytics_thumbnails: typeof analytics_thumbnails;
   analytics_thumbnails_lib: typeof analytics_thumbnails_lib;
