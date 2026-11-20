@@ -4,6 +4,7 @@ import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
 import { publishDeclarationProblem } from "./publish-declaration";
+import { defaultScheduleProblem } from "./default-schedule";
 import { analyticsDeclarationProblem, analyticsDeclarationWarning } from "./analytics-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
@@ -81,6 +82,7 @@ export {
   type OnPublishedPlaceholder,
   type PublishableKind,
 } from "./publish-declaration";
+export type { DefaultScheduleDeclaration } from "./default-schedule";
 export { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS, type AnalyticsDeclaration } from "./analytics-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
@@ -524,6 +526,8 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         (m.mcpServers as McpServerConfig[]).map((server) => server.name),
       );
       if (problem) return { ok: false, reason: problem };
+      const scheduleProblem = defaultScheduleProblem(entry.defaultSchedule, `missionTypes[${JSON.stringify(entry.type)}]`);
+      if (scheduleProblem) return { ok: false, reason: scheduleProblem };
       const analyticsProblem = analyticsDeclarationProblem(
         entry.analytics,
         `missionTypes[${JSON.stringify(entry.type)}]`,

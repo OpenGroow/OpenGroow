@@ -134,6 +134,19 @@ A `select` field is a good fit for a small option (a platform, a tone). When the
 
 Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. To offer Production Recipes on a type, list `production-recipe` in its `contextProviders`; the Create Mission form then shows a "Production Recipe" choice, hidden while the Project has no active recipe for that type.
 
+## A default Schedule
+
+A Mission type may declare the cadence of the Schedule OpenGroow creates for it when the Agent is activated:
+
+```yaml
+missionTypes:
+  - type: weekly_report
+    payload: '{}'
+    defaultSchedule: { unit: weekly, dayOfWeek: 1, hour: 8, minute: 0 }
+```
+
+`unit` is `daily`, `weekly` (needs `dayOfWeek`, 0-6) or `monthly` (needs `dayOfMonth`, 1-31); `hour` 0-23, `minute` 0-59. The Schedule uses the Mission type's `payload` and the user's own timezone (the dashboard sends the browser's). It is created once: a Mission type that already has a Schedule for the Agent keeps it, so reactivating does not duplicate it. The user can change its cadence, pause it, delete it or press Run now on the Schedules page.
+
 ## Publishing from a Template: the Publishable guide (ADR-069)
 
 By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`): the Agent returns a **Publishable**, a small JSON object of references (URLs) and text, and OpenGroow posts it on the channels the human chose. This guide is the whole path for an author writing a Template for their own MCP. Opting in is per Mission type; Mission types without `publish` behave as before.
