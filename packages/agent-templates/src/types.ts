@@ -12,6 +12,12 @@ export type McpServerConfig = {
   /** Convex-only: extra headers sent to the MCP server from Convex. */
   headers?: Record<string, string>;
   callTimeout?: number;
+  /**
+   * Marks the Internal MCP (ADR-080): the server OpenGroow serves itself. Lists
+   * the tools this Template may call. The Template holds no URL (`url` is "" once
+   * validated): OpenGroow derives it from the deployment.
+   */
+  internal?: { tools: string[] };
 };
 
 /**
