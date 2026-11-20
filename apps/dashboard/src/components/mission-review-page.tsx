@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Card } from "@/components/ui/card";
 import type { AutoPublishControl } from "@/src/components/auto-publish-toggle";
+import { PlanReview, type PlanItemView } from "@/src/components/plan-review";
 import { PublishablePreview } from "@/src/components/publishable-preview";
 import { PublishSection, type PublishProjection } from "@/src/components/publish-section";
 
@@ -486,6 +487,7 @@ export function MissionReviewContent({
       error?: string;
     } | null;
     actions: ReviewActionDescriptor[];
+    plan?: PlanItemView[];
     publish?: PublishProjection;
     errors: string[];
   } | null>(null);
@@ -646,7 +648,7 @@ export function MissionReviewContent({
   // The primary action of a Mission waiting for a decision: first thing of the overview, not below the content.
   const reviewBlockedReason = reviewActionBlockedReason(reviewActions, mission.status, carouselReviewBlocked);
   const reviewBar =
-    reviewArtifact?.available && isReviewable ? (
+    (reviewArtifact?.available || reviewProjection.plan !== undefined) && isReviewable ? (
       <section
         data-testid="review-bar"
         className="grid gap-3 rounded-xl border border-status-warning/30 bg-status-warning/10 p-4"
@@ -700,6 +702,7 @@ export function MissionReviewContent({
   const main = (
     <>
       {reviewBar}
+      {reviewProjection.plan !== undefined && <PlanReview items={reviewProjection.plan} />}
       <PublishablePreview publishable={publishable} missionId={missionId} />
       {/* A Mission type that publishes mirrors indexing from its `publish.onPublished` call (ADR-074). */}
       {publishDriven && <IndexingBadge indexing={mission.indexing} />}

@@ -12,7 +12,7 @@ import {
   RUNTIME_WORKSPACE_FILE_READ,
 } from "@opengroow/protocol";
 import { buildMissionContext } from "./mission_dispatcher/mission_context.js";
-import { decideReconciliation, type ReconcileDecision } from "./mission_dispatcher/reconciliation.js";
+import { decideInvalidOutput, decideReconciliation, type ReconcileDecision } from "./mission_dispatcher/reconciliation.js";
 import {
   appendContextProviders,
   CONTEXT_PROVIDER_RENDERERS,
@@ -33,7 +33,7 @@ import { buildSourceScoringRunFile } from "./source_scoring.js";
 import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
-import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
+import { resolveMissionTypeBlockerCodes, resolveMissionTypeIsPlan, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
 import { RECIPE_PROVIDER } from "./production_recipe_rules.js";
 import { enqueueCommandMutation } from "./mission_dispatcher/enqueue_command.js";
 import {
@@ -188,7 +188,37 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
   if (!state) return;
 
   const salvageTimedOut = isTimedOut(maxMs + SALVAGE_READ_GRACE_MS);
-  const decision = decideReconciliation(
+  const decisionCtx = {
+    parent: state.parent,
+    sourceIngestion: state.sourceIngestion === true,
+    sourceScoring: state.sourceScoring === true,
+    sourceRouting: state.sourceRouting === true,
+    runId: state.runId,
+    missionType: state.missionType,
+    blockerCodes: await resolveMissionTypeBlockerCodes(
+      registry,
+      run.instanceId,
+      run.templateId,
+      state.missionType,
+      runTemplateVersion(run),
+    ),
+    publish: await resolveMissionTypePublish(
+      registry,
+      run.instanceId,
+      run.templateId,
+      state.missionType,
+      runTemplateVersion(run),
+    ),
+    planReview: await resolveMissionTypeIsPlan(
+      registry,
+      run.instanceId,
+      run.templateId,
+      state.missionType,
+      runTemplateVersion(run),
+    ),
+    retryableFailureCount: state.retryableFailureCount,
+  };
+  let decision = decideReconciliation(
     {
       execResult: state.execResult,
       resultReadCommandId: state.resultReadCommandId as Id<"commands"> | null,
@@ -200,30 +230,22 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       finalReadResult: state.finalReadResult,
       maxMs,
     },
-    {
-      parent: state.parent,
-      sourceIngestion: state.sourceIngestion === true,
-      sourceScoring: state.sourceScoring === true,
-      sourceRouting: state.sourceRouting === true,
-      runId: state.runId,
-      missionType: state.missionType,
-      blockerCodes: await resolveMissionTypeBlockerCodes(
-        registry,
-        run.instanceId,
-        run.templateId,
-        state.missionType,
-        runTemplateVersion(run),
-      ),
-      publish: await resolveMissionTypePublish(
-        registry,
-        run.instanceId,
-        run.templateId,
-        state.missionType,
-        runTemplateVersion(run),
-      ),
-      retryableFailureCount: state.retryableFailureCount,
-    },
+    decisionCtx,
   );
+
+  // A Plan the shape of which is right still has to hold at creation time: each item is checked with the
+  // rules of a manual Mission creation, and the Agent corrects the ones that fail (ADR-081).
+  if (
+    decision.type === "markCompleted" &&
+    decision.result.status === "needs_human_review" &&
+    decision.result.plan !== undefined
+  ) {
+    const errors = await ctx.runQuery(internal.plan.checkItems, {
+      instanceId: run.instanceId,
+      items: decision.result.plan,
+    });
+    if (errors.length > 0) decision = decideInvalidOutput(errors.join("; "), decisionCtx);
+  }
 
   await ctx.runMutation(internal.mission_dispatcher.recordReconcileDecision, {
     runId: state.runId,

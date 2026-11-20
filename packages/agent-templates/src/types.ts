@@ -147,6 +147,15 @@ export type ReviewActionInput = {
  */
 export type ReviewContentContract =
   | {
+      /**
+       * A Plan (ADR-081): the deliverable is the list of items the Agent
+       * reports in its result file, validated and stored by Convex. There is
+       * no content to load, hence no server, path or workspace.
+       */
+      kind: "plan";
+      actions?: ReviewActionCapability[];
+    }
+  | {
       kind: "markdown" | "metadata" | "image" | "video";
       /** Signals that the deliverable lives in the agent's workspace. */
       service: "workspace";
