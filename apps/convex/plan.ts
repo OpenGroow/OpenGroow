@@ -6,21 +6,26 @@ import { messageOf } from "./error_message.js";
 import { planItemV, type PlanItem } from "./plan_schema.js";
 import { createMissionLikeManual, markMissionDone } from "./missions.js";
 
-/** The Template that executes each Mission type of the Project: the first active agent that declares it. */
-async function templateOfMissionTypes(ctx: QueryCtx, instanceId: string): Promise<Map<string, string>> {
+type MissionTypeExecutor = { templateId: string; isPlan: boolean };
+
+/** The Template that executes each Mission type of the Project (the first active agent that declares it),
+ * and whether the type is reviewed as a Plan. */
+async function executorOfMissionTypes(ctx: QueryCtx, instanceId: string): Promise<Map<string, MissionTypeExecutor>> {
   const agents = await ctx.db
     .query("projectAgents")
     .withIndex("by_instance_status", (q) => q.eq("instanceId", instanceId).eq("status", "active"))
     .take(100);
   const registry = getTemplateRegistry(ctx);
-  const templateOfType = new Map<string, string>();
+  const executorOfType = new Map<string, MissionTypeExecutor>();
   for (const agent of agents) {
     const template = await registry.resolve(instanceId, agent.templateId);
     for (const missionType of template?.manifest.missionTypes ?? []) {
-      if (!templateOfType.has(missionType.type)) templateOfType.set(missionType.type, agent.templateId);
+      if (!executorOfType.has(missionType.type)) {
+        executorOfType.set(missionType.type, { templateId: agent.templateId, isPlan: missionType.review?.kind === "plan" });
+      }
     }
   }
-  return templateOfType;
+  return executorOfType;
 }
 
 type CheckedItem = { position: number; item: PlanItem; templateId: string };
@@ -35,16 +40,22 @@ async function checkPlanItems(
   instanceId: string,
   items: ReadonlyArray<{ position: number; item: PlanItem }>,
 ): Promise<{ checked: CheckedItem[]; errors: string[] }> {
-  const templateOfType = await templateOfMissionTypes(ctx, instanceId);
+  const executorOfType = await executorOfMissionTypes(ctx, instanceId);
   const checked: CheckedItem[] = [];
   const errors: string[] = [];
   for (const { position, item } of items) {
     const at = `plan item ${position + 1} (${item.type})`;
-    const templateId = templateOfType.get(item.type);
-    if (!templateId) {
+    const executor = executorOfType.get(item.type);
+    if (!executor) {
       errors.push(`${at}: Mission type "${item.type}" is not active in this Project`);
       continue;
     }
+    // A Plan whose item is itself a Plan would plan again once approved, without end.
+    if (executor.isPlan) {
+      errors.push(`${at}: Mission type "${item.type}" is reviewed as a Plan, a Plan cannot contain a Plan`);
+      continue;
+    }
+    const { templateId } = executor;
     try {
       await assertMissionCreatable(ctx, { instanceId, templateId, type: item.type, payload: item.payload });
       checked.push({ position, item, templateId });

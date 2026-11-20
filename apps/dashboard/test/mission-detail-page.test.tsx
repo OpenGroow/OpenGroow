@@ -271,7 +271,8 @@ describe("MissionDetailContent", () => {
     await render();
 
     const declined = document.querySelector("[data-testid='declined-plan-items']")!;
-    expect(declined.textContent).toContain("create_reel");
+    expect(declined.textContent).toContain("Create Reel");
+    expect(declined.textContent).not.toContain("create_reel");
     expect(declined.textContent).toContain("Reels reach new people");
   });
 

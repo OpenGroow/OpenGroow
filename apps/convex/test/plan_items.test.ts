@@ -11,7 +11,10 @@ const TEMPLATE_ID = "@example/maker";
 
 useTemplateRegistry([INSTANCE_ID], [
   fixtureTemplate(TEMPLATE_ID, {
-    missionTypes: [{ type: "create_article", label: "Article", payload: "{}", agentsMd: "a.md" }],
+    missionTypes: [
+      { type: "create_article", label: "Article", payload: "{}", agentsMd: "a.md" },
+      { type: "plan_week", label: "Weekly plan", payload: "{}", agentsMd: "p.md", review: { kind: "plan" } },
+    ],
   }),
 ]);
 
@@ -55,6 +58,14 @@ describe("planItemErrors", () => {
     const errors = await check(t, [item(), item({ type: "create_reel" })]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/item 2 \(create_reel\).*not active/);
+  });
+
+  it("refuses a Plan item that is itself a Plan-review Mission type, with the item's position", async () => {
+    const t = convexTest(schema, modules);
+    await seedAgent(t);
+    const errors = await check(t, [item(), item({ type: "plan_week" })]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/item 2 \(plan_week\).*Plan/);
   });
 
   it("refuses a type whose agent was deactivated", async () => {

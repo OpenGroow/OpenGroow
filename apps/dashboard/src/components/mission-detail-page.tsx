@@ -20,7 +20,8 @@ import { missionStatus, runStatus } from "@/components/opengroow/mission-status"
 import { Card } from "@/components/ui/card";
 import { PublicationList } from "./publication-list";
 import { MissionReviewContent } from "./mission-review-page";
-import { titleCase } from "@/src/lib/mission-type";
+import { missionTypeLabel, titleCase } from "@/src/lib/mission-type";
+import { PlanFigures } from "./plan-review";
 import { Bot, Calendar, Code, Ellipsis, FileText, Layers, RefreshCw, Trash2, type LucideIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -338,12 +339,12 @@ export function MissionDetailContent({
       <>
         {/* What happened — only for failed missions */}
         {failureError !== undefined && (
-          <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-6">
+          <Card className="grid gap-3 bg-destructive/10 p-6 ring-destructive/30">
             <h2 className="m-0 text-sm font-semibold text-destructive">
               What happened
             </h2>
             <p className="m-0 break-words text-sm text-destructive">{failureError}</p>
-          </section>
+          </Card>
         )}
 
         {/* Blocked — a Template-declared human-action blocker (issue #323). */}
@@ -393,7 +394,7 @@ export function MissionDetailContent({
         <DetailRow icon={RefreshCw} label="Updated">{formatLocalTimestamp(mission.updatedAt)}</DetailRow>
       </dl>
       {mission.fromPlan && (
-        <section className="grid gap-2 rounded-lg border border-border bg-background p-3 text-sm" data-testid="from-plan">
+        <Card className="grid gap-2 bg-background p-3 text-sm" data-testid="from-plan">
           <p className="m-0 font-semibold text-foreground">
             Proposed by{" "}
             <Link
@@ -404,27 +405,20 @@ export function MissionDetailContent({
             </Link>
           </p>
           <p className="m-0 text-foreground">{mission.fromPlan.reason}</p>
-          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-            {mission.fromPlan.figures.map((figure, index) => (
-              <div key={index} className="contents">
-                <dt className="text-muted-foreground">{figure.label}</dt>
-                <dd className="m-0 text-foreground">{String(figure.value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+          <PlanFigures figures={mission.fromPlan.figures} />
+        </Card>
       )}
       {mission.declinedPlanItems && mission.declinedPlanItems.length > 0 && (
-        <section className="grid gap-2 rounded-lg border border-border bg-background p-3 text-sm" data-testid="declined-plan-items">
+        <Card className="grid gap-2 bg-background p-3 text-sm" data-testid="declined-plan-items">
           <p className="m-0 font-semibold text-foreground">Declined</p>
           <ul className="m-0 grid list-none gap-1 p-0">
             {mission.declinedPlanItems.map((item, index) => (
               <li key={index} className="text-muted-foreground">
-                <span className="font-semibold text-foreground">{item.type}</span>: {item.reason}
+                <span className="font-semibold text-foreground">{missionTypeLabel(manifests, item.type)}</span>: {item.reason}
               </li>
             ))}
           </ul>
-        </section>
+        </Card>
       )}
       {/* Without a Publishing card (no `publish` declared), Auto-publish stays here. */}
       {autoPublish && !declaresPublish && (
@@ -542,6 +536,7 @@ export function MissionDetailContent({
             aside={detailsCard}
             notices={notices}
             autoPublish={declaresPublish ? autoPublish : undefined}
+            typeLabel={(type) => missionTypeLabel(manifests, type)}
           />
       </div>
       <section hidden={tab !== "runs"} className="grid gap-4" aria-label="Run History">
