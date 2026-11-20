@@ -28,6 +28,12 @@ describe("validateManifest: Internal MCP declaration (ADR-080)", () => {
     }
   });
 
+  it("accepts a manifest it has already validated (the normalised empty url is not a declared url)", () => {
+    const first = validateManifest(base([internal()]));
+    expect(first.ok).toBe(true);
+    if (first.ok) expect(validateManifest(first.manifest).ok).toBe(true);
+  });
+
   it("refuses a URL on the Internal MCP server", () => {
     const result = validateManifest(base([internal({ url: "https://example.com/mcp" })]));
     expect(result.ok).toBe(false);
