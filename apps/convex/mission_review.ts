@@ -14,7 +14,7 @@ export type ReviewContentKind = "markdown" | "metadata" | "image" | "video";
 export type MissionReviewActionInput = {
   key: string;
   label: string;
-  type: "text" | "datetime-local";
+  type: "text" | "datetime-local" | "plan_selection";
   required: boolean;
 };
 

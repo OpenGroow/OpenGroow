@@ -38,3 +38,46 @@ describe("review kind plan", () => {
     expect(validateManifest(manifestWith({ kind: "plan", actions: [{ key: "reject" }] })).ok).toBe(false);
   });
 });
+
+const APPROVE = {
+  key: "approve",
+  label: "Approve",
+  requiredStatus: "to_validate",
+  inputs: [{ key: "items", label: "Items", type: "plan_selection", required: false }],
+  effect: { kind: "approve_plan", selectionKey: "items" },
+  transition: "done",
+};
+
+describe("approving a Plan", () => {
+  const withApprove = (patch: Record<string, unknown>) => manifestWith({ kind: "plan", actions: [{ ...APPROVE, ...patch }] });
+
+  it("accepts the selection input and the internal approve effect", () => {
+    expect(validateManifest(withApprove({})).ok).toBe(true);
+  });
+
+  it("refuses an approve effect whose selectionKey names no plan_selection input", () => {
+    expect(validateManifest(withApprove({ effect: { kind: "approve_plan", selectionKey: "other" } })).ok).toBe(false);
+    expect(validateManifest(withApprove({ effect: { kind: "approve_plan" } })).ok).toBe(false);
+    expect(
+      validateManifest(withApprove({ inputs: [{ key: "items", label: "Items", type: "text", required: false }] })).ok,
+    ).toBe(false);
+  });
+
+  it("refuses an approve effect on anything but the approve action or a done transition", () => {
+    expect(validateManifest(withApprove({ key: "publish" })).ok).toBe(false);
+    expect(validateManifest(withApprove({ transition: "approved" })).ok).toBe(false);
+  });
+
+  it("refuses an unknown key on the effect", () => {
+    expect(validateManifest(withApprove({ effect: { kind: "approve_plan", selectionKey: "items", x: 1 } })).ok).toBe(false);
+  });
+
+  it("refuses a plan approval on a review that is not a Plan", () => {
+    const review = { kind: "markdown", server: "x", path: "/a/{id}", actions: [APPROVE] };
+    expect(validateManifest({ ...manifestWith(review), mcpServers: [{ name: "x", url: "https://example.com/mcp" }] }).ok).toBe(false);
+  });
+
+  it("refuses a required selection, since every item is selected by default", () => {
+    expect(validateManifest(withApprove({ inputs: [{ ...APPROVE.inputs[0], required: true }] })).ok).toBe(false);
+  });
+});
