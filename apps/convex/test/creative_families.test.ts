@@ -231,3 +231,63 @@ describe("creativeFamilies.listUnclassified", () => {
     expect(res.page).toEqual([]);
   });
 });
+
+describe("creativeFamilies.stats", () => {
+  const stats = (t: T, identity: typeof OWNER, familyId: unknown) =>
+    t.withIdentity(identity).query(api.creative_families.stats, { instanceId: INSTANCE_ID, familyId: familyId as never });
+
+  it("computes median and maximum over the Sources that have views only", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstances(t);
+    const f = await family(t);
+    for (const analysis of [{ viewCount: 100 }, { viewCount: 300 }, { viewCount: 200 }, { viewCount: 400 }, {}, { likeCount: 9 }]) {
+      await source(t, { creativeFamilyId: f, analysis });
+    }
+    expect(await stats(t, OWNER, f)).toEqual({
+      sourceCount: 6, withViewsCount: 4, medianViews: 250, maxViews: 400, truncated: false,
+    });
+  });
+
+  it("reports unknown, not zero, when no Source has views", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstances(t);
+    const f = await family(t);
+    await source(t, { creativeFamilyId: f, analysis: { query: "x" } });
+    const empty = await family(t);
+    expect(await stats(t, OWNER, f)).toMatchObject({ sourceCount: 1, withViewsCount: 0, medianViews: null, maxViews: null });
+    expect(await stats(t, OWNER, empty)).toMatchObject({ sourceCount: 0, withViewsCount: 0, medianViews: null, maxViews: null });
+  });
+
+  it("keeps a recorded zero view count as known", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstances(t);
+    const f = await family(t);
+    await source(t, { creativeFamilyId: f, analysis: { viewCount: 0 } });
+    expect(await stats(t, OWNER, f)).toMatchObject({ withViewsCount: 1, medianViews: 0, maxViews: 0 });
+  });
+
+  it("flags a family above 500 Sources as truncated", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstances(t);
+    const f = await family(t);
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 501; i++) {
+        await ctx.db.insert("sources", {
+          instanceId: INSTANCE_ID, ownerId: OWNER.subject, templateId: TEMPLATE_ID, sourceId: "keyword", label: "K",
+          family: "search", status: "ready", origin: `o${i}`, capturedAt: 1, createdAt: i, marketing: {},
+          analysis: { viewCount: 1 }, creativeFamilyId: f,
+        } as never);
+      }
+    });
+    expect(await stats(t, OWNER, f)).toMatchObject({ sourceCount: 500, truncated: true });
+  });
+
+  it("is refused for a stranger and for a family of another Instance", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstances(t);
+    const f = await family(t);
+    const foreign = await family(t, {}, OTHER_INSTANCE_ID);
+    expect(await stats(t, STRANGER, f)).toBeNull();
+    expect(await stats(t, OWNER, foreign)).toBeNull();
+  });
+});
