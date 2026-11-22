@@ -381,6 +381,22 @@ export default defineSchema({
     // follow the Project's current version. The review engine and external job
     // polling resolve the Template at this version.
     templateVersion: v.optional(v.string()),
+    // The Recipe Snapshot (issue #137, ADR-083): what the Production Recipe
+    // resolved to at creation, written once and never recomputed. The
+    // `production-recipe` context provider renders it for every Run. Absent
+    // for a Mission created without a recipe.
+    recipeSnapshot: v.optional(
+      v.object({
+        recipeId: v.id("productionRecipes"),
+        recipeName: v.string(),
+        version: v.number(),
+        connectionId: v.id("productionConnections"),
+        values: v.record(v.string(), v.string()),
+        prompt: v.optional(v.string()),
+        instructions: v.string(),
+        constraints: v.array(v.string()),
+      }),
+    ),
     type: v.string(),
     payload: v.any(),
     status: missionStatusV,

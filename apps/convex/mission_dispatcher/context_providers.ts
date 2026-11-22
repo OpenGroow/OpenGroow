@@ -223,6 +223,60 @@ function renderPlatformAccountFromUnknown(data: unknown): string {
   return renderPlatformAccountSection(data as PlatformAccountInfo);
 }
 
+// ─── Production recipe provider (issue #137, ADR-083) ───────────────────────
+
+/** What the provider renders: the Mission's Recipe Snapshot, nothing else. */
+export type ProductionRecipeInfo = {
+  recipeName: string;
+  version: number;
+  values: Record<string, string>;
+  prompt?: string;
+  instructions: string;
+  constraints: string[];
+} | null;
+
+/** A code fence long enough that the text cannot close it. */
+function fenceFor(text: string): string {
+  const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+  return "`".repeat(longest + 1);
+}
+
+/**
+ * Pure renderer for the production-recipe provider: the `Production Recipe`
+ * section, built from the Mission's Recipe Snapshot alone (no query), so every
+ * Run of the Mission receives the same text. Returns `null` for a Mission
+ * without a snapshot.
+ */
+export function renderProductionRecipeSection(info: ProductionRecipeInfo): string | null {
+  if (!info) return null;
+  const lines = [
+    "# Production Recipe",
+    "",
+    `Recipe: ${singleLine(info.recipeName)} (version ${info.version})`,
+    "",
+    "The Template's technical instructions and the Brand Core take precedence over this section on any conflict.",
+    "",
+  ];
+  if (info.prompt !== undefined) {
+    const fence = fenceFor(info.prompt);
+    lines.push("## Prompt (verbatim)", "", "Send this text unchanged; never rephrase it.", "", fence, info.prompt, fence, "");
+  }
+  lines.push("## Instructions", "", info.instructions, "");
+  if (info.constraints.length > 0) {
+    lines.push("## Constraints", "", ...info.constraints.map((c) => `- ${singleLine(c)}`), "");
+  }
+  const names = Object.keys(info.values);
+  if (names.length > 0) {
+    lines.push("## Variables", "", ...names.map((name) => `- ${name}: ${singleLine(info.values[name]!)}`), "");
+  }
+  return lines.join("\n");
+}
+
+function renderProductionRecipeFromUnknown(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  return renderProductionRecipeSection(data as ProductionRecipeInfo);
+}
+
 // ─── Provider registry ──────────────────────────────────────────────────────
 
 type ContextProviderRenderer = (data: unknown) => string | null;
@@ -247,6 +301,7 @@ export const CONTEXT_PROVIDER_RENDERERS: Record<ContextProviderName, ContextProv
   "active-agents": renderActiveAgentsFromUnknown,
   "observation-production-source": renderCarouselPlanningSourceFromUnknown,
   "platform-account": renderPlatformAccountFromUnknown,
+  "production-recipe": renderProductionRecipeFromUnknown,
 };
 
 /** Providers that render the Agent's config: a Run cannot dispatch for them on an absent config. */

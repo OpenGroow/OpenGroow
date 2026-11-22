@@ -136,7 +136,7 @@ const VALID_BLOCKER_RESOLUTION_KINDS = new Set(["link", "execution_device"]);
  * renderers live with the dispatcher (apps/convex/mission_dispatcher/
  * context_providers.ts), whose registry is typed against this list.
  */
-export const CONTEXT_PROVIDER_NAMES = ["active-agents", "observation-production-source", "platform-account"] as const;
+export const CONTEXT_PROVIDER_NAMES = ["active-agents", "observation-production-source", "platform-account", "production-recipe"] as const;
 export type ContextProviderName = (typeof CONTEXT_PROVIDER_NAMES)[number];
 
 function unknownContextProvider(raw: unknown): string | undefined {

@@ -449,6 +449,9 @@ export const dispatchPendingRuns = internalAction({
                 payload: mission.payload as Record<string, unknown> | undefined,
               };
             }
+            if (name === "production-recipe") {
+              providerData[name] = mission.recipeSnapshot ?? null;
+            }
             if (name === "observation-production-source") {
               const observationId = sourceIdFromPayload(mission.payload);
               providerData[name] = observationId
