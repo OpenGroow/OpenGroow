@@ -612,6 +612,10 @@ export default defineSchema({
     slug: v.string(),
     name: v.string(),
     description: v.string(),
+    // Absent means active (families written before the Creative Library).
+    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
+    // Set on a family emptied by a merge: where its Sources went.
+    mergedIntoId: v.optional(v.id("creativeFamilies")),
   })
     // Lists an Instance's existing families for the scoring call's prompt
     // context.
@@ -712,6 +716,14 @@ export default defineSchema({
     .index("by_instance_owner_createdAt", ["instanceId", "ownerId", "createdAt"])
     // Family-filtered list, and the distinct-family walk of `listFamilies`.
     .index("by_instance_owner_family_createdAt", ["instanceId", "ownerId", "family", "createdAt"])
+    // A Creative Family's Sources, and (family left undefined) the unclassified
+    // ones, newest first.
+    .index("by_instance_owner_creativeFamily_createdAt", [
+      "instanceId",
+      "ownerId",
+      "creativeFamilyId",
+      "createdAt",
+    ])
     .index("by_instance_template_retry", ["instanceId", "templateId", "retryRequested"])
     // A Source already written from the same report entry (same post, same
     // capture): a batch re-read after a failed execution does not add it again.
