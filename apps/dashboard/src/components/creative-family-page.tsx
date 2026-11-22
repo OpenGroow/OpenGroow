@@ -18,6 +18,7 @@ import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests,
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
 import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
 import { isWebUrl } from "@/src/lib/web-url";
+import { FamilyRecipes } from "@/src/components/family-recipes";
 import { AddSourceButton, RemoveFromFamilyButton } from "@/src/components/creative-family-source-actions";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
@@ -97,6 +98,8 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
       </div>
 
       {stats ? <Statistics stats={stats} /> : null}
+
+      <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} />
 
       <section aria-label="Family Sources" className="grid gap-3">
         {status === "LoadingFirstPage" ? (
