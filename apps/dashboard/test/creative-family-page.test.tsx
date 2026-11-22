@@ -23,6 +23,9 @@ vi.mock("@convex/_generated/api", () => ({
   api: {
     creative_family_merge: { merge: "creative_family_merge.merge" },
     creative_families: { list: "creative_families.list", get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
+    creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
+    creative_family_sources: { assign: "creative_family_sources.assign", remove: "creative_family_sources.remove" },
+    creative_families_archive: { archive: "creative_families_archive.archive", unarchive: "creative_families_archive.unarchive" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -112,6 +115,14 @@ describe("CreativeFamilyContent", () => {
   it("offers the merge on an active family", async () => {
     await render();
     expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(true);
+  });
+
+  it("offers Archive for an active family and Unarchive for an archived one", async () => {
+    const buttons = () => Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+    await render();
+    expect(buttons()).toContain("Archive");
+    await render({ family: { ...FAMILY, status: "archived" } });
+    expect(buttons()).toContain("Unarchive");
   });
 
   it("shows the statistics: Sources with views out of the total, median and maximum", async () => {

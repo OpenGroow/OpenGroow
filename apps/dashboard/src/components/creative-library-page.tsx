@@ -8,9 +8,11 @@ import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
+import { NewFamilyButton } from "@/src/components/creative-family-actions";
 import { sourceCountLabel } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
@@ -55,7 +57,18 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="grid gap-8">
-      <PageHeader title="Creative Library" description="The mechanics your Sources share, grouped into Creative Families." />
+      <PageHeader
+        title="Creative Library"
+        description="The mechanics your Sources share, grouped into Creative Families."
+        action={
+          <div className="flex items-center gap-3">
+            <Button variant="outline" nativeButton={false} render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
+              Unclassified Sources
+            </Button>
+            <NewFamilyButton instanceId={instanceId} />
+          </div>
+        }
+      />
       {families === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : families.length === 0 ? (
