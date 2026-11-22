@@ -47,13 +47,19 @@ See ADR-051.
 
 ### Creative Family
 
-A named creative pattern or mechanic an Instance's Sources get grouped into (e.g. "fake_sms", "mini_story", "letter_reveal") — used to later tell which formats actually work for that Instance's own audience.
+The creative mechanic that several of an Instance's Sources share (e.g. "fake_sms", "mini_story", "letter_reveal"). Its `description` states that mechanic. A Creative Family is a list the **user curates**: scoring does not create it and does not assign a Source to it, so a newly scored Source arrives unclassified.
 
-- **Discovered per Instance, not predefined globally**: deep enrichment shows the LLM the Instance's own Creative Families so far and asks it to either assign the Source to one of them or propose a new one. There is no shared, cross-Instance taxonomy — unlike `mediaType` (a small, closed, global enum), what counts as a "format" is expected to differ entirely between Instances/brands.
-- **Descriptive only in V1**: stored on every Source (`creativeFamilyId`), but does not feed into the Replication Score. It becomes actionable only once enough Missions have been produced from enough Sources to compare each family's real-world performance — a deliberately deferred step.
-- _Avoid_: fixing an enum of families ahead of time, or letting the LLM invent free-text family names per Source — both were considered and rejected in favor of a stable, per-Instance, reused-or-created list.
+- **Per Instance, not predefined globally**: there is no shared, cross-Instance taxonomy. What counts as a "format" differs between Instances/brands.
+- **At most one family per Source**: the single reference `creativeFamilyId` on the Source. Families created before ADR-082, and the Sources assigned to them, are kept as they are.
+- **Scoring ignores it**: a scoring result that still carries a family (Agents installed earlier) is accepted and that part is dropped.
+- **Descriptive**: it does not feed into the Replication Score.
+- _Avoid_: letting scoring or an LLM create families by itself (the earlier behaviour produced many near-duplicates), and using it for the Template-declared grouping, which is a **Source group**.
 
-See ADR-051.
+See ADR-051, ADR-082.
+
+### Source group
+
+The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.
 
 ### Replication Score
 

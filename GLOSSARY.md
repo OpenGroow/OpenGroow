@@ -72,7 +72,7 @@ Definitions are in `docs/domain/`. Read the file of the domain you work on; do n
 | **Source Agent** | The source Agent Template (ADR-052): Also defines: `score`, `routing`. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **SourceJob** | The unit of work that fills the database with a Source: Also defines: One SourceJob per Agent, batched. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Observation** | Retired term: | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
-| **Creative Family** | A named creative pattern or mechanic an Instance's Sources get grouped into (e.g. Also defines: Descriptive only in V1. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
+| **Creative Family** | The creative mechanic that several of an Instance's Sources share, curated by the user; scoring no longer creates or assigns it. Also defines: Source group. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Replication Score** | A composite 0–1 score on a scored Source, expressing how good an inspiration it is to replicate for *this Instance's own product* — not how viral… Also defines: Weighted sum of four sub-scores, Optimizes for fit, not virality, Gated, not always-decisive. | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Engagement Score** | The Replication Score's performance sub-score: | [docs/domain/marketing-engine.md](docs/domain/marketing-engine.md) |
 | **Publisher** | A Project-level integration (adapter plus per-Project config) that publishes approved deliverables to an external service; a Project has several, at most one per adapter. | [docs/domain/publishing.md](docs/domain/publishing.md) |
