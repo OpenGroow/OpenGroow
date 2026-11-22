@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import { internal } from "../_generated/api";
 import schema from "../schema";
@@ -38,7 +38,6 @@ const modules = {
 };
 
 
-import { afterEach, beforeEach } from "vitest";
 import { createInMemoryTemplateRegistry } from "@opengroow/agent-templates/registry";
 
 type FileToWrite = { filePath: string; content: string };
