@@ -26,6 +26,7 @@ vi.mock("@convex/_generated/api", () => ({
     creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     creative_family_sources: { assign: "creative_family_sources.assign", remove: "creative_family_sources.remove" },
     creative_families_archive: { archive: "creative_families_archive.archive", unarchive: "creative_families_archive.unarchive" },
+    production_recipes: { list: "production_recipes.list", create: "production_recipes.create" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
