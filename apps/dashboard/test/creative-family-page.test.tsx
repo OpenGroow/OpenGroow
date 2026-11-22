@@ -22,6 +22,7 @@ vi.mock("convex/react", () => ({
 vi.mock("@convex/_generated/api", () => ({
   api: {
     creative_families: { get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
+    creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },

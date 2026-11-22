@@ -11,13 +11,14 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EditFamilyButton } from "@/src/components/creative-family-actions";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { metricsOf, postUrlOf } from "@/src/lib/creative-library";
 import { isWebUrl } from "@/src/lib/web-url";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
-// views, and its Sources. Read-only.
+// views, and its Sources.
 
 const PAGE_SIZE = 25;
 // Matches the server's `STATS_SOURCE_CAP` (`creative_families.stats`).
@@ -79,7 +80,12 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         <PageHeader
           title={family.name}
           description={family.description}
-          action={<StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />}
+          action={
+            <div className="flex items-center gap-3">
+              <StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
+              <EditFamilyButton instanceId={instanceId} family={family} />
+            </div>
+          }
         />
       </div>
 

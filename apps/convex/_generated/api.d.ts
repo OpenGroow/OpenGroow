@@ -39,6 +39,7 @@ import type * as connect_tickets_node from "../connect_tickets_node.js";
 import type * as connect_tickets_utils from "../connect_tickets_utils.js";
 import type * as connected_devices from "../connected_devices.js";
 import type * as creative_families from "../creative_families.js";
+import type * as creative_family_details from "../creative_family_details.js";
 import type * as crons from "../crons.js";
 import type * as env from "../env.js";
 import type * as error_message from "../error_message.js";
@@ -213,6 +214,7 @@ declare const fullApi: ApiFromModules<{
   connect_tickets_utils: typeof connect_tickets_utils;
   connected_devices: typeof connected_devices;
   creative_families: typeof creative_families;
+  creative_family_details: typeof creative_family_details;
   crons: typeof crons;
   env: typeof env;
   error_message: typeof error_message;

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
+import { NewFamilyButton } from "@/src/components/creative-family-actions";
 import { sourceCountLabel } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
@@ -55,7 +56,11 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="grid gap-8">
-      <PageHeader title="Creative Library" description="The mechanics your Sources share, grouped into Creative Families." />
+      <PageHeader
+        title="Creative Library"
+        description="The mechanics your Sources share, grouped into Creative Families."
+        action={<NewFamilyButton instanceId={instanceId} />}
+      />
       {families === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : families.length === 0 ? (
