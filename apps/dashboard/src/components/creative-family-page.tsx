@@ -11,6 +11,7 @@ import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-archive-button";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { metricsOf, postUrlOf } from "@/src/lib/creative-library";
@@ -79,7 +80,12 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         <PageHeader
           title={family.name}
           description={family.description}
-          action={<StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />}
+          action={
+            <div className="flex items-center gap-3">
+              <StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
+              <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={family.status === "archived"} />
+            </div>
+          }
         />
       </div>
 

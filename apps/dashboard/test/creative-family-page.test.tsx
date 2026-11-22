@@ -22,6 +22,7 @@ vi.mock("convex/react", () => ({
 vi.mock("@convex/_generated/api", () => ({
   api: {
     creative_families: { get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
+    creative_families_archive: { archive: "creative_families_archive.archive", unarchive: "creative_families_archive.unarchive" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -98,6 +99,14 @@ describe("CreativeFamilyContent", () => {
     expect(text()).toContain("A close-up reaction");
     expect(text()).toContain("Active");
     expect(document.body.querySelector('a[href="/projects/instance-1/library"]')).not.toBeNull();
+  });
+
+  it("offers Archive for an active family and Unarchive for an archived one", async () => {
+    const buttons = () => Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+    await render();
+    expect(buttons()).toContain("Archive");
+    await render({ family: { ...FAMILY, status: "archived" } });
+    expect(buttons()).toContain("Unarchive");
   });
 
   it("shows the statistics: Sources with views out of the total, median and maximum", async () => {
