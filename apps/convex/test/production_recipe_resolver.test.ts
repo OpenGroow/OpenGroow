@@ -54,6 +54,20 @@ describe("resolveRecipeVersion", () => {
   });
 });
 
+describe("literal braces", () => {
+  const base = { constraints: [], variables: [{ name: "MOOD", values: ["calm"], default: "calm" }] };
+  it("accepts text with empty or JSON-like braces and keeps it verbatim", () => {
+    const content = { ...base, prompt: 'Return {} or { } or {"a": 1}, mood {MOOD}.', instructions: "Use {not a name} and {1x}." };
+    expect(() => validateRecipeContent(content)).not.toThrow();
+    expect(placeholdersOf(content.prompt)).toEqual(["MOOD"]);
+    expect(resolveRecipeVersion(content, {}).prompt).toBe('Return {} or { } or {"a": 1}, mood calm.');
+    expect(resolveRecipeVersion(content, {}).instructions).toBe("Use {not a name} and {1x}.");
+  });
+  it("still rejects an undeclared name-shaped placeholder", () => {
+    expect(() => validateRecipeContent({ ...base, instructions: "{GHOST}" })).toThrow("no matching variable");
+  });
+});
+
 describe("validateRecipeContent", () => {
   it("lists placeholders", () => {
     expect(placeholdersOf("a {X} b {Y} {X}")).toEqual(["X", "Y"]);

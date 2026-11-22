@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { ownedConnection } from "./production_connections.js";
 import { isCompatible, RECIPE_PROVIDER } from "./production_connection_rules.js";
-import { ownedRecipe } from "./production_recipes.js";
+import { latestVersion, ownedRecipe } from "./production_recipes.js";
 import { resolveRecipeVersion } from "./production_recipe_resolver.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -69,10 +69,9 @@ export async function buildRecipeSnapshot(
   if (!recipe) throw new Error("Production Recipe not found");
   if (recipe.status === "archived") throw new Error("This Production Recipe is archived");
 
-  const versions = ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", recipe._id));
   const version =
     arg.version === undefined
-      ? await versions.order("desc").first()
+      ? await latestVersion(ctx, recipe._id)
       : await ctx.db
           .query("productionRecipeVersions")
           .withIndex("by_recipe_version", (q) => q.eq("recipeId", recipe._id).eq("version", arg.version!))
