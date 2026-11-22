@@ -161,4 +161,43 @@ describe("periodic Source scoring Job", () => {
     expect((afterFirst.job?.runtime as { inFlightBatch?: { sourceIds: string[] } }).inFlightBatch?.sourceIds).toEqual([second]);
     expect(afterFirst.job?.lastOutcome).toBeUndefined();
   });
+
+  async function completeWithScore(entryExtra: Record<string, unknown>) {
+    const t = convexTest(schema, modules);
+    await seedInstance(t);
+    await activateSourceAgent(t);
+    const source = await insertSource(t);
+    const instanceId = (await t.run((ctx) => ctx.db.get(source)))!.instanceId;
+    const existingFamily = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId, slug: "kept", name: "Kept", description: "Already there." }));
+    const job = (await scoreJob(t))!;
+    await t.withIdentity(OWNER).mutation(api.score_jobs.runNow, { jobId: job._id });
+    const run = (await t.run((ctx) => ctx.db.query("runs").unique()))!;
+    await t.run((ctx) => ctx.db.patch(run._id, { status: "running" }));
+    await t.mutation(internal.runs.markCompleted, {
+      runId: run._id,
+      result: { status: "success", summary: "scored", additionalDetails: { scores: [{ sourceId: source, productFit: 1, replicability: 0.75, creativeStrength: 0.5, ...entryExtra }] } },
+    });
+    return t.run(async (ctx) => ({ source: await ctx.db.get(source), families: await ctx.db.query("creativeFamilies").collect(), existingFamily }));
+  }
+
+  it("scores a Source whose result still carries a family, without creating or assigning one", async () => {
+    const out = await completeWithScore({ creativeFamily: { slug: "mini_story", name: "Mini Story", description: "A short story." } });
+    expect(out.source?.scoring).toMatchObject({ productFit: 1, replicability: 0.75, creativeStrength: 0.5 });
+    expect(out.source?.creativeFamilyId).toBeUndefined();
+    expect(out.families.map((f) => f.slug)).toEqual(["kept"]);
+  });
+
+  it("scores a Source whose result carries a malformed family value, without creating or assigning one", async () => {
+    const out = await completeWithScore({ creativeFamily: 42 });
+    expect(out.source?.scoring).toMatchObject({ productFit: 1, replicability: 0.75, creativeStrength: 0.5 });
+    expect(out.source?.creativeFamilyId).toBeUndefined();
+    expect(out.families.map((f) => f.slug)).toEqual(["kept"]);
+  });
+
+  it("scores a Source whose result has no family, without creating or assigning one", async () => {
+    const out = await completeWithScore({});
+    expect(out.source?.scoring).toMatchObject({ productFit: 1 });
+    expect(out.source?.creativeFamilyId).toBeUndefined();
+    expect(out.families.map((f) => f.slug)).toEqual(["kept"]);
+  });
 });

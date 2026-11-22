@@ -602,19 +602,20 @@ export default defineSchema({
     decision: reconcileDecisionLogV,
     createdAt: v.number(),
   }).index("by_run_created", ["runId", "createdAt"]),
-  // A named, reusable creative pattern for an Instance (issue #486) —
-  // resolved by the scoring call at deep-enrichment completion, either by
-  // matching an Observation to an existing family (by slug) or by proposing
-  // a new one. No table-level relation back to the Observations that
-  // produced/matched it; `sources.creativeFamilyId` is the only link.
+  // A named, reusable creative pattern for an Instance (issue #486), curated
+  // by the user (ADR-082): scoring no longer creates or assigns families.
+  // `sources.creativeFamilyId` is the only link to its Sources.
   creativeFamilies: defineTable({
     instanceId: v.string(),
     slug: v.string(),
     name: v.string(),
     description: v.string(),
+    // Absent means active (families written before the Creative Library).
+    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
+    // Set on a family emptied by a merge: where its Sources went.
+    mergedIntoId: v.optional(v.id("creativeFamilies")),
   })
-    // Lists an Instance's existing families for the scoring call's prompt
-    // context.
+    // Lists an Instance's families for the Creative Library (`creative_families.list`).
     .index("by_instance", ["instanceId"])
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
@@ -712,6 +713,14 @@ export default defineSchema({
     .index("by_instance_owner_createdAt", ["instanceId", "ownerId", "createdAt"])
     // Family-filtered list, and the distinct-family walk of `listFamilies`.
     .index("by_instance_owner_family_createdAt", ["instanceId", "ownerId", "family", "createdAt"])
+    // A Creative Family's Sources, and (family left undefined) the unclassified
+    // ones, newest first.
+    .index("by_instance_owner_creativeFamily_createdAt", [
+      "instanceId",
+      "ownerId",
+      "creativeFamilyId",
+      "createdAt",
+    ])
     .index("by_instance_template_retry", ["instanceId", "templateId", "retryRequested"])
     // A Source already written from the same report entry (same post, same
     // capture): a batch re-read after a failed execution does not add it again.

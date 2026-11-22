@@ -32,14 +32,12 @@ const scoreEntryZ = z.object({
   productFit: rubricScoreZ,
   replicability: rubricScoreZ,
   creativeStrength: rubricScoreZ,
-  creativeFamily: z.object({
-    slug: z.string().trim().min(1),
-    name: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-  }).strict(),
+  // Agents installed before ADR-082 still return a family; any value is accepted and ignored (removal trigger in ADR-082).
+  creativeFamily: z.unknown().optional(),
 }).strict();
 
-export type SourceScore = z.infer<typeof scoreEntryZ> & { sourceId: Id<"sources"> };
+/** A validated score entry; the tolerated legacy family field is dropped (ADR-082). */
+export type SourceScore = Omit<z.infer<typeof scoreEntryZ>, "sourceId" | "creativeFamily"> & { sourceId: Id<"sources"> };
 
 export type ScoringValidation = {
   valid: SourceScore[];
@@ -142,7 +140,7 @@ export function buildSourceScoringRunFile(args: {
     "",
     "Write the RunResult to the outputs file named in the command. Its `status` must be `success` and `additionalDetails.scores` must contain exactly one entry for every Source above:",
     "",
-    '```json\n{ "status": "success", "summary": "Scored 2 Sources", "additionalDetails": { "scores": [ { "sourceId": "...", "productFit": 0.75, "replicability": 1, "creativeStrength": 0.5, "creativeFamily": { "slug": "mini_story", "name": "Mini Story", "description": "A short narrative format." } } ] } }\n```',
+    '```json\n{ "status": "success", "summary": "Scored 2 Sources", "additionalDetails": { "scores": [ { "sourceId": "...", "productFit": 0.75, "replicability": 1, "creativeStrength": 0.5 } ] } }\n```',
     "",
     "Use only rubric values 0, 0.25, 0.5, 0.75 or 1. Do not omit a Source. Do not return Partial or failed for an individual Source: valid entries are kept and invalid entries are retried with feedback.",
   ];
