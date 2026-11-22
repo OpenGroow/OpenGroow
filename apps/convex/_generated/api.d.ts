@@ -95,6 +95,8 @@ import type * as observations_scoring_daily from "../observations_scoring_daily.
 import type * as openclaw_usage from "../openclaw_usage.js";
 import type * as optional_plugins from "../optional_plugins.js";
 import type * as post_url from "../post_url.js";
+import type * as production_recipe_resolver from "../production_recipe_resolver.js";
+import type * as production_recipes from "../production_recipes.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
 import type * as project_agents_auth from "../project_agents/auth.js";
@@ -273,6 +275,8 @@ declare const fullApi: ApiFromModules<{
   openclaw_usage: typeof openclaw_usage;
   optional_plugins: typeof optional_plugins;
   post_url: typeof post_url;
+  production_recipe_resolver: typeof production_recipe_resolver;
+  production_recipes: typeof production_recipes;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;
   "project_agents/auth": typeof project_agents_auth;
