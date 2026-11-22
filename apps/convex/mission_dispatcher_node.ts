@@ -19,7 +19,7 @@ import {
   CONTEXT_PROVIDERS_REQUIRING_CONFIG,
   VALID_CONTEXT_PROVIDER_NAMES,
 } from "./mission_dispatcher/context_providers.js";
-import { getTemplateRegistry, runTemplateVersion } from "./template_registry.js";
+import { getTemplateRegistry, resolveMissionTemplate, runTemplateVersion } from "./template_registry.js";
 import {
   computeRunMaxMs,
   computeSessionBudgetMs,
@@ -342,7 +342,18 @@ export const dispatchPendingRuns = internalAction({
       const { mission, run, workspaceKey, config } = inputs;
 
       try {
-        const template = await registry.resolve(mission.instanceId, mission.templateId);
+        // Every Run of a Mission (first, retry, revision) runs on the Template
+        // version the Mission was pinned to. A pinned version that is gone
+        // fails the Run: running on other instructions silently is worse.
+        const template = await resolveMissionTemplate(registry, mission);
+        if (!template && mission.templateVersion !== undefined) {
+          await ctx.runMutation(internal.runs.markFailed, {
+            runId: claimed.runId,
+            code: "template_version_missing",
+            message: `template ${mission.templateId} version ${mission.templateVersion} is no longer installed; this Mission is pinned to it`,
+          });
+          continue;
+        }
         const runContext = template?.manifest.runContext;
 
         // Declarative context providers (issue #429): for each provider name
