@@ -10,12 +10,13 @@ import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
+import { RecipeConnectionsPanel } from "@/src/components/recipe-connections-panel";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import type { RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
 // One Production Recipe (issue #143): its content, version history, edit
-// (saves a new version) and archive. The connections panel (#145) embeds here.
+// (saves a new version) and archive. The connections panel (#145) is embedded below.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
 type RecipeDetail = { _id: string; creativeFamilyId: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
@@ -117,6 +118,8 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
           ))}
         </ul>
       </section>
+
+      <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} archived={archived} />
 
       <ProductionRecipeFormDialog
         mode="edit"
