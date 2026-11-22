@@ -642,6 +642,18 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_recipe_version", ["recipeId", "version"]),
+  // A Creative Connection (issue #137): a recipe offered to one Mission type of
+  // one installed Template. The target is the Template plus the Mission type.
+  productionConnections: defineTable({
+    instanceId: v.string(),
+    recipeId: v.id("productionRecipes"),
+    templateId: v.string(),
+    missionType: v.string(),
+    // Payload field -> allowed values; empty means any payload.
+    compatibleWhen: v.record(v.string(), v.array(v.string())),
+    status: v.union(v.literal("candidate"), v.literal("active"), v.literal("disabled")),
+  })
+    .index("by_recipe_target", ["recipeId", "templateId", "missionType"]),
   // Sources (issue #529, ADR-051): the generic, append-only successor of
   // Observations, ingested by Convex from a SourceJob Run's result file.
   // `label` and `family` are copied from the Template's declaration, never

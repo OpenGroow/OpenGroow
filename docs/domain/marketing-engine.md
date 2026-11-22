@@ -71,6 +71,14 @@ One immutable save of a **Production Recipe**: an optional verbatim `prompt`, fr
 - **Placeholders**: `{NAME}` in the `prompt` and the `instructions` must match a declared variable, and a variable's default must be one of its values; both are checked at save.
 - **Resolution**: a pure function turns a version plus choices into the resolved texts and the values used. Per variable: the explicit value, else a random draw if the variable is named in `vary`, else the default. An unknown variable, a value outside the list, or a variable with neither value nor default fails with an explicit error. Same input gives the same output (the random source is injectable).
 
+### Creative Connection
+
+A **Production Recipe** offered to one Mission type of one installed Template. The target is the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable; a recipe has at most one connection per target in a Project.
+
+- **Validated on save** against the installed manifest: the Mission type exists, it declares the `production-recipe` provider, and each `compatibleWhen` entry is a select field whose listed values are among its declared options. `compatibleWhen` maps a payload field to its allowed values; a listed field missing from the payload is incompatible.
+- **Status**: `candidate` (usable only when referenced explicitly), `active` (activated manually, never automatically) or `disabled` (never usable).
+- _Avoid_: targeting an Agent instead of a Template and Mission type, and free-text technical identifiers.
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.
