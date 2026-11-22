@@ -1,6 +1,6 @@
 # ADR-082: Creative Families are curated by the user, scoring no longer creates them
 
-**Status:** Proposed (reverses part of ADR-051)
+**Status:** Accepted (reverses part of ADR-051: scoring assigning a Creative Family)
 
 ## Context
 
@@ -10,7 +10,7 @@ ADR-051 had scoring assign every Source to a Creative Family, creating it by slu
 
 - **Scoring only scores.** Applying a score writes the score record on the Source. It looks up, creates and assigns no Creative Family. A newly scored Source arrives unclassified.
 - **A Creative Family is a list the user curates.** Its `description` states the creative mechanic its Sources share.
-- **The scoring result contract tolerates the old field.** The family part of an entry is optional and ignored, so Agents installed earlier keep working. The run prompt no longer shows it. The Hub scoring instructions change only after this is deployed.
+- **The scoring result contract tolerates the old field.** The family part of an entry is optional and ignored, so Agents installed earlier keep working. The run prompt no longer shows it. The Hub scoring instructions change only after this is deployed. Removal trigger: once the Hub scoring instructions no longer ask for a family and no installed Agent returns one, drop the tolerated `creativeFamily` entry field from the result contract.
 - **Existing families and assignments are kept.** No backfill, no migration. The single `creativeFamilyId` on the Source stays the only link.
 - **The Template-declared grouping is called Source group** to stop colliding with Creative Family. The stored column name does not change.
 

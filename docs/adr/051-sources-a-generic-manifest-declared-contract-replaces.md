@@ -1,6 +1,6 @@
 # ADR-051: Sources — a generic, manifest-declared contract replaces Observation; a SourceJob (not a Mission) normalizes and enriches
 
-**Status:** Accepted
+**Status:** Accepted (partly reversed by ADR-082: scoring no longer assigns or creates Creative Families)
 
 ### Context
 

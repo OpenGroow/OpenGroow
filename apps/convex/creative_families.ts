@@ -1,4 +1,4 @@
-import { paginationOptsValidator } from "convex/server";
+import { paginationOptsValidator, type PaginationOptions } from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type QueryCtx } from "./_generated/server.js";
@@ -9,17 +9,23 @@ import { engagementCountsOf } from "./sources_social.js";
 // user curates, and its `description` states the mechanic its Sources share.
 // Every read resolves ownership through the Instance, like `sources.ts`.
 
+/** The most families read for one Instance (a curated list, far below this). */
+export const FAMILY_LIST_CAP = 200;
 /** The most Sources counted per family; beyond it the count is reported capped. */
 export const FAMILY_COUNT_CAP = 100;
+/** The most Sources a family's statistics are computed over. */
+export const STATS_SOURCE_CAP = 500;
 /** Recent Sources shown with each family. */
 export const RECENT_SOURCES = 3;
-
 const EMPTY_PAGE = { page: [], isDone: true, continueCursor: "" };
 
-type SourceView = Omit<Doc<"sources">, "raw" | "rawData"> & { thumbnailUrl: string | null };
+/** `creativeFamilyId` of a Source that belongs to no family. */
+const UNCLASSIFIED = undefined;
+
+type SourceWithThumbnailUrl = Omit<Doc<"sources">, "raw" | "rawData"> & { thumbnailUrl: string | null };
 
 /** A Source without its large raw capture fields, with a loadable thumbnail URL. */
-async function viewOf(ctx: QueryCtx, source: Doc<"sources">): Promise<SourceView> {
+async function sourceWithThumbnailUrl(ctx: QueryCtx, source: Doc<"sources">): Promise<SourceWithThumbnailUrl> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { raw, rawData, ...rest } = source;
   const thumbnailUrl = source.thumbnailStorageId ? await ctx.storage.getUrl(source.thumbnailStorageId) : null;
@@ -30,7 +36,7 @@ function familySources(
   ctx: QueryCtx,
   instanceId: string,
   ownerId: string,
-  familyId: Id<"creativeFamilies"> | undefined,
+  familyId: Id<"creativeFamilies"> | typeof UNCLASSIFIED,
 ) {
   return ctx.db
     .query("sources")
@@ -40,8 +46,28 @@ function familySources(
     .order("desc");
 }
 
-function statusOf(family: Doc<"creativeFamilies">): "active" | "archived" {
-  return family.status ?? "active";
+/** One page of a family's Sources (or the unclassified ones), newest first. */
+async function paginateSources(
+  ctx: QueryCtx,
+  instanceId: string,
+  ownerId: string,
+  familyId: Id<"creativeFamilies"> | typeof UNCLASSIFIED,
+  paginationOpts: PaginationOptions,
+) {
+  const result = await familySources(ctx, instanceId, ownerId, familyId).paginate(paginationOpts);
+  return { ...result, page: await Promise.all(result.page.map((s) => sourceWithThumbnailUrl(ctx, s))) };
+}
+
+/** The fields of a family shown by `list` and `get`. */
+function familyView(family: Doc<"creativeFamilies">) {
+  return {
+    _id: family._id,
+    slug: family.slug,
+    name: family.name,
+    description: family.description,
+    status: family.status ?? "active",
+    mergedIntoId: family.mergedIntoId,
+  };
 }
 
 /** A family of the caller's Instance, or null (another Instance's family is "not found"). */
@@ -59,20 +85,15 @@ export const list = query({
     const families = await ctx.db
       .query("creativeFamilies")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .collect();
+      .take(FAMILY_LIST_CAP);
     return await Promise.all(
       families.map(async (family) => {
         const sources = await familySources(ctx, args.instanceId, ownerId, family._id).take(FAMILY_COUNT_CAP + 1);
         return {
-          _id: family._id,
-          slug: family.slug,
-          name: family.name,
-          description: family.description,
-          status: statusOf(family),
-          mergedIntoId: family.mergedIntoId,
+          ...familyView(family),
           sourceCount: Math.min(sources.length, FAMILY_COUNT_CAP),
           sourceCountCapped: sources.length > FAMILY_COUNT_CAP,
-          recentSources: await Promise.all(sources.slice(0, RECENT_SOURCES).map((s) => viewOf(ctx, s))),
+          recentSources: await Promise.all(sources.slice(0, RECENT_SOURCES).map((s) => sourceWithThumbnailUrl(ctx, s))),
         };
       }),
     );
@@ -87,14 +108,7 @@ export const get = query({
     if (ownerId === null) return null;
     const family = await ownedFamily(ctx, args.instanceId, args.familyId);
     if (!family) return null;
-    return {
-      _id: family._id,
-      slug: family.slug,
-      name: family.name,
-      description: family.description,
-      status: statusOf(family),
-      mergedIntoId: family.mergedIntoId,
-    };
+    return familyView(family);
   },
 });
 
@@ -105,8 +119,7 @@ export const listSources = query({
     const ownerId = await readOwnerId(ctx, args.instanceId);
     if (ownerId === null) return EMPTY_PAGE;
     if (!(await ownedFamily(ctx, args.instanceId, args.familyId))) return EMPTY_PAGE;
-    const result = await familySources(ctx, args.instanceId, ownerId, args.familyId).paginate(args.paginationOpts);
-    return { ...result, page: await Promise.all(result.page.map((s) => viewOf(ctx, s))) };
+    return await paginateSources(ctx, args.instanceId, ownerId, args.familyId, args.paginationOpts);
   },
 });
 
@@ -116,17 +129,14 @@ export const listUnclassified = query({
   handler: async (ctx, args) => {
     const ownerId = await readOwnerId(ctx, args.instanceId);
     if (ownerId === null) return EMPTY_PAGE;
-    const result = await familySources(ctx, args.instanceId, ownerId, undefined).paginate(args.paginationOpts);
-    return { ...result, page: await Promise.all(result.page.map((s) => viewOf(ctx, s))) };
+    return await paginateSources(ctx, args.instanceId, ownerId, UNCLASSIFIED, args.paginationOpts);
   },
 });
 
-/** The most Sources a family's statistics are computed over. */
-export const STATS_SOURCE_CAP = 500;
-
+/** Median of a non-empty ascending list. */
 function medianOf(sorted: number[]): number {
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+  const upperMiddle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[upperMiddle]! : (sorted[upperMiddle - 1]! + sorted[upperMiddle]!) / 2;
 }
 
 /**

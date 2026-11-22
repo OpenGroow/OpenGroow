@@ -187,6 +187,13 @@ describe("periodic Source scoring Job", () => {
     expect(out.families.map((f) => f.slug)).toEqual(["kept"]);
   });
 
+  it("scores a Source whose result carries a malformed family value, without creating or assigning one", async () => {
+    const out = await completeWithScore({ creativeFamily: 42 });
+    expect(out.source?.scoring).toMatchObject({ productFit: 1, replicability: 0.75, creativeStrength: 0.5 });
+    expect(out.source?.creativeFamilyId).toBeUndefined();
+    expect(out.families.map((f) => f.slug)).toEqual(["kept"]);
+  });
+
   it("scores a Source whose result has no family, without creating or assigning one", async () => {
     const out = await completeWithScore({});
     expect(out.source?.scoring).toMatchObject({ productFit: 1 });

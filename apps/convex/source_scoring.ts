@@ -32,11 +32,12 @@ const scoreEntryZ = z.object({
   productFit: rubricScoreZ,
   replicability: rubricScoreZ,
   creativeStrength: rubricScoreZ,
-  // Agents installed before ADR-082 still return a family; it is accepted and ignored.
+  // Agents installed before ADR-082 still return a family; any value is accepted and ignored (removal trigger in ADR-082).
   creativeFamily: z.unknown().optional(),
 }).strict();
 
-export type SourceScore = z.infer<typeof scoreEntryZ> & { sourceId: Id<"sources"> };
+/** A validated score entry; the tolerated legacy family field is dropped (ADR-082). */
+export type SourceScore = Omit<z.infer<typeof scoreEntryZ>, "sourceId" | "creativeFamily"> & { sourceId: Id<"sources"> };
 
 export type ScoringValidation = {
   valid: SourceScore[];
