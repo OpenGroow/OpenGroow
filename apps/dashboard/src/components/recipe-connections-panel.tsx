@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -18,9 +18,13 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 type Status = "candidate" | "active" | "disabled";
 type SelectField = { key: string; label: string; options: Array<{ value: string; label: string }> };
 type Target = { templateId: string; templateName: string; missionType: string; label: string; selectFields: SelectField[] };
-type Connection = { _id: string; recipeId: string; templateId: string; missionType: string; compatibleWhen: Record<string, string[]>; status: Status };
+type Connection = { _id: string; recipeId: string; templateId: string; missionType: string; compatibleWhen: Record<string, string[]>; status: Status; templateName?: string; missionTypeLabel?: string };
 
-const STATUS_LABEL: Record<Status, string> = { candidate: "Candidate", active: "Active", disabled: "Disabled" };
+const STATUS_DISPLAY: Record<Status, { label: string; tone: StatusTone }> = {
+  candidate: { label: "Candidate", tone: "info" },
+  active: { label: "Active", tone: "active" },
+  disabled: { label: "Disabled", tone: "neutral" },
+};
 const STATUS_ACTIONS: Record<Status, Array<{ to: Status; label: string }>> = {
   candidate: [{ to: "active", label: "Activate" }, { to: "disabled", label: "Disable" }],
   active: [{ to: "candidate", label: "Back to candidate" }, { to: "disabled", label: "Disable" }],
@@ -91,7 +95,7 @@ export function RecipeConnectionsPanel({ instanceId, recipeId, archived }: { ins
               <Card className="flex flex-wrap items-center gap-3 px-5 py-3">
                 <div className="grid min-w-0 flex-1 gap-0.5 text-sm">
                   <span className="font-medium text-foreground">
-                    {t ? `${t.templateName} · ${t.label}` : `${c.templateId} · ${c.missionType}`}
+                    {t ? `${t.templateName} · ${t.label}` : `${c.templateName ?? c.templateId} · ${c.missionTypeLabel ?? c.missionType}`}
                   </span>
                   <span className="text-muted-foreground">
                     {Object.entries(c.compatibleWhen).length === 0
@@ -105,7 +109,7 @@ export function RecipeConnectionsPanel({ instanceId, recipeId, archived }: { ins
                           .join(" · ")}
                   </span>
                 </div>
-                <Badge variant="outline">{STATUS_LABEL[c.status]}</Badge>
+                <StatusBadge tone={STATUS_DISPLAY[c.status].tone} label={STATUS_DISPLAY[c.status].label} />
                 {STATUS_ACTIONS[c.status].map((a) => (
                   <Button
                     key={a.to}

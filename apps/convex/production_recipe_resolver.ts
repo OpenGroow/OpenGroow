@@ -27,8 +27,10 @@ export type ResolvedRecipe = {
   values: Record<string, string>;
 };
 
-const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const PLACEHOLDER = /\{([^{}]*)\}/g;
+const NAME_PATTERN = "[A-Za-z_][A-Za-z0-9_]*";
+const NAME = new RegExp(`^${NAME_PATTERN}$`);
+// Name-shaped tokens only: `{}`, `{ }` or JSON-like braces are literal text.
+const PLACEHOLDER = new RegExp(`\\{(${NAME_PATTERN})\\}`, "g");
 
 /** Distinct placeholder names of a text, in order of first appearance. */
 export function placeholdersOf(text: string): string[] {

@@ -25,6 +25,7 @@ import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
+import { compatibleWhenV, connectionStatusV, recipeStatusV, recipeVariableV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -643,7 +644,7 @@ export default defineSchema({
     creativeFamilyId: v.id("creativeFamilies"),
     name: v.string(),
     description: v.string(),
-    status: v.union(v.literal("active"), v.literal("archived")),
+    status: recipeStatusV,
   })
     .index("by_instance_family", ["instanceId", "creativeFamilyId"]),
   // A Recipe Version: append-only, never patched. An edit inserts the next one.
@@ -654,7 +655,7 @@ export default defineSchema({
     prompt: v.optional(v.string()),
     instructions: v.string(),
     constraints: v.array(v.string()),
-    variables: v.array(v.object({ name: v.string(), values: v.array(v.string()), default: v.optional(v.string()) })),
+    variables: v.array(recipeVariableV),
     createdAt: v.number(),
   })
     .index("by_recipe_version", ["recipeId", "version"]),
@@ -665,9 +666,8 @@ export default defineSchema({
     recipeId: v.id("productionRecipes"),
     templateId: v.string(),
     missionType: v.string(),
-    // Payload field -> allowed values; empty means any payload.
-    compatibleWhen: v.record(v.string(), v.array(v.string())),
-    status: v.union(v.literal("candidate"), v.literal("active"), v.literal("disabled")),
+    compatibleWhen: compatibleWhenV,
+    status: connectionStatusV,
   })
     .index("by_recipe_target", ["recipeId", "templateId", "missionType"]),
   // Sources (issue #529, ADR-051): the generic, append-only successor of

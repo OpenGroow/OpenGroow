@@ -11,6 +11,7 @@
  * Brand Core) they are not meaningful to every Template.
  */
 
+import { RECIPE_PROVIDER } from "../production_connection_rules.js";
 import { SOCIAL_ENGAGEMENT_PLATFORMS, singleLine, type ContextProviderName } from "@opengroow/agent-templates";
 
 // ─── Active agents provider ─────────────────────────────────────────────────
@@ -301,7 +302,7 @@ export const CONTEXT_PROVIDER_RENDERERS: Record<ContextProviderName, ContextProv
   "active-agents": renderActiveAgentsFromUnknown,
   "observation-production-source": renderCarouselPlanningSourceFromUnknown,
   "platform-account": renderPlatformAccountFromUnknown,
-  "production-recipe": renderProductionRecipeFromUnknown,
+  [RECIPE_PROVIDER]: renderProductionRecipeFromUnknown,
 };
 
 /** Providers that render the Agent's config: a Run cannot dispatch for them on an absent config. */

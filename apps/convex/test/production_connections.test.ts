@@ -1,9 +1,10 @@
+import { setTemplateRegistryForTests } from "../template_registry";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { insertInstance } from "./instance_fixture";
-import { fixtureTemplate, installTemplateRegistry } from "./helpers/template_registry.helpers";
+import { fixtureTemplate, inMemoryRegistry, installTemplateRegistry } from "./helpers/template_registry.helpers";
 import { isCompatible, validateConnectionTarget } from "../production_connection_rules";
 
 const modules = {
@@ -133,5 +134,51 @@ describe("production_connections", () => {
     const targets = await owner.query(api.production_connections.listTargets, { instanceId: INSTANCE_ID });
     expect(targets).toHaveLength(1);
     expect(targets[0]).toMatchObject({ templateId: "@example/video-a", missionType: "create_letter_video", selectFields: [{ key: "format" }] });
+  });
+
+  describe("staged Template version", () => {
+    const stagedFormat = { ...missionType().fields[0]!, options: [{ value: "hook", label: "Hook" }, { value: "square", label: "Square" }] };
+    async function setupStaged() {
+      const ctx = await setup();
+      // v1 (current) declares no provider; v2 (staged, not applied) does.
+      const v1 = template("@example/video-staged", [missionType({ contextProviders: [] })]);
+      const v2 = template("@example/video-staged", [missionType({ fields: [stagedFormat] })]);
+      setTemplateRegistryForTests({
+        async resolve(_p, id, version) {
+          if (id !== "@example/video-staged") return undefined;
+          return version === "2.0.0" ? v2 : version === undefined || version === "1.0.0" ? v1 : undefined;
+        },
+        async list() {
+          return [];
+        },
+      });
+      await ctx.t.run(async (db) => {
+        await db.db.insert("installedTemplates", { projectId: INSTANCE_ID, templateId: "@example/video-staged", version: "1.0.0", origin: "hub", digest: "d", manifest: {}, current: true, installedAt: 1 } as never);
+        await db.db.insert("installedTemplates", { projectId: INSTANCE_ID, templateId: "@example/video-staged", version: "2.0.0", origin: "hub", digest: "d", manifest: {}, current: false, staged: true, installedAt: 2 } as never);
+      });
+      return ctx;
+    }
+
+    it("offers a target only the staged version declares", async () => {
+      const { owner } = await setupStaged();
+      const targets = await owner.query(api.production_connections.listTargets, { instanceId: INSTANCE_ID });
+      expect(targets).toHaveLength(1);
+      expect(targets[0]).toMatchObject({ templateId: "@example/video-staged", missionType: "create_letter_video" });
+      expect(targets[0]!.selectFields[0]!.options.map((o) => o.value)).toEqual(["hook", "square"]);
+    });
+
+    it("accepts a connection validated against the staged manifest", async () => {
+      const { owner, recipeId } = await setupStaged();
+      const args = { instanceId: INSTANCE_ID, recipeId, templateId: "@example/video-staged", missionType: "create_letter_video" };
+      await expect(owner.mutation(api.production_connections.create, { ...args, compatibleWhen: { format: ["square"] } })).resolves.toBeTruthy();
+    });
+
+    it("still refuses when no installed version declares the provider", async () => {
+      const { owner, recipeId } = await setupStaged();
+      setTemplateRegistryForTests(inMemoryRegistry([INSTANCE_ID], [template("@example/video-staged", [missionType({ contextProviders: [] })])]));
+      await expect(
+        owner.mutation(api.production_connections.create, { instanceId: INSTANCE_ID, recipeId, templateId: "@example/video-staged", missionType: "create_letter_video" }),
+      ).rejects.toThrow("provider");
+    });
   });
 });

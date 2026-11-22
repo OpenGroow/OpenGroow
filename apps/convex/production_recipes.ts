@@ -1,8 +1,9 @@
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
+import { recipeVariableV, type recipeStatusV } from "./production_validators.js";
 import { validateRecipeContent, type RecipeContent } from "./production_recipe_resolver.js";
 
 // Production Recipes under a Creative Family (issue #137). A recipe is an
@@ -17,7 +18,7 @@ const contentArgs = {
   prompt: v.optional(v.string()),
   instructions: v.string(),
   constraints: v.array(v.string()),
-  variables: v.array(v.object({ name: v.string(), values: v.array(v.string()), default: v.optional(v.string()) })),
+  variables: v.array(recipeVariableV),
 };
 
 type ContentArgs = { prompt?: string; instructions: string; constraints: string[]; variables: RecipeContent["variables"] };
@@ -128,7 +129,7 @@ export const saveVersion = mutation({
   },
 });
 
-async function setStatus(ctx: MutationCtx, instanceId: string, recipeId: Id<"productionRecipes">, status: "active" | "archived") {
+async function setStatus(ctx: MutationCtx, instanceId: string, recipeId: Id<"productionRecipes">, status: Infer<typeof recipeStatusV>) {
   await ownerIdFor(ctx, instanceId);
   const recipe = await requireOwnedRecipe(ctx, instanceId, recipeId);
   if (recipe.status !== status) await ctx.db.patch(recipeId, { status });

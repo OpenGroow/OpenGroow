@@ -34,6 +34,7 @@ import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
+import { RECIPE_PROVIDER } from "./production_connection_rules.js";
 import { enqueueCommandMutation } from "./mission_dispatcher/enqueue_command.js";
 import {
   pollExternalJobRun,
@@ -449,7 +450,7 @@ export const dispatchPendingRuns = internalAction({
                 payload: mission.payload as Record<string, unknown> | undefined,
               };
             }
-            if (name === "production-recipe") {
+            if (name === RECIPE_PROVIDER) {
               providerData[name] = mission.recipeSnapshot ?? null;
             }
             if (name === "observation-production-source") {
