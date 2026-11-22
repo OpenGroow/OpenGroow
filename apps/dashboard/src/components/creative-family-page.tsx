@@ -17,6 +17,7 @@ import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { metricsOf, postUrlOf } from "@/src/lib/creative-library";
 import { isWebUrl } from "@/src/lib/web-url";
+import { AddSourceButton, RemoveFromFamilyButton } from "@/src/components/creative-family-source-actions";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
 // views, and its Sources.
@@ -85,6 +86,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
             <div className="flex items-center gap-3">
               <StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
               <EditFamilyButton instanceId={instanceId} family={family} />
+              {family.status === "archived" ? null : <AddSourceButton instanceId={instanceId} familyId={familyId} />}
               <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={family.status === "archived"} />
             </div>
           }
@@ -174,12 +176,13 @@ function FamilySourceRow({ source, instanceId, platform }: { source: FamilySourc
             </div>
           ))}
         </dl>
-        <div className="relative z-10 flex justify-end">
+        <div className="relative z-10 flex items-start justify-end gap-2">
           {isWebUrl(original) ? (
             <Button variant="outline" size="icon" nativeButton={false} render={<a href={original} target="_blank" rel="noreferrer" aria-label="Open original" />}>
               <ExternalLink />
             </Button>
           ) : null}
+          <RemoveFromFamilyButton instanceId={instanceId} sourceId={source._id} />
         </div>
       </Card>
     </li>
