@@ -116,6 +116,7 @@ describe("Project layout navigation", () => {
       "Missions",
       "Agents",
       "Sources",
+      "Creative Library",
       "Jobs",
       "Scheduler",
       "Brand",

@@ -15,6 +15,7 @@ export type InstanceView =
   | "agents"
   | "missions"
   | "sources"
+  | "library"
   | "jobs"
   | "schedules"
   | "publishers"
