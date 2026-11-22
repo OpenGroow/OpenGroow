@@ -602,11 +602,9 @@ export default defineSchema({
     decision: reconcileDecisionLogV,
     createdAt: v.number(),
   }).index("by_run_created", ["runId", "createdAt"]),
-  // A named, reusable creative pattern for an Instance (issue #486) —
-  // resolved by the scoring call at deep-enrichment completion, either by
-  // matching an Observation to an existing family (by slug) or by proposing
-  // a new one. No table-level relation back to the Observations that
-  // produced/matched it; `sources.creativeFamilyId` is the only link.
+  // A named, reusable creative pattern for an Instance (issue #486), curated
+  // by the user (ADR-082): scoring no longer creates or assigns families.
+  // `sources.creativeFamilyId` is the only link to its Sources.
   creativeFamilies: defineTable({
     instanceId: v.string(),
     slug: v.string(),
@@ -617,8 +615,7 @@ export default defineSchema({
     // Set on a family emptied by a merge: where its Sources went.
     mergedIntoId: v.optional(v.id("creativeFamilies")),
   })
-    // Lists an Instance's existing families for the scoring call's prompt
-    // context.
+    // Lists an Instance's families for the Creative Library (`creative_families.list`).
     .index("by_instance", ["instanceId"])
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
