@@ -95,6 +95,8 @@ import type * as observations_scoring_daily from "../observations_scoring_daily.
 import type * as openclaw_usage from "../openclaw_usage.js";
 import type * as optional_plugins from "../optional_plugins.js";
 import type * as post_url from "../post_url.js";
+import type * as production_connection_rules from "../production_connection_rules.js";
+import type * as production_connections from "../production_connections.js";
 import type * as production_recipe_resolver from "../production_recipe_resolver.js";
 import type * as production_recipes from "../production_recipes.js";
 import type * as project_agents from "../project_agents.js";
@@ -275,6 +277,8 @@ declare const fullApi: ApiFromModules<{
   openclaw_usage: typeof openclaw_usage;
   optional_plugins: typeof optional_plugins;
   post_url: typeof post_url;
+  production_connection_rules: typeof production_connection_rules;
+  production_connections: typeof production_connections;
   production_recipe_resolver: typeof production_recipe_resolver;
   production_recipes: typeof production_recipes;
   project_agents: typeof project_agents;
