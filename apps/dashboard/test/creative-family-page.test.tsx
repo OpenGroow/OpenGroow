@@ -131,7 +131,7 @@ describe("CreativeFamilyContent", () => {
     expect(text()).toContain("1,500");
     expect(text()).toContain("2,000");
     expect(text()).not.toContain("truncated");
-    expect(text()).not.toContain("first 500");
+    expect(text()).not.toContain("newest 500");
   });
 
   it("shows unknown, not zero, when no Source has views", async () => {
@@ -142,7 +142,7 @@ describe("CreativeFamilyContent", () => {
 
   it("warns when the statistics cover a truncated sample", async () => {
     await render({ stats: { ...STATS, truncated: true } });
-    expect(text()).toContain("first 500 Sources");
+    expect(text()).toContain("newest 500 Sources");
   });
 
   it("lists each Source with thumbnail, platform, original link, date and the metrics collected", async () => {

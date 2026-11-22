@@ -65,15 +65,27 @@ function familyView(family: Doc<"creativeFamilies">) {
     slug: family.slug,
     name: family.name,
     description: family.description,
-    status: family.status ?? "active",
+    status: isActiveFamily(family) ? "active" : "archived",
     mergedIntoId: family.mergedIntoId,
   };
 }
 
+/** True for a family that can receive Sources: `status` is absent on families written before archiving. */
+export function isActiveFamily(family: { status?: "active" | "archived" }): boolean {
+  return family.status !== "archived";
+}
+
 /** A family of the caller's Instance, or null (another Instance's family is "not found"). */
-async function ownedFamily(ctx: QueryCtx, instanceId: string, familyId: Id<"creativeFamilies">) {
+export async function ownedFamily(ctx: QueryCtx, instanceId: string, familyId: Id<"creativeFamilies">) {
   const family = await ctx.db.get(familyId);
   return family && family.instanceId === instanceId ? family : null;
+}
+
+/** Like {@link ownedFamily} but throws "Creative Family not found"; for mutations. */
+export async function requireOwnedFamily(ctx: QueryCtx, instanceId: string, familyId: Id<"creativeFamilies">) {
+  const family = await ownedFamily(ctx, instanceId, familyId);
+  if (!family) throw new Error("Creative Family not found");
+  return family;
 }
 
 /** The Project's families with their capped Source count and three recent Sources. */

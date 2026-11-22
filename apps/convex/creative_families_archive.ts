@@ -1,23 +1,20 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
+import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import { ownerIdFor } from "./instance_ownership.js";
 
 // Archive and unarchive a Creative Family (ADR-082). An archived family is no
 // longer offered as a destination (see `isActiveFamily`), but its Sources keep
 // their link to it and stay listed under it. Nothing else about it changes.
 
-/** True for a family that can receive Sources: `status` is absent on families written before archiving. */
-export function isActiveFamily(family: { status?: "active" | "archived" }): boolean {
-  return family.status !== "archived";
-}
-
 async function setStatus(ctx: MutationCtx, instanceId: string, familyId: Id<"creativeFamilies">, status: "active" | "archived") {
   await ownerIdFor(ctx, instanceId);
-  const family = await ctx.db.get(familyId);
-  // Another Instance's family is "not found", never confirmed to exist.
-  if (!family || family.instanceId !== instanceId) throw new Error("Creative Family not found");
-  if ((family.status ?? "active") !== status) await ctx.db.patch(familyId, { status });
+  const family = await requireOwnedFamily(ctx, instanceId, familyId);
+  if (isActiveFamily(family) !== (status === "active")) {
+    // A family that is active again was not merged away any more.
+    await ctx.db.patch(familyId, status === "active" ? { status, mergedIntoId: undefined } : { status });
+  }
   return null;
 }
 

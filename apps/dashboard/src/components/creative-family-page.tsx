@@ -8,14 +8,14 @@ import type { Id } from "@convex/_generated/dataModel";
 import { ArrowLeft, ExternalLink, Layers, Eye, TrendingUp, Trophy } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatTile } from "@/components/opengroow/stat-tile";
-import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
 import { EditFamilyButton } from "@/src/components/creative-family-actions";
 import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-archive-button";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
-import { metricsOf, postUrlOf } from "@/src/lib/creative-library";
+import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
 import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
 import { isWebUrl } from "@/src/lib/web-url";
 import { AddSourceButton, RemoveFromFamilyButton } from "@/src/components/creative-family-source-actions";
@@ -85,15 +85,15 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           description={family.description}
           action={
             <div className="flex items-center gap-3">
-              {family.status === "active" ? <MergeFamilyButton instanceId={instanceId} familyId={family._id} familyName={family.name} /> : null}
-              <StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
+              {isActiveFamily(family) ? <MergeFamilyButton instanceId={instanceId} familyId={family._id} familyName={family.name} /> : null}
+              <FamilyStatusBadge size="default" status={family.status} />
               <EditFamilyButton instanceId={instanceId} family={family} />
-              {family.status === "archived" ? null : <AddSourceButton instanceId={instanceId} familyId={familyId} />}
-              <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={family.status === "archived"} />
+              {isActiveFamily(family) ? <AddSourceButton instanceId={instanceId} familyId={familyId} /> : null}
+              <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={!isActiveFamily(family)} />
             </div>
           }
         />
-        {family.mergedIntoId ? <MergedInto instanceId={instanceId} destinationId={family.mergedIntoId} /> : null}
+        {!isActiveFamily(family) && family.mergedIntoId ? <MergedInto instanceId={instanceId} destinationId={family.mergedIntoId} /> : null}
       </div>
 
       {stats ? <Statistics stats={stats} /> : null}
@@ -160,7 +160,7 @@ function Statistics({ stats }: { stats: FamilyStats }) {
       {stats.truncated ? (
         <p role="note" className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
           <Eye aria-hidden="true" className="size-4 shrink-0" />
-          These figures cover only the first {STATS_CAP} Sources of the family, not all of them.
+          These figures cover only the newest {STATS_CAP} Sources of the family, not all of them.
         </p>
       ) : null}
     </section>
@@ -168,7 +168,7 @@ function Statistics({ stats }: { stats: FamilyStats }) {
 }
 
 function FamilySourceRow({ source, instanceId, platform }: { source: FamilySource; instanceId: string; platform?: SourcePlatform }) {
-  const title = source.marketing.summary ?? source.origin;
+  const title = sourceTitle(source);
   const original = postUrlOf(source);
   return (
     <li>

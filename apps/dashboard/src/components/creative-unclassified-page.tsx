@@ -1,17 +1,17 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
-import { usePaginatedQuery, useQuery, useMutation } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { formatSourceDate } from "@/src/components/source-status-pill";
-import { errorMessage, type ClassifiableSource } from "@/src/components/creative-family-source-actions";
+import { useAssignSource, type ClassifiableSource } from "@/src/components/creative-family-source-actions";
+import { isActiveFamily, sourceTitle } from "@/src/lib/creative-library";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
 
 // Sources that belong to no Creative Family, each with a family picker (ADR-082).
@@ -35,11 +35,10 @@ export function CreativeUnclassifiedContent({ instanceId }: { instanceId: string
     { instanceId },
     { initialNumItems: PAGE_SIZE },
   ) as { results: UnclassifiedSource[]; status: string; loadMore: (numItems: number) => void };
-  const assign = useMutation(api.creative_family_sources.assign);
+  const { assign, error } = useAssignSource(instanceId);
   const platformFor = useSourcePlatforms(instanceId);
-  const [error, setError] = useState<string | null>(null);
   useThumbnailRequests(instanceId, results);
-  const destinations = (families ?? []).filter((family) => family.status === "active");
+  const destinations = (families ?? []).filter(isActiveFamily);
 
   return (
     <div className="grid gap-8">
@@ -70,7 +69,7 @@ export function CreativeUnclassifiedContent({ instanceId }: { instanceId: string
                       href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
                       className="w-fit max-w-full truncate text-base font-semibold text-foreground"
                     >
-                      {source.marketing.summary ?? source.origin}
+                      {sourceTitle(source)}
                     </Link>
                     <div className="flex flex-wrap items-center gap-3">
                       <FormatBadge source={source} platform={platformFor(source)} />
@@ -79,16 +78,13 @@ export function CreativeUnclassifiedContent({ instanceId }: { instanceId: string
                   </div>
                 </div>
                 <NativeSelect
-                  aria-label={`Family for ${source.marketing.summary ?? source.origin}`}
+                  aria-label={`Family for ${sourceTitle(source)}`}
                   className="h-11 lg:w-56"
                   value=""
                   onChange={(event) => {
                     const familyId = event.target.value;
                     if (!familyId) return;
-                    setError(null);
-                    assign({ instanceId, sourceId: source._id as Id<"sources">, familyId: familyId as Id<"creativeFamilies"> }).catch((e: unknown) =>
-                      setError(errorMessage(e)),
-                    );
+                    assign(source._id, familyId);
                   }}
                 >
                   <option value="">Choose a family…</option>

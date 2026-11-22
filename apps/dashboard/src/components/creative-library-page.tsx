@@ -6,7 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { StatusBadge } from "@/components/opengroow/status-badge";
+import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -128,7 +128,7 @@ function FamilyRowItem({ family, instanceId }: { family: FamilyRow; instanceId: 
             >
               {family.name}
             </Link>
-            <StatusBadge tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
+            <FamilyStatusBadge status={family.status} />
             {family.sourceCount === 0 ? <Badge variant="outline" size="xs">Empty</Badge> : null}
             {family.sourceCount === 1 ? <Badge variant="outline" size="xs">Single Source</Badge> : null}
           </div>

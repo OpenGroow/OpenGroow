@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
 // Archives or unarchives a Creative Family (ADR-082). An archived family is
 // no longer offered as a destination; its Sources stay listed under it.
@@ -29,7 +30,7 @@ export function CreativeFamilyArchiveButton({
     try {
       await (archived ? unarchive : archive)({ instanceId, familyId: familyId as Id<"creativeFamilies"> });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update the family.");
+      setError(extractConvexErrorMessage(e, "Could not update the family."));
     } finally {
       setPending(false);
     }

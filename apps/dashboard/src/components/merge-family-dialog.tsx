@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { isActiveFamily } from "@/src/lib/creative-library";
 
 // Merge a Creative Family into another (ADR-082). The server moves at most 100
 // Sources per call; this repeats the call until none remain, and calling it
@@ -56,7 +58,7 @@ function MergeFamilyDialog({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const selectId = React.useId();
-  const targets = (families ?? []).filter((f) => f._id !== familyId && f.status === "active");
+  const targets = (families ?? []).filter((f) => f._id !== familyId && isActiveFamily(f));
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -69,7 +71,7 @@ function MergeFamilyDialog({
       );
       setMoved(total);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "The merge failed. Run it again to resume.");
+      setError(extractConvexErrorMessage(e, "The merge failed. Run it again to resume."));
     } finally {
       setBusy(false);
     }

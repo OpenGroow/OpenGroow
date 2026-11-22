@@ -56,6 +56,16 @@ describe("creative_family_details.create", () => {
     await expect(create(t, "HOOK ZOOM")).rejects.toThrow(/already exists/);
   });
 
+  it("finds a duplicate name past the list cap", async () => {
+    const t = await seed();
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 205; i++) {
+        await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: `f-${i}`, name: `Family ${i}`, description: "d" });
+      }
+    });
+    await expect(create(t, "family 204")).rejects.toThrow(/already exists/);
+  });
+
   it("refuses a name whose slug already exists", async () => {
     const t = await seed();
     await t.run(async (ctx) => {

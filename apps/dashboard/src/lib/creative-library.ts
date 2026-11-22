@@ -25,3 +25,13 @@ export function postUrlOf(source: { origin: string; analysis?: unknown }): strin
   const analysis = typeof source.analysis === "object" && source.analysis !== null ? (source.analysis as Record<string, unknown>) : {};
   return typeof analysis.postUrl === "string" ? analysis.postUrl : source.origin;
 }
+
+/** True for a family that can receive Sources. */
+export function isActiveFamily(family: { status: "active" | "archived" }): boolean {
+  return family.status === "active";
+}
+
+/** What a Source is called in lists: its summary, else its origin. */
+export function sourceTitle(source: { origin: string; marketing: { summary?: string } }): string {
+  return source.marketing.summary ?? source.origin;
+}

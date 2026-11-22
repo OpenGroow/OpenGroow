@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
 // Name and mechanic of a Creative Family (ADR-082): used to create one and to edit it.
 
@@ -16,13 +17,6 @@ type Props = {
   initial?: { name: string; description: string };
   onSubmit: (fields: { name: string; description: string }) => void | Promise<void>;
 };
-
-/** The server's refusal text, without Convex's request prefix and stack. */
-function messageOf(error: unknown): string {
-  const raw = error instanceof Error ? error.message : "Failed to save the Creative Family";
-  const uncaught = /Uncaught Error: ([^\n]*)/.exec(raw);
-  return uncaught?.[1] ?? raw;
-}
 
 export function CreativeFamilyFormDialog({ mode, open, onOpenChange, initial, onSubmit }: Props) {
   const [name, setName] = React.useState(initial?.name ?? "");
@@ -51,7 +45,7 @@ export function CreativeFamilyFormDialog({ mode, open, onOpenChange, initial, on
       await onSubmit({ name: name.trim(), description: description.trim() });
       onOpenChange(false);
     } catch (submitError: unknown) {
-      setError(messageOf(submitError));
+      setError(extractConvexErrorMessage(submitError, "Failed to save the Creative Family"));
     } finally {
       setSubmitting(false);
     }

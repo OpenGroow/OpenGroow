@@ -86,6 +86,22 @@ describe("creative_family_merge.merge", () => {
     expect(archived.mergedIntoId).toBe(into);
   });
 
+  it("moves the Sources of every owner of the Instance before archiving", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t);
+    const from = await family(t);
+    const into = await family(t);
+    await sources(t, from, 2);
+    await sources(t, from, 3, INSTANCE_ID, OWNER.tokenIdentifier);
+    const result = await t
+      .withIdentity(OWNER)
+      .mutation(api.creative_family_merge.merge, { instanceId: INSTANCE_ID, fromFamilyId: from, intoFamilyId: into });
+    expect(result).toEqual({ moved: 5, remaining: 0 });
+    expect(await countIn(t, into)).toBe(5);
+    expect(await countIn(t, from)).toBe(0);
+    expect((await t.run((ctx) => ctx.db.get(from)))!.status).toBe("archived");
+  });
+
   it("archives an empty family at once and is a no-op when run again", async () => {
     const t = convexTest(schema, modules);
     await seed(t);

@@ -7,6 +7,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { sourceTitle } from "@/src/lib/creative-library";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 
 // Hand classification of Sources (ADR-082): remove a Source from its family,
@@ -16,8 +18,18 @@ const PAGE_SIZE = 25;
 
 export type ClassifiableSource = VisualSource & { _id: string; origin: string; marketing: { summary?: string } };
 
-/** Message of a failed mutation, shown instead of an unhandled rejection. */
-export const errorMessage = (error: unknown): string => (error instanceof Error ? error.message : "Something went wrong");
+/** `assign(sourceId, familyId)` puts a Source in a family; a refusal is kept in `error` instead of an unhandled rejection. */
+export function useAssignSource(instanceId: string) {
+  const assignMutation = useMutation(api.creative_family_sources.assign);
+  const [error, setError] = useState<string | null>(null);
+  const assign = (sourceId: string, familyId: string) => {
+    setError(null);
+    assignMutation({ instanceId, sourceId: sourceId as Id<"sources">, familyId: familyId as Id<"creativeFamilies"> }).catch((e: unknown) =>
+      setError(extractConvexErrorMessage(e, "Something went wrong")),
+    );
+  };
+  return { assign, error };
+}
 
 export function RemoveFromFamilyButton({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const remove = useMutation(api.creative_family_sources.remove);
@@ -29,7 +41,7 @@ export function RemoveFromFamilyButton({ instanceId, sourceId }: { instanceId: s
         variant="outline"
         onClick={() => {
           setError(null);
-          remove({ instanceId, sourceId: sourceId as Id<"sources"> }).catch((e: unknown) => setError(errorMessage(e)));
+          remove({ instanceId, sourceId: sourceId as Id<"sources"> }).catch((e: unknown) => setError(extractConvexErrorMessage(e, "Something went wrong")));
         }}
       >
         Remove from family
@@ -66,8 +78,7 @@ function UnclassifiedPicker({ instanceId, familyId }: { instanceId: string; fami
     { instanceId },
     { initialNumItems: PAGE_SIZE },
   ) as { results: ClassifiableSource[]; status: string; loadMore: (numItems: number) => void };
-  const assign = useMutation(api.creative_family_sources.assign);
-  const [error, setError] = useState<string | null>(null);
+  const { assign, error } = useAssignSource(instanceId);
   useThumbnailRequests(instanceId, results);
   if (status === "LoadingFirstPage") return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (results.length === 0) return <p className="text-sm text-muted-foreground">No unclassified Sources.</p>;
@@ -78,16 +89,11 @@ function UnclassifiedPicker({ instanceId, familyId }: { instanceId: string; fami
         {results.map((source) => (
           <li key={source._id} className="flex items-center gap-3">
             <SourceThumbnail source={source} className="size-12" />
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{source.marketing.summary ?? source.origin}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{sourceTitle(source)}</span>
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setError(null);
-                assign({ instanceId, sourceId: source._id as Id<"sources">, familyId: familyId as Id<"creativeFamilies"> }).catch((e: unknown) =>
-                  setError(errorMessage(e)),
-                );
-              }}
+              onClick={() => assign(source._id, familyId)}
             >
               Add
             </Button>

@@ -74,6 +74,17 @@ describe("creative_families_archive", () => {
     expect(row!.status).toBe("active");
   });
 
+  it("clears the merge record when a merged family is unarchived", async () => {
+    const t = convexTest(schema, modules);
+    await seed(t);
+    const dest = await family(t);
+    const f = await family(t, { status: "archived", mergedIntoId: dest });
+    await t.withIdentity(OWNER).mutation(api.creative_families_archive.unarchive, { instanceId: INSTANCE_ID, familyId: f });
+    const doc = await t.run((ctx) => ctx.db.get(f));
+    expect(doc!.status).toBe("active");
+    expect(doc!.mergedIntoId).toBeUndefined();
+  });
+
   it("is idempotent and leaves the name, slug and merge record alone", async () => {
     const t = convexTest(schema, modules);
     await seed(t);

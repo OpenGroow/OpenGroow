@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
-import { FAMILY_LIST_CAP } from "./creative_families.js";
+import { requireOwnedFamily } from "./creative_families.js";
 import { ownerIdFor } from "./instance_ownership.js";
 
 // Create and edit a Creative Family (ADR-082, issue #130). The slug is derived
@@ -27,12 +27,11 @@ function cleanFields(name: string, description: string) {
 /** Throws when another family of the Instance (archived included) has this name. */
 async function assertNameFree(ctx: MutationCtx, instanceId: string, name: string, selfId?: Id<"creativeFamilies">) {
   const wanted = normalizeFamilyName(name);
-  const families = await ctx.db
-    .query("creativeFamilies")
-    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-    .take(FAMILY_LIST_CAP);
-  if (families.some((f) => f._id !== selfId && normalizeFamilyName(f.name) === wanted)) {
-    throw new Error(`A Creative Family named "${name}" already exists`);
+  // Read them all: a cap here would let a duplicate past it slip through.
+  for await (const f of ctx.db.query("creativeFamilies").withIndex("by_instance", (q) => q.eq("instanceId", instanceId))) {
+    if (f._id !== selfId && normalizeFamilyName(f.name) === wanted) {
+      throw new Error(`A Creative Family named "${name}" already exists`);
+    }
   }
 }
 
@@ -57,8 +56,7 @@ export const update = mutation({
   args: { instanceId: v.string(), familyId: v.id("creativeFamilies"), name: v.string(), description: v.string() },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    const family = await ctx.db.get(args.familyId);
-    if (!family || family.instanceId !== args.instanceId) throw new Error("Creative Family not found");
+    await requireOwnedFamily(ctx, args.instanceId, args.familyId);
     const fields = cleanFields(args.name, args.description);
     await assertNameFree(ctx, args.instanceId, fields.name, args.familyId);
     await ctx.db.patch(args.familyId, fields);

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
+import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import { ownerIdsFor } from "./instance_ownership.js";
 
 // Hand classification of Sources into Creative Families (ADR-082). A Source
@@ -21,9 +22,8 @@ export const assign = mutation({
   args: { instanceId: v.string(), sourceId: v.id("sources"), familyId: v.id("creativeFamilies") },
   handler: async (ctx, args) => {
     const source = await ownedSource(ctx, args.instanceId, args.sourceId);
-    const family = await ctx.db.get(args.familyId);
-    if (!family || family.instanceId !== args.instanceId) throw new Error("Creative Family not found");
-    if (family.status === "archived") throw new Error("This Creative Family is archived");
+    const family = await requireOwnedFamily(ctx, args.instanceId, args.familyId);
+    if (!isActiveFamily(family)) throw new Error("This Creative Family is archived");
     if (source.creativeFamilyId === args.familyId) return null;
     await ctx.db.patch(args.sourceId, { creativeFamilyId: args.familyId });
     return null;
