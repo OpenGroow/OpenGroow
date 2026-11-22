@@ -21,7 +21,8 @@ vi.mock("convex/react", () => ({
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    creative_families: { get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
+    creative_family_merge: { merge: "creative_family_merge.merge" },
+    creative_families: { list: "creative_families.list", get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -98,6 +99,19 @@ describe("CreativeFamilyContent", () => {
     expect(text()).toContain("A close-up reaction");
     expect(text()).toContain("Active");
     expect(document.body.querySelector('a[href="/projects/instance-1/library"]')).not.toBeNull();
+  });
+
+  it("shows where an archived merged family's Sources went", async () => {
+    await render({ family: { ...FAMILY, status: "archived", mergedIntoId: "fam-2" } });
+    const note = document.body.querySelector('[role="note"]') as HTMLElement;
+    expect(note.textContent).toContain("Merged into");
+    expect(note.querySelector('a[href="/projects/instance-1/library/fam-2"]')).not.toBeNull();
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
+  });
+
+  it("offers the merge on an active family", async () => {
+    await render();
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(true);
   });
 
   it("shows the statistics: Sources with views out of the total, median and maximum", async () => {

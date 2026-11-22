@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { metricsOf, postUrlOf } from "@/src/lib/creative-library";
+import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
 import { isWebUrl } from "@/src/lib/web-url";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
@@ -23,7 +24,7 @@ const PAGE_SIZE = 25;
 // Matches the server's `STATS_SOURCE_CAP` (`creative_families.stats`).
 const STATS_CAP = 500;
 
-type FamilyDetail = { _id: string; name: string; description: string; status: "active" | "archived" };
+type FamilyDetail = { _id: string; name: string; description: string; status: "active" | "archived"; mergedIntoId?: string };
 type FamilyStats = { sourceCount: number; withViewsCount: number; medianViews: number | null; maxViews: number | null; truncated: boolean };
 type FamilySource = {
   _id: string;
@@ -79,8 +80,14 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         <PageHeader
           title={family.name}
           description={family.description}
-          action={<StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />}
+          action={
+            <div className="flex items-center gap-3">
+              {family.status === "active" ? <MergeFamilyButton instanceId={instanceId} familyId={family._id} familyName={family.name} /> : null}
+              <StatusBadge size="default" tone={family.status === "archived" ? "neutral" : "active"} label={family.status === "archived" ? "Archived" : "Active"} />
+            </div>
+          }
         />
+        {family.mergedIntoId ? <MergedInto instanceId={instanceId} destinationId={family.mergedIntoId} /> : null}
       </div>
 
       {stats ? <Statistics stats={stats} /> : null}
@@ -104,6 +111,23 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         ) : null}
       </section>
     </div>
+  );
+}
+
+/** Where an archived family's Sources went. */
+function MergedInto({ instanceId, destinationId }: { instanceId: string; destinationId: string }) {
+  const destination = useQuery(api.creative_families.get, { instanceId, familyId: destinationId as Id<"creativeFamilies"> }) as
+    | { name: string }
+    | null
+    | undefined;
+  return (
+    <p role="note" className="m-0 text-sm text-muted-foreground">
+      Merged into{" "}
+      <Link href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(destinationId)}`} className="font-medium text-foreground underline-offset-4 hover:underline">
+        {destination?.name ?? "another family"}
+      </Link>
+      . Its Sources moved there.
+    </p>
   );
 }
 
