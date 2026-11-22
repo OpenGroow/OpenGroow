@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
+import { engagementCountsOf } from "./sources_social.js";
 
 // Read side of the Creative Library (ADR-082): a Creative Family is a list the
 // user curates, and its `description` states the mechanic its Sources share.
@@ -117,5 +118,41 @@ export const listUnclassified = query({
     if (ownerId === null) return EMPTY_PAGE;
     const result = await familySources(ctx, args.instanceId, ownerId, undefined).paginate(args.paginationOpts);
     return { ...result, page: await Promise.all(result.page.map((s) => viewOf(ctx, s))) };
+  },
+});
+
+/** The most Sources a family's statistics are computed over. */
+export const STATS_SOURCE_CAP = 500;
+
+function medianOf(sorted: number[]): number {
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/**
+ * A family's statistics, computed at read time (nothing is stored) over its
+ * newest Sources, at most STATS_SOURCE_CAP, with a flag when it was cut short.
+ * Median and maximum cover only the Sources with views; a missing metric is
+ * unknown (`null`), never zero. Null for a stranger or a family of another Instance.
+ */
+export const stats = query({
+  args: { instanceId: v.string(), familyId: v.id("creativeFamilies") },
+  handler: async (ctx, args) => {
+    const ownerId = await readOwnerId(ctx, args.instanceId);
+    if (ownerId === null) return null;
+    if (!(await ownedFamily(ctx, args.instanceId, args.familyId))) return null;
+    const fetched = await familySources(ctx, args.instanceId, ownerId, args.familyId).take(STATS_SOURCE_CAP + 1);
+    const sources = fetched.slice(0, STATS_SOURCE_CAP);
+    const views = sources
+      .map((s) => engagementCountsOf(s).viewCount)
+      .filter((n): n is number => n !== undefined)
+      .sort((a, b) => a - b);
+    return {
+      sourceCount: sources.length,
+      withViewsCount: views.length,
+      medianViews: views.length > 0 ? medianOf(views) : null,
+      maxViews: views.length > 0 ? views[views.length - 1]! : null,
+      truncated: fetched.length > STATS_SOURCE_CAP,
+    };
   },
 });
