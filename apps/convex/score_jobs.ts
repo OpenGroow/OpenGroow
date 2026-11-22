@@ -98,19 +98,8 @@ async function applySourceScores(ctx: MutationCtx, scores: SourceScore[]): Promi
   for (const score of scores) {
     const source = await ctx.db.get(score.sourceId);
     if (!source || !isUnscored(source)) continue;
-    const existing = await ctx.db
-      .query("creativeFamilies")
-      .withIndex("by_instance_slug", (q) => q.eq("instanceId", source.instanceId).eq("slug", score.creativeFamily.slug))
-      .unique();
-    const creativeFamilyId = existing?._id ?? await ctx.db.insert("creativeFamilies", {
-      instanceId: source.instanceId,
-      slug: score.creativeFamily.slug,
-      name: score.creativeFamily.name,
-      description: score.creativeFamily.description,
-    });
     await ctx.db.patch(source._id, {
       scoring: { productFit: score.productFit, replicability: score.replicability, creativeStrength: score.creativeStrength },
-      creativeFamilyId,
     });
   }
 }
