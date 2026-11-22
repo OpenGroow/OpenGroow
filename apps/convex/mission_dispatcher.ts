@@ -36,6 +36,7 @@ export const loadDispatchInputs = internalQuery({
         instanceId: mission.instanceId,
         templateId: mission.templateId,
         ...(mission.templateVersion !== undefined ? { templateVersion: mission.templateVersion } : {}),
+        ...(mission.recipeSnapshot !== undefined ? { recipeSnapshot: mission.recipeSnapshot } : {}),
         type: mission.type,
         payload: mission.payload,
         ...(mission.lastResult !== undefined ? { lastResult: mission.lastResult } : {}),

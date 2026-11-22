@@ -79,6 +79,16 @@ A **Production Recipe** offered to one Mission type of one installed Template. T
 - **Status**: `candidate` (usable only when referenced explicitly), `active` (activated manually, never automatically) or `disabled` (never usable).
 - _Avoid_: targeting an Agent instead of a Template and Mission type, and free-text technical identifiers.
 
+### Recipe Snapshot
+
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, the **Creative Connection**, the variable values used, and the resolved prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+
+- **Checks at creation**, in order: the connection belongs to the Project and is not `disabled`; it targets the Template and Mission type; the payload satisfies its `compatibleWhen`; the Template version the Mission is pinned to declares the `production-recipe` provider; the recipe is not archived; then the variables resolve (an unknown variable or a value outside the list refuses the creation).
+- The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
+- _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
+
+See ADR-083.
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.

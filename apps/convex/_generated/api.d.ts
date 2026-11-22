@@ -85,6 +85,7 @@ import type * as mission_dispatcher_reconcile_apply_node from "../mission_dispat
 import type * as mission_dispatcher_reconciliation from "../mission_dispatcher/reconciliation.js";
 import type * as mission_dispatcher_session_budget from "../mission_dispatcher/session_budget.js";
 import type * as mission_dispatcher_node from "../mission_dispatcher_node.js";
+import type * as mission_recipe from "../mission_recipe.js";
 import type * as mission_review from "../mission_review.js";
 import type * as mission_summary_http from "../mission_summary_http.js";
 import type * as missions from "../missions.js";
@@ -267,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   "mission_dispatcher/reconciliation": typeof mission_dispatcher_reconciliation;
   "mission_dispatcher/session_budget": typeof mission_dispatcher_session_budget;
   mission_dispatcher_node: typeof mission_dispatcher_node;
+  mission_recipe: typeof mission_recipe;
   mission_review: typeof mission_review;
   mission_summary_http: typeof mission_summary_http;
   missions: typeof missions;
