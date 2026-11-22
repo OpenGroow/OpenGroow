@@ -57,6 +57,20 @@ The creative mechanic that several of an Instance's Sources share (e.g. "fake_sm
 
 See ADR-051, ADR-082.
 
+### Production Recipe
+
+How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance and has a name and a description. Its content lives in its **Recipe Versions**. A recipe is `active` or `archived`; archiving keeps every version readable and stops further edits.
+
+- **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
+- _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
+
+### Recipe Version
+
+One immutable save of a **Production Recipe**: an optional verbatim `prompt`, free-form `instructions`, a list of `constraints` (guidance text, not validations) and controlled `variables` (a name, a closed list of allowed values, a default). Editing a recipe appends the next version; a saved version is never modified.
+
+- **Placeholders**: `{NAME}` in the `prompt` and the `instructions` must match a declared variable, and a variable's default must be one of its values; both are checked at save.
+- **Resolution**: a pure function turns a version plus choices into the resolved texts and the values used. Per variable: the explicit value, else a random draw if the variable is named in `vary`, else the default. An unknown variable, a value outside the list, or a variable with neither value nor default fails with an explicit error. Same input gives the same output (the random source is injectable).
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.

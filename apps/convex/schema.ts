@@ -620,6 +620,28 @@ export default defineSchema({
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
     .index("by_instance_slug", ["instanceId", "slug"]),
+  // A Production Recipe (issue #137): how to reproduce a Creative Family's
+  // mechanic. Identity only; its content lives in `productionRecipeVersions`.
+  productionRecipes: defineTable({
+    instanceId: v.string(),
+    creativeFamilyId: v.id("creativeFamilies"),
+    name: v.string(),
+    description: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+  })
+    .index("by_instance_family", ["instanceId", "creativeFamilyId"]),
+  // A Recipe Version: append-only, never patched. An edit inserts the next one.
+  productionRecipeVersions: defineTable({
+    instanceId: v.string(),
+    recipeId: v.id("productionRecipes"),
+    version: v.number(),
+    prompt: v.optional(v.string()),
+    instructions: v.string(),
+    constraints: v.array(v.string()),
+    variables: v.array(v.object({ name: v.string(), values: v.array(v.string()), default: v.optional(v.string()) })),
+    createdAt: v.number(),
+  })
+    .index("by_recipe_version", ["recipeId", "version"]),
   // Sources (issue #529, ADR-051): the generic, append-only successor of
   // Observations, ingested by Convex from a SourceJob Run's result file.
   // `label` and `family` are copied from the Template's declaration, never
