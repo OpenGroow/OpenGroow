@@ -179,4 +179,17 @@ describe("CreativeFamilyContent", () => {
     });
     expect(loadMore).toHaveBeenCalled();
   });
+
+  it("shows Sources by default and switches to Recipes with the tabs", async () => {
+    await render({ sources: [makeSource()] });
+    const tab = (name: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLElement;
+    expect(tab("Sources").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[aria-label="Production Recipes"]')).toBeNull();
+    await act(async () => {
+      tab("Recipes").click();
+    });
+    expect(tab("Recipes").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[aria-label="Production Recipes"]')).not.toBeNull();
+    expect((document.querySelector('[aria-label="Family Sources"]') as HTMLElement).hidden).toBe(true);
+  });
 });

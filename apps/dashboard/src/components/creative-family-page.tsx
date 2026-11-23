@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -17,6 +17,7 @@ import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
 import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
+import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
 import { FamilyRecipes } from "@/src/components/family-recipes";
 import { AddSourceButton, RemoveFromFamilyButton } from "@/src/components/creative-family-source-actions";
@@ -44,6 +45,12 @@ type FamilySource = {
   thumbnailTriedAt?: number;
 };
 
+const TABS = [
+  { key: "sources", label: "Sources" },
+  { key: "recipes", label: "Recipes" },
+] as const;
+type FamilyTab = (typeof TABS)[number]["key"];
+
 const number = (value: number): string => new Intl.NumberFormat("en-US").format(value);
 /** A figure the server could not compute is unknown, never zero. */
 const figure = (value: number | null): string => (value === null ? "Unknown" : number(value));
@@ -64,6 +71,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { instanceId, familyId: id },
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
+  const [tab, setTab] = useState<FamilyTab>("sources");
   const platformFor = useSourcePlatforms(instanceId);
   useThumbnailRequests(instanceId, results);
 
@@ -99,9 +107,27 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
 
       {stats ? <Statistics stats={stats} /> : null}
 
-      <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} />
+      <div role="tablist" aria-label="Creative Family" className="flex gap-6 border-b border-border">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn(
+              "-mb-px border-b-2 px-1 pb-3 text-base font-semibold transition-colors",
+              tab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      <section aria-label="Family Sources" className="grid gap-3">
+      {tab === "recipes" ? <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} /> : null}
+
+      <section aria-label="Family Sources" hidden={tab !== "sources"} className="grid gap-3">
         {status === "LoadingFirstPage" ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : results.length === 0 ? (
