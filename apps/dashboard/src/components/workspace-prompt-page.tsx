@@ -21,18 +21,29 @@ type TranscriptState =
 
 type WorkspacePromptPageProps = {
   params: Promise<{ projectId: string; workspaceKey: string }>;
+  /** Which Run and Mission to show when the page is not opened with `?runId=&missionId=` (the Mission's Run page). */
+  runId?: Id<"runs">;
+  missionId?: Id<"missions">;
 };
 
-export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
+const MCP_NAME_SEPARATORS = [".", "__"] as const;
+
+/** Whether a transcript tool name is a call to `tool`, on `server` when it is known. */
+function isCallToTool(recordedName: string, tool: string, server: string | undefined): boolean {
+  if (server) return MCP_NAME_SEPARATORS.some((separator) => recordedName === `${server}${separator}${tool}`);
+  return recordedName === tool || MCP_NAME_SEPARATORS.some((separator) => recordedName.endsWith(`${separator}${tool}`));
+}
+
+export function WorkspacePromptPage({ params, runId: runIdProp, missionId: missionIdProp }: WorkspacePromptPageProps) {
   const { projectId, workspaceKey } = use(params);
   const { manifests } = useProjectManifests(decodeURIComponent(projectId));
   const decodedWorkspaceKey = decodeURIComponent(workspaceKey);
   const searchParams = useSearchParams();
-  const runId = searchParams.get("runId") as Id<"runs"> | null;
-  // Read straight from the link (mission-detail-page.tsx's RunRow) so both
+  const runId = runIdProp ?? (searchParams.get("runId") as Id<"runs"> | null);
+  // Read straight from the link or the route (the Mission's Run page) so both
   // Convex queries fire in parallel on mount, instead of waiting for `run`
   // to resolve before mission.get can even start.
-  const missionId = searchParams.get("missionId") as Id<"missions"> | null;
+  const missionId = missionIdProp ?? (searchParams.get("missionId") as Id<"missions"> | null);
 
   const run = useQuery(api.runs.get, runId ? { runId } : "skip");
   const mission = useQuery(api.missions.get, missionId ? { missionId } : "skip");
@@ -105,19 +116,16 @@ export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
     return <p className="text-sm text-muted-foreground">Run not found.</p>;
   }
 
-  // The transcript records an MCP tool_call's name prefixed by its server
-  // (e.g. "media-mcp.generate_assets"), while `generativeMcpCall`
-  // declares the bare tool name to stay consistent with
-  // `externalJobsByMissionType`'s job-type keys. Match the exact
-  // `server.toolName` when the server is known; otherwise fall back to a
-  // same-name match regardless of server.
+  // The transcript records an MCP tool_call's name prefixed by its server, and
+  // the separator depends on the model provider's API: `media-mcp.generate_assets`
+  // (OpenAI Responses) or `media-mcp__generate_assets` (OpenRouter / completions
+  // APIs, which do not accept a dot in a tool name). `generativeMcpCall` declares
+  // the bare tool name to stay consistent with `externalJobsByMissionType`'s
+  // job-type keys. Match the exact `server` + separator + tool when the server
+  // is known; otherwise fall back to a same-name match regardless of server.
   const generationCall =
     transcript.status === "data" && generativeToolName
-      ? transcript.toolCalls.find((turn) =>
-          generativeServer
-            ? turn.toolName === `${generativeServer}.${generativeToolName}`
-            : turn.toolName === generativeToolName || turn.toolName.endsWith(`.${generativeToolName}`),
-        )
+      ? transcript.toolCalls.find((turn) => isCallToTool(turn.toolName, generativeToolName, generativeServer))
       : undefined;
 
   return (

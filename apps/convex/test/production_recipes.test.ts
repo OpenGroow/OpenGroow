@@ -147,6 +147,18 @@ describe("production_recipes", () => {
     await expect(owner.mutation(api.production_recipes.setTarget, { ...args, ...TARGET })).rejects.toThrow("archived");
   });
 
+  it("offers only the active recipes of that Template and Mission type, to the owner", async () => {
+    const { t, owner, familyId, recipeId } = await setup();
+    const base = { instanceId: INSTANCE_ID, familyId, description: "", ...content };
+    const archived = await owner.mutation(api.production_recipes.create, { ...base, name: "Old", ...TARGET });
+    await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE_ID, recipeId: archived.recipeId });
+    await owner.mutation(api.production_recipes.create, { ...base, name: "Other Template", templateId: "@example/video-b", missionType: "create_letter_video" });
+    const offered = await owner.query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET });
+    expect(offered).toEqual([{ _id: recipeId, name: "Recipe A", description: "d", latestVersion: 1 }]);
+    expect(await owner.query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, templateId: TARGET.templateId, missionType: "create_letter_only_video" })).toEqual([]);
+    expect(await t.withIdentity(STRANGER).query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET })).toEqual([]);
+  });
+
   it("lists targets that declare the provider", async () => {
     const { t, owner } = await setup();
     await t.run(async (ctx) => {

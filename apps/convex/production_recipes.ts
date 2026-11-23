@@ -213,6 +213,33 @@ export const list = query({
   },
 });
 
+/**
+ * The active recipes written for one Mission type of one Template: what the
+ * Create Mission form offers. Archived recipes are never offered (a Mission
+ * cannot be created with one), and nothing is chosen automatically.
+ */
+export const listForMissionType = query({
+  args: { instanceId: v.string(), templateId: v.string(), missionType: v.string() },
+  handler: async (ctx, args) => {
+    if ((await readOwnerId(ctx, args.instanceId)) === null) return [];
+    const recipes = await ctx.db
+      .query("productionRecipes")
+      .withIndex("by_instance_target", (q) =>
+        q.eq("instanceId", args.instanceId).eq("templateId", args.templateId).eq("missionType", args.missionType),
+      )
+      .take(RECIPE_LIST_CAP);
+    const active = recipes.filter((recipe) => recipe.status === "active");
+    return await Promise.all(
+      active.map(async (recipe) => ({
+        _id: recipe._id,
+        name: recipe.name,
+        description: recipe.description,
+        latestVersion: (await latestVersion(ctx, recipe._id))?.version ?? 0,
+      })),
+    );
+  },
+});
+
 /** One recipe with its latest version, or null for a stranger or another Instance's recipe. */
 export const get = query({
   args: idArgs,

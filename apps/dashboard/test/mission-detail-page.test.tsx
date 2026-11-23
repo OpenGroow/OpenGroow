@@ -459,7 +459,7 @@ describe("MissionDetailContent", () => {
     expect(row.textContent).toContain("Article written successfully");
   });
 
-  it("shows a View prompt link next to View logs when a workspaceKey is resolved", async () => {
+  it("opens a Run's Prompt and Logs under the Mission, not under the Agent", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.get") return BASE_MISSION;
       if (key === "runs.listByMission") return [BASE_RUN];
@@ -471,8 +471,9 @@ describe("MissionDetailContent", () => {
     const links = Array.from(document.querySelectorAll("a")) as HTMLAnchorElement[];
     const viewPromptLink = links.find((a) => a.textContent === "View prompt");
     expect(viewPromptLink).toBeDefined();
-    expect(viewPromptLink!.getAttribute("href")).toBe(
-      "/projects/instance-1/agents/%40opengroow%2Fseo/prompt?runId=run-1&missionId=mission-1",
+    expect(viewPromptLink!.getAttribute("href")).toBe("/projects/instance-1/missions/mission-1/runs/run-1/prompt");
+    expect(links.find((a) => a.textContent === "View logs")!.getAttribute("href")).toBe(
+      "/projects/instance-1/missions/mission-1/runs/run-1/logs",
     );
   });
 

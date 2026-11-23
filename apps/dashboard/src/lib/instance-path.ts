@@ -19,11 +19,15 @@ export function runLogsHref(instanceId: string, templateId: string, runId: strin
 }
 
 /**
- * The Agent prompt page for one Run of a Mission ("View prompt" on a Mission's
- * Runs). `workspace-prompt-page.tsx` reads `runId` and `missionId` on mount.
+ * One Run of a Mission, under the Mission: its Prompt and its Logs ("View
+ * prompt" / "View logs" on a Mission's Runs). A Source's or a job's Run has no
+ * Mission and keeps `runLogsHref` (the Agent's Logs).
  */
-export function runPromptHref(instanceId: string, templateId: string, runId: string, missionId: string): string {
-  const project = encodeURIComponent(instanceId);
-  const template = encodeURIComponent(templateId);
-  return `/projects/${project}/agents/${template}/prompt?runId=${encodeURIComponent(runId)}&missionId=${encodeURIComponent(missionId)}`;
+export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs"): string {
+  return `${missionHref(instanceId, missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
+}
+
+/** A Mission's page. */
+export function missionHref(instanceId: string, missionId: string): string {
+  return `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}`;
 }

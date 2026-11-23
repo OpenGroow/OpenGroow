@@ -9,7 +9,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import { AutoPublishToggle, supportsAutoPublish, type AutoPublishControl } from "./auto-publish-toggle";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import { runLogsHref, runPromptHref } from "@/src/lib/instance-path";
+import { missionRunHref } from "@/src/lib/instance-path";
 import { blockedExternalResult } from "@/src/lib/mission-result";
 import { BlockedNotice } from "@/src/components/blocked-notice";
 import { Button } from "@/components/ui/button";
@@ -118,14 +118,12 @@ function DetailRow({
 function RunRow({
   run,
   instanceId,
-  templateId,
   missionLabel,
   missionNumber,
   hasWorkspace,
 }: {
   run: Doc<"runs">;
   instanceId: string;
-  templateId: string;
   /** The Mission type as a title (`Create Reel`). */
   missionLabel: string;
   missionNumber?: number;
@@ -145,32 +143,32 @@ function RunRow({
           {missionNumber !== undefined && ` #${missionNumber}`}
         </span>
         <StatusBadge tone={runStatus(run.status).tone} label={runStatus(run.status).label} size="default" />
-        {hasWorkspace && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            nativeButton={false}
-            render={<Link href={runLogsHref(instanceId, templateId, run._id)} />}
-          >
-            <FileText />
-            View logs
-          </Button>
-        )}
         {/* Every Run listed here is one of this Mission's, so `missionId` is
             always set; the check only narrows the optional/null field the `runs`
             table stores it in (a Run's other RunParent is a SourceJob). */}
         {hasWorkspace && run.missionId != null && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full"
-            nativeButton={false}
-            render={<Link href={runPromptHref(instanceId, templateId, run._id, run.missionId)} />}
-          >
-            <Code />
-            View prompt
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              nativeButton={false}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "logs")} />}
+            >
+              <FileText />
+              View logs
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              nativeButton={false}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "prompt")} />}
+            >
+              <Code />
+              View prompt
+            </Button>
+          </>
         )}
       </div>
       <div className="flex flex-wrap gap-x-8 gap-y-1 text-sm text-muted-foreground">
@@ -522,7 +520,6 @@ export function MissionDetailContent({
                   key={run._id}
                   run={run}
                   instanceId={instanceId}
-                  templateId={mission.templateId}
                   missionLabel={titleCase(mission.type)}
                   missionNumber={mission.number}
                   hasWorkspace={projectAgent?.workspaceKey !== undefined}
