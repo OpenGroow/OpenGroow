@@ -90,38 +90,37 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
             </div>
           }
         />
-        <div className="flex items-center gap-2">
-          <Play aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          <NativeSelect
-            aria-label="Mission type"
-            className="max-w-sm"
-            disabled={archived}
-            value={`${recipe.templateId}\u0000${recipe.missionType}`}
-            onChange={async (e) => {
-              const [templateId, missionType] = e.target.value.split("\u0000") as [string, string];
-              setError(null);
-              try {
-                await setTarget({ instanceId, recipeId: id, templateId, missionType });
-              } catch (err) {
-                setError(extractConvexErrorMessage(err, "Could not change the Mission type."));
-              }
-            }}
-          >
-            {/* The current type stays listed even if no installed Template offers it any more. */}
-            {[
-              ...(targets ?? []),
-              ...(targets?.some((x) => x.templateId === recipe.templateId && x.missionType === recipe.missionType)
-                ? []
-                : [{ templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }]),
-            ].map((t) => (
-              <option key={`${t.templateId}\u0000${t.missionType}`} value={`${t.templateId}\u0000${t.missionType}`}>
-                {`${t.templateName} · ${t.label}`}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
         {error ? <p role="alert" className="m-0 text-sm text-destructive">{error}</p> : null}
       </div>
+
+      <ContentCard icon={Play} title="Mission type">
+        <NativeSelect
+          aria-label="Mission type"
+          disabled={archived}
+          value={`${recipe.templateId}\u0000${recipe.missionType}`}
+          onChange={async (e) => {
+            const [templateId, missionType] = e.target.value.split("\u0000") as [string, string];
+            setError(null);
+            try {
+              await setTarget({ instanceId, recipeId: id, templateId, missionType });
+            } catch (err) {
+              setError(extractConvexErrorMessage(err, "Could not change the Mission type."));
+            }
+          }}
+        >
+          {/* The current type stays listed even if no installed Template offers it any more. */}
+          {[
+            ...(targets ?? []),
+            ...(targets?.some((x) => x.templateId === recipe.templateId && x.missionType === recipe.missionType)
+              ? []
+              : [{ templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }]),
+          ].map((t) => (
+            <option key={`${t.templateId}\u0000${t.missionType}`} value={`${t.templateId}\u0000${t.missionType}`}>
+              {`${t.templateName} · ${t.label}`}
+            </option>
+          ))}
+        </NativeSelect>
+      </ContentCard>
 
       {shown ? (
         <section aria-label="Recipe content" className="grid gap-6">
