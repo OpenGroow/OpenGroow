@@ -52,7 +52,8 @@ export function RecipeConnectionsPanel({ instanceId, recipeId }: { instanceId: s
       connectionByKey.set(key, c);
       if (!labels.has(key)) labels.set(key, `${c.templateName ?? c.templateId} · ${c.missionTypeLabel ?? c.missionType}`);
     }
-    return { labels, items: [...labels.keys()], connectionByKey };
+    // Connected targets are shown as chips only: the list offers what is left to connect.
+    return { labels, items: [...labels.keys()].filter((key) => !connectionByKey.has(key)), connectionByKey };
   }, [targets, connections]);
   const selected = [...connectionByKey.keys()];
 
