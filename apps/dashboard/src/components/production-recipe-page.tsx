@@ -9,7 +9,6 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
 import { RecipeConnectionsPanel } from "@/src/components/recipe-connections-panel";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -75,7 +74,6 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
           description={recipe.description}
           action={
             <div className="flex items-center gap-3">
-              <FamilyStatusBadge size="default" status={recipe.status} />
               {!archived && recipe.latest ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   <Pencil className="size-4" />

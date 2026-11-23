@@ -106,29 +106,16 @@ describe("CreativeLibraryContent", () => {
     expect(text()).toContain("No Creative Families yet");
   });
 
-  it("lists name, description, Source count, preview Sources and status with a link to the family", async () => {
+  it("lists name, description, Source count and preview Sources with a link to the family", async () => {
     await render([makeFamily({ recentSources: [makeSource("a"), makeSource("b"), makeSource("c")] })]);
 
     expect(text()).toContain("Reaction");
     expect(text()).toContain("A close-up reaction");
     expect(text()).toContain("5 Sources");
-    expect(text()).toContain("Active");
+    expect(text()).not.toContain("Active");
     expect(document.body.querySelectorAll("li img").length).toBe(3);
     const link = document.body.querySelector("li a[data-family-name]");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/library/fam-1");
-  });
-
-  it("flags empty families and families with a single Source", async () => {
-    await render([
-      makeFamily({ _id: "e", name: "Empty one", sourceCount: 0 }),
-      makeFamily({ _id: "s", name: "Single one", sourceCount: 1 }),
-      makeFamily({ _id: "m", name: "Many", sourceCount: 7 }),
-    ]);
-    const rows = Array.from(document.body.querySelectorAll("li")); // largest first
-    expect(rows[0]?.textContent).not.toContain("Empty");
-    expect(rows[0]?.textContent).not.toContain("Single Source");
-    expect(rows[1]?.textContent).toContain("Single Source");
-    expect(rows[2]?.textContent).toContain("Empty");
   });
 
   it("shows a capped count as 100+", async () => {
@@ -142,19 +129,14 @@ describe("CreativeLibraryContent", () => {
     expect(names()).toEqual(["Unboxing"]);
   });
 
-  it("filters active, archived and empty families", async () => {
+  it("lists only active families and shows no status, filter or Empty flag", async () => {
     await render([
       makeFamily({ _id: "a", name: "Live", sourceCount: 3 }),
       makeFamily({ _id: "b", name: "Old", status: "archived", sourceCount: 2 }),
       makeFamily({ _id: "c", name: "Nothing", sourceCount: 0 }),
     ]);
-    expect(names()).toEqual(["Live", "Old", "Nothing"]);
-    await press("Archived");
-    expect(names()).toEqual(["Old"]);
-    await press("Empty");
-    expect(names()).toEqual(["Nothing"]);
-    await press("Active");
     expect(names()).toEqual(["Live", "Nothing"]);
+    expect(text()).not.toMatch(/Archived|Empty|Single Source/);
   });
 
   it("sorts by number of Sources, largest or smallest first", async () => {

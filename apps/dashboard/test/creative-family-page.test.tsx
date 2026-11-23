@@ -97,11 +97,11 @@ describe("CreativeFamilyContent", () => {
     expect(text()).toContain("Creative Family not found");
   });
 
-  it("shows the name, description, status and a link back to the library", async () => {
+  it("shows the name, description and a link back to the library", async () => {
     await render();
     expect(text()).toContain("Reaction");
     expect(text()).toContain("A close-up reaction");
-    expect(text()).toContain("Active");
+    expect(text()).not.toContain("Active");
     expect(document.body.querySelector('a[href="/projects/instance-1/library"]')).not.toBeNull();
   });
 

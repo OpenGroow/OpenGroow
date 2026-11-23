@@ -4,10 +4,8 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
+import { SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,12 +28,7 @@ type FamilyRow = {
   recentSources: VisualSource[];
 };
 
-type StatusFilter = "all" | "active" | "archived" | "empty";
 type Sort = "most" | "fewest";
-
-const matchesFilter = (family: FamilyRow, filter: StatusFilter): boolean =>
-  filter === "all" ||
-  (filter === "empty" ? family.sourceCount === 0 : family.status === filter);
 
 type Props = { params: Promise<{ instanceId: string }> };
 
@@ -45,7 +38,6 @@ export function CreativeLibraryPage({ params }: Props) {
 }
 
 export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
-  const [filter, setFilter] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<Sort>("most");
   const [search, setSearch] = useState("");
   const families = useQuery(api.creative_families.list, { instanceId }) as FamilyRow[] | undefined;
@@ -57,13 +49,14 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
     setSelecting(false);
     setSelected([]);
   };
-  const selectedFamilies = (families ?? []).filter((family) => selected.includes(family._id));
 
   const needle = search.trim().toLowerCase();
-  const visible = (families ?? [])
-    .filter((family) => matchesFilter(family, filter) && (needle === "" || family.name.toLowerCase().includes(needle)))
+  // Archived families (merged away or archived) are not listed.
+  const activeFamilies = (families ?? []).filter((family) => family.status === "active");
+  const visible = activeFamilies
+    .filter((family) => needle === "" || family.name.toLowerCase().includes(needle))
     .sort((a, b) => (sort === "most" ? b.sourceCount - a.sourceCount : a.sourceCount - b.sourceCount));
-  const count = (id: StatusFilter) => (families ?? []).filter((family) => matchesFilter(family, id)).length;
+  const selectedFamilies = activeFamilies.filter((family) => selected.includes(family._id));
   useThumbnailRequests(instanceId, visible.flatMap((family) => family.recentSources));
 
   return (
@@ -96,22 +89,11 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
       />
       {families === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : families.length === 0 ? (
+      ) : activeFamilies.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Creative Families yet.</p>
       ) : (
         <section className="grid gap-5">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-            <FilterChips
-              label="Family status"
-              value={filter}
-              onChange={(id) => setFilter(id as StatusFilter)}
-              options={[
-                { id: "all", label: "All", count: count("all") },
-                { id: "active", label: "Active", count: count("active") },
-                { id: "archived", label: "Archived", count: count("archived") },
-                { id: "empty", label: "Empty", count: count("empty") },
-              ]}
-            />
             <div className="flex flex-col gap-3 sm:flex-row">
               <SearchField value={search} onChange={setSearch} label="Search families" placeholder="Search families…" className="lg:w-52" />
               <NativeSelect
@@ -126,7 +108,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
             </div>
           </div>
           {visible.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Creative Families match these filters.</p>
+            <p className="text-sm text-muted-foreground">No Creative Families match this search.</p>
           ) : (
             <ul className="grid gap-3">
               {visible.map((family) => (
@@ -134,7 +116,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
                   key={family._id}
                   family={family}
                   instanceId={instanceId}
-                  selection={selecting && family.status === "active" ? { checked: selected.includes(family._id), onToggle: () => toggle(family._id) } : undefined}
+                  selection={selecting ? { checked: selected.includes(family._id), onToggle: () => toggle(family._id) } : undefined}
                 />
               ))}
             </ul>
@@ -182,9 +164,6 @@ function FamilyRowItem({
             >
               {family.name}
             </Link>
-            <FamilyStatusBadge status={family.status} />
-            {family.sourceCount === 0 ? <Badge variant="outline" size="xs">Empty</Badge> : null}
-            {family.sourceCount === 1 ? <Badge variant="outline" size="xs">Single Source</Badge> : null}
           </div>
           <p className="m-0 line-clamp-2 text-sm text-muted-foreground">{family.description}</p>
         </div>

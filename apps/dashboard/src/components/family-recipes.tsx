@@ -8,7 +8,6 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 
 // The Production Recipes of a Creative Family, on its detail page (issue #143).
@@ -49,7 +48,6 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
                   <span className="truncate text-sm text-muted-foreground">{recipe.description}</span>
                 </div>
                 <span className="text-sm text-muted-foreground tabular-nums">v{recipe.latestVersion}</span>
-                <FamilyStatusBadge status={recipe.status} />
               </Card>
             </li>
           ))}

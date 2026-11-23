@@ -10,7 +10,6 @@ import { PageHeader } from "@/components/opengroow/page-header";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
 import { EditFamilyButton } from "@/src/components/creative-family-actions";
 import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-archive-button";
 import { formatSourceDate } from "@/src/components/source-status-pill";
@@ -93,7 +92,6 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           description={family.description}
           action={
             <div className="flex items-center gap-3">
-              <FamilyStatusBadge size="default" status={family.status} />
               <EditFamilyButton instanceId={instanceId} family={family} />
               {isActiveFamily(family) ? <AddSourceButton instanceId={instanceId} familyId={familyId} /> : null}
               <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={!isActiveFamily(family)} />
