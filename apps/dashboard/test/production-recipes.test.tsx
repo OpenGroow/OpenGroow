@@ -49,13 +49,12 @@ vi.mock("@convex/_generated/api", () => ({
 
 const V2 = {
   version: 2,
-  prompt: "Close-up of {MOOD}",
+  prompt: "Close-up of a woman",
   instructions: "Write a short hook",
   constraints: ["No dialogue", "No text overlay"],
-  variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "calm" }],
   createdAt: Date.UTC(2026, 0, 2),
 };
-const V1 = { ...V2, version: 1, prompt: "Close-up", variables: [], createdAt: Date.UTC(2026, 0, 1) };
+const V1 = { ...V2, version: 1, prompt: "Close-up", createdAt: Date.UTC(2026, 0, 1) };
 const RECIPE = { _id: "rec-1", creativeFamilyId: "fam-1", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
 
 const TARGETS = [
@@ -140,41 +139,38 @@ describe("Production Recipes UI", () => {
       prompt: "Close-up of a woman",
       instructions: "Write a hook",
       constraints: ["No dialogue", "No text"],
-      variables: [],
     });
     expect(document.body.querySelector("form")).toBeNull();
   });
 
   it("shows the server error and keeps the form open", async () => {
-    mutations["recipes.create"].mockRejectedValue(new Error("[Request ID: x] Server Error\nUncaught Error: Placeholder {TYPO} has no matching variable\n    at handler"));
+    mutations["recipes.create"].mockRejectedValue(new Error("[Request ID: x] Server Error\nUncaught Error: Something went wrong\n    at handler"));
     await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
     await press("New recipe");
     await fill("#recipe-name", "R");
     await fill("#recipe-description", "d");
     await fill("#recipe-instructions", "i");
     await submit();
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Placeholder {TYPO} has no matching variable");
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Something went wrong");
     expect(document.body.querySelector("form")).not.toBeNull();
   });
 
   it("shows the latest version and edits it into a new version", async () => {
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
     expect(container.textContent).toContain("Reaction clip");
-    expect(container.textContent).toContain("Close-up of {MOOD}");
+    expect(container.textContent).toContain("Close-up of a woman");
     expect(container.textContent).toContain("No dialogue");
     await press("Edit");
-    expect((document.body.querySelector("#recipe-prompt") as HTMLTextAreaElement).value).toBe("Close-up of {MOOD}");
+    expect((document.body.querySelector("#recipe-prompt") as HTMLTextAreaElement).value).toBe("Close-up of a woman");
     expect((document.body.querySelector("#recipe-constraints") as HTMLTextAreaElement).value).toBe("No dialogue\nNo text overlay");
-    expect(document.body.querySelector("#variable-values-0")).toBeNull();
     await fill("#recipe-instructions", "Write a longer hook");
     await submit();
     expect(mutations["recipes.saveVersion"]).toHaveBeenCalledWith({
       instanceId: "p1",
       recipeId: "rec-1",
-      prompt: "Close-up of {MOOD}",
+      prompt: "Close-up of a woman",
       instructions: "Write a longer hook",
       constraints: ["No dialogue", "No text overlay"],
-      variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "calm" }],
     });
   });
 

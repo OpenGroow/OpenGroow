@@ -3,8 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { recipeVariableV, type recipeStatusV } from "./production_validators.js";
-import { validateRecipeContent, type RecipeContent } from "./production_recipe_resolver.js";
+import { type recipeStatusV } from "./production_validators.js";
 
 // Production Recipes under a Creative Family (issue #137). A recipe is an
 // identity; each save appends an immutable Recipe Version. Every read and
@@ -18,10 +17,10 @@ const contentArgs = {
   prompt: v.optional(v.string()),
   instructions: v.string(),
   constraints: v.array(v.string()),
-  variables: v.array(recipeVariableV),
 };
 
-type ContentArgs = { prompt?: string; instructions: string; constraints: string[]; variables: RecipeContent["variables"] };
+type ContentArgs = { prompt?: string; instructions: string; constraints: string[] };
+type RecipeContent = { prompt?: string; instructions: string; constraints: string[] };
 
 /** Trims the content, drops blank lines and validates it; throws on a bad version. */
 function cleanContent(args: ContentArgs): RecipeContent {
@@ -30,13 +29,7 @@ function cleanContent(args: ContentArgs): RecipeContent {
     ...(prompt ? { prompt } : {}),
     instructions: args.instructions.trim(),
     constraints: args.constraints.map((c) => c.trim()).filter((c) => c !== ""),
-    variables: args.variables.map((variable) => ({
-      name: variable.name.trim(),
-      values: variable.values,
-      ...(variable.default === undefined ? {} : { default: variable.default }),
-    })),
   };
-  validateRecipeContent(content);
   return content;
 }
 
@@ -90,7 +83,6 @@ function versionView(version: Doc<"productionRecipeVersions">) {
     prompt: version.prompt,
     instructions: version.instructions,
     constraints: version.constraints,
-    variables: version.variables,
     createdAt: version.createdAt,
   };
 }

@@ -36,10 +36,9 @@ const family = (t: T, instanceId = INSTANCE_ID, fields: Record<string, unknown> 
   t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId, slug: `s-${Math.random()}`, name: "Family", description: "Mechanic", ...fields } as never));
 
 const content = {
-  prompt: "A {MOOD} reaction.",
-  instructions: "Keep it {MOOD}.",
+  prompt: "A calm reaction.",
+  instructions: "Keep it calm.",
   constraints: ["No dialogue", "  "],
-  variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "delighted" }],
 };
 
 async function setup() {
@@ -62,25 +61,13 @@ describe("production_recipes", () => {
   it("appends versions and never modifies a saved one", async () => {
     const { owner, recipeId } = await setup();
     const v2 = await owner.mutation(api.production_recipes.saveVersion, {
-      instanceId: INSTANCE_ID, recipeId, ...content, prompt: "Another {MOOD} take.",
+      instanceId: INSTANCE_ID, recipeId, ...content, prompt: "Another take.",
     });
     expect(v2).toBe(2);
     const versions = await owner.query(api.production_recipes.listVersions, { instanceId: INSTANCE_ID, recipeId });
     expect(versions.map((x) => x.version)).toEqual([2, 1]);
-    expect(versions[1]!.prompt).toBe("A {MOOD} reaction.");
-    expect(versions[0]!.prompt).toBe("Another {MOOD} take.");
-  });
-
-  it("rejects a placeholder without variable and a default outside the values, at create and save", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
-    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "B", description: "", ...content, prompt: "{NOPE}" })).rejects.toThrow("{NOPE}");
-    await expect(
-      owner.mutation(api.production_recipes.saveVersion, {
-        instanceId: INSTANCE_ID, recipeId, ...content, variables: [{ name: "MOOD", values: ["calm"], default: "delighted" }],
-      }),
-    ).rejects.toThrow("not one of its values");
-    const count = await t.run(async (ctx) => (await ctx.db.query("productionRecipeVersions").collect()).length);
-    expect(count).toBe(1);
+    expect(versions[1]!.prompt).toBe("A calm reaction.");
+    expect(versions[0]!.prompt).toBe("Another take.");
   });
 
   it("archives keeping history, refuses edits, and unarchives", async () => {

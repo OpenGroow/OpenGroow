@@ -25,7 +25,7 @@ import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
-import { compatibleWhenV, connectionStatusV, recipeStatusV, recipeVariableV } from "./production_validators.js";
+import { compatibleWhenV, connectionStatusV, recipeStatusV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -392,7 +392,6 @@ export default defineSchema({
         recipeName: v.string(),
         version: v.number(),
         connectionId: v.id("productionConnections"),
-        values: v.record(v.string(), v.string()),
         prompt: v.optional(v.string()),
         instructions: v.string(),
         constraints: v.array(v.string()),
@@ -655,7 +654,6 @@ export default defineSchema({
     prompt: v.optional(v.string()),
     instructions: v.string(),
     constraints: v.array(v.string()),
-    variables: v.array(recipeVariableV),
     createdAt: v.number(),
   })
     .index("by_recipe_version", ["recipeId", "version"]),

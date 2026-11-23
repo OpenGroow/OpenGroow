@@ -3,7 +3,6 @@ import { v } from "convex/values";
 // Validators shared by the Production Recipe tables and their functions
 // (issue #137).
 
-export const recipeVariableV = v.object({ name: v.string(), values: v.array(v.string()), default: v.optional(v.string()) });
 export const recipeStatusV = v.union(v.literal("active"), v.literal("archived"));
 export const connectionStatusV = v.union(v.literal("candidate"), v.literal("active"), v.literal("disabled"));
 /** Payload field -> allowed values; empty means any payload. */

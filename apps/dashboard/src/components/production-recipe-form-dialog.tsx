@@ -10,7 +10,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { contentFromDraft, draftFromVersion, emptyDraft, type RecipeDraft, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
 // Create a Production Recipe or edit it (an edit saves the next version).
-// Server refusals are shown as is. Variables are not editable here (variations are separate recipes); an existing version keeps its own.
+// Server refusals are shown as is.
 
 type Props = {
   mode: "create" | "edit";

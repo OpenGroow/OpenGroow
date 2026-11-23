@@ -66,10 +66,8 @@ How to reproduce the mechanic of a **Creative Family**: it belongs to one family
 
 ### Recipe Version
 
-One immutable save of a **Production Recipe**: an optional verbatim `prompt`, free-form `instructions`, a list of `constraints` (guidance text, not validations) and controlled `variables` (a name, a closed list of allowed values, a default). Editing a recipe appends the next version; a saved version is never modified.
+One immutable save of a **Production Recipe**: an optional verbatim `prompt`, free-form `instructions`, a list of `constraints` (guidance text, not validations). Editing a recipe appends the next version; a saved version is never modified.
 
-- **Placeholders**: `{NAME}` in the `prompt` and the `instructions` must match a declared variable, and a variable's default must be one of its values; both are checked at save.
-- **Resolution**: a pure function turns a version plus choices into the resolved texts and the values used. Per variable: the explicit value, else a random draw if the variable is named in `vary`, else the default. An unknown variable, a value outside the list, or a variable with neither value nor default fails with an explicit error. Same input gives the same output (the random source is injectable).
 
 ### Creative Connection
 
@@ -81,9 +79,9 @@ A **Production Recipe** offered to one Mission type of one installed Template. T
 
 ### Recipe Snapshot
 
-What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, the **Creative Connection**, the variable values used, and the resolved prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, the **Creative Connection**, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
 
-- **Checks at creation**, in order: the connection belongs to the Project and is not `disabled`; it targets the Template and Mission type; the payload satisfies its `compatibleWhen`; the Template version the Mission is pinned to declares the `production-recipe` provider; the recipe is not archived; then the variables resolve (an unknown variable or a value outside the list refuses the creation).
+- **Checks at creation**, in order: the connection belongs to the Project and is not `disabled`; it targets the Template and Mission type; the payload satisfies its `compatibleWhen`; the Template version the Mission is pinned to declares the `production-recipe` provider; the recipe is not archived.
 - The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
 - _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
 

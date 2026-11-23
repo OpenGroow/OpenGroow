@@ -4,7 +4,6 @@ import type { QueryCtx } from "./_generated/server.js";
 import { ownedConnection } from "./production_connections.js";
 import { isCompatible, RECIPE_PROVIDER } from "./production_connection_rules.js";
 import { latestVersion, ownedRecipe } from "./production_recipes.js";
-import { resolveRecipeVersion } from "./production_recipe_resolver.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // The recipe argument of `missions.create` and the Recipe Snapshot it produces
@@ -15,17 +14,11 @@ export const recipeArgV = v.object({
   connectionId: v.id("productionConnections"),
   /** Defaults to the recipe's latest version, pinned from then on. */
   version: v.optional(v.number()),
-  /** Explicit values of the recipe's variables. */
-  values: v.optional(v.record(v.string(), v.string())),
-  /** Variables to draw at random. */
-  vary: v.optional(v.array(v.string())),
 });
 
 export type RecipeArg = {
   connectionId: Id<"productionConnections">;
   version?: number;
-  values?: Record<string, string>;
-  vary?: string[];
 };
 
 export type RecipeSnapshot = NonNullable<Doc<"missions">["recipeSnapshot"]>;
@@ -34,7 +27,7 @@ export type RecipeSnapshot = NonNullable<Doc<"missions">["recipeSnapshot"]>;
  * Checks, in order: the connection belongs to the Project and is not disabled;
  * its target matches the Template and Mission type; the payload satisfies its
  * compatibility rule; the pinned Template version declares the provider; the
- * recipe is not archived. Then resolves the variables into a snapshot.
+ * recipe is not archived. Then copies the version into a snapshot.
  */
 export async function buildRecipeSnapshot(
   ctx: QueryCtx,
@@ -78,15 +71,13 @@ export async function buildRecipeSnapshot(
           .unique();
   if (!version) throw new Error(`Production Recipe has no version ${arg.version ?? ""}`.trim());
 
-  const resolved = resolveRecipeVersion(version, { values: arg.values, vary: arg.vary });
   return {
     recipeId: recipe._id,
     recipeName: recipe.name,
     version: version.version,
     connectionId: connection._id,
-    values: resolved.values,
-    ...(resolved.prompt === undefined ? {} : { prompt: resolved.prompt }),
-    instructions: resolved.instructions,
-    constraints: resolved.constraints,
+    ...(version.prompt === undefined ? {} : { prompt: version.prompt }),
+    instructions: version.instructions,
+    constraints: version.constraints,
   };
 }

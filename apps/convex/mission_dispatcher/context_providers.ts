@@ -230,7 +230,6 @@ function renderPlatformAccountFromUnknown(data: unknown): string {
 export type ProductionRecipeInfo = {
   recipeName: string;
   version: number;
-  values: Record<string, string>;
   prompt?: string;
   instructions: string;
   constraints: string[];
@@ -265,10 +264,6 @@ export function renderProductionRecipeSection(info: ProductionRecipeInfo): strin
   lines.push("## Instructions", "", info.instructions, "");
   if (info.constraints.length > 0) {
     lines.push("## Constraints", "", ...info.constraints.map((c) => `- ${singleLine(c)}`), "");
-  }
-  const names = Object.keys(info.values);
-  if (names.length > 0) {
-    lines.push("## Variables", "", ...names.map((name) => `- ${name}: ${singleLine(info.values[name]!)}`), "");
   }
   return lines.join("\n");
 }

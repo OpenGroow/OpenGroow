@@ -98,7 +98,6 @@ import type * as optional_plugins from "../optional_plugins.js";
 import type * as post_url from "../post_url.js";
 import type * as production_connection_rules from "../production_connection_rules.js";
 import type * as production_connections from "../production_connections.js";
-import type * as production_recipe_resolver from "../production_recipe_resolver.js";
 import type * as production_recipes from "../production_recipes.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
@@ -281,7 +280,6 @@ declare const fullApi: ApiFromModules<{
   post_url: typeof post_url;
   production_connection_rules: typeof production_connection_rules;
   production_connections: typeof production_connections;
-  production_recipe_resolver: typeof production_recipe_resolver;
   production_recipes: typeof production_recipes;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;

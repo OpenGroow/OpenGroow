@@ -138,8 +138,8 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
         open={editing}
         onOpenChange={setEditing}
         initial={recipe.latest ?? undefined}
-        onSubmit={async ({ prompt, instructions, constraints, variables }) => {
-          await saveVersion({ instanceId, recipeId: id, ...(prompt ? { prompt } : {}), instructions, constraints, variables });
+        onSubmit={async ({ prompt, instructions, constraints }) => {
+          await saveVersion({ instanceId, recipeId: id, ...(prompt ? { prompt } : {}), instructions, constraints });
           setSelected(null);
         }}
       />

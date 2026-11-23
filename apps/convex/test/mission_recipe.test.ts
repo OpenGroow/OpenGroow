@@ -94,8 +94,7 @@ async function setup() {
   async function recipe(instanceId = INSTANCE, family: Id<"creativeFamilies"> = familyId, as = owner) {
     const { recipeId } = await as.mutation(api.production_recipes.create, {
       instanceId, familyId: family, name: "Reaction", description: "",
-      prompt: "A close-up, {MOOD} face.", instructions: "Write a {MOOD} hook.", constraints: ["No dialogue"],
-      variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "delighted" }],
+      prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
     return recipeId;
   }
@@ -111,33 +110,32 @@ async function setup() {
 }
 
 describe("missions.create with a recipe", () => {
-  it("stores the snapshot once, with the resolved texts and values used", async () => {
+  it("stores the snapshot once, with the texts used", async () => {
     const { t, recipe, connect, create } = await setup();
     const connectionId = await connect(await recipe());
-    const { missionId } = await create({ templateVersion: "2.0.0", recipe: { connectionId, values: { MOOD: "calm" } } });
+    const { missionId } = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
     const mission = await t.run((ctx) => ctx.db.get(missionId));
     expect(mission?.templateVersion).toBe("2.0.0");
     expect(mission?.payload).toEqual({ format: "hook" });
     expect(mission?.recipeSnapshot).toMatchObject({
-      recipeName: "Reaction", version: 1, connectionId, values: { MOOD: "calm" },
+      recipeName: "Reaction", version: 1, connectionId,
       prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
   });
 
-  it("accepts an active connection, an older version and drawn variables", async () => {
+  it("accepts an active connection, and an older version", async () => {
     const { owner, t, recipe, connect, create } = await setup();
     const recipeId = await recipe();
     await owner.mutation(api.production_recipes.saveVersion, {
-      instanceId: INSTANCE, recipeId, prompt: "Second {MOOD}", instructions: "i", constraints: [],
-      variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "delighted" }],
+      instanceId: INSTANCE, recipeId, prompt: "Second take", instructions: "i", constraints: [],
     });
     const connectionId = await connect(recipeId, "active");
     const latest = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
-    const older = await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 1, vary: ["MOOD"] } });
+    const older = await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 1 } });
     const snaps = await t.run(async (ctx) => [(await ctx.db.get(latest.missionId))?.recipeSnapshot, (await ctx.db.get(older.missionId))?.recipeSnapshot]);
-    expect(snaps[0]).toMatchObject({ version: 2, prompt: "Second delighted" });
+    expect(snaps[0]).toMatchObject({ version: 2, prompt: "Second take" });
     expect(snaps[1]?.version).toBe(1);
-    expect(["delighted", "calm"]).toContain(snaps[1]?.values.MOOD);
+    expect(snaps[1]?.prompt).toBe("A close-up, calm face.");
   });
 
   it("refuses a disabled connection, a stranger's connection and an unknown connection", async () => {
@@ -181,18 +179,16 @@ describe("missions.create with a recipe", () => {
     await expect(create({ templateVersion: "2.0.0", recipe: { connectionId } })).rejects.toThrow(/archived/);
   });
 
-  it("refuses an unknown variable, a value outside the list and an unknown version", async () => {
+  it("refuses an unknown version", async () => {
     const { recipe, connect, create } = await setup();
     const connectionId = await connect(await recipe());
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId, values: { NOPE: "x" } } })).rejects.toThrow(/Unknown variable/);
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId, values: { MOOD: "angry" } } })).rejects.toThrow(/not allowed/);
     await expect(create({ templateVersion: "2.0.0", recipe: { connectionId, version: 9 } })).rejects.toThrow(/version/i);
   });
 
   it("creates nothing when the creation is refused", async () => {
     const { t, recipe, connect, create } = await setup();
     const connectionId = await connect(await recipe());
-    await create({ templateVersion: "2.0.0", recipe: { connectionId, values: { MOOD: "angry" } } }).catch(() => undefined);
+    await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 9 } }).catch(() => undefined);
     expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
   });
 });
@@ -241,10 +237,10 @@ describe("Recipe Snapshot in context.md", () => {
     await t.action(internal.mission_dispatcher_node.dispatchPendingRuns, {});
     const first = await dispatched(t, runId);
     expect(first).toContain("# Production Recipe");
-    expect(first).toContain("A close-up, delighted face.");
+    expect(first).toContain("A close-up, calm face.");
 
     await owner.mutation(api.production_recipes.saveVersion, {
-      instanceId: INSTANCE, recipeId, prompt: "Changed", instructions: "Changed", constraints: [], variables: [],
+      instanceId: INSTANCE, recipeId, prompt: "Changed", instructions: "Changed", constraints: [],
     });
     await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
     await t.run((ctx) => ctx.db.patch(runId, { status: "failed" }));
@@ -267,7 +263,7 @@ describe("Recipe Snapshot in context.md", () => {
 
 describe("renderProductionRecipeSection", () => {
   const snapshot = {
-    recipeName: "Reaction", version: 3, values: { MOOD: "calm" },
+    recipeName: "Reaction", version: 3,
     prompt: "A calm face.", instructions: "Write a hook.", constraints: ["No dialogue", "Calm"],
   };
   it("renders every subsection and the precedence statement", () => {
@@ -278,7 +274,7 @@ describe("renderProductionRecipeSection", () => {
     expect(md).toContain("A calm face.");
     expect(md).toContain("## Instructions\n\nWrite a hook.");
     expect(md).toContain("## Constraints\n\n- No dialogue\n- Calm");
-    expect(md).toContain("- MOOD: calm");
+    expect(md).not.toContain("## Variables");
     expect(md).toMatch(/technical instructions[\s\S]*Brand Core[\s\S]*take precedence/);
   });
   it("omits the prompt subsection without a prompt and renders nothing without a snapshot", () => {

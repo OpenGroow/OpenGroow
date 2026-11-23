@@ -53,7 +53,7 @@ async function setup() {
   const familyId = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "s", name: "F", description: "d" } as never));
   const owner = t.withIdentity(OWNER);
   const { recipeId } = await owner.mutation(api.production_recipes.create, {
-    instanceId: INSTANCE_ID, familyId, name: "R", description: "", instructions: "Do it.", constraints: [], variables: [],
+    instanceId: INSTANCE_ID, familyId, name: "R", description: "", instructions: "Do it.", constraints: [],
   });
   return { t, owner, recipeId };
 }

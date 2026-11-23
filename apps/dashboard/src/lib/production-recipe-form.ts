@@ -5,22 +5,19 @@ export type RecipeVersionContent = {
   prompt?: string;
   instructions: string;
   constraints: string[];
-  variables: { name: string; values: string[]; default?: string }[];
 };
 
-export type VariableDraft = { name: string; values: string; default: string };
-export type RecipeDraft = { prompt: string; instructions: string; constraints: string; variables: VariableDraft[] };
+export type RecipeDraft = { prompt: string; instructions: string; constraints: string };
 
 const lines = (text: string): string[] => text.split("\n").map((l) => l.trim()).filter((l) => l !== "");
 
-export const emptyDraft = (): RecipeDraft => ({ prompt: "", instructions: "", constraints: "", variables: [] });
+export const emptyDraft = (): RecipeDraft => ({ prompt: "", instructions: "", constraints: "" });
 
 export function draftFromVersion(version: RecipeVersionContent): RecipeDraft {
   return {
     prompt: version.prompt ?? "",
     instructions: version.instructions,
     constraints: version.constraints.join("\n"),
-    variables: version.variables.map((v) => ({ name: v.name, values: v.values.join("\n"), default: v.default ?? "" })),
   };
 }
 
@@ -31,9 +28,5 @@ export function contentFromDraft(draft: RecipeDraft): RecipeVersionContent {
     ...(prompt ? { prompt } : {}),
     instructions: draft.instructions.trim(),
     constraints: lines(draft.constraints),
-    variables: draft.variables.map((v) => {
-      const def = v.default.trim();
-      return { name: v.name.trim(), values: lines(v.values), ...(def ? { default: def } : {}) };
-    }),
   };
 }
