@@ -23,6 +23,14 @@ type WorkspacePromptPageProps = {
   params: Promise<{ projectId: string; workspaceKey: string }>;
 };
 
+const MCP_NAME_SEPARATORS = [".", "__"] as const;
+
+/** Whether a transcript tool name is a call to `tool`, on `server` when it is known. */
+function isCallToTool(recordedName: string, tool: string, server: string | undefined): boolean {
+  if (server) return MCP_NAME_SEPARATORS.some((separator) => recordedName === `${server}${separator}${tool}`);
+  return recordedName === tool || MCP_NAME_SEPARATORS.some((separator) => recordedName.endsWith(`${separator}${tool}`));
+}
+
 export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
   const { projectId, workspaceKey } = use(params);
   const { manifests } = useProjectManifests(decodeURIComponent(projectId));
@@ -105,19 +113,16 @@ export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
     return <p className="text-sm text-muted-foreground">Run not found.</p>;
   }
 
-  // The transcript records an MCP tool_call's name prefixed by its server
-  // (e.g. "media-mcp.generate_assets"), while `generativeMcpCall`
-  // declares the bare tool name to stay consistent with
-  // `externalJobsByMissionType`'s job-type keys. Match the exact
-  // `server.toolName` when the server is known; otherwise fall back to a
-  // same-name match regardless of server.
+  // The transcript records an MCP tool_call's name prefixed by its server, and
+  // the separator depends on the model provider's API: `media-mcp.generate_assets`
+  // (OpenAI Responses) or `media-mcp__generate_assets` (OpenRouter / completions
+  // APIs, which do not accept a dot in a tool name). `generativeMcpCall` declares
+  // the bare tool name to stay consistent with `externalJobsByMissionType`'s
+  // job-type keys. Match the exact `server` + separator + tool when the server
+  // is known; otherwise fall back to a same-name match regardless of server.
   const generationCall =
     transcript.status === "data" && generativeToolName
-      ? transcript.toolCalls.find((turn) =>
-          generativeServer
-            ? turn.toolName === `${generativeServer}.${generativeToolName}`
-            : turn.toolName === generativeToolName || turn.toolName.endsWith(`.${generativeToolName}`),
-        )
+      ? transcript.toolCalls.find((turn) => isCallToTool(turn.toolName, generativeToolName, generativeServer))
       : undefined;
 
   return (

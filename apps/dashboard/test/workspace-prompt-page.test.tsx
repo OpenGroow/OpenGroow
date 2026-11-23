@@ -176,6 +176,25 @@ describe("WorkspacePromptPage", () => {
     expect(document.body.textContent).toContain("prefixed tool call prompt");
   });
 
+  it("matches a tool_call recorded with a double underscore (OpenRouter / completions APIs), e.g. 'media-mcp__generate_assets'", async () => {
+    getWorkspaceRunTranscriptMock.mockResolvedValue({
+      found: true,
+      turns: [{ kind: "tool_call", toolName: "media-mcp__generate_assets", arguments: { prompt: "double underscore prompt" } }],
+    });
+    await render([MANIFEST_WITH_GENERATIVE_CALL]);
+    expect(document.body.textContent).toContain("double underscore prompt");
+  });
+
+  it("does not match another tool whose name only ends with the same letters", async () => {
+    getWorkspaceRunTranscriptMock.mockResolvedValue({
+      found: true,
+      turns: [{ kind: "tool_call", toolName: "media-mcp__regenerate_assets", arguments: { prompt: "wrong tool prompt" } }],
+    });
+    await render([MANIFEST_WITH_GENERATIVE_CALL]);
+    expect(document.body.textContent).not.toContain("wrong tool prompt");
+    expect(document.body.textContent).toContain("found");
+  });
+
   it("shows the Génération panel with the exact arguments of the matching tool_call found in the transcript", async () => {
     getWorkspaceRunTranscriptMock.mockResolvedValue({
       found: true,
