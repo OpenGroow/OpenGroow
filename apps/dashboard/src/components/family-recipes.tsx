@@ -37,17 +37,17 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
         <ul className="grid gap-3">
           {recipes.map((recipe) => (
             <li key={recipe._id}>
-              <Card className="relative flex items-center gap-4 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
-                <div className="grid min-w-0 flex-1 gap-1">
+              <Card className="relative flex flex-col items-start gap-1 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
+                <div className="flex max-w-full items-center gap-3">
                   <Link
                     href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(familyId)}/recipes/${encodeURIComponent(recipe._id)}`}
                     className="w-fit max-w-full truncate text-base font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
                   >
                     {recipe.name}
                   </Link>
-                  <span className="truncate text-sm text-muted-foreground">{recipe.description}</span>
+                  <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary tabular-nums">{`v${recipe.latestVersion}`}</span>
                 </div>
-                <span className="text-sm text-muted-foreground tabular-nums">v{recipe.latestVersion}</span>
+                <span className="max-w-full truncate text-sm text-muted-foreground">{recipe.description}</span>
               </Card>
             </li>
           ))}
