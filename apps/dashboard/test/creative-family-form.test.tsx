@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeFamilyContent } from "../src/components/creative-family-page";
 import { CreativeLibraryContent } from "../src/components/creative-library-page";
 
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const createMock = vi.fn();
@@ -95,7 +97,11 @@ describe("create and edit a Creative Family", () => {
 
   it("edits name and description from the family page, prefilled", async () => {
     await act(async () => root.render(<CreativeFamilyContent instanceId="instance-1" familyId="fam-1" />));
-    await press("Edit");
+    await act(async () => {
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Edit") as HTMLElement).click());
     expect((document.body.querySelector("#family-name") as HTMLInputElement).value).toBe("Reaction");
     expect((document.body.querySelector("#family-description") as HTMLTextAreaElement).value).toBe("A close-up");
     await fill("#family-name", "Silent Reaction", HTMLInputElement.prototype);

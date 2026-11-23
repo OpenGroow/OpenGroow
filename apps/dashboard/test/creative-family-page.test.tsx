@@ -6,6 +6,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeFamilyContent } from "../src/components/creative-family-page";
 
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
@@ -118,12 +120,35 @@ describe("CreativeFamilyContent", () => {
     expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
   });
 
-  it("offers Archive for an active family and Unarchive for an archived one", async () => {
-    const buttons = () => Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+  async function openMenu() {
+    const trigger = document.querySelector('[aria-label="More actions"]')!;
+    await act(async () => {
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+      }
+    });
+    return () => Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent);
+  }
+
+  it("keeps Edit and Delete in the more-actions menu, not as header buttons", async () => {
     await render();
-    expect(buttons()).toContain("Archive");
+    const headerButtons = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+    expect(headerButtons).not.toContain("Edit");
+    expect(headerButtons).not.toContain("Archive");
+    expect(headerButtons).not.toContain("Delete");
+    expect((await openMenu())()).toEqual(["Edit", "Delete"]);
+  });
+
+  it("Delete archives the family", async () => {
+    await render();
+    await openMenu();
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Delete") as HTMLElement).click());
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", familyId: "fam-1" });
+  });
+
+  it("offers Restore instead of Delete on an archived family", async () => {
     await render({ family: { ...FAMILY, status: "archived" } });
-    expect(buttons()).toContain("Unarchive");
+    expect((await openMenu())()).toEqual(["Edit", "Restore"]);
   });
 
   it("shows the statistics: total Sources, median and maximum", async () => {

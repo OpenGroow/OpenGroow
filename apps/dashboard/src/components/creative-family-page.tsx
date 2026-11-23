@@ -10,8 +10,7 @@ import { PageHeader } from "@/components/opengroow/page-header";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EditFamilyButton } from "@/src/components/creative-family-actions";
-import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-archive-button";
+import { FamilyMoreMenu } from "@/src/components/family-more-menu";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
@@ -92,9 +91,8 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           description={family.description}
           action={
             <div className="flex items-center gap-3">
-              <EditFamilyButton instanceId={instanceId} family={family} />
               {isActiveFamily(family) ? <AddSourceButton instanceId={instanceId} familyId={familyId} /> : null}
-              <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={!isActiveFamily(family)} />
+              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} />
             </div>
           }
         />
