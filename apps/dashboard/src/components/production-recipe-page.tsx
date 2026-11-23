@@ -1,14 +1,16 @@
 "use client";
 
+import * as React from "react";
 import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Braces, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { RecipeConnectionsPanel } from "@/src/components/recipe-connections-panel";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
@@ -90,7 +92,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
       </div>
 
       {shown ? (
-        <section aria-label="Recipe content" className="grid gap-3">
+        <section aria-label="Recipe content" className="grid gap-6">
           {viewingOld ? (
             <p role="note" className="m-0 text-sm text-muted-foreground">
               Viewing version {shown.version}, not the latest.{" "}
@@ -103,21 +105,33 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
         </section>
       ) : null}
 
-      <section aria-label="Version history" className="grid gap-3">
-        <h2 className="m-0 text-lg font-semibold text-foreground">Version history</h2>
-        <ul className="m-0 grid list-none gap-2 p-0">
-          {(versions ?? []).map((v) => (
-            <li key={v.version} className="flex items-center gap-3 text-sm">
-              <Button type="button" variant="link" className="h-auto p-0" aria-label={`Version ${v.version}`} onClick={() => setSelected(v.version)}>
-                Version {v.version}
-              </Button>
-              <span className="text-muted-foreground tabular-nums">{new Date(v.createdAt).toISOString().slice(0, 10)}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} archived={archived} />
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <section aria-label="Version history">
+          <Card className="grid gap-4 px-5 py-4">
+            <SectionTitle icon={History} title="Version history" />
+            <ul className="m-0 grid list-none gap-2 p-0">
+              {(versions ?? []).map((v) => (
+                <li key={v.version}>
+                  <button
+                    type="button"
+                    aria-label={`Version ${v.version}`}
+                    aria-current={shown?.version === v.version ? "true" : undefined}
+                    onClick={() => setSelected(v.version)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-surface-raised",
+                      shown?.version === v.version && "bg-surface-raised",
+                    )}
+                  >
+                    <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary tabular-nums">{`v${v.version}`}</span>
+                    <span className="text-muted-foreground tabular-nums">{new Date(v.createdAt).toISOString().slice(0, 10)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+        <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} archived={archived} />
+      </div>
 
       <ProductionRecipeFormDialog
         mode="edit"
@@ -133,25 +147,85 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   );
 }
 
+function SectionTitle({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon aria-hidden="true" className="size-5 text-muted-foreground" />
+      <h2 className="m-0 text-lg font-semibold text-foreground">{title}</h2>
+    </div>
+  );
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      aria-label={`Copy ${label}`}
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check /> : <Copy />}
+    </Button>
+  );
+}
+
+function ContentCard({ icon, title, copyText, children }: { icon: LucideIcon; title: string; copyText?: string; children: React.ReactNode }) {
+  return (
+    <Card aria-label={title} className="grid gap-3 px-5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <SectionTitle icon={icon} title={title} />
+        {copyText !== undefined ? <CopyButton text={copyText} label={title.toLowerCase()} /> : null}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+/** Long texts (the prompt) are folded to a few lines and can be unfolded. */
+function FoldedText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 480;
+  return (
+    <div className="grid gap-2">
+      <p className={cn("m-0 whitespace-pre-wrap text-sm leading-6 text-foreground", long && !open && "line-clamp-6")}>{text}</p>
+      {long ? (
+        <Button type="button" variant="link" className="h-auto w-fit p-0" onClick={() => setOpen((v) => !v)}>
+          {open ? "Show less" : "Show more"}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 function VersionContent({ version }: { version: Version }) {
   return (
-    <Card className="grid gap-4 px-5 py-4">
-      {version.prompt ? <Field label="Prompt" text={version.prompt} /> : null}
-      <Field label="Instructions" text={version.instructions} />
+    <div className="grid gap-6">
+      {version.prompt ? (
+        <ContentCard icon={Layers} title="Prompt" copyText={version.prompt}>
+          <FoldedText text={version.prompt} />
+        </ContentCard>
+      ) : null}
+      <ContentCard icon={FileText} title="Instructions" copyText={version.instructions}>
+        <FoldedText text={version.instructions} />
+      </ContentCard>
       {version.constraints.length > 0 ? (
-        <div className="grid gap-1">
-          <h3 className="m-0 text-sm font-medium text-muted-foreground">Constraints</h3>
-          <ul className="m-0 grid gap-1 pl-5 text-sm text-foreground">
+        <ContentCard icon={ShieldCheck} title="Constraints" copyText={version.constraints.join("\n")}>
+          <ul className="m-0 grid gap-2 pl-5 text-sm text-foreground marker:text-primary">
             {version.constraints.map((c, i) => (
               <li key={i}>{c}</li>
             ))}
           </ul>
-        </div>
+        </ContentCard>
       ) : null}
       {version.variables.length > 0 ? (
-        <div className="grid gap-1">
-          <h3 className="m-0 text-sm font-medium text-muted-foreground">Variables</h3>
-          <dl className="m-0 grid gap-2 text-sm">
+        <ContentCard icon={Braces} title="Variables">
+          <dl className="m-0 grid gap-3 text-sm">
             {version.variables.map((variable) => (
               <div key={variable.name} className="grid gap-0.5">
                 <dt className="font-medium text-foreground">{`{${variable.name}}`}</dt>
@@ -162,17 +236,8 @@ function VersionContent({ version }: { version: Version }) {
               </div>
             ))}
           </dl>
-        </div>
+        </ContentCard>
       ) : null}
-    </Card>
-  );
-}
-
-function Field({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="grid gap-1">
-      <h3 className="m-0 text-sm font-medium text-muted-foreground">{label}</h3>
-      <p className="m-0 whitespace-pre-wrap text-sm text-foreground">{text}</p>
     </div>
   );
 }

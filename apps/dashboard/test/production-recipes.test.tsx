@@ -194,10 +194,22 @@ describe("Production Recipes UI", () => {
   it("browses the version history", async () => {
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
     const items = Array.from(container.querySelectorAll('[aria-label="Version history"] li'));
-    expect(items.map((li) => li.textContent)).toEqual([expect.stringContaining("Version 2"), expect.stringContaining("Version 1")]);
-    await press("Version 1");
+    expect(items.map((li) => li.textContent)).toEqual([expect.stringContaining("v2"), expect.stringContaining("v1")]);
+    await act(async () => (container.querySelector('button[aria-label="Version 1"]') as HTMLElement).click());
     expect(container.textContent).toContain("Viewing version 1");
     expect(container.textContent).toContain("Close-up");
+  });
+
+  it("shows the Prompt, Instructions and Constraints as cards with a copy button", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+    for (const title of ["Prompt", "Instructions", "Constraints"]) {
+      expect(container.querySelector(`[aria-label="${title}"]`), title).not.toBeNull();
+    }
+    await act(async () => (container.querySelector('button[aria-label="Copy prompt"]') as HTMLElement).click());
+    expect(writeText).toHaveBeenCalledWith(expect.any(String));
+    expect(writeText.mock.calls[0]![0].length).toBeGreaterThan(0);
   });
 
   it("archives and unarchives", async () => {
