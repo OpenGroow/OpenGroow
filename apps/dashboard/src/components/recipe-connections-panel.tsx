@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Link2, Play, Power, PowerOff, type LucideIcon } from "lucide-react";
-import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
+import { Link2, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -16,28 +15,16 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 // values come only from the installed Templates' manifests (listTargets); the
 // server revalidates on save and its refusals are shown as is.
 
-type Status = "candidate" | "active" | "disabled";
 type SelectField = { key: string; label: string; options: Array<{ value: string; label: string }> };
 type Target = { templateId: string; templateName: string; missionType: string; label: string; selectFields: SelectField[] };
-type Connection = { _id: string; recipeId: string; templateId: string; missionType: string; compatibleWhen: Record<string, string[]>; status: Status; templateName?: string; missionTypeLabel?: string };
-
-const STATUS_DISPLAY: Record<Status, { label: string; tone: StatusTone }> = {
-  candidate: { label: "Candidate", tone: "info" },
-  active: { label: "Active", tone: "active" },
-  disabled: { label: "Disabled", tone: "neutral" },
-};
-const STATUS_ACTIONS: Record<Status, Array<{ to: Status; label: string; icon: LucideIcon }>> = {
-  candidate: [{ to: "active", label: "Activate", icon: Power }, { to: "disabled", label: "Disable", icon: PowerOff }],
-  active: [{ to: "candidate", label: "Back to candidate", icon: ArrowLeft }, { to: "disabled", label: "Disable", icon: PowerOff }],
-  disabled: [{ to: "candidate", label: "Back to candidate", icon: ArrowLeft }, { to: "active", label: "Activate", icon: Power }],
-};
+type Connection = { _id: string; recipeId: string; templateId: string; missionType: string; compatibleWhen: Record<string, string[]>; templateName?: string; missionTypeLabel?: string };
 
 export function RecipeConnectionsPanel({ instanceId, recipeId, archived }: { instanceId: string; recipeId: string; archived: boolean }) {
   const id = recipeId as Id<"productionRecipes">;
   const connections = useQuery(api.production_connections.list, { instanceId, recipeId: id }) as Connection[] | undefined;
   const targets = useQuery(api.production_connections.listTargets, { instanceId }) as Target[] | undefined;
   const create = useMutation(api.production_connections.create);
-  const setStatus = useMutation(api.production_connections.setStatus);
+  const remove = useMutation(api.production_connections.remove);
   const [targetIndex, setTargetIndex] = useState("");
   const [conditions, setConditions] = useState<Record<string, string[]>>({});
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +83,7 @@ export function RecipeConnectionsPanel({ instanceId, recipeId, archived }: { ins
             const t = findTarget(c);
             const fields = t?.selectFields ?? [];
             return (
-              <li key={c._id} className="grid gap-3 rounded-xl border border-border p-3">
+              <li key={c._id} className="rounded-xl border border-border p-3">
                 <div className="flex items-start gap-3">
                   <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-raised text-muted-foreground">
                     <Play className="size-4" />
@@ -117,21 +104,15 @@ export function RecipeConnectionsPanel({ instanceId, recipeId, archived }: { ins
                             .join(" · ")}
                     </span>
                   </div>
-                  <StatusBadge tone={STATUS_DISPLAY[c.status].tone} label={STATUS_DISPLAY[c.status].label} />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {STATUS_ACTIONS[c.status].map((a) => (
-                    <Button
-                      key={a.to}
-                      type="button"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => run(() => setStatus({ instanceId, connectionId: c._id as Id<"productionConnections">, status: a.to }), "Could not change the status.")}
-                    >
-                      <a.icon className="size-4" />
-                      {a.label}
-                    </Button>
-                  ))}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Remove connection"
+                    onClick={() => run(() => remove({ instanceId, connectionId: c._id as Id<"productionConnections"> }), "Could not remove the connection.")}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               </li>
             );

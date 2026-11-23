@@ -15,7 +15,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.archive": vi.fn(),
   "recipes.unarchive": vi.fn(),
   "connections.create": vi.fn(),
-  "connections.setStatus": vi.fn(),
+  "connections.remove": vi.fn(),
 };
 let connections: unknown;
 let targets: unknown;
@@ -40,7 +40,7 @@ vi.mock("@convex/_generated/api", () => ({
     },
     production_connections: {
       create: "connections.create",
-      setStatus: "connections.setStatus",
+      remove: "connections.remove",
       list: "connections.list",
       listTargets: "connections.listTargets",
     },
@@ -74,7 +74,6 @@ const CONNECTION = {
   templateId: "@example/video-demo",
   missionType: "create_letter_video",
   compatibleWhen: { format: ["vertical"] },
-  status: "candidate",
 };
 
 describe("Production Recipes UI", () => {
@@ -216,13 +215,12 @@ describe("Production Recipes UI", () => {
       });
     };
 
-    it("lists the connections with target label, conditions and status", async () => {
+    it("lists the connections with target label and conditions", async () => {
       connections = [CONNECTION];
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
       expect(panel().textContent).toContain("Video Demo");
       expect(panel().textContent).toContain("Letter video");
       expect(panel().textContent).toContain("Format: Vertical");
-      expect(panel().textContent).toContain("Candidate");
     });
 
     it("creates a connection from an installed target and its option values", async () => {
@@ -254,13 +252,14 @@ describe("Production Recipes UI", () => {
       expect(panel().querySelector('[role="alert"]')?.textContent).toBe("This recipe is already connected to this Mission type");
     });
 
-    it("changes the status and shows a server refusal", async () => {
+    it("removes a connection and shows a server refusal", async () => {
       connections = [CONNECTION];
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await press("Activate");
-      expect(mutations["connections.setStatus"]).toHaveBeenCalledWith({ instanceId: "p1", connectionId: "conn-1", status: "active" });
-      mutations["connections.setStatus"].mockRejectedValue(new Error("Uncaught Error: Creative Connection not found"));
-      await press("Disable");
+      const remove = () => act(async () => (panel().querySelector('[aria-label="Remove connection"]') as HTMLElement).click());
+      await remove();
+      expect(mutations["connections.remove"]).toHaveBeenCalledWith({ instanceId: "p1", connectionId: "conn-1" });
+      mutations["connections.remove"].mockRejectedValue(new Error("Uncaught Error: Creative Connection not found"));
+      await remove();
       expect(panel().querySelector('[role="alert"]')?.textContent).toBe("Creative Connection not found");
     });
   });

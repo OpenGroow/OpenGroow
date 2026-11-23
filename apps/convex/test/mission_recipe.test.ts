@@ -98,9 +98,9 @@ async function setup() {
     });
     return recipeId;
   }
-  async function connect(recipeId: Id<"productionRecipes">, status: "candidate" | "active" | "disabled" = "candidate", compatibleWhen: Record<string, string[]> = { format: ["hook"] }) {
+  async function connect(recipeId: Id<"productionRecipes">, compatibleWhen: Record<string, string[]> = { format: ["hook"] }) {
     const connectionId = await owner.mutation(api.production_connections.create, {
-      instanceId: INSTANCE, recipeId, templateId: TEMPLATE_ID, missionType: "create_letter_video", compatibleWhen, status,
+      instanceId: INSTANCE, recipeId, templateId: TEMPLATE_ID, missionType: "create_letter_video", compatibleWhen,
     });
     return connectionId;
   }
@@ -129,7 +129,7 @@ describe("missions.create with a recipe", () => {
     await owner.mutation(api.production_recipes.saveVersion, {
       instanceId: INSTANCE, recipeId, prompt: "Second take", instructions: "i", constraints: [],
     });
-    const connectionId = await connect(recipeId, "active");
+    const connectionId = await connect(recipeId);
     const latest = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
     const older = await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 1 } });
     const snaps = await t.run(async (ctx) => [(await ctx.db.get(latest.missionId))?.recipeSnapshot, (await ctx.db.get(older.missionId))?.recipeSnapshot]);
@@ -138,10 +138,9 @@ describe("missions.create with a recipe", () => {
     expect(snaps[1]?.prompt).toBe("A close-up, calm face.");
   });
 
-  it("refuses a disabled connection, a stranger's connection and an unknown connection", async () => {
+  it("refuses a stranger's connection", async () => {
     const { recipe, connect, create, stranger } = await setup();
-    const connectionId = await connect(await recipe(), "disabled");
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId } })).rejects.toThrow(/disabled/);
+    const connectionId = await connect(await recipe());
     await expect(
       stranger.mutation(api.missions.create, { instanceId: OTHER_INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload: { format: "hook" }, recipe: { connectionId } } as never),
     ).rejects.toThrow(/not found/);

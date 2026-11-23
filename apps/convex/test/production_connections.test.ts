@@ -75,13 +75,13 @@ describe("rules", () => {
 });
 
 describe("production_connections", () => {
-  it("creates a candidate connection and reads it back", async () => {
+  it("creates a connection and reads it back", async () => {
     const { owner, recipeId } = await setup();
     const id = await owner.mutation(api.production_connections.create, {
       instanceId: INSTANCE_ID, recipeId, templateId: "@example/video-a", missionType: "create_letter_video", compatibleWhen: { format: ["hook"] },
     });
     expect(await owner.query(api.production_connections.get, { instanceId: INSTANCE_ID, connectionId: id })).toMatchObject({
-      status: "candidate", templateId: "@example/video-a", compatibleWhen: { format: ["hook"] },
+      templateId: "@example/video-a", compatibleWhen: { format: ["hook"] },
     });
     expect(await owner.query(api.production_connections.list, { instanceId: INSTANCE_ID, recipeId })).toHaveLength(1);
   });
@@ -104,24 +104,22 @@ describe("production_connections", () => {
     await expect(owner.mutation(api.production_connections.create, { ...args, templateId: "@example/video-a" })).rejects.toThrow("already connected");
   });
 
-  it("changes status", async () => {
+  it("removes a connection", async () => {
     const { owner, recipeId } = await setup();
     const id = await owner.mutation(api.production_connections.create, { instanceId: INSTANCE_ID, recipeId, templateId: "@example/video-a", missionType: "create_letter_video" });
-    for (const status of ["active", "disabled", "candidate"] as const) {
-      await owner.mutation(api.production_connections.setStatus, { instanceId: INSTANCE_ID, connectionId: id, status });
-      expect((await owner.query(api.production_connections.get, { instanceId: INSTANCE_ID, connectionId: id }))!.status).toBe(status);
-    }
+    await owner.mutation(api.production_connections.remove, { instanceId: INSTANCE_ID, connectionId: id });
+    expect(await owner.query(api.production_connections.list, { instanceId: INSTANCE_ID, recipeId })).toEqual([]);
   });
 
   it("is isolated per Project", async () => {
     const { t, owner, recipeId } = await setup();
     const id = await owner.mutation(api.production_connections.create, { instanceId: INSTANCE_ID, recipeId, templateId: "@example/video-a", missionType: "create_letter_video" });
     const stranger = t.withIdentity(STRANGER);
-    await expect(stranger.mutation(api.production_connections.setStatus, { instanceId: INSTANCE_ID, connectionId: id, status: "active" })).rejects.toThrow();
+    await expect(stranger.mutation(api.production_connections.remove, { instanceId: INSTANCE_ID, connectionId: id })).rejects.toThrow();
     expect(await stranger.query(api.production_connections.get, { instanceId: INSTANCE_ID, connectionId: id })).toBeNull();
     expect(await stranger.query(api.production_connections.list, { instanceId: INSTANCE_ID, recipeId })).toEqual([]);
     // The stranger's own Instance cannot reach the owner's connection either.
-    await expect(stranger.mutation(api.production_connections.setStatus, { instanceId: OTHER_INSTANCE_ID, connectionId: id, status: "active" })).rejects.toThrow("not found");
+    await expect(stranger.mutation(api.production_connections.remove, { instanceId: OTHER_INSTANCE_ID, connectionId: id })).rejects.toThrow("not found");
   });
 
   it("lists targets that declare the provider, with their select fields", async () => {

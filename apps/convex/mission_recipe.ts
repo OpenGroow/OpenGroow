@@ -24,7 +24,7 @@ export type RecipeArg = {
 export type RecipeSnapshot = NonNullable<Doc<"missions">["recipeSnapshot"]>;
 
 /**
- * Checks, in order: the connection belongs to the Project and is not disabled;
+ * Checks, in order: the connection belongs to the Project;
  * its target matches the Template and Mission type; the payload satisfies its
  * compatibility rule; the pinned Template version declares the provider; the
  * recipe is not archived. Then copies the version into a snapshot.
@@ -44,7 +44,6 @@ export async function buildRecipeSnapshot(
   const { recipe: arg } = args;
   const connection = await ownedConnection(ctx, args.instanceId, arg.connectionId);
   if (!connection) throw new Error("Creative Connection not found");
-  if (connection.status === "disabled") throw new Error("This Creative Connection is disabled");
   if (connection.templateId !== args.templateId || connection.missionType !== args.type) {
     throw new Error(`This Creative Connection does not target Mission type "${args.type}" of ${args.templateId}`);
   }

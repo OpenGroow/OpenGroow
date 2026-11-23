@@ -74,14 +74,14 @@ One immutable save of a **Production Recipe**: an optional verbatim `prompt`, fr
 A **Production Recipe** offered to one Mission type of one installed Template. The target is the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable; a recipe has at most one connection per target in a Project.
 
 - **Validated on save** against the installed manifest: the Mission type exists, it declares the `production-recipe` provider, and each `compatibleWhen` entry is a select field whose listed values are among its declared options. `compatibleWhen` maps a payload field to its allowed values; a listed field missing from the payload is incompatible.
-- **Status**: `candidate` (usable only when referenced explicitly), `active` (activated manually, never automatically) or `disabled` (never usable).
+- **No status**: a connection is usable as soon as it exists and is never selected automatically; it is chosen explicitly at Mission creation. Removing it leaves existing Missions unchanged (their snapshot is a copy).
 - _Avoid_: targeting an Agent instead of a Template and Mission type, and free-text technical identifiers.
 
 ### Recipe Snapshot
 
 What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, the **Creative Connection**, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
 
-- **Checks at creation**, in order: the connection belongs to the Project and is not `disabled`; it targets the Template and Mission type; the payload satisfies its `compatibleWhen`; the Template version the Mission is pinned to declares the `production-recipe` provider; the recipe is not archived.
+- **Checks at creation**, in order: the connection belongs to the Project; it targets the Template and Mission type; the payload satisfies its `compatibleWhen`; the Template version the Mission is pinned to declares the `production-recipe` provider; the recipe is not archived.
 - The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
 - _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
 

@@ -5,7 +5,7 @@ import type { AgentTemplate } from "@opengroow/agent-templates";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { ownedRecipe } from "./production_recipes.js";
 import { RECIPE_PROVIDER, validateConnectionTarget } from "./production_connection_rules.js";
-import { compatibleWhenV, connectionStatusV } from "./production_validators.js";
+import { compatibleWhenV } from "./production_validators.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // Creative Connections (issue #137): a recipe offered to one Mission type of
@@ -13,8 +13,6 @@ import { getTemplateRegistry } from "./template_registry.js";
 // Instance and validates the target against the installed manifest.
 
 export const CONNECTION_LIST_CAP = 200;
-
-const statusV = connectionStatusV;
 
 /**
  * The installed versions of a Template a connection may target, newest first:
@@ -63,11 +61,10 @@ async function view(ctx: QueryCtx, connection: Doc<"productionConnections">) {
     templateName: manifest?.name,
     missionTypeLabel: manifest?.missionTypes?.find((t) => t.type === connection.missionType)?.label,
     compatibleWhen: connection.compatibleWhen,
-    status: connection.status,
   };
 }
 
-/** Creates a connection (default status `candidate`); refused for a bad target or a duplicate. */
+/** Creates a connection; refused for a bad target or a duplicate. */
 export const create = mutation({
   args: {
     instanceId: v.string(),
@@ -75,7 +72,6 @@ export const create = mutation({
     templateId: v.string(),
     missionType: v.string(),
     compatibleWhen: v.optional(compatibleWhenV),
-    status: v.optional(statusV),
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
@@ -99,19 +95,18 @@ export const create = mutation({
       templateId: args.templateId,
       missionType: args.missionType,
       compatibleWhen,
-      status: args.status ?? "candidate",
     });
   },
 });
 
-/** Changes a connection's status (activation is manual). */
-export const setStatus = mutation({
-  args: { instanceId: v.string(), connectionId: v.id("productionConnections"), status: statusV },
+/** Removes a connection. Missions already created keep their snapshot. */
+export const remove = mutation({
+  args: { instanceId: v.string(), connectionId: v.id("productionConnections") },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const connection = await ownedConnection(ctx, args.instanceId, args.connectionId);
     if (!connection) throw new Error("Creative Connection not found");
-    if (connection.status !== args.status) await ctx.db.patch(args.connectionId, { status: args.status });
+    await ctx.db.delete(args.connectionId);
     return null;
   },
 });
