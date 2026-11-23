@@ -161,7 +161,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           </ul>
         )}
         {hasMore ? (
-          <Button type="button" variant="outline" className="w-fit" disabled={status === "LoadingMore"} onClick={() => loadMore(PAGE_SIZE)}>
+          <Button type="button" variant="outline" className="w-fit justify-self-end" disabled={status === "LoadingMore"} onClick={() => loadMore(PAGE_SIZE)}>
             Load more
           </Button>
         ) : null}
