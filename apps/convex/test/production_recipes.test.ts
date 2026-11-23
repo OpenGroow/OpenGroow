@@ -136,6 +136,17 @@ describe("production_recipes", () => {
     expect(await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID, familyId })).toHaveLength(3);
   });
 
+  it("changes the target, validated, and refuses it on an archived recipe", async () => {
+    const { owner, recipeId } = await setup();
+    const args = { instanceId: INSTANCE_ID, recipeId };
+    await owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/video-b", missionType: "create_letter_video" });
+    expect(await owner.query(api.production_recipes.get, args)).toMatchObject({ templateId: "@example/video-b" });
+    await expect(owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/no-provider", missionType: "create_letter_video" })).rejects.toThrow("provider");
+    expect(await owner.query(api.production_recipes.get, args)).toMatchObject({ templateId: "@example/video-b" });
+    await owner.mutation(api.production_recipes.archive, args);
+    await expect(owner.mutation(api.production_recipes.setTarget, { ...args, ...TARGET })).rejects.toThrow("archived");
+  });
+
   it("lists targets that declare the provider", async () => {
     const { t, owner } = await setup();
     await t.run(async (ctx) => {

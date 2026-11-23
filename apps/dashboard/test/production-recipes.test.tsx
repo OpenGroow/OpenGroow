@@ -15,6 +15,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.create": vi.fn(),
   "recipes.saveVersion": vi.fn(),
   "recipes.archive": vi.fn(),
+  "recipes.setTarget": vi.fn(),
   "recipes.unarchive": vi.fn(),
 };
 let targets: unknown;
@@ -37,6 +38,7 @@ vi.mock("@convex/_generated/api", () => ({
       get: "recipes.get",
       listVersions: "recipes.listVersions",
       listTargets: "recipes.listTargets",
+      setTarget: "recipes.setTarget",
     },
   },
 }));
@@ -200,9 +202,16 @@ describe("Production Recipes UI", () => {
     expect(mutations["recipes.unarchive"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
   });
 
-  it("shows the Mission type of the recipe", async () => {
+  it("shows the Mission type of the recipe and changes it", async () => {
+    targets = [...TARGETS, { templateId: "@example/video-demo", templateName: "Video Demo", missionType: "other_video", label: "Other video" }];
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-    expect(container.querySelector('[aria-label="Mission type"]')?.textContent).toContain("Video Demo · Letter video");
+    const select = container.querySelector('select[data-slot="native-select"]') as HTMLSelectElement;
+    expect(select.selectedOptions[0]?.textContent).toBe("Video Demo · Letter video");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "@example/video-demo\u0000other_video");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(mutations["recipes.setTarget"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1", templateId: "@example/video-demo", missionType: "other_video" });
   });
 
   it("asks for a Mission type before creating, and says when none is available", async () => {

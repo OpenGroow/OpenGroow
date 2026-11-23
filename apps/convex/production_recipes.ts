@@ -60,6 +60,15 @@ async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: 
 const declaresProvider = (template: AgentTemplate, missionType: string) =>
   template.manifest.missionTypes?.find((t) => t.type === missionType)?.contextProviders?.includes(RECIPE_PROVIDER) === true;
 
+/** Throws unless an installed version of the Template has this Mission type and it declares the provider. */
+async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
+  const versions = await installedVersions(ctx, instanceId, templateId);
+  if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
+  // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
+  const template = versions.find((t) => declaresProvider(t, missionType)) ?? versions[versions.length - 1]!;
+  validateRecipeTarget(template.manifest, missionType);
+}
+
 /** A recipe of the caller's Instance, or null (another Instance's recipe is "not found"). */
 export async function ownedRecipe(ctx: QueryCtx, instanceId: string, recipeId: Id<"productionRecipes">) {
   const recipe = await ctx.db.get(recipeId);
@@ -134,11 +143,7 @@ export const create = mutation({
     const name = args.name.trim().replace(/\s+/g, " ");
     if (name === "") throw new Error("A Production Recipe needs a name");
     const content = cleanContent(args);
-    const versions = await installedVersions(ctx, args.instanceId, args.templateId);
-    if (versions.length === 0) throw new Error(`Template "${args.templateId}" is not installed`);
-    // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
-    const template = versions.find((t) => declaresProvider(t, args.missionType)) ?? versions[versions.length - 1]!;
-    validateRecipeTarget(template.manifest, args.missionType);
+    await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
     const recipeId = await ctx.db.insert("productionRecipes", {
       instanceId: args.instanceId,
       creativeFamilyId: args.familyId,
@@ -162,6 +167,19 @@ export const saveVersion = mutation({
     const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
     if (recipe.status === "archived") throw new Error("An archived Production Recipe cannot be edited");
     return await appendVersion(ctx, recipe, cleanContent(args));
+  },
+});
+
+/** Changes the Mission type a recipe is written for. Existing Missions keep their snapshot. */
+export const setTarget = mutation({
+  args: { instanceId: v.string(), recipeId: v.id("productionRecipes"), templateId: v.string(), missionType: v.string() },
+  handler: async (ctx, args) => {
+    await ownerIdFor(ctx, args.instanceId);
+    const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
+    if (recipe.status === "archived") throw new Error("An archived Production Recipe cannot be edited");
+    await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
+    await ctx.db.patch(args.recipeId, { templateId: args.templateId, missionType: args.missionType });
+    return null;
   },
 });
 

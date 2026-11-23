@@ -61,7 +61,7 @@ See ADR-051, ADR-082.
 
 How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is `active` or `archived`; archiving keeps every version readable and stops further edits.
 
-- **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider. The target never changes afterwards.
+- **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
 - **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
 - **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
 - _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
