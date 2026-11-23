@@ -182,7 +182,7 @@ function Statistics({ stats }: { stats: FamilyStats }) {
   return (
     <section aria-label="Statistics" className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile icon={Layers} label="Sources with views" value={`${stats.withViewsCount} of ${stats.sourceCount}`} tone="visual" />
+        <StatTile icon={Layers} label="Sources" value={number(stats.sourceCount)} tone="visual" />
         <StatTile icon={TrendingUp} label="Median views" value={figure(stats.medianViews)} tone="engagement" />
         <StatTile icon={Trophy} label="Maximum views" value={figure(stats.maxViews)} tone="research" />
       </div>

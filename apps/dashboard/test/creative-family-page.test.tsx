@@ -126,9 +126,11 @@ describe("CreativeFamilyContent", () => {
     expect(buttons()).toContain("Unarchive");
   });
 
-  it("shows the statistics: Sources with views out of the total, median and maximum", async () => {
+  it("shows the statistics: total Sources, median and maximum", async () => {
     await render();
-    expect(text()).toContain("2 of 4");
+    const stat = document.body.querySelector('[aria-label="Statistics"]')?.textContent ?? "";
+    expect(stat).toContain("4Sources");
+    expect(stat).not.toContain(" of ");
     expect(text()).toContain("1,500");
     expect(text()).toContain("2,000");
     expect(text()).not.toContain("truncated");
@@ -137,7 +139,7 @@ describe("CreativeFamilyContent", () => {
 
   it("shows unknown, not zero, when no Source has views", async () => {
     await render({ stats: { sourceCount: 3, withViewsCount: 0, medianViews: null, maxViews: null, truncated: false } });
-    expect(text()).toContain("0 of 3");
+    expect(document.body.querySelector('[aria-label="Statistics"]')?.textContent).toContain("3Sources");
     expect(document.body.querySelector('[aria-label="Statistics"]')?.textContent).toContain("Unknown");
   });
 
