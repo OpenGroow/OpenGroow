@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runLogsHref, runPromptHref } from "@/src/lib/instance-path";
+import { missionRunHref, runLogsHref } from "@/src/lib/instance-path";
 
 describe("run deep links", () => {
   it("runLogsHref opens one Run in the Agent's Logs tab", () => {
@@ -8,13 +8,17 @@ describe("run deep links", () => {
     );
   });
 
-  it("runPromptHref opens one Run's prompt for a Mission under the Agent", () => {
-    expect(runPromptHref("instance-1", "seo", "run-1", "mission-1")).toBe(
-      "/projects/instance-1/agents/seo/prompt?runId=run-1&missionId=mission-1",
+  it("missionRunHref opens one Run's Prompt or Logs under its Mission", () => {
+    expect(missionRunHref("instance-1", "mission-1", "run-1", "prompt")).toBe(
+      "/projects/instance-1/missions/mission-1/runs/run-1/prompt",
+    );
+    expect(missionRunHref("instance-1", "mission-1", "run-1", "logs")).toBe(
+      "/projects/instance-1/missions/mission-1/runs/run-1/logs",
     );
   });
 
   it("encodes path and query segments", () => {
+    expect(missionRunHref("a b", "m/1", "r&1", "logs")).toBe("/projects/a%20b/missions/m%2F1/runs/r%261/logs");
     expect(runLogsHref("a b", "t/x", "r&1")).toBe("/projects/a%20b/agents/t%2Fx/logs?runId=r%261");
   });
 });

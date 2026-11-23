@@ -21,6 +21,9 @@ type TranscriptState =
 
 type WorkspacePromptPageProps = {
   params: Promise<{ projectId: string; workspaceKey: string }>;
+  /** Which Run and Mission to show when the page is not opened with `?runId=&missionId=` (the Mission's Run page). */
+  runId?: Id<"runs">;
+  missionId?: Id<"missions">;
 };
 
 const MCP_NAME_SEPARATORS = [".", "__"] as const;
@@ -31,16 +34,16 @@ function isCallToTool(recordedName: string, tool: string, server: string | undef
   return recordedName === tool || MCP_NAME_SEPARATORS.some((separator) => recordedName.endsWith(`${separator}${tool}`));
 }
 
-export function WorkspacePromptPage({ params }: WorkspacePromptPageProps) {
+export function WorkspacePromptPage({ params, runId: runIdProp, missionId: missionIdProp }: WorkspacePromptPageProps) {
   const { projectId, workspaceKey } = use(params);
   const { manifests } = useProjectManifests(decodeURIComponent(projectId));
   const decodedWorkspaceKey = decodeURIComponent(workspaceKey);
   const searchParams = useSearchParams();
-  const runId = searchParams.get("runId") as Id<"runs"> | null;
-  // Read straight from the link (mission-detail-page.tsx's RunRow) so both
+  const runId = runIdProp ?? (searchParams.get("runId") as Id<"runs"> | null);
+  // Read straight from the link or the route (the Mission's Run page) so both
   // Convex queries fire in parallel on mount, instead of waiting for `run`
   // to resolve before mission.get can even start.
-  const missionId = searchParams.get("missionId") as Id<"missions"> | null;
+  const missionId = missionIdProp ?? (searchParams.get("missionId") as Id<"missions"> | null);
 
   const run = useQuery(api.runs.get, runId ? { runId } : "skip");
   const mission = useQuery(api.missions.get, missionId ? { missionId } : "skip");

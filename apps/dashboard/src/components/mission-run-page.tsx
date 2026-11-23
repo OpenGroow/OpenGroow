@@ -1,0 +1,120 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import * as React from "react";
+import { use } from "react";
+import { useAction, useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { TabNav } from "@/components/opengroow/tab-nav";
+import { AgentWorkspaceView } from "@/src/components/agent-workspace-view";
+import { WorkspacePromptPage } from "@/src/components/workspace-prompt-page";
+import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
+import { TranscriptPanel } from "@/src/components/workspace-logs-transcript";
+import type { TranscriptState } from "@/src/components/workspace-logs.types";
+import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
+import { missionRunHref } from "@/src/lib/instance-path";
+import { titleCase } from "@/src/lib/mission-type";
+
+type RunViewProps = { instanceId: string; missionId: string; runId: string };
+
+/**
+ * One Run of a Mission, under the Mission: a header that says which Mission and
+ * Run this is, a way back to the Mission, and the Run's Prompt and Logs as tabs.
+ * They used to open under the Agent's pages, which dropped the Mission context.
+ */
+export function MissionRunShell({ instanceId, missionId, runId, children }: RunViewProps & { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const mission = useQuery(api.missions.get, { missionId: missionId as Id<"missions"> });
+  const run = useQuery(api.runs.get, { runId: runId as Id<"runs"> });
+  const missionHref = `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}`;
+  const tabs = [
+    { label: "Prompt", href: missionRunHref(instanceId, missionId, runId, "prompt"), enabled: true },
+    { label: "Logs", href: missionRunHref(instanceId, missionId, runId, "logs"), enabled: true },
+  ];
+
+  if (mission === null || run === null) {
+    return <p className="m-0 text-sm text-muted-foreground">This Run was not found.</p>;
+  }
+  return (
+    <section className="grid min-w-0 gap-6">
+      <header className="grid gap-4">
+        <Link href={missionHref} className="text-xs font-semibold text-muted-foreground hover:text-primary">
+          ← {mission ? titleCase(mission.type) : "Mission"}
+        </Link>
+        <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
+          Run{mission ? ` of ${titleCase(mission.type)}` : ""}
+        </h1>
+        <TabNav items={tabs} current={pathname} label="Run sections" />
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** The Agent that ran this Run, found from the Run itself. */
+function useRunTemplateId(runId: string): string | null | undefined {
+  const run = useQuery(api.runs.get, { runId: runId as Id<"runs"> });
+  return run === undefined ? undefined : run === null ? null : run.templateId;
+}
+
+export function MissionRunPromptView({ instanceId, missionId, runId }: RunViewProps) {
+  const templateId = useRunTemplateId(runId);
+  if (!templateId) return null;
+  return (
+    <AgentWorkspaceView instanceId={instanceId} templateId={templateId}>
+      {(params) => (
+        <WorkspacePromptPage params={params} runId={runId as Id<"runs">} missionId={missionId as Id<"missions">} />
+      )}
+    </AgentWorkspaceView>
+  );
+}
+
+export function MissionRunLogsView({ instanceId, runId }: RunViewProps) {
+  const templateId = useRunTemplateId(runId);
+  if (!templateId) return null;
+  return (
+    <AgentWorkspaceView instanceId={instanceId} templateId={templateId}>
+      {(params) => <RunTranscript params={params} runId={runId as Id<"runs">} />}
+    </AgentWorkspaceView>
+  );
+}
+
+/** The session transcript of this one Run: what the Agent said and did. */
+function RunTranscript({
+  params,
+  runId,
+}: {
+  params: Promise<{ projectId: string; workspaceKey: string }>;
+  runId: Id<"runs">;
+}) {
+  const { projectId, workspaceKey } = use(params);
+  const runtimeInstanceId = useRuntimeInstanceId(decodeURIComponent(projectId));
+  const decodedWorkspaceKey = decodeURIComponent(workspaceKey);
+  const getWorkspaceRunTranscript = useAction(api.workspace_logs_node.getWorkspaceRunTranscript);
+  const [transcript, setTranscript] = React.useState<TranscriptState>({ status: "loading" });
+  const latestRequestId = React.useRef(0);
+
+  React.useEffect(() => {
+    if (!runtimeInstanceId) return;
+    const requestId = ++latestRequestId.current;
+    setTranscript({ status: "loading" });
+    getWorkspaceRunTranscript({ instanceId: runtimeInstanceId, workspaceKey: decodedWorkspaceKey, runId })
+      .then((result) => {
+        if (requestId !== latestRequestId.current) return;
+        setTranscript({ status: "data", found: result.found, turns: result.turns, runId: result.runId ?? null });
+      })
+      .catch((err: unknown) => {
+        if (requestId !== latestRequestId.current) return;
+        setTranscript({ status: "error", error: err instanceof Error ? err.message : "Failed to load logs" });
+      });
+    // getWorkspaceRunTranscript is intentionally omitted: useAction returns a stable ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtimeInstanceId, decodedWorkspaceKey, runId]);
+
+  if (!runtimeInstanceId) {
+    return <LogsStatePanel title="Logs unavailable" description="This project isn't connected yet, so no logs can be shown." />;
+  }
+  return <TranscriptPanel transcript={transcript} />;
+}
