@@ -1,19 +1,22 @@
 "use client";
 
 import { use, useState } from "react";
+import { useSelection } from "@/src/hooks/use-selection";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
+import { SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
-import { Badge } from "@/components/ui/badge";
+import { CheckSquare, Ellipsis, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
-import { NewFamilyButton } from "@/src/components/creative-family-actions";
-import { sourceCountLabel } from "@/src/lib/creative-library";
+import { NewFamilyDialog } from "@/src/components/creative-family-actions";
+import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
+import { isActiveFamily, sourceCountLabel } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
 // the mechanic its Sources share. Read-only here; built from the Sources page blocks.
@@ -28,12 +31,7 @@ type FamilyRow = {
   recentSources: VisualSource[];
 };
 
-type StatusFilter = "all" | "active" | "archived" | "empty";
 type Sort = "most" | "fewest";
-
-const matchesFilter = (family: FamilyRow, filter: StatusFilter): boolean =>
-  filter === "all" ||
-  (filter === "empty" ? family.sourceCount === 0 : family.status === filter);
 
 type Props = { params: Promise<{ instanceId: string }> };
 
@@ -43,16 +41,20 @@ export function CreativeLibraryPage({ params }: Props) {
 }
 
 export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
-  const [filter, setFilter] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<Sort>("most");
   const [search, setSearch] = useState("");
   const families = useQuery(api.creative_families.list, { instanceId }) as FamilyRow[] | undefined;
+  const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
+  const [merging, setMerging] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const needle = search.trim().toLowerCase();
-  const visible = (families ?? [])
-    .filter((family) => matchesFilter(family, filter) && (needle === "" || family.name.toLowerCase().includes(needle)))
+  // Archived families (merged away or archived) are not listed.
+  const activeFamilies = (families ?? []).filter(isActiveFamily);
+  const visible = activeFamilies
+    .filter((family) => needle === "" || family.name.toLowerCase().includes(needle))
     .sort((a, b) => (sort === "most" ? b.sourceCount - a.sourceCount : a.sourceCount - b.sourceCount));
-  const count = (id: StatusFilter) => (families ?? []).filter((family) => matchesFilter(family, id)).length;
+  const selectedFamilies = activeFamilies.filter((family) => selected.includes(family._id));
   useThumbnailRequests(instanceId, visible.flatMap((family) => family.recentSources));
 
   return (
@@ -65,28 +67,42 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
             <Button variant="outline" nativeButton={false} render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
               Unclassified Sources
             </Button>
-            <NewFamilyButton instanceId={instanceId} />
+            {selecting ? (
+              <>
+                <Button type="button" disabled={selectedFamilies.length < 2} onClick={() => setMerging(true)}>
+                  Merge ({selectedFamilies.length})
+                </Button>
+                <Button type="button" variant="outline" onClick={stopSelecting}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" size="icon" aria-label="More actions" />}>
+                  <Ellipsis />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={startSelecting}>
+                    <CheckSquare />
+                    Select
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setCreating(true)}>
+                    <Plus />
+                    New family
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         }
       />
       {families === undefined ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : families.length === 0 ? (
+      ) : activeFamilies.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Creative Families yet.</p>
       ) : (
         <section className="grid gap-5">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-            <FilterChips
-              label="Family status"
-              value={filter}
-              onChange={(id) => setFilter(id as StatusFilter)}
-              options={[
-                { id: "all", label: "All", count: count("all") },
-                { id: "active", label: "Active", count: count("active") },
-                { id: "archived", label: "Archived", count: count("archived") },
-                { id: "empty", label: "Empty", count: count("empty") },
-              ]}
-            />
             <div className="flex flex-col gap-3 sm:flex-row">
               <SearchField value={search} onChange={setSearch} label="Search families" placeholder="Search families…" className="lg:w-52" />
               <NativeSelect
@@ -101,24 +117,54 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
             </div>
           </div>
           {visible.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Creative Families match these filters.</p>
+            <p className="text-sm text-muted-foreground">No Creative Families match this search.</p>
           ) : (
             <ul className="grid gap-3">
               {visible.map((family) => (
-                <FamilyRowItem key={family._id} family={family} instanceId={instanceId} />
+                <FamilyRowItem
+                  key={family._id}
+                  family={family}
+                  instanceId={instanceId}
+                  selection={selecting ? { checked: selected.includes(family._id), onToggle: () => toggle(family._id) } : undefined}
+                />
               ))}
             </ul>
           )}
         </section>
       )}
+      <NewFamilyDialog instanceId={instanceId} open={creating} onOpenChange={setCreating} />
+      {merging ? (
+        <MergeFamiliesDialog
+          instanceId={instanceId}
+          families={selectedFamilies}
+          onClose={() => setMerging(false)}
+          onDone={stopSelecting}
+        />
+      ) : null}
     </div>
   );
 }
 
-function FamilyRowItem({ family, instanceId }: { family: FamilyRow; instanceId: string }) {
+function FamilyRowItem({
+  family,
+  instanceId,
+  selection,
+}: {
+  family: FamilyRow;
+  instanceId: string;
+  selection?: { checked: boolean; onToggle: () => void };
+}) {
   return (
     <li>
       <Card className="relative flex flex-col gap-4 px-5 py-4 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center">
+        {selection ? (
+          <Checkbox
+            className="relative z-10"
+            aria-label={`Select ${family.name}`}
+            checked={selection.checked}
+            onCheckedChange={selection.onToggle}
+          />
+        ) : null}
         <div className="grid min-w-0 flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <Link
@@ -128,9 +174,6 @@ function FamilyRowItem({ family, instanceId }: { family: FamilyRow; instanceId: 
             >
               {family.name}
             </Link>
-            <FamilyStatusBadge status={family.status} />
-            {family.sourceCount === 0 ? <Badge variant="outline" size="xs">Empty</Badge> : null}
-            {family.sourceCount === 1 ? <Badge variant="outline" size="xs">Single Source</Badge> : null}
           </div>
           <p className="m-0 line-clamp-2 text-sm text-muted-foreground">{family.description}</p>
         </div>

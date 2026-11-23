@@ -57,6 +57,30 @@ The creative mechanic that several of an Instance's Sources share (e.g. "fake_sm
 
 See ADR-051, ADR-082.
 
+### Production Recipe
+
+How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is `active` or `archived`; archiving keeps every version readable and stops further edits.
+
+- **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
+- **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
+- **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
+- _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
+
+### Recipe Version
+
+One immutable save of a **Production Recipe**: an optional verbatim `prompt`, free-form `instructions`, a list of `constraints` (guidance text, not validations). Editing a recipe appends the next version; a saved version is never modified.
+
+
+### Recipe Snapshot
+
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+
+- **Checks at creation**, in order: the recipe belongs to the Project and is not archived; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
+- The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
+- _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
+
+See ADR-083.
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.

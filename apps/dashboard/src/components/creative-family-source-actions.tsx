@@ -11,7 +11,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceTitle } from "@/src/lib/creative-library";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 
-// Hand classification of Sources (ADR-082): remove a Source from its family,
+// Hand classification of Sources (ADR-082): take Sources out of their family,
 // or add an unclassified one from the family page. A Source is never deleted.
 
 const PAGE_SIZE = 25;
@@ -31,24 +31,25 @@ export function useAssignSource(instanceId: string) {
   return { assign, error };
 }
 
-export function RemoveFromFamilyButton({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
-  const remove = useMutation(api.creative_family_sources.remove);
+/** `removeMany(sourceIds)` takes Sources out of their family, one after the other; a refusal stops it and is kept in `error`. */
+export function useRemoveSources(instanceId: string) {
+  const removeMutation = useMutation(api.creative_family_sources.remove);
   const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="grid gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          setError(null);
-          remove({ instanceId, sourceId: sourceId as Id<"sources"> }).catch((e: unknown) => setError(extractConvexErrorMessage(e, "Something went wrong")));
-        }}
-      >
-        Remove from family
-      </Button>
-      {error ? <p role="alert" className="m-0 text-sm text-destructive">{error}</p> : null}
-    </div>
-  );
+  const [pending, setPending] = useState(false);
+  const removeMany = async (sourceIds: string[]): Promise<boolean> => {
+    setError(null);
+    setPending(true);
+    try {
+      for (const sourceId of sourceIds) await removeMutation({ instanceId, sourceId: sourceId as Id<"sources"> });
+      return true;
+    } catch (e) {
+      setError(extractConvexErrorMessage(e, "Something went wrong"));
+      return false;
+    } finally {
+      setPending(false);
+    }
+  };
+  return { removeMany, error, pending };
 }
 
 export function AddSourceButton({ instanceId, familyId }: { instanceId: string; familyId: string }) {

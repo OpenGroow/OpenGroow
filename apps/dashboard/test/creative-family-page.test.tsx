@@ -6,6 +6,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeFamilyContent } from "../src/components/creative-family-page";
 
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
@@ -26,6 +28,7 @@ vi.mock("@convex/_generated/api", () => ({
     creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     creative_family_sources: { assign: "creative_family_sources.assign", remove: "creative_family_sources.remove" },
     creative_families_archive: { archive: "creative_families_archive.archive", unarchive: "creative_families_archive.unarchive" },
+    production_recipes: { list: "production_recipes.list", create: "production_recipes.create", listTargets: "production_recipes.listTargets" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -96,11 +99,11 @@ describe("CreativeFamilyContent", () => {
     expect(text()).toContain("Creative Family not found");
   });
 
-  it("shows the name, description, status and a link back to the library", async () => {
+  it("shows the name, description and a link back to the library", async () => {
     await render();
     expect(text()).toContain("Reaction");
     expect(text()).toContain("A close-up reaction");
-    expect(text()).toContain("Active");
+    expect(text()).not.toContain("Active");
     expect(document.body.querySelector('a[href="/projects/instance-1/library"]')).not.toBeNull();
   });
 
@@ -112,22 +115,67 @@ describe("CreativeFamilyContent", () => {
     expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
   });
 
-  it("offers the merge on an active family", async () => {
+  it("no longer offers the merge: it lives on the Library page", async () => {
     await render();
-    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(true);
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
   });
 
-  it("offers Archive for an active family and Unarchive for an archived one", async () => {
-    const buttons = () => Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+  async function openMenu() {
+    const trigger = document.querySelector('[aria-label="More actions"]')!;
+    await act(async () => {
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+      }
+    });
+    return () => Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent);
+  }
+
+  it("keeps Edit and Delete in the more-actions menu, not as header buttons", async () => {
     await render();
-    expect(buttons()).toContain("Archive");
+    const headerButtons = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+    expect(headerButtons).not.toContain("Edit");
+    expect(headerButtons).not.toContain("Archive");
+    expect(headerButtons).not.toContain("Delete");
+    expect((await openMenu())()).toEqual(["Edit", "Select", "Delete"]);
+  });
+
+  it("Delete archives the family", async () => {
+    await render();
+    await openMenu();
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Delete") as HTMLElement).click());
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", familyId: "fam-1" });
+  });
+
+  it("selects Sources from the menu and removes them from the family", async () => {
+    await render({ sources: [makeSource({ _id: "s1", label: "One" }), makeSource({ _id: "s2", label: "Two" })] });
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Remove from family")).toBe(false);
+    expect(document.querySelectorAll('[role="checkbox"]').length).toBe(0);
+    await openMenu();
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Select") as HTMLElement).click());
+    const boxes = Array.from(document.querySelectorAll('[role="checkbox"]')) as HTMLElement[];
+    expect(boxes.length).toBe(2);
+    const removeButton = () => Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Remove (")) as HTMLButtonElement;
+    expect(removeButton().disabled).toBe(true);
+    await act(async () => boxes[0]!.click());
+    await act(async () => boxes[1]!.click());
+    expect(removeButton().textContent).toBe("Remove (2)");
+    requestThumbnailsMock.mockResolvedValue(null);
+    await act(async () => removeButton().click());
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceId: "s1" });
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceId: "s2" });
+    expect(document.querySelectorAll('[role="checkbox"]').length).toBe(0);
+  });
+
+  it("offers Restore instead of Delete on an archived family", async () => {
     await render({ family: { ...FAMILY, status: "archived" } });
-    expect(buttons()).toContain("Unarchive");
+    expect((await openMenu())()).toEqual(["Edit", "Select", "Restore"]);
   });
 
-  it("shows the statistics: Sources with views out of the total, median and maximum", async () => {
+  it("shows the statistics: total Sources, median and maximum", async () => {
     await render();
-    expect(text()).toContain("2 of 4");
+    const stat = document.body.querySelector('[aria-label="Statistics"]')?.textContent ?? "";
+    expect(stat).toContain("4Sources");
+    expect(stat).not.toContain(" of ");
     expect(text()).toContain("1,500");
     expect(text()).toContain("2,000");
     expect(text()).not.toContain("truncated");
@@ -136,7 +184,7 @@ describe("CreativeFamilyContent", () => {
 
   it("shows unknown, not zero, when no Source has views", async () => {
     await render({ stats: { sourceCount: 3, withViewsCount: 0, medianViews: null, maxViews: null, truncated: false } });
-    expect(text()).toContain("0 of 3");
+    expect(document.body.querySelector('[aria-label="Statistics"]')?.textContent).toContain("3Sources");
     expect(document.body.querySelector('[aria-label="Statistics"]')?.textContent).toContain("Unknown");
   });
 
@@ -177,5 +225,18 @@ describe("CreativeFamilyContent", () => {
       more?.click();
     });
     expect(loadMore).toHaveBeenCalled();
+  });
+
+  it("shows Sources by default and switches to Recipes with the tabs", async () => {
+    await render({ sources: [makeSource()] });
+    const tab = (name: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLElement;
+    expect(tab("Sources").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[aria-label="Production Recipes"]')).toBeNull();
+    await act(async () => {
+      tab("Recipes").click();
+    });
+    expect(tab("Recipes").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[aria-label="Production Recipes"]')).not.toBeNull();
+    expect((document.querySelector('[aria-label="Family Sources"]') as HTMLElement).hidden).toBe(true);
   });
 });

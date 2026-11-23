@@ -85,6 +85,7 @@ import type * as mission_dispatcher_reconcile_apply_node from "../mission_dispat
 import type * as mission_dispatcher_reconciliation from "../mission_dispatcher/reconciliation.js";
 import type * as mission_dispatcher_session_budget from "../mission_dispatcher/session_budget.js";
 import type * as mission_dispatcher_node from "../mission_dispatcher_node.js";
+import type * as mission_recipe from "../mission_recipe.js";
 import type * as mission_review from "../mission_review.js";
 import type * as mission_summary_http from "../mission_summary_http.js";
 import type * as missions from "../missions.js";
@@ -95,6 +96,8 @@ import type * as observations_scoring_daily from "../observations_scoring_daily.
 import type * as openclaw_usage from "../openclaw_usage.js";
 import type * as optional_plugins from "../optional_plugins.js";
 import type * as post_url from "../post_url.js";
+import type * as production_recipe_rules from "../production_recipe_rules.js";
+import type * as production_recipes from "../production_recipes.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
 import type * as project_agents_auth from "../project_agents/auth.js";
@@ -263,6 +266,7 @@ declare const fullApi: ApiFromModules<{
   "mission_dispatcher/reconciliation": typeof mission_dispatcher_reconciliation;
   "mission_dispatcher/session_budget": typeof mission_dispatcher_session_budget;
   mission_dispatcher_node: typeof mission_dispatcher_node;
+  mission_recipe: typeof mission_recipe;
   mission_review: typeof mission_review;
   mission_summary_http: typeof mission_summary_http;
   missions: typeof missions;
@@ -273,6 +277,8 @@ declare const fullApi: ApiFromModules<{
   openclaw_usage: typeof openclaw_usage;
   optional_plugins: typeof optional_plugins;
   post_url: typeof post_url;
+  production_recipe_rules: typeof production_recipe_rules;
+  production_recipes: typeof production_recipes;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;
   "project_agents/auth": typeof project_agents_auth;

@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -9,16 +9,17 @@ import { ArrowLeft, ExternalLink, Layers, Eye, TrendingUp, Trophy } from "lucide
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
-import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge";
-import { EditFamilyButton } from "@/src/components/creative-family-actions";
-import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-archive-button";
+import { FamilyMoreMenu } from "@/src/components/family-more-menu";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
+import { useSelection } from "@/src/hooks/use-selection";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
-import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
+import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
-import { AddSourceButton, RemoveFromFamilyButton } from "@/src/components/creative-family-source-actions";
+import { FamilyRecipes } from "@/src/components/family-recipes";
+import { AddSourceButton, useRemoveSources } from "@/src/components/creative-family-source-actions";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
 // views, and its Sources.
@@ -43,6 +44,12 @@ type FamilySource = {
   thumbnailTriedAt?: number;
 };
 
+const TABS = [
+  { key: "sources", label: "Sources" },
+  { key: "recipes", label: "Recipes" },
+] as const;
+type FamilyTab = (typeof TABS)[number]["key"];
+
 const number = (value: number): string => new Intl.NumberFormat("en-US").format(value);
 /** A figure the server could not compute is unknown, never zero. */
 const figure = (value: number | null): string => (value === null ? "Unknown" : number(value));
@@ -63,6 +70,9 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { instanceId, familyId: id },
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
+  const [tab, setTab] = useState<FamilyTab>("sources");
+  const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
+  const { removeMany, error: removeError, pending: removing } = useRemoveSources(instanceId);
   const platformFor = useSourcePlatforms(instanceId);
   useThumbnailRequests(instanceId, results);
 
@@ -85,20 +95,49 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           description={family.description}
           action={
             <div className="flex items-center gap-3">
-              {isActiveFamily(family) ? <MergeFamilyButton instanceId={instanceId} familyId={family._id} familyName={family.name} /> : null}
-              <FamilyStatusBadge size="default" status={family.status} />
-              <EditFamilyButton instanceId={instanceId} family={family} />
-              {isActiveFamily(family) ? <AddSourceButton instanceId={instanceId} familyId={familyId} /> : null}
-              <CreativeFamilyArchiveButton instanceId={instanceId} familyId={family._id} archived={!isActiveFamily(family)} />
+              {selecting ? (
+                <>
+                  <Button type="button" disabled={selected.length === 0 || removing} onClick={() => void removeMany(selected).then((ok) => ok && stopSelecting())}>
+                    Remove ({selected.length})
+                  </Button>
+                  <Button type="button" variant="outline" disabled={removing} onClick={stopSelecting}>
+                    Cancel
+                  </Button>
+                </>
+              ) : isActiveFamily(family) ? (
+                <AddSourceButton instanceId={instanceId} familyId={familyId} />
+              ) : null}
+              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={() => { setTab("sources"); startSelecting(); }} />
             </div>
           }
         />
+        {removeError ? <p role="alert" className="m-0 text-sm text-destructive">{removeError}</p> : null}
         {!isActiveFamily(family) && family.mergedIntoId ? <MergedInto instanceId={instanceId} destinationId={family.mergedIntoId} /> : null}
       </div>
 
       {stats ? <Statistics stats={stats} /> : null}
 
-      <section aria-label="Family Sources" className="grid gap-3">
+      <div role="tablist" aria-label="Creative Family" className="flex gap-6 border-b border-border">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={cn(
+              "-mb-px border-b-2 px-1 pb-3 text-base font-semibold transition-colors",
+              tab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "recipes" ? <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} /> : null}
+
+      <section aria-label="Family Sources" hidden={tab !== "sources"} className="grid gap-3">
         {status === "LoadingFirstPage" ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : results.length === 0 ? (
@@ -106,12 +145,18 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         ) : (
           <ul className="grid gap-3">
             {results.map((source) => (
-              <FamilySourceRow key={source._id} source={source} instanceId={instanceId} platform={platformFor(source)} />
+              <FamilySourceRow
+                key={source._id}
+                source={source}
+                instanceId={instanceId}
+                platform={platformFor(source)}
+                selection={selecting ? { checked: selected.includes(source._id), onToggle: () => toggle(source._id) } : undefined}
+              />
             ))}
           </ul>
         )}
         {hasMore ? (
-          <Button type="button" variant="outline" className="w-fit" disabled={status === "LoadingMore"} onClick={() => loadMore(PAGE_SIZE)}>
+          <Button type="button" variant="outline" className="w-fit justify-self-end" disabled={status === "LoadingMore"} onClick={() => loadMore(PAGE_SIZE)}>
             Load more
           </Button>
         ) : null}
@@ -153,7 +198,7 @@ function Statistics({ stats }: { stats: FamilyStats }) {
   return (
     <section aria-label="Statistics" className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatTile icon={Layers} label="Sources with views" value={`${stats.withViewsCount} of ${stats.sourceCount}`} tone="visual" />
+        <StatTile icon={Layers} label="Sources" value={number(stats.sourceCount)} tone="visual" />
         <StatTile icon={TrendingUp} label="Median views" value={figure(stats.medianViews)} tone="engagement" />
         <StatTile icon={Trophy} label="Maximum views" value={figure(stats.maxViews)} tone="research" />
       </div>
@@ -167,13 +212,26 @@ function Statistics({ stats }: { stats: FamilyStats }) {
   );
 }
 
-function FamilySourceRow({ source, instanceId, platform }: { source: FamilySource; instanceId: string; platform?: SourcePlatform }) {
+function FamilySourceRow({
+  source,
+  instanceId,
+  platform,
+  selection,
+}: {
+  source: FamilySource;
+  instanceId: string;
+  platform?: SourcePlatform;
+  selection?: { checked: boolean; onToggle: () => void };
+}) {
   const title = sourceTitle(source);
   const original = postUrlOf(source);
   return (
     <li>
       <Card className="relative flex flex-col gap-4 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-4">
+          {selection ? (
+            <Checkbox className="relative z-10" aria-label={`Select ${title}`} checked={selection.checked} onCheckedChange={selection.onToggle} />
+          ) : null}
           <SourceThumbnail source={source} className="size-20" />
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
             <Link
@@ -202,7 +260,6 @@ function FamilySourceRow({ source, instanceId, platform }: { source: FamilySourc
               <ExternalLink />
             </Button>
           ) : null}
-          <RemoveFromFamilyButton instanceId={instanceId} sourceId={source._id} />
         </div>
       </Card>
     </li>

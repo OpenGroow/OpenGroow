@@ -100,7 +100,7 @@ export function CreativeUnclassifiedContent({ instanceId }: { instanceId: string
         </ul>
       )}
       {status === "CanLoadMore" ? (
-        <Button type="button" variant="outline" className="w-fit" onClick={() => loadMore(PAGE_SIZE)}>
+        <Button type="button" variant="outline" className="w-fit justify-self-end" onClick={() => loadMore(PAGE_SIZE)}>
           Load more
         </Button>
       ) : null}

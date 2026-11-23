@@ -25,6 +25,7 @@ import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
+import { recipeStatusV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -381,6 +382,20 @@ export default defineSchema({
     // follow the Project's current version. The review engine and external job
     // polling resolve the Template at this version.
     templateVersion: v.optional(v.string()),
+    // The Recipe Snapshot (issue #137, ADR-083): what the Production Recipe
+    // resolved to at creation, written once and never recomputed. The
+    // `production-recipe` context provider renders it for every Run. Absent
+    // for a Mission created without a recipe.
+    recipeSnapshot: v.optional(
+      v.object({
+        recipeId: v.id("productionRecipes"),
+        recipeName: v.string(),
+        version: v.number(),
+        prompt: v.optional(v.string()),
+        instructions: v.string(),
+        constraints: v.array(v.string()),
+      }),
+    ),
     type: v.string(),
     payload: v.any(),
     status: missionStatusV,
@@ -620,6 +635,30 @@ export default defineSchema({
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
     .index("by_instance_slug", ["instanceId", "slug"]),
+  // A Production Recipe (issue #137): how to reproduce a Creative Family's
+  // mechanic, written for one Mission type of one Template. Identity only; its
+  // content lives in `productionRecipeVersions`.
+  productionRecipes: defineTable({
+    instanceId: v.string(),
+    creativeFamilyId: v.id("creativeFamilies"),
+    templateId: v.string(),
+    missionType: v.string(),
+    name: v.string(),
+    description: v.string(),
+    status: recipeStatusV,
+  })
+    .index("by_instance_family", ["instanceId", "creativeFamilyId"]),
+  // A Recipe Version: append-only, never patched. An edit inserts the next one.
+  productionRecipeVersions: defineTable({
+    instanceId: v.string(),
+    recipeId: v.id("productionRecipes"),
+    version: v.number(),
+    prompt: v.optional(v.string()),
+    instructions: v.string(),
+    constraints: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_recipe_version", ["recipeId", "version"]),
   // Sources (issue #529, ADR-051): the generic, append-only successor of
   // Observations, ingested by Convex from a SourceJob Run's result file.
   // `label` and `family` are copied from the Template's declaration, never

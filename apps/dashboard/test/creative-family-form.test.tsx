@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeFamilyContent } from "../src/components/creative-family-page";
 import { CreativeLibraryContent } from "../src/components/creative-library-page";
 
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const createMock = vi.fn();
@@ -32,6 +34,8 @@ vi.mock("@convex/_generated/api", () => ({
     creative_families: { list: "creative_families.list", get: "creative_families.get", stats: "creative_families.stats", listSources: "creative_families.listSources" },
     creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     creative_families_archive: { archive: "x.archive", unarchive: "x.unarchive" },
+    creative_family_sources: { remove: "x.remove" },
+    production_recipes: { list: "production_recipes.list", create: "production_recipes.create", listTargets: "production_recipes.listTargets" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -57,6 +61,13 @@ describe("create and edit a Creative Family", () => {
     const button = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.trim() === label);
     await act(async () => button?.click());
   };
+  const openFamilyMenuItem = async (label: string) => {
+    await act(async () => {
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === label) as HTMLElement).click());
+  };
   const fill = async (selector: string, value: string, proto: object) => {
     const field = document.body.querySelector(selector) as HTMLInputElement;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
@@ -73,7 +84,7 @@ describe("create and edit a Creative Family", () => {
 
   it("creates a family from the library, even when there is none yet", async () => {
     await act(async () => root.render(<CreativeLibraryContent instanceId="instance-1" />));
-    await press("New family");
+    await openFamilyMenuItem("New family");
     await fill("#family-name", "  Silent Reaction ", HTMLInputElement.prototype);
     await fill("#family-description", "Close-up reaction", HTMLTextAreaElement.prototype);
     await submit();
@@ -84,7 +95,7 @@ describe("create and edit a Creative Family", () => {
   it("shows the refusal and keeps the dialog open", async () => {
     createMock.mockRejectedValue(new Error('[Request ID: x] Server Error\nUncaught Error: A Creative Family named "Reaction" already exists\n    at handler'));
     await act(async () => root.render(<CreativeLibraryContent instanceId="instance-1" />));
-    await press("New family");
+    await openFamilyMenuItem("New family");
     await fill("#family-name", "Reaction", HTMLInputElement.prototype);
     await fill("#family-description", "d", HTMLTextAreaElement.prototype);
     await submit();
@@ -94,7 +105,11 @@ describe("create and edit a Creative Family", () => {
 
   it("edits name and description from the family page, prefilled", async () => {
     await act(async () => root.render(<CreativeFamilyContent instanceId="instance-1" familyId="fam-1" />));
-    await press("Edit");
+    await act(async () => {
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Edit") as HTMLElement).click());
     expect((document.body.querySelector("#family-name") as HTMLInputElement).value).toBe("Reaction");
     expect((document.body.querySelector("#family-description") as HTMLTextAreaElement).value).toBe("A close-up");
     await fill("#family-name", "Silent Reaction", HTMLInputElement.prototype);
