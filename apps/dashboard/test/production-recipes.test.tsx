@@ -16,17 +16,14 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.saveVersion": vi.fn(),
   "recipes.archive": vi.fn(),
   "recipes.unarchive": vi.fn(),
-  "connections.create": vi.fn(),
-  "connections.remove": vi.fn(),
 };
-let connections: unknown;
 let targets: unknown;
 let recipes: unknown;
 let recipe: unknown;
 let versions: unknown;
 
 vi.mock("convex/react", () => ({
-  useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "connections.list" ? connections : key === "connections.listTargets" ? targets : undefined),
+  useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : undefined),
   useMutation: (key: string) => mutations[key],
 }));
 vi.mock("@convex/_generated/api", () => ({
@@ -39,12 +36,7 @@ vi.mock("@convex/_generated/api", () => ({
       list: "recipes.list",
       get: "recipes.get",
       listVersions: "recipes.listVersions",
-    },
-    production_connections: {
-      create: "connections.create",
-      remove: "connections.remove",
-      list: "connections.list",
-      listTargets: "connections.listTargets",
+      listTargets: "recipes.listTargets",
     },
   },
 }));
@@ -57,7 +49,7 @@ const V2 = {
   createdAt: Date.UTC(2026, 0, 2),
 };
 const V1 = { ...V2, version: 1, prompt: "Close-up", createdAt: Date.UTC(2026, 0, 1) };
-const RECIPE = { _id: "rec-1", creativeFamilyId: "fam-1", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
+const RECIPE = { _id: "rec-1", creativeFamilyId: "fam-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
 
 const TARGETS = [
   {
@@ -67,12 +59,6 @@ const TARGETS = [
     label: "Letter video",
   },
 ];
-const CONNECTION = {
-  _id: "conn-1",
-  recipeId: "rec-1",
-  templateId: "@example/video-demo",
-  missionType: "create_letter_video",
-};
 
 describe("Production Recipes UI", () => {
   let container: HTMLDivElement;
@@ -81,7 +67,6 @@ describe("Production Recipes UI", () => {
   beforeEach(() => {
     for (const m of Object.values(mutations)) m.mockReset().mockResolvedValue(null);
     recipes = [];
-    connections = [];
     targets = TARGETS;
     recipe = RECIPE;
     versions = [V2, V1];
@@ -107,15 +92,23 @@ describe("Production Recipes UI", () => {
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
   };
+  const choose = async (selector: string, value: string) => {
+    const select = document.body.querySelector(selector) as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  };
   const submit = async () => {
     await act(async () => (document.body.querySelector("form") as HTMLFormElement).requestSubmit());
   };
 
   it("lists the recipes of a family with a link to each", async () => {
-    recipes = [{ _id: "rec-1", creativeFamilyId: "fam-1", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 2 }];
+    recipes = [{ _id: "rec-1", creativeFamilyId: "fam-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 2 }];
     await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
     expect(container.textContent).toContain("Reaction clip");
     expect(container.textContent).toContain("v2");
+    expect(container.textContent).toContain("Video Demo · Letter video");
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/library/fam-1/recipes/rec-1");
   });
 
@@ -124,6 +117,7 @@ describe("Production Recipes UI", () => {
     await press("New recipe");
     await fill("#recipe-name", " Reaction clip ");
     await fill("#recipe-description", "A reaction");
+    await choose("#recipe-target", "0");
     await fill("#recipe-prompt", "Close-up of a woman");
     await fill("#recipe-instructions", "Write a hook");
     await fill("#recipe-constraints", "No dialogue\n\n No text ");
@@ -131,6 +125,8 @@ describe("Production Recipes UI", () => {
     expect(mutations["recipes.create"]).toHaveBeenCalledWith({
       instanceId: "p1",
       familyId: "fam-1",
+      templateId: "@example/video-demo",
+      missionType: "create_letter_video",
       name: "Reaction clip",
       description: "A reaction",
       prompt: "Close-up of a woman",
@@ -146,6 +142,7 @@ describe("Production Recipes UI", () => {
     await press("New recipe");
     await fill("#recipe-name", "R");
     await fill("#recipe-description", "d");
+    await choose("#recipe-target", "0");
     await fill("#recipe-instructions", "i");
     await submit();
     expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Something went wrong");
@@ -203,49 +200,18 @@ describe("Production Recipes UI", () => {
     expect(mutations["recipes.unarchive"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
   });
 
-  describe("connections panel", () => {
-    const panel = () => container.querySelector('[aria-label="Connections"]')!;
-    const openList = () => act(async () => (panel().querySelector('[aria-label="Show Mission types"]') as HTMLElement).click());
-    const item = (label: string) => Array.from(document.querySelectorAll('[role="option"]')).find((i) => i.textContent?.includes(label)) as HTMLElement | undefined;
+  it("shows the Mission type of the recipe", async () => {
+    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+    expect(container.querySelector('[aria-label="Mission type"]')?.textContent).toContain("Video Demo · Letter video");
+  });
 
-    it("shows the connected Mission types as chips", async () => {
-      connections = [CONNECTION];
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      expect(panel().textContent).toContain("Video Demo · Letter video");
-    });
-
-    it("connects the recipe when a Mission type is ticked", async () => {
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await openList();
-      await act(async () => item("Letter video")!.click());
-      expect(mutations["connections.create"]).toHaveBeenCalledWith({
-        instanceId: "p1",
-        recipeId: "rec-1",
-        templateId: "@example/video-demo",
-        missionType: "create_letter_video",
-      });
-    });
-
-    it("removes the connection when its chip is removed", async () => {
-      connections = [CONNECTION];
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await act(async () => (panel().querySelector('[data-slot="combobox-chip-remove"]') as HTMLElement).click());
-      expect(mutations["connections.remove"]).toHaveBeenCalledWith({ instanceId: "p1", connectionId: "conn-1" });
-    });
-
-    it("tells when no installed Template can consume recipes", async () => {
-      targets = [];
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      expect(panel().textContent).toContain("No installed Template");
-      expect(panel().querySelector('[aria-label="Show Mission types"]')).toBeNull();
-    });
-
-    it("shows the server refusal", async () => {
-      mutations["connections.create"].mockRejectedValue(new Error("Uncaught Error: Cannot connect an archived Production Recipe"));
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await openList();
-      await act(async () => item("Letter video")!.click());
-      expect(panel().querySelector('[role="alert"]')?.textContent).toBe("Cannot connect an archived Production Recipe");
-    });
+  it("asks for a Mission type before creating, and says when none is available", async () => {
+    await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
+    await press("New recipe");
+    await fill("#recipe-name", "R");
+    await fill("#recipe-description", "d");
+    await fill("#recipe-instructions", "i");
+    expect((Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent === "Create recipe") as HTMLButtonElement).disabled).toBe(true);
+    expect(mutations["recipes.create"]).not.toHaveBeenCalled();
   });
 });

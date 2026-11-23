@@ -29,7 +29,6 @@ const modules = {
   "../mission_dispatcher.ts": () => import("../mission_dispatcher.js"),
   "../mission_dispatcher_node.ts": () => import("../mission_dispatcher_node.js"),
   "../production_recipes.ts": () => import("../production_recipes.js"),
-  "../production_connections.ts": () => import("../production_connections.js"),
 };
 
 const INSTANCE = "instance-mission-recipe";
@@ -93,101 +92,87 @@ async function setup() {
 
   async function recipe(instanceId = INSTANCE, family: Id<"creativeFamilies"> = familyId, as = owner) {
     const { recipeId } = await as.mutation(api.production_recipes.create, {
-      instanceId, familyId: family, name: "Reaction", description: "",
+      instanceId, familyId: family, templateId: TEMPLATE_ID, missionType: "create_letter_video", name: "Reaction", description: "",
       prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
     return recipeId;
   }
-  async function connect(recipeId: Id<"productionRecipes">, compatibleWhen: Record<string, string[]> = { format: ["hook"] }) {
-    const connectionId = await owner.mutation(api.production_connections.create, {
-      instanceId: INSTANCE, recipeId, templateId: TEMPLATE_ID, missionType: "create_letter_video", compatibleWhen,
-    });
-    return connectionId;
-  }
   const create = (extra: Record<string, unknown>, payload: unknown = { format: "hook" }) =>
     owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload, ...extra } as never);
-  return { t, owner, stranger, recipe, connect, create, otherFamily };
+  return { t, owner, stranger, recipe, create, otherFamily };
 }
 
 describe("missions.create with a recipe", () => {
   it("stores the snapshot once, with the texts used", async () => {
-    const { t, recipe, connect, create } = await setup();
-    const connectionId = await connect(await recipe());
-    const { missionId } = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
+    const { t, recipe, create } = await setup();
+    const recipeId = await recipe();
+    const { missionId } = await create({ templateVersion: "2.0.0", recipe: { recipeId } });
     const mission = await t.run((ctx) => ctx.db.get(missionId));
     expect(mission?.templateVersion).toBe("2.0.0");
     expect(mission?.payload).toEqual({ format: "hook" });
     expect(mission?.recipeSnapshot).toMatchObject({
-      recipeName: "Reaction", version: 1, connectionId,
+      recipeName: "Reaction", version: 1, recipeId,
       prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
   });
 
-  it("accepts an active connection, and an older version", async () => {
-    const { owner, t, recipe, connect, create } = await setup();
+  it("accepts an older version", async () => {
+    const { owner, t, recipe, create } = await setup();
     const recipeId = await recipe();
     await owner.mutation(api.production_recipes.saveVersion, {
       instanceId: INSTANCE, recipeId, prompt: "Second take", instructions: "i", constraints: [],
     });
-    const connectionId = await connect(recipeId);
-    const latest = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
-    const older = await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 1 } });
+    const latest = await create({ templateVersion: "2.0.0", recipe: { recipeId } });
+    const older = await create({ templateVersion: "2.0.0", recipe: { recipeId, version: 1 } });
     const snaps = await t.run(async (ctx) => [(await ctx.db.get(latest.missionId))?.recipeSnapshot, (await ctx.db.get(older.missionId))?.recipeSnapshot]);
     expect(snaps[0]).toMatchObject({ version: 2, prompt: "Second take" });
     expect(snaps[1]?.version).toBe(1);
     expect(snaps[1]?.prompt).toBe("A close-up, calm face.");
   });
 
-  it("refuses a stranger's connection", async () => {
-    const { recipe, connect, create, stranger } = await setup();
-    const connectionId = await connect(await recipe());
+  it("refuses a stranger's recipe", async () => {
+    const { recipe, create, stranger } = await setup();
+    const recipeId = await recipe();
     await expect(
-      stranger.mutation(api.missions.create, { instanceId: OTHER_INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload: { format: "hook" }, recipe: { connectionId } } as never),
+      stranger.mutation(api.missions.create, { instanceId: OTHER_INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload: { format: "hook" }, recipe: { recipeId } } as never),
     ).rejects.toThrow(/not found/);
   });
 
-  it("refuses a connection that targets another Mission type", async () => {
-    const { recipe, connect, owner } = await setup();
-    const connectionId = await connect(await recipe());
+  it("refuses a recipe written for another Mission type", async () => {
+    const { recipe, owner } = await setup();
+    const recipeId = await recipe();
     await expect(
-      owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: "@example/other", type: "create_letter_video", payload: { format: "hook" }, recipe: { connectionId } } as never),
-    ).rejects.toThrow(/does not target/);
+      owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: "@example/other", type: "create_letter_video", payload: { format: "hook" }, recipe: { recipeId } } as never),
+    ).rejects.toThrow(/not written for/);
     await expect(
-      owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "other_type", payload: { format: "hook" }, recipe: { connectionId } } as never),
-    ).rejects.toThrow(/does not target/);
-  });
-
-  it("refuses an incompatible payload", async () => {
-    const { recipe, connect, create } = await setup();
-    const connectionId = await connect(await recipe());
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId } }, { format: "letter" })).rejects.toThrow(/compatib/i);
+      owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "other_type", payload: { format: "hook" }, recipe: { recipeId } } as never),
+    ).rejects.toThrow(/not written for/);
   });
 
   it("refuses a pinned version that does not declare the provider", async () => {
-    const { recipe, connect, create } = await setup();
-    const connectionId = await connect(await recipe());
+    const { recipe, create } = await setup();
+    const recipeId = await recipe();
     // No templateVersion: the Mission pins the current 1.0.0.
-    await expect(create({ recipe: { connectionId } })).rejects.toThrow(/production-recipe/);
+    await expect(create({ recipe: { recipeId } })).rejects.toThrow(/production-recipe/);
   });
 
   it("refuses an archived recipe", async () => {
-    const { owner, recipe, connect, create } = await setup();
+    const { owner, recipe, create } = await setup();
     const recipeId = await recipe();
-    const connectionId = await connect(recipeId);
     await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId } })).rejects.toThrow(/archived/);
+    await expect(create({ templateVersion: "2.0.0", recipe: { recipeId } })).rejects.toThrow(/archived/);
   });
 
   it("refuses an unknown version", async () => {
-    const { recipe, connect, create } = await setup();
-    const connectionId = await connect(await recipe());
-    await expect(create({ templateVersion: "2.0.0", recipe: { connectionId, version: 9 } })).rejects.toThrow(/version/i);
+    const { recipe, create } = await setup();
+    const recipeId = await recipe();
+    await expect(create({ templateVersion: "2.0.0", recipe: { recipeId, version: 9 } })).rejects.toThrow(/version/i);
   });
 
   it("creates nothing when the creation is refused", async () => {
-    const { t, recipe, connect, create } = await setup();
-    const connectionId = await connect(await recipe());
-    await create({ templateVersion: "2.0.0", recipe: { connectionId, version: 9 } }).catch(() => undefined);
+    const { t, recipe, create } = await setup();
+    const recipeId = await recipe();
+    await create({ templateVersion: "2.0.0", recipe: { recipeId, version: 9 } }).catch(() => undefined);
     expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
   });
 });
@@ -229,10 +214,9 @@ describe("Recipe Snapshot in context.md", () => {
   }
 
   it("renders the same section for every Run, unchanged by a new version or archiving", async () => {
-    const { t, owner, recipe, connect, create } = await setup();
+    const { t, owner, recipe, create } = await setup();
     const recipeId = await recipe();
-    const connectionId = await connect(recipeId);
-    const { missionId, runId } = await create({ templateVersion: "2.0.0", recipe: { connectionId } });
+    const { missionId, runId } = await create({ templateVersion: "2.0.0", recipe: { recipeId } });
     await t.action(internal.mission_dispatcher_node.dispatchPendingRuns, {});
     const first = await dispatched(t, runId);
     expect(first).toContain("# Production Recipe");

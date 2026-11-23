@@ -25,7 +25,7 @@ import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
-import { compatibleWhenV, recipeStatusV } from "./production_validators.js";
+import { recipeStatusV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -391,7 +391,6 @@ export default defineSchema({
         recipeId: v.id("productionRecipes"),
         recipeName: v.string(),
         version: v.number(),
-        connectionId: v.id("productionConnections"),
         prompt: v.optional(v.string()),
         instructions: v.string(),
         constraints: v.array(v.string()),
@@ -637,10 +636,13 @@ export default defineSchema({
     // fully index-served lookup, no `.filter()`.
     .index("by_instance_slug", ["instanceId", "slug"]),
   // A Production Recipe (issue #137): how to reproduce a Creative Family's
-  // mechanic. Identity only; its content lives in `productionRecipeVersions`.
+  // mechanic, written for one Mission type of one Template. Identity only; its
+  // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
     creativeFamilyId: v.id("creativeFamilies"),
+    templateId: v.string(),
+    missionType: v.string(),
     name: v.string(),
     description: v.string(),
     status: recipeStatusV,
@@ -657,16 +659,6 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_recipe_version", ["recipeId", "version"]),
-  // A Creative Connection (issue #137): a recipe offered to one Mission type of
-  // one installed Template. The target is the Template plus the Mission type.
-  productionConnections: defineTable({
-    instanceId: v.string(),
-    recipeId: v.id("productionRecipes"),
-    templateId: v.string(),
-    missionType: v.string(),
-    compatibleWhen: compatibleWhenV,
-  })
-    .index("by_recipe_target", ["recipeId", "templateId", "missionType"]),
   // Sources (issue #529, ADR-051): the generic, append-only successor of
   // Observations, ingested by Convex from a SourceJob Run's result file.
   // `label` and `family` are copied from the Template's declaration, never

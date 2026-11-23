@@ -5,18 +5,23 @@ import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Plus } from "lucide-react";
+import { Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
+import { ProductionRecipeFormDialog, type RecipeTarget } from "@/src/components/production-recipe-form-dialog";
 
 // The Production Recipes of a Creative Family, on its detail page (issue #143).
 
-type RecipeRow = { _id: string; name: string; description: string; status: "active" | "archived"; latestVersion: number };
+type RecipeRow = { _id: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latestVersion: number };
 
 export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId: string; familyId: string; canCreate: boolean }) {
   const recipes = useQuery(api.production_recipes.list, { instanceId, familyId: familyId as Id<"creativeFamilies"> }) as RecipeRow[] | undefined;
+  const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as RecipeTarget[] | undefined;
   const create = useMutation(api.production_recipes.create);
+  const targetLabel = (r: RecipeRow) => {
+    const t = targets?.find((x) => x.templateId === r.templateId && x.missionType === r.missionType);
+    return t ? `${t.templateName} · ${t.label}` : r.missionType;
+  };
   const [open, setOpen] = useState(false);
   return (
     <section aria-label="Production Recipes" className="grid gap-3">
@@ -48,6 +53,10 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
                   <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary tabular-nums">{`v${recipe.latestVersion}`}</span>
                 </div>
                 <span className="max-w-full truncate text-sm text-muted-foreground">{recipe.description}</span>
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Play aria-hidden="true" className="size-3" />
+                  {targetLabel(recipe)}
+                </span>
               </Card>
             </li>
           ))}
@@ -57,6 +66,7 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
         mode="create"
         open={open}
         onOpenChange={setOpen}
+        targets={targets}
         onSubmit={async (fields) => {
           await create({ instanceId, familyId: familyId as Id<"creativeFamilies">, ...fields });
         }}

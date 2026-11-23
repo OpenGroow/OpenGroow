@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { contentFromDraft, draftFromVersion, emptyDraft, type RecipeDraft, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
@@ -17,12 +18,17 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: RecipeVersionContent;
-  onSubmit: (fields: { name: string; description: string } & RecipeVersionContent) => void | Promise<void>;
+  /** The Mission types a new recipe can be written for (create mode). */
+  targets?: RecipeTarget[];
+  onSubmit: (fields: { name: string; description: string; templateId: string; missionType: string } & RecipeVersionContent) => void | Promise<void>;
 };
 
-export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, onSubmit }: Props) {
+export type RecipeTarget = { templateId: string; templateName: string; missionType: string; label: string };
+
+export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, targets = [], onSubmit }: Props) {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [targetIndex, setTargetIndex] = React.useState("");
   const [draft, setDraft] = React.useState<RecipeDraft>(() => (initial ? draftFromVersion(initial) : emptyDraft()));
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -32,6 +38,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
     if (open && !wasOpen.current) {
       setName("");
       setDescription("");
+      setTargetIndex("");
       setDraft(initial ? draftFromVersion(initial) : emptyDraft());
       setError(null);
     }
@@ -40,7 +47,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
 
   const set = (patch: Partial<RecipeDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
-  const disabled = submitting || draft.instructions.trim() === "" || (mode === "create" && (name.trim() === "" || description.trim() === ""));
+  const disabled = submitting || draft.instructions.trim() === "" || (mode === "create" && (name.trim() === "" || description.trim() === "" || targetIndex === ""));
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,7 +55,8 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ name: name.trim().replace(/\s+/g, " "), description: description.trim(), ...contentFromDraft(draft) });
+      const target = targets[Number(targetIndex)];
+      await onSubmit({ name: name.trim().replace(/\s+/g, " "), description: description.trim(), templateId: target?.templateId ?? "", missionType: target?.missionType ?? "", ...contentFromDraft(draft) });
       onOpenChange(false);
     } catch (submitError: unknown) {
       setError(extractConvexErrorMessage(submitError, "Failed to save the Production Recipe"));
@@ -78,6 +86,18 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
               <div className="grid gap-2">
                 <Label htmlFor="recipe-description">Description</Label>
                 <Textarea id="recipe-description" value={description} required rows={2} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="recipe-target">Mission type</Label>
+                <NativeSelect id="recipe-target" value={targetIndex} required onChange={(e) => setTargetIndex(e.target.value)}>
+                  <option value="">Choose a Mission type</option>
+                  {targets.map((t, i) => (
+                    <option key={`${t.templateId}:${t.missionType}`} value={String(i)}>
+                      {`${t.templateName} · ${t.label}`}
+                    </option>
+                  ))}
+                </NativeSelect>
+                {targets.length === 0 ? <p className="m-0 text-xs text-muted-foreground">No installed Template can consume a recipe yet.</p> : null}
               </div>
             </>
           ) : null}

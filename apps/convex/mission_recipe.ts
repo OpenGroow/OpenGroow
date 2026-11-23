@@ -1,8 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
-import { ownedConnection } from "./production_connections.js";
-import { isCompatible, RECIPE_PROVIDER } from "./production_connection_rules.js";
+import { RECIPE_PROVIDER } from "./production_recipe_rules.js";
 import { latestVersion, ownedRecipe } from "./production_recipes.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -11,23 +10,22 @@ import { getTemplateRegistry } from "./template_registry.js";
 // refused creation leaves nothing behind.
 
 export const recipeArgV = v.object({
-  connectionId: v.id("productionConnections"),
+  recipeId: v.id("productionRecipes"),
   /** Defaults to the recipe's latest version, pinned from then on. */
   version: v.optional(v.number()),
 });
 
 export type RecipeArg = {
-  connectionId: Id<"productionConnections">;
+  recipeId: Id<"productionRecipes">;
   version?: number;
 };
 
 export type RecipeSnapshot = NonNullable<Doc<"missions">["recipeSnapshot"]>;
 
 /**
- * Checks, in order: the connection belongs to the Project;
- * its target matches the Template and Mission type; the payload satisfies its
- * compatibility rule; the pinned Template version declares the provider; the
- * recipe is not archived. Then copies the version into a snapshot.
+ * Checks, in order: the recipe belongs to the Project and is not archived; it is
+ * written for this Template and Mission type; the pinned Template version
+ * declares the provider. Then copies the version into a snapshot.
  */
 export async function buildRecipeSnapshot(
   ctx: QueryCtx,
@@ -35,20 +33,17 @@ export async function buildRecipeSnapshot(
     instanceId: string;
     templateId: string;
     type: string;
-    payload: unknown;
     /** The version the Mission is pinned to; undefined follows the current one. */
     pinnedVersion: string | undefined;
     recipe: RecipeArg;
   },
 ): Promise<RecipeSnapshot> {
   const { recipe: arg } = args;
-  const connection = await ownedConnection(ctx, args.instanceId, arg.connectionId);
-  if (!connection) throw new Error("Creative Connection not found");
-  if (connection.templateId !== args.templateId || connection.missionType !== args.type) {
-    throw new Error(`This Creative Connection does not target Mission type "${args.type}" of ${args.templateId}`);
-  }
-  if (!isCompatible(connection.compatibleWhen, args.payload)) {
-    throw new Error("The Mission payload is not compatible with this Creative Connection");
+  const recipe = await ownedRecipe(ctx, args.instanceId, arg.recipeId);
+  if (!recipe) throw new Error("Production Recipe not found");
+  if (recipe.status === "archived") throw new Error("This Production Recipe is archived");
+  if (recipe.templateId !== args.templateId || recipe.missionType !== args.type) {
+    throw new Error(`This Production Recipe is not written for Mission type "${args.type}" of ${args.templateId}`);
   }
   const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.pinnedVersion);
   const declares = template?.manifest.missionTypes?.find((t) => t.type === args.type)?.contextProviders?.includes(RECIPE_PROVIDER);
@@ -57,10 +52,6 @@ export async function buildRecipeSnapshot(
       `The Template version this Mission is pinned to${args.pinnedVersion ? ` (${args.pinnedVersion})` : ""} does not declare the ${RECIPE_PROVIDER} provider for "${args.type}"`,
     );
   }
-  const recipe = await ownedRecipe(ctx, args.instanceId, connection.recipeId);
-  if (!recipe) throw new Error("Production Recipe not found");
-  if (recipe.status === "archived") throw new Error("This Production Recipe is archived");
-
   const version =
     arg.version === undefined
       ? await latestVersion(ctx, recipe._id)
@@ -74,7 +65,6 @@ export async function buildRecipeSnapshot(
     recipeId: recipe._id,
     recipeName: recipe.name,
     version: version.version,
-    connectionId: connection._id,
     ...(version.prompt === undefined ? {} : { prompt: version.prompt }),
     instructions: version.instructions,
     constraints: version.constraints,

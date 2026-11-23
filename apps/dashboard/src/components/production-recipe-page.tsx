@@ -6,12 +6,11 @@ import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Play, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { RecipeConnectionsPanel } from "@/src/components/recipe-connections-panel";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import type { RecipeVersionContent } from "@/src/lib/production-recipe-form";
@@ -20,7 +19,7 @@ import type { RecipeVersionContent } from "@/src/lib/production-recipe-form";
 // (saves a new version) and archive. The connections panel (#145) is embedded below.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
-type RecipeDetail = { _id: string; creativeFamilyId: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
+type RecipeDetail = { _id: string; creativeFamilyId: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
 
 type Props = { params: Promise<{ projectId: string; familyId: string; recipeId: string }> };
 
@@ -33,6 +32,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   const id = recipeId as Id<"productionRecipes">;
   const recipe = useQuery(api.production_recipes.get, { instanceId, recipeId: id }) as RecipeDetail | null | undefined;
   const versions = useQuery(api.production_recipes.listVersions, { instanceId, recipeId: id }) as Version[] | undefined;
+  const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as Array<{ templateId: string; templateName: string; missionType: string; label: string }> | undefined;
   const saveVersion = useMutation(api.production_recipes.saveVersion);
   const archive = useMutation(api.production_recipes.archive);
   const unarchive = useMutation(api.production_recipes.unarchive);
@@ -88,6 +88,13 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
             </div>
           }
         />
+        <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground" aria-label="Mission type">
+          <Play aria-hidden="true" className="size-4" />
+          {(() => {
+            const t = targets?.find((x) => x.templateId === recipe.templateId && x.missionType === recipe.missionType);
+            return t ? `${t.templateName} · ${t.label}` : recipe.missionType;
+          })()}
+        </p>
         {error ? <p role="alert" className="m-0 text-sm text-destructive">{error}</p> : null}
       </div>
 
@@ -105,7 +112,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
         </section>
       ) : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6">
         <section aria-label="Version history">
           <Card className="grid gap-4 px-5 py-4">
             <SectionTitle icon={History} title="Version history" />
@@ -130,7 +137,6 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
             </ul>
           </Card>
         </section>
-        <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} />
       </div>
 
       <ProductionRecipeFormDialog

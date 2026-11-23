@@ -2,8 +2,11 @@ import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
+import type { AgentTemplate } from "@opengroow/agent-templates";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { type recipeStatusV } from "./production_validators.js";
+import { RECIPE_PROVIDER, validateRecipeTarget } from "./production_recipe_rules.js";
+import { getTemplateRegistry } from "./template_registry.js";
 
 // Production Recipes under a Creative Family (issue #137). A recipe is an
 // identity; each save appends an immutable Recipe Version. Every read and
@@ -32,6 +35,30 @@ function cleanContent(args: ContentArgs): RecipeContent {
   };
   return content;
 }
+
+/**
+ * The installed versions of a Template a recipe may target, newest first: the
+ * staged one (offered, not applied yet), then the current one. A pilot can
+ * write a recipe for a staged version before it is applied.
+ */
+async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: string): Promise<AgentTemplate[]> {
+  const registry = getTemplateRegistry(ctx);
+  const staged = await ctx.db
+    .query("installedTemplates")
+    .withIndex("by_project_template_staged", (q) => q.eq("projectId", instanceId).eq("templateId", templateId).eq("staged", true))
+    .take(10);
+  const templates: AgentTemplate[] = [];
+  for (const row of staged) {
+    const template = await registry.resolve(instanceId, templateId, row.version);
+    if (template) templates.push(template);
+  }
+  const current = await registry.resolve(instanceId, templateId);
+  if (current) templates.push(current);
+  return templates;
+}
+
+const declaresProvider = (template: AgentTemplate, missionType: string) =>
+  template.manifest.missionTypes?.find((t) => t.type === missionType)?.contextProviders?.includes(RECIPE_PROVIDER) === true;
 
 /** A recipe of the caller's Instance, or null (another Instance's recipe is "not found"). */
 export async function ownedRecipe(ctx: QueryCtx, instanceId: string, recipeId: Id<"productionRecipes">) {
@@ -71,6 +98,8 @@ function recipeView(recipe: Doc<"productionRecipes">) {
   return {
     _id: recipe._id,
     creativeFamilyId: recipe.creativeFamilyId,
+    templateId: recipe.templateId,
+    missionType: recipe.missionType,
     name: recipe.name,
     description: recipe.description,
     status: recipe.status,
@@ -89,7 +118,15 @@ function versionView(version: Doc<"productionRecipeVersions">) {
 
 /** Creates a recipe under an active family with its version 1. */
 export const create = mutation({
-  args: { instanceId: v.string(), familyId: v.id("creativeFamilies"), name: v.string(), description: v.string(), ...contentArgs },
+  args: {
+    instanceId: v.string(),
+    familyId: v.id("creativeFamilies"),
+    templateId: v.string(),
+    missionType: v.string(),
+    name: v.string(),
+    description: v.string(),
+    ...contentArgs,
+  },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const family = await requireOwnedFamily(ctx, args.instanceId, args.familyId);
@@ -97,9 +134,16 @@ export const create = mutation({
     const name = args.name.trim().replace(/\s+/g, " ");
     if (name === "") throw new Error("A Production Recipe needs a name");
     const content = cleanContent(args);
+    const versions = await installedVersions(ctx, args.instanceId, args.templateId);
+    if (versions.length === 0) throw new Error(`Template "${args.templateId}" is not installed`);
+    // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
+    const template = versions.find((t) => declaresProvider(t, args.missionType)) ?? versions[versions.length - 1]!;
+    validateRecipeTarget(template.manifest, args.missionType);
     const recipeId = await ctx.db.insert("productionRecipes", {
       instanceId: args.instanceId,
       creativeFamilyId: args.familyId,
+      templateId: args.templateId,
+      missionType: args.missionType,
       name,
       description: args.description.trim(),
       status: "active",
@@ -180,5 +224,38 @@ export const listVersions = query({
       .order("desc")
       .take(VERSION_LIST_CAP);
     return versions.map(versionView);
+  },
+});
+
+/**
+ * The Mission types of the Project's installed Templates that declare the
+ * `production-recipe` provider: what a recipe can be written for.
+ */
+export const listTargets = query({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args) => {
+    if ((await readOwnerId(ctx, args.instanceId)) === null) return [];
+    const current = await ctx.db
+      .query("installedTemplates")
+      .withIndex("by_project_current_template", (q) => q.eq("projectId", args.instanceId).eq("current", true))
+      .take(100);
+    const staged = await ctx.db
+      .query("installedTemplates")
+      .withIndex("by_project_staged", (q) => q.eq("projectId", args.instanceId).eq("staged", true))
+      .take(100);
+    const templateIds = [...new Set([...current, ...staged].map((row) => row.templateId))];
+    const targets: Array<{ templateId: string; templateName: string; missionType: string; label: string }> = [];
+    for (const templateId of templateIds) {
+      const offered = new Set<string>();
+      // Newest version first: a Mission type is offered once, from the newest version declaring the provider.
+      for (const template of await installedVersions(ctx, args.instanceId, templateId)) {
+        for (const type of template.manifest.missionTypes ?? []) {
+          if (offered.has(type.type) || !declaresProvider(template, type.type)) continue;
+          offered.add(type.type);
+          targets.push({ templateId, templateName: template.manifest.name, missionType: type.type, label: type.label });
+        }
+      }
+    }
+    return targets;
   },
 });

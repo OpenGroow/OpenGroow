@@ -11,7 +11,7 @@
  * Brand Core) they are not meaningful to every Template.
  */
 
-import { RECIPE_PROVIDER } from "../production_connection_rules.js";
+import { RECIPE_PROVIDER } from "../production_recipe_rules.js";
 import { SOCIAL_ENGAGEMENT_PLATFORMS, singleLine, type ContextProviderName } from "@opengroow/agent-templates";
 
 // ─── Active agents provider ─────────────────────────────────────────────────
