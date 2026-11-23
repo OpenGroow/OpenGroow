@@ -16,7 +16,6 @@ import { CreativeFamilyArchiveButton } from "@/src/components/creative-family-ar
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
-import { MergeFamilyButton } from "@/src/components/merge-family-dialog";
 import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
 import { FamilyRecipes } from "@/src/components/family-recipes";
@@ -94,7 +93,6 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
           description={family.description}
           action={
             <div className="flex items-center gap-3">
-              {isActiveFamily(family) ? <MergeFamilyButton instanceId={instanceId} familyId={family._id} familyName={family.name} /> : null}
               <FamilyStatusBadge size="default" status={family.status} />
               <EditFamilyButton instanceId={instanceId} family={family} />
               {isActiveFamily(family) ? <AddSourceButton instanceId={instanceId} familyId={familyId} /> : null}

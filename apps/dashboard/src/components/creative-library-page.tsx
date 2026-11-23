@@ -10,9 +10,11 @@ import { FamilyStatusBadge } from "@/src/components/creative-family-status-badge
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 import { NewFamilyButton } from "@/src/components/creative-family-actions";
+import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
 import { sourceCountLabel } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
@@ -47,6 +49,15 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
   const [sort, setSort] = useState<Sort>("most");
   const [search, setSearch] = useState("");
   const families = useQuery(api.creative_families.list, { instanceId }) as FamilyRow[] | undefined;
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [merging, setMerging] = useState(false);
+  const toggle = (id: string) => setSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected([]);
+  };
+  const selectedFamilies = (families ?? []).filter((family) => selected.includes(family._id));
 
   const needle = search.trim().toLowerCase();
   const visible = (families ?? [])
@@ -65,6 +76,20 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
             <Button variant="outline" nativeButton={false} render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
               Unclassified Sources
             </Button>
+            {selecting ? (
+              <>
+                <Button type="button" disabled={selectedFamilies.length < 2} onClick={() => setMerging(true)}>
+                  Merge ({selectedFamilies.length})
+                </Button>
+                <Button type="button" variant="outline" onClick={stopSelecting}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button type="button" variant="outline" onClick={() => setSelecting(true)}>
+                Select
+              </Button>
+            )}
             <NewFamilyButton instanceId={instanceId} />
           </div>
         }
@@ -105,20 +130,49 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
           ) : (
             <ul className="grid gap-3">
               {visible.map((family) => (
-                <FamilyRowItem key={family._id} family={family} instanceId={instanceId} />
+                <FamilyRowItem
+                  key={family._id}
+                  family={family}
+                  instanceId={instanceId}
+                  selection={selecting && family.status === "active" ? { checked: selected.includes(family._id), onToggle: () => toggle(family._id) } : undefined}
+                />
               ))}
             </ul>
           )}
         </section>
       )}
+      {merging ? (
+        <MergeFamiliesDialog
+          instanceId={instanceId}
+          families={selectedFamilies}
+          onClose={() => setMerging(false)}
+          onDone={stopSelecting}
+        />
+      ) : null}
     </div>
   );
 }
 
-function FamilyRowItem({ family, instanceId }: { family: FamilyRow; instanceId: string }) {
+function FamilyRowItem({
+  family,
+  instanceId,
+  selection,
+}: {
+  family: FamilyRow;
+  instanceId: string;
+  selection?: { checked: boolean; onToggle: () => void };
+}) {
   return (
     <li>
       <Card className="relative flex flex-col gap-4 px-5 py-4 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center">
+        {selection ? (
+          <Checkbox
+            className="relative z-10"
+            aria-label={`Select ${family.name}`}
+            checked={selection.checked}
+            onCheckedChange={selection.onToggle}
+          />
+        ) : null}
         <div className="grid min-w-0 flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <Link

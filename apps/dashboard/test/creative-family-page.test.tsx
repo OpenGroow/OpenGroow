@@ -113,9 +113,9 @@ describe("CreativeFamilyContent", () => {
     expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
   });
 
-  it("offers the merge on an active family", async () => {
+  it("no longer offers the merge: it lives on the Library page", async () => {
     await render();
-    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(true);
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Merge into…")).toBe(false);
   });
 
   it("offers Archive for an active family and Unarchive for an archived one", async () => {

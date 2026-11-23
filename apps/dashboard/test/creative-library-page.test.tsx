@@ -6,6 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeLibraryContent } from "../src/components/creative-library-page";
 
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
@@ -19,6 +22,7 @@ vi.mock("convex/react", () => ({
 vi.mock("@convex/_generated/api", () => ({
   api: {
     creative_families: { list: "creative_families.list" },
+    creative_family_merge: { merge: "creative_family_merge.merge" },
     creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
@@ -167,5 +171,53 @@ describe("CreativeLibraryContent", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(names()).toEqual(["Small", "Mid", "Big"]);
+  });
+
+  describe("merging families", () => {
+    const boxes = () => Array.from(document.body.querySelectorAll('[role="checkbox"]')) as HTMLElement[];
+    const check = async (label: string) => {
+      const box = boxes().find((b) => b.getAttribute("aria-label") === label);
+      await act(async () => {
+        box?.click();
+      });
+    };
+    const FAMILIES = [
+      makeFamily({ _id: "a", name: "Alpha", sourceCount: 9 }),
+      makeFamily({ _id: "b", name: "Beta", sourceCount: 5 }),
+      makeFamily({ _id: "c", name: "Gamma", sourceCount: 2, status: "archived" }),
+    ];
+
+    it("shows no checkbox until Select is pressed, then only on active families", async () => {
+      await render(FAMILIES);
+      expect(boxes().length).toBe(0);
+      await press("Select");
+      expect(boxes().map((b) => b.getAttribute("aria-label"))).toEqual(["Select Alpha", "Select Beta"]);
+    });
+
+    it("enables Merge from two selected families and merges the others into the one kept", async () => {
+      requestThumbnailsMock.mockResolvedValue({ moved: 5, remaining: 0 });
+      await render(FAMILIES);
+      await press("Select");
+      const mergeButton = () => Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Merge ("));
+      expect((mergeButton() as HTMLButtonElement).disabled).toBe(true);
+      await check("Select Alpha");
+      expect((mergeButton() as HTMLButtonElement).disabled).toBe(true);
+      await check("Select Beta");
+      expect((mergeButton() as HTMLButtonElement).disabled).toBe(false);
+      await press("Merge (2)");
+
+      const select = Array.from(document.body.querySelectorAll("select")).find((el) => el.textContent?.includes("Choose a family")) as HTMLSelectElement;
+      expect(Array.from(select.options).map((o) => o.textContent)).toEqual(["Choose a family", "Alpha", "Beta"]);
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+        setter.call(select, "a");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await act(async () => {
+        (Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent === "Merge") as HTMLElement).click();
+      });
+      expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", fromFamilyId: "b", intoFamilyId: "a" });
+      expect(document.body.textContent).toContain("5 Sources moved");
+    });
   });
 });
