@@ -123,28 +123,24 @@ describe("Production Recipes UI", () => {
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/library/fam-1/recipes/rec-1");
   });
 
-  it("creates a recipe with prompt, constraints and variables", async () => {
+  it("creates a recipe with prompt and constraints", async () => {
     await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
     await press("New recipe");
     await fill("#recipe-name", " Reaction clip ");
     await fill("#recipe-description", "A reaction");
-    await fill("#recipe-prompt", "Close-up of {MOOD}");
+    await fill("#recipe-prompt", "Close-up of a woman");
     await fill("#recipe-instructions", "Write a hook");
     await fill("#recipe-constraints", "No dialogue\n\n No text ");
-    await press("Add variable");
-    await fill("#variable-name-0", "MOOD");
-    await fill("#variable-values-0", "delighted\ncalm");
-    await fill("#variable-default-0", "calm");
     await submit();
     expect(mutations["recipes.create"]).toHaveBeenCalledWith({
       instanceId: "p1",
       familyId: "fam-1",
       name: "Reaction clip",
       description: "A reaction",
-      prompt: "Close-up of {MOOD}",
+      prompt: "Close-up of a woman",
       instructions: "Write a hook",
       constraints: ["No dialogue", "No text"],
-      variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "calm" }],
+      variables: [],
     });
     expect(document.body.querySelector("form")).toBeNull();
   });
@@ -169,7 +165,7 @@ describe("Production Recipes UI", () => {
     await press("Edit");
     expect((document.body.querySelector("#recipe-prompt") as HTMLTextAreaElement).value).toBe("Close-up of {MOOD}");
     expect((document.body.querySelector("#recipe-constraints") as HTMLTextAreaElement).value).toBe("No dialogue\nNo text overlay");
-    expect((document.body.querySelector("#variable-values-0") as HTMLTextAreaElement).value).toBe("delighted\ncalm");
+    expect(document.body.querySelector("#variable-values-0")).toBeNull();
     await fill("#recipe-instructions", "Write a longer hook");
     await submit();
     expect(mutations["recipes.saveVersion"]).toHaveBeenCalledWith({
@@ -180,15 +176,6 @@ describe("Production Recipes UI", () => {
       constraints: ["No dialogue", "No text overlay"],
       variables: [{ name: "MOOD", values: ["delighted", "calm"], default: "calm" }],
     });
-  });
-
-  it("shows a server refusal on edit (default outside values)", async () => {
-    mutations["recipes.saveVersion"].mockRejectedValue(new Error("Uncaught Error: Default of MOOD is not one of its values"));
-    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-    await press("Edit");
-    await fill("#variable-default-0", "angry");
-    await submit();
-    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Default of MOOD is not one of its values");
   });
 
   it("browses the version history", async () => {

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Braces, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -221,21 +221,6 @@ function VersionContent({ version }: { version: Version }) {
               <li key={i}>{c}</li>
             ))}
           </ul>
-        </ContentCard>
-      ) : null}
-      {version.variables.length > 0 ? (
-        <ContentCard icon={Braces} title="Variables">
-          <dl className="m-0 grid gap-3 text-sm">
-            {version.variables.map((variable) => (
-              <div key={variable.name} className="grid gap-0.5">
-                <dt className="font-medium text-foreground">{`{${variable.name}}`}</dt>
-                <dd className="m-0 text-muted-foreground">
-                  {variable.values.join(", ")}
-                  {variable.default !== undefined ? ` (default: ${variable.default})` : ""}
-                </dd>
-              </div>
-            ))}
-          </dl>
         </ContentCard>
       ) : null}
     </div>
