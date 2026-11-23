@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FamilyRecipes } from "../src/components/family-recipes";
 import { ProductionRecipeContent } from "../src/components/production-recipe-page";
 
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mutations: Record<string, ReturnType<typeof vi.fn>> = {
@@ -63,9 +65,6 @@ const TARGETS = [
     templateName: "Video Demo",
     missionType: "create_letter_video",
     label: "Letter video",
-    selectFields: [
-      { key: "format", label: "Format", options: [{ value: "vertical", label: "Vertical" }, { value: "square", label: "Square" }] },
-    ],
   },
 ];
 const CONNECTION = {
@@ -73,7 +72,6 @@ const CONNECTION = {
   recipeId: "rec-1",
   templateId: "@example/video-demo",
   missionType: "create_letter_video",
-  compatibleWhen: { format: ["vertical"] },
 };
 
 describe("Production Recipes UI", () => {
@@ -207,60 +205,47 @@ describe("Production Recipes UI", () => {
 
   describe("connections panel", () => {
     const panel = () => container.querySelector('[aria-label="Connections"]')!;
-    const choose = async (selector: string, value: string) => {
-      const select = document.body.querySelector(selector) as HTMLSelectElement;
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-    };
+    const openList = () => act(async () => (panel().querySelector('[aria-label="Show Mission types"]') as HTMLElement).click());
+    const item = (label: string) => Array.from(document.querySelectorAll('[role="option"]')).find((i) => i.textContent?.includes(label)) as HTMLElement | undefined;
 
-    it("lists the connections with target label and conditions", async () => {
+    it("shows the connected Mission types as chips", async () => {
       connections = [CONNECTION];
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      expect(panel().textContent).toContain("Video Demo");
-      expect(panel().textContent).toContain("Letter video");
-      expect(panel().textContent).toContain("Format: Vertical");
+      expect(panel().textContent).toContain("Video Demo · Letter video");
     });
 
-    it("creates a connection from an installed target and its option values", async () => {
+    it("connects the recipe when a Mission type is ticked", async () => {
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await choose("#connection-target", "0");
-      await press("Vertical");
-      await press("Add connection");
+      await openList();
+      await act(async () => item("Letter video")!.click());
       expect(mutations["connections.create"]).toHaveBeenCalledWith({
         instanceId: "p1",
         recipeId: "rec-1",
         templateId: "@example/video-demo",
         missionType: "create_letter_video",
-        compatibleWhen: { format: ["vertical"] },
       });
+    });
+
+    it("removes the connection when its chip is removed", async () => {
+      connections = [CONNECTION];
+      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+      await act(async () => (panel().querySelector('[data-slot="combobox-chip-remove"]') as HTMLElement).click());
+      expect(mutations["connections.remove"]).toHaveBeenCalledWith({ instanceId: "p1", connectionId: "conn-1" });
     });
 
     it("tells when no installed Template can consume recipes", async () => {
       targets = [];
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
       expect(panel().textContent).toContain("No installed Template");
-      expect(Array.from(panel().querySelectorAll("button")).some((b) => b.textContent === "Add connection")).toBe(false);
+      expect(panel().querySelector('[aria-label="Show Mission types"]')).toBeNull();
     });
 
-    it("shows the server error when creating", async () => {
-      mutations["connections.create"].mockRejectedValue(new Error("Uncaught Error: This recipe is already connected to this Mission type"));
+    it("shows the server refusal", async () => {
+      mutations["connections.create"].mockRejectedValue(new Error("Uncaught Error: Cannot connect an archived Production Recipe"));
       await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      await choose("#connection-target", "0");
-      await press("Add connection");
-      expect(panel().querySelector('[role="alert"]')?.textContent).toBe("This recipe is already connected to this Mission type");
-    });
-
-    it("removes a connection and shows a server refusal", async () => {
-      connections = [CONNECTION];
-      await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-      const remove = () => act(async () => (panel().querySelector('[aria-label="Remove connection"]') as HTMLElement).click());
-      await remove();
-      expect(mutations["connections.remove"]).toHaveBeenCalledWith({ instanceId: "p1", connectionId: "conn-1" });
-      mutations["connections.remove"].mockRejectedValue(new Error("Uncaught Error: Creative Connection not found"));
-      await remove();
-      expect(panel().querySelector('[role="alert"]')?.textContent).toBe("Creative Connection not found");
+      await openList();
+      await act(async () => item("Letter video")!.click());
+      expect(panel().querySelector('[role="alert"]')?.textContent).toBe("Cannot connect an archived Production Recipe");
     });
   });
 });

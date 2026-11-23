@@ -130,7 +130,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
             </ul>
           </Card>
         </section>
-        <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} archived={archived} />
+        <RecipeConnectionsPanel instanceId={instanceId} recipeId={recipeId} />
       </div>
 
       <ProductionRecipeFormDialog
