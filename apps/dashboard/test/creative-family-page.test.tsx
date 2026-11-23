@@ -136,7 +136,7 @@ describe("CreativeFamilyContent", () => {
     expect(headerButtons).not.toContain("Edit");
     expect(headerButtons).not.toContain("Archive");
     expect(headerButtons).not.toContain("Delete");
-    expect((await openMenu())()).toEqual(["Edit", "Delete"]);
+    expect((await openMenu())()).toEqual(["Edit", "Select", "Delete"]);
   });
 
   it("Delete archives the family", async () => {
@@ -146,9 +146,29 @@ describe("CreativeFamilyContent", () => {
     expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", familyId: "fam-1" });
   });
 
+  it("selects Sources from the menu and removes them from the family", async () => {
+    await render({ sources: [makeSource({ _id: "s1", label: "One" }), makeSource({ _id: "s2", label: "Two" })] });
+    expect(Array.from(document.body.querySelectorAll("button")).some((b) => b.textContent === "Remove from family")).toBe(false);
+    expect(document.querySelectorAll('[role="checkbox"]').length).toBe(0);
+    await openMenu();
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Select") as HTMLElement).click());
+    const boxes = Array.from(document.querySelectorAll('[role="checkbox"]')) as HTMLElement[];
+    expect(boxes.length).toBe(2);
+    const removeButton = () => Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Remove (")) as HTMLButtonElement;
+    expect(removeButton().disabled).toBe(true);
+    await act(async () => boxes[0]!.click());
+    await act(async () => boxes[1]!.click());
+    expect(removeButton().textContent).toBe("Remove (2)");
+    requestThumbnailsMock.mockResolvedValue(null);
+    await act(async () => removeButton().click());
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceId: "s1" });
+    expect(requestThumbnailsMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceId: "s2" });
+    expect(document.querySelectorAll('[role="checkbox"]').length).toBe(0);
+  });
+
   it("offers Restore instead of Delete on an archived family", async () => {
     await render({ family: { ...FAMILY, status: "archived" } });
-    expect((await openMenu())()).toEqual(["Edit", "Restore"]);
+    expect((await openMenu())()).toEqual(["Edit", "Select", "Restore"]);
   });
 
   it("shows the statistics: total Sources, median and maximum", async () => {

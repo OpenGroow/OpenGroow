@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CreativeUnclassifiedContent } from "../src/components/creative-unclassified-page";
-import { RemoveFromFamilyButton } from "../src/components/creative-family-source-actions";
+import { useRemoveSources } from "../src/components/creative-family-source-actions";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -79,13 +79,22 @@ describe("Creative Library Source classification", () => {
     expect(container.textContent).toContain("No unclassified Sources");
   });
 
-  it("removes a Source from its family and shows a refusal message", async () => {
-    await act(async () => root.render(<RemoveFromFamilyButton instanceId="instance-1" sourceId="src-1" />));
-    const button = container.querySelector("button") as HTMLButtonElement;
-    await act(async () => button.click());
-    expect(removeMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceId: "src-1" });
+  it("removes Sources from their family one after the other and keeps a refusal message", async () => {
+    let hook!: ReturnType<typeof useRemoveSources>;
+    function Probe() {
+      hook = useRemoveSources("instance-1");
+      return <p>{hook.error}</p>;
+    }
+    await act(async () => root.render(<Probe />));
+    await act(async () => {
+      expect(await hook.removeMany(["src-1", "src-2"])).toBe(true);
+    });
+    expect(removeMock).toHaveBeenNthCalledWith(1, { instanceId: "instance-1", sourceId: "src-1" });
+    expect(removeMock).toHaveBeenNthCalledWith(2, { instanceId: "instance-1", sourceId: "src-2" });
     removeMock.mockRejectedValue(new Error("Forbidden"));
-    await act(async () => button.click());
+    await act(async () => {
+      expect(await hook.removeMany(["src-3"])).toBe(false);
+    });
     expect(container.textContent).toContain("Forbidden");
   });
 });

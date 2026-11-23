@@ -4,13 +4,13 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Ellipsis, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { CheckSquare, Ellipsis, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CreativeFamilyFormDialog } from "@/src/components/creative-family-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
-// The "more actions" menu of a Creative Family: Edit and Delete (ADR-082). Delete archives
+// The "more actions" menu of a Creative Family: Edit, Select and Delete (ADR-082). Delete archives
 // the family: its Sources stay, it is no longer listed, and it cannot receive new ones.
 // An archived family reached by a link offers Restore instead.
 
@@ -18,10 +18,13 @@ export function FamilyMoreMenu({
   instanceId,
   family,
   archived,
+  onSelect,
 }: {
   instanceId: string;
   family: { _id: string; name: string; description: string };
   archived: boolean;
+  /** Starts the selection of the family's Sources. */
+  onSelect: () => void;
 }) {
   const update = useMutation(api.creative_family_details.update);
   const archive = useMutation(api.creative_families_archive.archive);
@@ -49,6 +52,10 @@ export function FamilyMoreMenu({
           <DropdownMenuItem onClick={() => setEditing(true)}>
             <Pencil />
             Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onSelect}>
+            <CheckSquare />
+            Select
           </DropdownMenuItem>
           {archived ? (
             <DropdownMenuItem onClick={() => void toggleArchived()}>
