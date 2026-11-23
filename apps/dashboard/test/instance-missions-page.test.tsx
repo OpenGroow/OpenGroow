@@ -578,6 +578,24 @@ describe("InstanceMissionsContent — mission list", () => {
       expect(createMission.mock.calls[0]![0]).not.toHaveProperty("recipe");
     });
 
+    it("forgets the chosen recipe when the Mission type changes, even if the user comes back to it", async () => {
+      await renderVideoForm(RECIPES);
+      const setValue = (select: HTMLSelectElement, value: string) =>
+        act(async () => {
+          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, value);
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      await setValue(recipeSelect()!, "recipe-1");
+      expect(recipeSelect()!.value).toBe("recipe-1");
+      const typeSelect = Array.from(document.querySelectorAll("select")).find((x) =>
+        Array.from(x.options).some((o) => o.value === "create_marketing_video"),
+      ) as HTMLSelectElement;
+      const first = typeSelect.value;
+      await setValue(typeSelect, "create_marketing_video");
+      await setValue(typeSelect, first);
+      expect(recipeSelect()!.value).toBe("");
+    });
+
     it("sends the chosen recipe to the creation", async () => {
       const createMission = await renderVideoForm(RECIPES);
       await act(async () => {

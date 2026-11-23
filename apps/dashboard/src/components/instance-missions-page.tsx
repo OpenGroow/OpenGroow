@@ -110,6 +110,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     // free-text input with an empty payload.
     const [firstType] = missionTypes;
     setType(firstType?.type ?? "");
+    setRecipeId("");
     setPayloadText(firstType?.payload ?? "");
     // A new template may not support autoPublish for its default mission
     // type — reset rather than carry a stale toggle across templates.
@@ -268,6 +269,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                   onChange={(e) => {
                     const next = e.target.value;
                     setType(next);
+                    setRecipeId("");
                     setRawPayloadMode(false);
                     // Pre-fill the payload with the selected type's default.
                     const option = missionTypes.find((t) => t.type === next);

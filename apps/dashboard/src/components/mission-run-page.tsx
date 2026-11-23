@@ -19,12 +19,33 @@ import { titleCase } from "@/src/lib/mission-type";
 
 type RunViewProps = { instanceId: string; missionId: string; runId: string };
 
+const RUN_NOT_FOUND = <p className="m-0 text-sm text-muted-foreground">This Run was not found.</p>;
+
+/** Convex refuses an id that is not one of its own (a mistyped URL): show "not found" instead of crashing the page. */
+class RunNotFoundBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? RUN_NOT_FOUND : this.props.children;
+  }
+}
+
 /**
  * One Run of a Mission, under the Mission: a header that says which Mission and
  * Run this is, a way back to the Mission, and the Run's Prompt and Logs as tabs.
  * They used to open under the Agent's pages, which dropped the Mission context.
  */
-export function MissionRunShell({ instanceId, missionId, runId, children }: RunViewProps & { children: React.ReactNode }) {
+export function MissionRunShell(props: RunViewProps & { children: React.ReactNode }) {
+  return (
+    <RunNotFoundBoundary>
+      <MissionRunHeader {...props} />
+    </RunNotFoundBoundary>
+  );
+}
+
+function MissionRunHeader({ instanceId, missionId, runId, children }: RunViewProps & { children: React.ReactNode }) {
   const pathname = usePathname();
   const mission = useQuery(api.missions.get, { missionId: missionId as Id<"missions"> });
   const run = useQuery(api.runs.get, { runId: runId as Id<"runs"> });
@@ -33,9 +54,8 @@ export function MissionRunShell({ instanceId, missionId, runId, children }: RunV
     { label: "Logs", href: missionRunHref(instanceId, missionId, runId, "logs"), enabled: true },
   ];
 
-  if (mission === null || run === null) {
-    return <p className="m-0 text-sm text-muted-foreground">This Run was not found.</p>;
-  }
+  // A Run belongs to one Mission: a URL pairing a Mission with another Mission's Run shows neither.
+  if (mission === null || run === null || (run && run.missionId !== missionId)) return RUN_NOT_FOUND;
   return (
     <section className="grid min-w-0 gap-6">
       <header className="grid gap-4">

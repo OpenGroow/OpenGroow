@@ -64,7 +64,7 @@ describe("MissionRunShell", () => {
 
   it("names the Mission, links back to it, and offers the Run's Prompt and Logs as tabs", async () => {
     useQueryMock.mockImplementation((key: string) =>
-      key === "missions.get" ? { type: "create_letter_video" } : { templateId: "@example/video" },
+      key === "missions.get" ? { type: "create_letter_video" } : { templateId: "@example/video", missionId: "mission-1" },
     );
     await render();
 
@@ -85,5 +85,24 @@ describe("MissionRunShell", () => {
     await render();
     expect(container.textContent).toContain("This Run was not found.");
     expect(container.textContent).not.toContain("tab content");
+  });
+
+  it("shows nothing of a Run that belongs to another Mission than the one in the URL", async () => {
+    useQueryMock.mockImplementation((key: string) =>
+      key === "missions.get" ? { type: "create_letter_video" } : { templateId: "@example/video", missionId: "mission-2" },
+    );
+    await render();
+    expect(container.textContent).toContain("This Run was not found.");
+    expect(container.textContent).not.toContain("tab content");
+  });
+
+  it("shows 'not found' instead of crashing when Convex refuses a malformed id", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    useQueryMock.mockImplementation(() => {
+      throw new Error("ArgumentValidationError: Value does not match validator");
+    });
+    await render();
+    expect(container.textContent).toContain("This Run was not found.");
+    consoleError.mockRestore();
   });
 });
