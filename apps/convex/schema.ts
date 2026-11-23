@@ -647,7 +647,9 @@ export default defineSchema({
     description: v.string(),
     status: recipeStatusV,
   })
-    .index("by_instance_family", ["instanceId", "creativeFamilyId"]),
+    .index("by_instance_family", ["instanceId", "creativeFamilyId"])
+    // The Create Mission picker: a Project's recipes for one Mission type of one Template.
+    .index("by_instance_target", ["instanceId", "templateId", "missionType"]),
   // A Recipe Version: append-only, never patched. An edit inserts the next one.
   productionRecipeVersions: defineTable({
     instanceId: v.string(),

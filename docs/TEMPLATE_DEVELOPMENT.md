@@ -112,6 +112,12 @@ missionTypes:
 
 Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
 
+### One Mission type per creative variant
+
+A `select` field is a good fit for a small option (a platform, a tone). When the variants do not share the same fields or the same creative instructions (a video with a hook and one without, where "Text on the Hook" means nothing for the second), declare **one Mission type per variant** instead of a `format` field. Fields cannot depend on each other's value, and a Production Recipe is written for one Mission type of one Template: it has no way to say "only for this format".
+
+Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. To offer Production Recipes on a type, list `production-recipe` in its `contextProviders`; the Create Mission form then shows a "Production Recipe" choice, hidden while the Project has no active recipe for that type.
+
 ## Publishing from a Template: the Publishable guide (ADR-069)
 
 By default a Template publishes through its own MCP. A Mission type can instead hand publication to the Project's **Publisher** (see `docs/domain/publishing.md`): the Agent returns a **Publishable**, a small JSON object of references (URLs) and text, and OpenGroow posts it on the channels the human chose. This guide is the whole path for an author writing a Template for their own MCP. Opting in is per Mission type; Mission types without `publish` behave as before.

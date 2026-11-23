@@ -69,6 +69,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
+  const [recipeId, setRecipeId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -87,6 +88,16 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
   const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
+  // Production Recipes written for this Template and Mission type. The choice is
+  // optional and never preselected; one that no longer belongs to the offered
+  // list (the type changed, the recipe was archived) counts as no choice.
+  const offeredRecipes = useQuery(
+    api.production_recipes.listForMissionType,
+    effectiveTemplateId && type.trim()
+      ? { instanceId, templateId: effectiveTemplateId, missionType: type.trim() }
+      : "skip",
+  );
+  const chosenRecipeId = offeredRecipes?.find((r) => r._id === recipeId)?._id;
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
   // A Mission type that declares `publish` groups channels, Auto-publish and the
   // date in one "Publish" card; others keep the standalone toggle.
@@ -152,9 +163,12 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
         // Only sent when opted in — an unchecked box leaves the field absent
         // rather than persisting an explicit `false`.
         ...(autoPublishAllowed && autoPublish ? { autoPublish: true } : {}),
+        // The recipe is frozen on the Mission at its latest version (ADR-083).
+        ...(chosenRecipeId ? { recipe: { recipeId: chosenRecipeId } } : {}),
       });
       setCreateOpen(false);
       setName("");
+      setRecipeId("");
       setAutoPublish(false);
       const [firstType] = missionTypes;
       setType(firstType?.type ?? "");
@@ -315,6 +329,22 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
               rawMode={rawPayloadMode}
               onRawModeChange={setRawPayloadMode}
             />
+
+            {offeredRecipes && offeredRecipes.length > 0 ? (
+              <label className="grid gap-1.5">
+                <span className="text-sm font-semibold text-muted-foreground">
+                  Production Recipe <span className="font-normal">(optional)</span>
+                </span>
+                <NativeSelect value={chosenRecipeId ?? ""} onChange={(e) => setRecipeId(e.target.value)}>
+                  <option value="">No recipe</option>
+                  {offeredRecipes.map((r) => (
+                    <option key={r._id} value={r._id}>
+                      {r.name} (v{r.latestVersion})
+                    </option>
+                  ))}
+                </NativeSelect>
+              </label>
+            ) : null}
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
