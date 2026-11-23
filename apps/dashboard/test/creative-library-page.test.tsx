@@ -156,6 +156,17 @@ describe("CreativeLibraryContent", () => {
   });
 
   describe("merging families", () => {
+    const menuItems = () => Array.from(document.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+    const startSelecting = async () => {
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      await act(async () => {
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+          trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+        }
+      });
+      await act(async () => menuItems().find((i) => i.textContent === "Select")!.click());
+    };
+
     const boxes = () => Array.from(document.body.querySelectorAll('[role="checkbox"]')) as HTMLElement[];
     const check = async (label: string) => {
       const box = boxes().find((b) => b.getAttribute("aria-label") === label);
@@ -169,17 +180,31 @@ describe("CreativeLibraryContent", () => {
       makeFamily({ _id: "c", name: "Gamma", sourceCount: 2, status: "archived" }),
     ];
 
-    it("shows no checkbox until Select is pressed, then only on active families", async () => {
+    it("keeps Select and Unclassified Sources in the more-actions menu", async () => {
+      await render(FAMILIES);
+      const headerButtons = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
+      expect(headerButtons).not.toContain("Select");
+      expect(headerButtons).not.toContain("Unclassified Sources");
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      await act(async () => {
+        for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+          trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+        }
+      });
+      expect(Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual(["Select", "Unclassified Sources"]);
+    });
+
+    it("shows no checkbox until Select is chosen, then only on active families", async () => {
       await render(FAMILIES);
       expect(boxes().length).toBe(0);
-      await press("Select");
+      await startSelecting();
       expect(boxes().map((b) => b.getAttribute("aria-label"))).toEqual(["Select Alpha", "Select Beta"]);
     });
 
     it("enables Merge from two selected families and merges the others into the one kept", async () => {
       requestThumbnailsMock.mockResolvedValue({ moved: 5, remaining: 0 });
       await render(FAMILIES);
-      await press("Select");
+      await startSelecting();
       const mergeButton = () => Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.startsWith("Merge ("));
       expect((mergeButton() as HTMLButtonElement).disabled).toBe(true);
       await check("Select Alpha");

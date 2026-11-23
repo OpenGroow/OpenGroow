@@ -6,7 +6,9 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
+import { CheckSquare, Ellipsis, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLinkItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -66,9 +68,6 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
         description="The mechanics your Sources share, grouped into Creative Families."
         action={
           <div className="flex items-center gap-3">
-            <Button variant="outline" nativeButton={false} render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
-              Unclassified Sources
-            </Button>
             {selecting ? (
               <>
                 <Button type="button" disabled={selectedFamilies.length < 2} onClick={() => setMerging(true)}>
@@ -79,9 +78,21 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
                 </Button>
               </>
             ) : (
-              <Button type="button" variant="outline" onClick={() => setSelecting(true)}>
-                Select
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" size="icon" aria-label="More actions" />}>
+                  <Ellipsis />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem onClick={() => setSelecting(true)}>
+                    <CheckSquare />
+                    Select
+                  </DropdownMenuItem>
+                  <DropdownMenuLinkItem render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
+                    <Inbox />
+                    Unclassified Sources
+                  </DropdownMenuLinkItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             <NewFamilyButton instanceId={instanceId} />
           </div>
