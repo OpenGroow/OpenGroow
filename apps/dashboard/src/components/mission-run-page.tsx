@@ -14,7 +14,7 @@ import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { TranscriptPanel } from "@/src/components/workspace-logs-transcript";
 import type { TranscriptState } from "@/src/components/workspace-logs.types";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
-import { missionRunHref } from "@/src/lib/instance-path";
+import { missionHref, missionRunHref } from "@/src/lib/instance-path";
 import { titleCase } from "@/src/lib/mission-type";
 
 type RunViewProps = { instanceId: string; missionId: string; runId: string };
@@ -28,7 +28,6 @@ export function MissionRunShell({ instanceId, missionId, runId, children }: RunV
   const pathname = usePathname();
   const mission = useQuery(api.missions.get, { missionId: missionId as Id<"missions"> });
   const run = useQuery(api.runs.get, { runId: runId as Id<"runs"> });
-  const missionHref = `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}`;
   const tabs = [
     { label: "Prompt", href: missionRunHref(instanceId, missionId, runId, "prompt"), enabled: true },
     { label: "Logs", href: missionRunHref(instanceId, missionId, runId, "logs"), enabled: true },
@@ -40,7 +39,7 @@ export function MissionRunShell({ instanceId, missionId, runId, children }: RunV
   return (
     <section className="grid min-w-0 gap-6">
       <header className="grid gap-4">
-        <Link href={missionHref} className="text-xs font-semibold text-muted-foreground hover:text-primary">
+        <Link href={missionHref(instanceId, missionId)} className="text-xs font-semibold text-muted-foreground hover:text-primary">
           ← {mission ? titleCase(mission.type) : "Mission"}
         </Link>
         <h1 className="m-0 text-3xl font-bold tracking-tight break-words text-foreground sm:text-4xl">
@@ -53,31 +52,40 @@ export function MissionRunShell({ instanceId, missionId, runId, children }: RunV
   );
 }
 
-/** The Agent that ran this Run, found from the Run itself. */
-function useRunTemplateId(runId: string): string | null | undefined {
+/** The Agent's workspace for this Run, found from the Run itself. */
+function RunWorkspace({
+  instanceId,
+  runId,
+  children,
+}: {
+  instanceId: string;
+  runId: string;
+  children: React.ComponentProps<typeof AgentWorkspaceView>["children"];
+}) {
   const run = useQuery(api.runs.get, { runId: runId as Id<"runs"> });
-  return run === undefined ? undefined : run === null ? null : run.templateId;
-}
-
-export function MissionRunPromptView({ instanceId, missionId, runId }: RunViewProps) {
-  const templateId = useRunTemplateId(runId);
-  if (!templateId) return null;
+  if (!run) return null;
   return (
-    <AgentWorkspaceView instanceId={instanceId} templateId={templateId}>
-      {(params) => (
-        <WorkspacePromptPage params={params} runId={runId as Id<"runs">} missionId={missionId as Id<"missions">} />
-      )}
+    <AgentWorkspaceView instanceId={instanceId} templateId={run.templateId}>
+      {children}
     </AgentWorkspaceView>
   );
 }
 
-export function MissionRunLogsView({ instanceId, runId }: RunViewProps) {
-  const templateId = useRunTemplateId(runId);
-  if (!templateId) return null;
+export function MissionRunPromptView({ instanceId, missionId, runId }: RunViewProps) {
   return (
-    <AgentWorkspaceView instanceId={instanceId} templateId={templateId}>
+    <RunWorkspace instanceId={instanceId} runId={runId}>
+      {(params) => (
+        <WorkspacePromptPage params={params} runId={runId as Id<"runs">} missionId={missionId as Id<"missions">} />
+      )}
+    </RunWorkspace>
+  );
+}
+
+export function MissionRunLogsView({ instanceId, runId }: Pick<RunViewProps, "instanceId" | "runId">) {
+  return (
+    <RunWorkspace instanceId={instanceId} runId={runId}>
       {(params) => <RunTranscript params={params} runId={runId as Id<"runs">} />}
-    </AgentWorkspaceView>
+    </RunWorkspace>
   );
 }
 

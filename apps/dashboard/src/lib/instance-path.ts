@@ -24,5 +24,10 @@ export function runLogsHref(instanceId: string, templateId: string, runId: strin
  * Mission and keeps `runLogsHref` (the Agent's Logs).
  */
 export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs"): string {
-  return `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
+  return `${missionHref(instanceId, missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
+}
+
+/** A Mission's page. */
+export function missionHref(instanceId: string, missionId: string): string {
+  return `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}`;
 }

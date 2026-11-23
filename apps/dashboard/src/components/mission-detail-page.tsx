@@ -118,14 +118,12 @@ function DetailRow({
 function RunRow({
   run,
   instanceId,
-  templateId,
   missionLabel,
   missionNumber,
   hasWorkspace,
 }: {
   run: Doc<"runs">;
   instanceId: string;
-  templateId: string;
   /** The Mission type as a title (`Create Reel`). */
   missionLabel: string;
   missionNumber?: number;
@@ -522,7 +520,6 @@ export function MissionDetailContent({
                   key={run._id}
                   run={run}
                   instanceId={instanceId}
-                  templateId={mission.templateId}
                   missionLabel={titleCase(mission.type)}
                   missionNumber={mission.number}
                   hasWorkspace={projectAgent?.workspaceKey !== undefined}

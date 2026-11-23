@@ -69,7 +69,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
-  const [recipeId, setRecipeId] = useState("");
+  const [recipeId, setRecipeId] = useState<Id<"productionRecipes"> | "">("");
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -93,11 +93,11 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   // list (the type changed, the recipe was archived) counts as no choice.
   const offeredRecipes = useQuery(
     api.production_recipes.listForMissionType,
-    effectiveTemplateId && type.trim()
+    createOpen && effectiveTemplateId && type.trim()
       ? { instanceId, templateId: effectiveTemplateId, missionType: type.trim() }
       : "skip",
   );
-  const chosenRecipeId = offeredRecipes?.find((r) => r._id === recipeId)?._id;
+  const chosenRecipeId = offeredRecipes?.some((r) => r._id === recipeId) ? recipeId : "";
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
   // A Mission type that declares `publish` groups channels, Auto-publish and the
   // date in one "Publish" card; others keep the standalone toggle.
@@ -335,7 +335,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
                 <span className="text-sm font-semibold text-muted-foreground">
                   Production Recipe <span className="font-normal">(optional)</span>
                 </span>
-                <NativeSelect value={chosenRecipeId ?? ""} onChange={(e) => setRecipeId(e.target.value)}>
+                <NativeSelect value={chosenRecipeId} onChange={(e) => setRecipeId(e.target.value as Id<"productionRecipes"> | "")}>
                   <option value="">No recipe</option>
                   {offeredRecipes.map((r) => (
                     <option key={r._id} value={r._id}>
