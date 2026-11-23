@@ -5,7 +5,7 @@ import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { type recipeStatusV } from "./production_validators.js";
-import { RECIPE_PROVIDER, validateRecipeTarget } from "./production_recipe_rules.js";
+import { declaresRecipeProvider, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // Production Recipes under a Creative Family (issue #137). A recipe is an
@@ -22,18 +22,16 @@ const contentArgs = {
   constraints: v.array(v.string()),
 };
 
-type ContentArgs = { prompt?: string; instructions: string; constraints: string[] };
 type RecipeContent = { prompt?: string; instructions: string; constraints: string[] };
 
-/** Trims the content, drops blank lines and validates it; throws on a bad version. */
-function cleanContent(args: ContentArgs): RecipeContent {
+/** Trims the content and drops blank constraint lines. */
+function cleanContent(args: RecipeContent): RecipeContent {
   const prompt = args.prompt?.trim();
-  const content: RecipeContent = {
+  return {
     ...(prompt ? { prompt } : {}),
     instructions: args.instructions.trim(),
     constraints: args.constraints.map((c) => c.trim()).filter((c) => c !== ""),
   };
-  return content;
 }
 
 /**
@@ -57,15 +55,12 @@ async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: 
   return templates;
 }
 
-const declaresProvider = (template: AgentTemplate, missionType: string) =>
-  template.manifest.missionTypes?.find((t) => t.type === missionType)?.contextProviders?.includes(RECIPE_PROVIDER) === true;
-
 /** Throws unless an installed version of the Template has this Mission type and it declares the provider. */
 async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
   const versions = await installedVersions(ctx, instanceId, templateId);
   if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
   // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
-  const template = versions.find((t) => declaresProvider(t, missionType)) ?? versions[versions.length - 1]!;
+  const template = versions.find((t) => declaresRecipeProvider(t.manifest, missionType)) ?? versions[versions.length - 1]!;
   validateRecipeTarget(template.manifest, missionType);
 }
 
@@ -268,7 +263,7 @@ export const listTargets = query({
       // Newest version first: a Mission type is offered once, from the newest version declaring the provider.
       for (const template of await installedVersions(ctx, args.instanceId, templateId)) {
         for (const type of template.manifest.missionTypes ?? []) {
-          if (offered.has(type.type) || !declaresProvider(template, type.type)) continue;
+          if (offered.has(type.type) || !declaresRecipeProvider(template.manifest, type.type)) continue;
           offered.add(type.type);
           targets.push({ templateId, templateName: template.manifest.name, missionType: type.type, label: type.label });
         }

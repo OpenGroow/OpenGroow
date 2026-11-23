@@ -1,7 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { use, useState } from "react";
+import { use, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -14,10 +13,10 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import type { RecipeVersionContent } from "@/src/lib/production-recipe-form";
+import { recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
 // One Production Recipe (issue #143): its content, version history, edit
-// (saves a new version) and archive. The connections panel (#145) is embedded below.
+// (saves a new version), archive, and the Mission type it is written for.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
 type RecipeDetail = { _id: string; creativeFamilyId: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
@@ -33,7 +32,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   const id = recipeId as Id<"productionRecipes">;
   const recipe = useQuery(api.production_recipes.get, { instanceId, recipeId: id }) as RecipeDetail | null | undefined;
   const versions = useQuery(api.production_recipes.listVersions, { instanceId, recipeId: id }) as Version[] | undefined;
-  const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as Array<{ templateId: string; templateName: string; missionType: string; label: string }> | undefined;
+  const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as RecipeTarget[] | undefined;
   const saveVersion = useMutation(api.production_recipes.saveVersion);
   const setTarget = useMutation(api.production_recipes.setTarget);
   const archive = useMutation(api.production_recipes.archive);
@@ -52,6 +51,11 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   }
   const archived = recipe.status === "archived";
   const shown = (selected !== null ? versions?.find((v) => v.version === selected) : undefined) ?? recipe.latest;
+  // The recipe's own type stays listed even when no installed Template offers it any more.
+  const offered = targets ?? [];
+  const options = offered.some((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType)
+    ? offered
+    : [...offered, { templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }];
   const viewingOld = shown !== null && recipe.latest !== null && shown.version !== recipe.latest.version;
 
   async function toggleArchive() {
@@ -97,26 +101,21 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
         <NativeSelect
           aria-label="Mission type"
           disabled={archived}
-          value={`${recipe.templateId}\u0000${recipe.missionType}`}
+          value={String(options.findIndex((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType))}
           onChange={async (e) => {
-            const [templateId, missionType] = e.target.value.split("\u0000") as [string, string];
+            const target = options[Number(e.target.value)];
+            if (!target) return;
             setError(null);
             try {
-              await setTarget({ instanceId, recipeId: id, templateId, missionType });
+              await setTarget({ instanceId, recipeId: id, templateId: target.templateId, missionType: target.missionType });
             } catch (err) {
               setError(extractConvexErrorMessage(err, "Could not change the Mission type."));
             }
           }}
         >
-          {/* The current type stays listed even if no installed Template offers it any more. */}
-          {[
-            ...(targets ?? []),
-            ...(targets?.some((x) => x.templateId === recipe.templateId && x.missionType === recipe.missionType)
-              ? []
-              : [{ templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }]),
-          ].map((t) => (
-            <option key={`${t.templateId}\u0000${t.missionType}`} value={`${t.templateId}\u0000${t.missionType}`}>
-              {`${t.templateName} · ${t.label}`}
+          {options.map((t, i) => (
+            <option key={`${t.templateId}:${t.missionType}`} value={String(i)}>
+              {recipeTargetLabel(t)}
             </option>
           ))}
         </NativeSelect>
@@ -136,32 +135,30 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
         </section>
       ) : null}
 
-      <div className="grid items-start gap-6">
-        <section aria-label="Version history">
-          <Card className="grid gap-4 px-5 py-4">
-            <SectionTitle icon={History} title="Version history" />
-            <ul className="m-0 grid list-none gap-2 p-0">
-              {(versions ?? []).map((v) => (
-                <li key={v.version}>
-                  <button
-                    type="button"
-                    aria-label={`Version ${v.version}`}
-                    aria-current={shown?.version === v.version ? "true" : undefined}
-                    onClick={() => setSelected(v.version)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-surface-raised",
-                      shown?.version === v.version && "bg-surface-raised",
-                    )}
-                  >
-                    <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary tabular-nums">{`v${v.version}`}</span>
-                    <span className="text-muted-foreground tabular-nums">{new Date(v.createdAt).toISOString().slice(0, 10)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </section>
-      </div>
+      <section aria-label="Version history">
+        <Card className="grid gap-4 px-5 py-4">
+          <SectionTitle icon={History} title="Version history" />
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {(versions ?? []).map((v) => (
+              <li key={v.version}>
+                <button
+                  type="button"
+                  aria-label={`Version ${v.version}`}
+                  aria-current={shown?.version === v.version ? "true" : undefined}
+                  onClick={() => setSelected(v.version)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left text-sm transition-colors hover:bg-surface-raised",
+                    shown?.version === v.version && "bg-surface-raised",
+                  )}
+                >
+                  <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary tabular-nums">{`v${v.version}`}</span>
+                  <span className="text-muted-foreground tabular-nums">{new Date(v.createdAt).toISOString().slice(0, 10)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </section>
 
       <ProductionRecipeFormDialog
         mode="edit"
@@ -205,7 +202,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-function ContentCard({ icon, title, copyText, children }: { icon: LucideIcon; title: string; copyText?: string; children: React.ReactNode }) {
+function ContentCard({ icon, title, copyText, children }: { icon: LucideIcon; title: string; copyText?: string; children: ReactNode }) {
   return (
     <Card aria-label={title} className="grid gap-3 px-5 py-4">
       <div className="flex items-center justify-between gap-3">

@@ -9,11 +9,15 @@ type ManifestLike = {
   missionTypes?: Array<{ type: string; contextProviders?: string[] }>;
 };
 
+/** True when the manifest has this Mission type and it declares the recipe provider. */
+export function declaresRecipeProvider(manifest: ManifestLike, missionType: string): boolean {
+  return manifest.missionTypes?.find((t) => t.type === missionType)?.contextProviders?.includes(RECIPE_PROVIDER) === true;
+}
+
 /** Throws unless the Mission type exists and declares the provider. */
 export function validateRecipeTarget(manifest: ManifestLike, missionType: string): void {
-  const type = manifest.missionTypes?.find((t) => t.type === missionType);
-  if (!type) throw new Error(`Mission type "${missionType}" does not exist in this Template`);
-  if (!type.contextProviders?.includes(RECIPE_PROVIDER)) {
+  if (!manifest.missionTypes?.some((t) => t.type === missionType)) throw new Error(`Mission type "${missionType}" does not exist in this Template`);
+  if (!declaresRecipeProvider(manifest, missionType)) {
     throw new Error(`Mission type "${missionType}" does not declare the ${RECIPE_PROVIDER} provider`);
   }
 }

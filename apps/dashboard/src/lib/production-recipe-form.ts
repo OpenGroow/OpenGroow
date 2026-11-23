@@ -30,3 +30,8 @@ export function contentFromDraft(draft: RecipeDraft): RecipeVersionContent {
     constraints: lines(draft.constraints),
   };
 }
+
+/** A Mission type a recipe can be written for (`production_recipes.listTargets`). */
+export type RecipeTarget = { templateId: string; templateName: string; missionType: string; label: string };
+
+export const recipeTargetLabel = (t: RecipeTarget): string => `${t.templateName} · ${t.label}`;

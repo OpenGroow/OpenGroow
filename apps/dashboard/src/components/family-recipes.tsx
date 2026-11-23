@@ -8,7 +8,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ProductionRecipeFormDialog, type RecipeTarget } from "@/src/components/production-recipe-form-dialog";
+import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
+import { recipeTargetLabel, type RecipeTarget } from "@/src/lib/production-recipe-form";
 
 // The Production Recipes of a Creative Family, on its detail page (issue #143).
 
@@ -20,7 +21,7 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
   const create = useMutation(api.production_recipes.create);
   const targetLabel = (r: RecipeRow) => {
     const t = targets?.find((x) => x.templateId === r.templateId && x.missionType === r.missionType);
-    return t ? `${t.templateName} · ${t.label}` : r.missionType;
+    return t ? recipeTargetLabel(t) : r.missionType;
   };
   const [open, setOpen] = useState(false);
   return (

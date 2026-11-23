@@ -208,7 +208,7 @@ describe("Production Recipes UI", () => {
     const select = container.querySelector('select[data-slot="native-select"]') as HTMLSelectElement;
     expect(select.selectedOptions[0]?.textContent).toBe("Video Demo · Letter video");
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "@example/video-demo\u0000other_video");
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "1");
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(mutations["recipes.setTarget"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1", templateId: "@example/video-demo", missionType: "other_video" });

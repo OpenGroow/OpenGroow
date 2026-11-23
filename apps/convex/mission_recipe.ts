@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
-import { RECIPE_PROVIDER } from "./production_recipe_rules.js";
+import { declaresRecipeProvider, RECIPE_PROVIDER } from "./production_recipe_rules.js";
 import { latestVersion, ownedRecipe } from "./production_recipes.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -46,8 +46,7 @@ export async function buildRecipeSnapshot(
     throw new Error(`This Production Recipe is not written for Mission type "${args.type}" of ${args.templateId}`);
   }
   const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.pinnedVersion);
-  const declares = template?.manifest.missionTypes?.find((t) => t.type === args.type)?.contextProviders?.includes(RECIPE_PROVIDER);
-  if (!declares) {
+  if (!template || !declaresRecipeProvider(template.manifest, args.type)) {
     throw new Error(
       `The Template version this Mission is pinned to${args.pinnedVersion ? ` (${args.pinnedVersion})` : ""} does not declare the ${RECIPE_PROVIDER} provider for "${args.type}"`,
     );

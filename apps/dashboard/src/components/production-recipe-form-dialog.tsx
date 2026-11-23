@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import { contentFromDraft, draftFromVersion, emptyDraft, type RecipeDraft, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
+import { contentFromDraft, draftFromVersion, emptyDraft, recipeTargetLabel, type RecipeDraft, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
 // Create a Production Recipe or edit it (an edit saves the next version).
 // Server refusals are shown as is.
@@ -22,8 +22,6 @@ type Props = {
   targets?: RecipeTarget[];
   onSubmit: (fields: { name: string; description: string; templateId: string; missionType: string } & RecipeVersionContent) => void | Promise<void>;
 };
-
-export type RecipeTarget = { templateId: string; templateName: string; missionType: string; label: string };
 
 export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, targets = [], onSubmit }: Props) {
   const [name, setName] = React.useState("");
@@ -93,7 +91,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
                   <option value="">Choose a Mission type</option>
                   {targets.map((t, i) => (
                     <option key={`${t.templateId}:${t.missionType}`} value={String(i)}>
-                      {`${t.templateName} · ${t.label}`}
+                      {recipeTargetLabel(t)}
                     </option>
                   ))}
                 </NativeSelect>

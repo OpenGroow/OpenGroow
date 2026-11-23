@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { FamilyMoreMenu } from "@/src/components/family-more-menu";
 import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
+import { useSelection } from "@/src/hooks/use-selection";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
 import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
@@ -70,14 +71,8 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
   const [tab, setTab] = useState<FamilyTab>("sources");
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
   const { removeMany, error: removeError, pending: removing } = useRemoveSources(instanceId);
-  const toggle = (id: string) => setSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-  const stopSelecting = () => {
-    setSelecting(false);
-    setSelected([]);
-  };
   const platformFor = useSourcePlatforms(instanceId);
   useThumbnailRequests(instanceId, results);
 
@@ -112,7 +107,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
               ) : isActiveFamily(family) ? (
                 <AddSourceButton instanceId={instanceId} familyId={familyId} />
               ) : null}
-              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={() => { setTab("sources"); setSelecting(true); }} />
+              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={() => { setTab("sources"); startSelecting(); }} />
             </div>
           }
         />

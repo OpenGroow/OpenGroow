@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { useSelection } from "@/src/hooks/use-selection";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -15,7 +16,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 import { NewFamilyDialog } from "@/src/components/creative-family-actions";
 import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
-import { sourceCountLabel } from "@/src/lib/creative-library";
+import { isActiveFamily, sourceCountLabel } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
 // the mechanic its Sources share. Read-only here; built from the Sources page blocks.
@@ -43,19 +44,13 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
   const [sort, setSort] = useState<Sort>("most");
   const [search, setSearch] = useState("");
   const families = useQuery(api.creative_families.list, { instanceId }) as FamilyRow[] | undefined;
-  const [selecting, setSelecting] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
+  const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
   const [merging, setMerging] = useState(false);
   const [creating, setCreating] = useState(false);
-  const toggle = (id: string) => setSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-  const stopSelecting = () => {
-    setSelecting(false);
-    setSelected([]);
-  };
 
   const needle = search.trim().toLowerCase();
   // Archived families (merged away or archived) are not listed.
-  const activeFamilies = (families ?? []).filter((family) => family.status === "active");
+  const activeFamilies = (families ?? []).filter(isActiveFamily);
   const visible = activeFamilies
     .filter((family) => needle === "" || family.name.toLowerCase().includes(needle))
     .sort((a, b) => (sort === "most" ? b.sourceCount - a.sourceCount : a.sourceCount - b.sourceCount));
@@ -87,7 +82,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
                   <Ellipsis />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setSelecting(true)}>
+                  <DropdownMenuItem onClick={startSelecting}>
                     <CheckSquare />
                     Select
                   </DropdownMenuItem>
