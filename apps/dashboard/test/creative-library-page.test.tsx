@@ -180,18 +180,19 @@ describe("CreativeLibraryContent", () => {
       makeFamily({ _id: "c", name: "Gamma", sourceCount: 2, status: "archived" }),
     ];
 
-    it("keeps Select and Unclassified Sources in the more-actions menu", async () => {
+    it("keeps Select and New family in the more-actions menu", async () => {
       await render(FAMILIES);
       const headerButtons = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent);
       expect(headerButtons).not.toContain("Select");
-      expect(headerButtons).not.toContain("Unclassified Sources");
+      expect(headerButtons).not.toContain("New family");
+      expect(document.body.textContent).toContain("Unclassified Sources");
       const trigger = document.querySelector('[aria-label="More actions"]')!;
       await act(async () => {
         for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
           trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
         }
       });
-      expect(Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual(["Select", "Unclassified Sources"]);
+      expect(Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual(["Select", "New family"]);
     });
 
     it("shows no checkbox until Select is chosen, then only on active families", async () => {

@@ -6,14 +6,14 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { CheckSquare, Ellipsis, Inbox } from "lucide-react";
+import { CheckSquare, Ellipsis, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLinkItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
-import { NewFamilyButton } from "@/src/components/creative-family-actions";
+import { NewFamilyDialog } from "@/src/components/creative-family-actions";
 import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
 import { sourceCountLabel } from "@/src/lib/creative-library";
 
@@ -46,6 +46,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [merging, setMerging] = useState(false);
+  const [creating, setCreating] = useState(false);
   const toggle = (id: string) => setSelected((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   const stopSelecting = () => {
     setSelecting(false);
@@ -68,6 +69,9 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
         description="The mechanics your Sources share, grouped into Creative Families."
         action={
           <div className="flex items-center gap-3">
+            <Button variant="outline" nativeButton={false} render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
+              Unclassified Sources
+            </Button>
             {selecting ? (
               <>
                 <Button type="button" disabled={selectedFamilies.length < 2} onClick={() => setMerging(true)}>
@@ -87,14 +91,13 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
                     <CheckSquare />
                     Select
                   </DropdownMenuItem>
-                  <DropdownMenuLinkItem render={<Link href={`/projects/${encodeURIComponent(instanceId)}/library/unclassified`} />}>
-                    <Inbox />
-                    Unclassified Sources
-                  </DropdownMenuLinkItem>
+                  <DropdownMenuItem onClick={() => setCreating(true)}>
+                    <Plus />
+                    New family
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <NewFamilyButton instanceId={instanceId} />
           </div>
         }
       />
@@ -134,6 +137,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
           )}
         </section>
       )}
+      <NewFamilyDialog instanceId={instanceId} open={creating} onOpenChange={setCreating} />
       {merging ? (
         <MergeFamiliesDialog
           instanceId={instanceId}

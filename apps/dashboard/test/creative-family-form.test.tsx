@@ -61,6 +61,13 @@ describe("create and edit a Creative Family", () => {
     const button = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.trim() === label);
     await act(async () => button?.click());
   };
+  const openFamilyMenuItem = async (label: string) => {
+    await act(async () => {
+      const trigger = document.querySelector('[aria-label="More actions"]')!;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) trigger.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
+    await act(async () => (Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === label) as HTMLElement).click());
+  };
   const fill = async (selector: string, value: string, proto: object) => {
     const field = document.body.querySelector(selector) as HTMLInputElement;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
@@ -77,7 +84,7 @@ describe("create and edit a Creative Family", () => {
 
   it("creates a family from the library, even when there is none yet", async () => {
     await act(async () => root.render(<CreativeLibraryContent instanceId="instance-1" />));
-    await press("New family");
+    await openFamilyMenuItem("New family");
     await fill("#family-name", "  Silent Reaction ", HTMLInputElement.prototype);
     await fill("#family-description", "Close-up reaction", HTMLTextAreaElement.prototype);
     await submit();
@@ -88,7 +95,7 @@ describe("create and edit a Creative Family", () => {
   it("shows the refusal and keeps the dialog open", async () => {
     createMock.mockRejectedValue(new Error('[Request ID: x] Server Error\nUncaught Error: A Creative Family named "Reaction" already exists\n    at handler'));
     await act(async () => root.render(<CreativeLibraryContent instanceId="instance-1" />));
-    await press("New family");
+    await openFamilyMenuItem("New family");
     await fill("#family-name", "Reaction", HTMLInputElement.prototype);
     await fill("#family-description", "d", HTMLTextAreaElement.prototype);
     await submit();
