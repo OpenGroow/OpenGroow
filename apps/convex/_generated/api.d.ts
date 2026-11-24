@@ -179,6 +179,8 @@ import type * as source_scoring from "../source_scoring.js";
 import type * as source_thumbnails from "../source_thumbnails.js";
 import type * as sources from "../sources.js";
 import type * as sources_social from "../sources_social.js";
+import type * as strategic_review_rules from "../strategic_review_rules.js";
+import type * as strategic_reviews from "../strategic_reviews.js";
 import type * as template_install_local from "../template_install_local.js";
 import type * as template_manifest_contract from "../template_manifest_contract.js";
 import type * as template_mcp_overrides from "../template_mcp_overrides.js";
@@ -377,6 +379,8 @@ declare const fullApi: ApiFromModules<{
   source_thumbnails: typeof source_thumbnails;
   sources: typeof sources;
   sources_social: typeof sources_social;
+  strategic_review_rules: typeof strategic_review_rules;
+  strategic_reviews: typeof strategic_reviews;
   template_install_local: typeof template_install_local;
   template_manifest_contract: typeof template_manifest_contract;
   template_mcp_overrides: typeof template_mcp_overrides;
