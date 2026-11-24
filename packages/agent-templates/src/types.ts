@@ -1,6 +1,7 @@
 import type { MachineToolInstall } from "./machine-tool";
 import type { PublishDeclaration } from "./publish-declaration";
 import type { AnalyticsDeclaration } from "./analytics-declaration";
+import type { DefaultScheduleDeclaration } from "./default-schedule";
 export type McpServerConfig = {
   name: string;
   transport: string;
@@ -12,6 +13,12 @@ export type McpServerConfig = {
   /** Convex-only: extra headers sent to the MCP server from Convex. */
   headers?: Record<string, string>;
   callTimeout?: number;
+  /**
+   * Marks the Internal MCP (ADR-080): the server OpenGroow serves itself. Lists
+   * the tools this Template may call. The Template holds no URL (`url` is "" once
+   * validated): OpenGroow derives it from the deployment.
+   */
+  internal?: { tools: string[] };
 };
 
 /**
@@ -420,6 +427,11 @@ export type MissionType = {
    * Mission type is not measured.
    */
   analytics?: AnalyticsDeclaration;
+  /**
+   * Cadence of the Schedule OpenGroow creates for this Mission type when the Agent is first
+   * activated. The user can change or delete it. Absent: no Schedule is created.
+   */
+  defaultSchedule?: DefaultScheduleDeclaration;
 };
 
 /** How a human resolves a Template-declared Mission blocker. */

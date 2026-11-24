@@ -65,6 +65,48 @@ export const create = mutation({
   },
 });
 
+// Default Schedules a Template declares (`missionTypes[].defaultSchedule`), created at
+// activation. A Mission type that already has a Schedule for this Agent is left alone, so
+// reactivating never duplicates one.
+export const createDefaults = internalMutation({
+  args: {
+    ownerId: v.string(),
+    instanceId: v.string(),
+    templateId: v.string(),
+    timezone: v.string(),
+    defaults: v.array(v.object({ type: v.string(), payload: v.any(), frequency: frequencyV })),
+  },
+  handler: async (ctx, args) => {
+    const { ownerId } = args;
+    const existing = await ctx.db
+      .query("schedules")
+      .withIndex("by_instance_template", (q) => q.eq("instanceId", args.instanceId).eq("templateId", args.templateId))
+      .collect();
+    const now = Date.now();
+    for (const entry of args.defaults) {
+      if (existing.some((schedule) => schedule.type === entry.type)) continue;
+      const frequency = entry.frequency as Frequency;
+      await ctx.db.insert("schedules", {
+        ownerId,
+        instanceId: args.instanceId,
+        templateId: args.templateId,
+        type: entry.type,
+        payload: entry.payload,
+        unit: frequency.unit,
+        ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
+        ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
+        hour: frequency.hour,
+        minute: frequency.minute,
+        timezone: args.timezone,
+        status: "active",
+        nextRunAt: computeNextRunAt(frequency, args.timezone, now),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
 export const pause = mutation({
   args: { scheduleId: v.id("schedules") },
   handler: async (ctx, args) => {
@@ -93,6 +135,28 @@ export const resume = mutation({
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
     await ctx.db.patch(args.scheduleId, { status: "active", nextRunAt, updatedAt: now });
+  },
+});
+
+// Changes the cadence of a Schedule. The next run is recomputed from now; a paused Schedule stays paused.
+export const updateFrequency = mutation({
+  args: { scheduleId: v.id("schedules"), frequency: frequencyV },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    const frequency = args.frequency as Frequency;
+    const now = Date.now();
+    await ctx.db.patch(args.scheduleId, {
+      unit: frequency.unit,
+      dayOfWeek: frequency.unit === "weekly" ? frequency.dayOfWeek : undefined,
+      dayOfMonth: frequency.unit === "monthly" ? frequency.dayOfMonth : undefined,
+      hour: frequency.hour,
+      minute: frequency.minute,
+      nextRunAt: computeNextRunAt(frequency, schedule.timezone, now),
+      updatedAt: now,
+    });
   },
 });
 

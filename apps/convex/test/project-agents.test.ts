@@ -53,6 +53,7 @@ const modules = {
   "../project_agents.ts": () => import("../project_agents.js"),
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
   "../runs.ts": () => import("../runs.js"),
+  "../schedules.ts": () => import("../schedules.js"),
   "../runtime_commands_node.ts": () => import("../runtime_commands_node.js"),
 };
 
@@ -1448,6 +1449,44 @@ describe("activateProjectAgent", () => {
     const commands = await t.run(async (ctx) => ctx.db.query("commands").collect());
     const mergeCommand = commands.find((c) => c.type === "runtime.mcp.servers.merge");
     expect(mergeCommand).toBeUndefined();
+  });
+
+  it("creates the default Schedule a Template declares, once, in the user's timezone", async () => {
+    const REPORTER_ID = "@example/reporter";
+    const t = convexTest(schema, modules);
+    const waitForRuntimeEvent = await getWaitForRuntimeEvent();
+    await seedInstance(t);
+    const reporter = fixtureTemplate(REPORTER_ID, {
+      visibility: "production",
+      missionTypes: [{ type: "report", label: "Report", payload: "{}", agentsMd: "report.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
+    });
+    reporter.missionAgentsMd = { report: "# Report\n" };
+    const restore = installTemplateRegistry([INSTANCE_ID], [reporter]);
+
+    waitForRuntimeEvent
+      .mockResolvedValueOnce({
+        status: 200, found: true, type: RUNTIME_WORKSPACE_CREATE_RESULT,
+        payload: { ok: true, commandId: "cmd-1", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-reporter", label: REPORTER_ID, absolutePath: "/home/node/.openclaw/workspace-ws-reporter" } },
+      })
+      .mockResolvedValueOnce({
+        status: 200, found: true, type: RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT,
+        payload: { ok: true, commandId: "cmd-3", instanceId: INSTANCE_ID, data: { agentId: REPORTER_ID, registered: true, configured: false } },
+      });
+    addFileDeleteMocks(waitForRuntimeEvent, "ws-reporter");
+    waitForRuntimeEvent
+      .mockResolvedValueOnce(fileWriteResult("ws-reporter", "AGENTS.md"))
+      .mockResolvedValueOnce(fileWriteResult("ws-reporter", "report.md"));
+    try {
+      const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.addProjectAgent, {
+        instanceId: INSTANCE_ID, templateId: REPORTER_ID, timezone: "Europe/Paris",
+      });
+      expect(result.status).toBe("active");
+      const rows = await t.run((ctx) => ctx.db.query("schedules").collect());
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ templateId: REPORTER_ID, type: "report", unit: "weekly", dayOfWeek: 1, timezone: "Europe/Paris", status: "active" });
+    } finally {
+      restore();
+    }
   });
 
   it("rejects development-only template activation unless demo agents are enabled", async () => {

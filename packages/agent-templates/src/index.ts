@@ -1,8 +1,10 @@
+import { internalMcpProblem } from "./internal-mcp";
 import type { ActivationBodyNode, AgentManifest, AgentTemplate, McpServerConfig, RequirementField } from "./types";
 import { machineToolInstallProblem } from "./machine-tool";
 import { deriveConfigIdKey } from "./activation-engine";
 import { flattenRequirementFields, labelTokenKeys } from "./requirements";
 import { publishDeclarationProblem } from "./publish-declaration";
+import { defaultScheduleProblem } from "./default-schedule";
 import { analyticsDeclarationProblem, analyticsDeclarationWarning } from "./analytics-declaration";
 import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./source-declarations";
 import { validateJobTypeDeclarations } from "./job-declarations";
@@ -80,6 +82,7 @@ export {
   type OnPublishedPlaceholder,
   type PublishableKind,
 } from "./publish-declaration";
+export type { DefaultScheduleDeclaration } from "./default-schedule";
 export { analyticsDeclarationFor, DEFAULT_ANALYTICS_COLLECT_DAYS, type AnalyticsDeclaration } from "./analytics-declaration";
 export { OFFICIAL_SCOPE } from "./official-scope";
 export { openClawAgentSlug } from "./openclaw-agent-slug";
@@ -200,7 +203,7 @@ function isValidMcpServerConfig(raw: unknown): raw is McpServerConfig {
   return (
     typeof s.name === "string" &&
     typeof s.transport === "string" &&
-    typeof s.url === "string" &&
+    (typeof s.url === "string" || s.internal !== undefined) &&
     (s.activationUrl === undefined || typeof s.activationUrl === "string") &&
     (s.publicBaseUrl === undefined || typeof s.publicBaseUrl === "string") &&
     (s.headers === undefined ||
@@ -465,6 +468,11 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
     return { ok: false, reason: "one or more entries in 'mcpServers' have invalid or missing fields (required: name, transport, url)" };
   }
 
+  const internalProblem = internalMcpProblem(m.mcpServers as Record<string, unknown>[]);
+  if (internalProblem) return { ok: false, reason: internalProblem };
+  // The Template holds no URL for the Internal MCP: normalise so `url` stays a string.
+  m.mcpServers = (m.mcpServers as McpServerConfig[]).map((server) => (server.internal ? { ...server, url: "" } : server));
+
   const visibility = m.visibility;
   if (visibility !== undefined && visibility !== "production" && visibility !== "development") {
     return { ok: false, reason: `invalid 'visibility' value ${JSON.stringify(visibility)} — must be "production" or "development"` };
@@ -518,6 +526,8 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         (m.mcpServers as McpServerConfig[]).map((server) => server.name),
       );
       if (problem) return { ok: false, reason: problem };
+      const scheduleProblem = defaultScheduleProblem(entry.defaultSchedule, `missionTypes[${JSON.stringify(entry.type)}]`);
+      if (scheduleProblem) return { ok: false, reason: scheduleProblem };
       const analyticsProblem = analyticsDeclarationProblem(
         entry.analytics,
         `missionTypes[${JSON.stringify(entry.type)}]`,
@@ -1085,3 +1095,4 @@ export function isTemplateVisible(
  * `@opengroow` scope.
  */
 export const SOURCE_AGENT_TEMPLATE_ID = "@opengroow/source";
+export { INTERNAL_MCP_TOOL_NAMES, isInternalMcpToolName, type InternalMcpToolName } from "./internal-mcp";

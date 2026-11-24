@@ -48,6 +48,11 @@ type InstanceAgentsPageProps = {
   selfHost?: boolean;
 };
 
+/** The default Schedules of a Template are created in the user's own timezone. */
+function browserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 export function InstanceAgentsPage({ params, selfHost = false }: InstanceAgentsPageProps) {
   const { instanceId } = use(params);
   const decodedInstanceId = decodeURIComponent(instanceId);
@@ -95,14 +100,14 @@ export function InstanceAgentsContent({
 
   async function handleAdd(templateId: string, userConfig: Record<string, string>) {
     if (!runtimeInstanceId) throw new Error("This Project's runtime is not ready yet.");
-    const result = await addAgent({ instanceId: runtimeInstanceId, templateId, userConfig });
+    const result = await addAgent({ instanceId: runtimeInstanceId, templateId, userConfig, timezone: browserTimezone() });
     if (result.status === "error") throw new Error(result.errorMessage);
   }
 
   function handleActivate(templateId: string, userConfig?: Record<string, string>) {
     if (!runtimeInstanceId) return;
     clearError(templateId);
-    void activate({ instanceId: runtimeInstanceId, templateId, userConfig }).then((result) => {
+    void activate({ instanceId: runtimeInstanceId, templateId, userConfig, timezone: browserTimezone() }).then((result) => {
       if (result.status === "error") {
         setError(templateId, result.errorMessage);
       }
@@ -201,6 +206,7 @@ export function InstanceAgentsContent({
               instanceId: runtimeInstanceId,
               templateId: pendingActivationCard.templateId,
               userConfig,
+              timezone: browserTimezone(),
             });
             if (result.status === "error") {
               setError(pendingActivationCard.templateId, result.errorMessage);

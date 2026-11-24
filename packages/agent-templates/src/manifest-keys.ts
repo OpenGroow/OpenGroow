@@ -62,7 +62,7 @@ type KeysOf<T> = T extends unknown ? keyof T & string : never;
 const keySetOf = <T>(names: Record<KeysOf<T>, true>): Set<string> => new Set(Object.keys(names));
 
 const MCP_SERVER = keySetOf<McpServerConfig>({
-  name: true, transport: true, url: true, activationUrl: true, publicBaseUrl: true, headers: true, callTimeout: true,
+  name: true, transport: true, url: true, activationUrl: true, publicBaseUrl: true, headers: true, callTimeout: true, internal: true,
 });
 const SELECT_OPTION = keySetOf<SelectRequirementOption>({ value: true, label: true });
 const LEAF_REQUIREMENT = keySetOf<LeafRequirementField>({
@@ -72,7 +72,7 @@ const GROUP_REQUIREMENT = keySetOf<Extract<RequirementField, { type: "group" }>>
 const SKILL = keySetOf<TemplateSkillDeclaration>({ source: true, spec: true, version: true });
 const MISSION_TYPE = keySetOf<MissionType>({
   type: true, label: true, description: true, payload: true, agentsMd: true, fields: true, sessionDurationMs: true,
-  review: true, blockers: true, contextProviders: true, publish: true, analytics: true,
+  review: true, blockers: true, contextProviders: true, publish: true, analytics: true, defaultSchedule: true,
 });
 const PAYLOAD_FIELD = keySetOf<MissionPayloadField>({
   key: true, label: true, required: true, type: true, options: true, min: true, max: true,

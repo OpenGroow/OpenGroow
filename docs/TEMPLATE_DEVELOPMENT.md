@@ -58,6 +58,22 @@ Each `bin` entry becomes a launcher in `~/.opengroow/bin`, which the paired node
 
 Try it on a machine with `pnpm template:machine-tool <package folder> [--tool <id>] [--uninstall]`. It prints the source, sha256 and exact commands, asks `[y/N]`, and leaves the machine unchanged on refusal or failure. Design: ADR-067.
 
+## Reading OpenGroow's own data: the Internal MCP (ADR-080)
+
+An Agent reads OpenGroow data (read-only) through the MCP server OpenGroow serves from Convex. Declare it among `mcpServers` with the tools you may call, and no URL:
+
+```yaml
+mcpServers:
+  - name: opengroow
+    transport: streamable-http
+    internal:
+      tools: [list_mission_types]
+```
+
+- Validation and installation refuse a `url`, `headers`, another transport, an unknown or duplicated tool, an empty list, and any other server next to it (the Agent token is written as the Authorization header of every declared server).
+- OpenGroow derives the URL from the deployment (`CONVEX_SITE_URL`, so it follows the published Convex site port) and generates the Agent token at each activation. The token only works while the Agent has a Run `running`, only for its own Project, and only for the declared tools. It never reaches the model.
+- Tools: `list_mission_types` (the Mission types the Project can activate, with descriptions), `get_analytics_summary` (`days?`: Publications aggregated by adapter, platform, format and Mission type), `list_publications` (`days?`, `limit?`: each Publication with its latest measurements and a status `data`, `no_data` or `unavailable`), `list_recent_missions` (`limit?`: Missions with status and outcome) and `get_brand_core`. The catalog is `apps/convex/internal_mcp/catalog.ts`; to add a tool, add its name to `INTERNAL_MCP_TOOL_NAMES` (`packages/agent-templates/src/internal-mcp.ts`) and its definition to the catalog.
+
 ## Source platform: logo, dedupe key and thumbnail (ADR-077)
 
 A Source declaration in `sources[]` may carry a `platform`. Without it the Source has no logo and no thumbnail, and two captures of one post are two Sources unless their pages are the same.
@@ -117,6 +133,19 @@ Only the forms check `fields`; the backend does not. A Mission created another w
 A `select` field is a good fit for a small option (a platform, a tone). When the variants do not share the same fields or the same creative instructions (a video with a hook and one without, where "Text on the Hook" means nothing for the second), declare **one Mission type per variant** instead of a `format` field. Fields cannot depend on each other's value, and a Production Recipe is written for one Mission type of one Template: it has no way to say "only for this format".
 
 Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. To offer Production Recipes on a type, list `production-recipe` in its `contextProviders`; the Create Mission form then shows a "Production Recipe" choice, hidden while the Project has no active recipe for that type.
+
+## A default Schedule
+
+A Mission type may declare the cadence of the Schedule OpenGroow creates for it when the Agent is activated:
+
+```yaml
+missionTypes:
+  - type: weekly_report
+    payload: '{}'
+    defaultSchedule: { unit: weekly, dayOfWeek: 1, hour: 8, minute: 0 }
+```
+
+`unit` is `daily`, `weekly` (needs `dayOfWeek`, 0-6) or `monthly` (needs `dayOfMonth`, 1-31); `hour` 0-23, `minute` 0-59. The Schedule uses the Mission type's `payload` and the user's own timezone (the dashboard sends the browser's). It is created once: a Mission type that already has a Schedule for the Agent keeps it, so reactivating does not duplicate it. The user can change its cadence, pause it, delete it or press Run now on the Schedules page.
 
 ## Publishing from a Template: the Publishable guide (ADR-069)
 
