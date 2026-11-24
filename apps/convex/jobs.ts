@@ -12,6 +12,8 @@ import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-peri
 import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 
 const DEFAULT_FREQUENCY: Frequency = { unit: "daily", hour: 6, minute: 0 };
+// A Strategic Review learns from accumulated results: every 7 days (Monday), not every day.
+const STRATEGIC_REVIEW_DEFAULT_FREQUENCY: Frequency = { unit: "weekly", dayOfWeek: 1, hour: 6, minute: 0 };
 const DEFAULT_TIMEZONE = "UTC";
 
 const JOB_DISPLAY_ORDER: Record<string, number> = {
@@ -146,6 +148,7 @@ export async function syncJobsWithAgentStatus(
       continue;
     }
 
+    const frequency = declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? STRATEGIC_REVIEW_DEFAULT_FREQUENCY : DEFAULT_FREQUENCY;
     await ctx.db.insert("jobs", {
       ownerId,
       instanceId: agent.instanceId,
@@ -154,11 +157,12 @@ export async function syncJobsWithAgentStatus(
       state: "active",
       config: declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? { analysisDays: DEFAULT_ANALYSIS_DAYS } : {},
       runtime: declaration.type === "source_ingestion" ? { cursorAt: now } : {},
-      unit: DEFAULT_FREQUENCY.unit,
-      hour: DEFAULT_FREQUENCY.hour,
-      minute: DEFAULT_FREQUENCY.minute,
+      unit: frequency.unit,
+      ...(frequency.unit === "weekly" ? { dayOfWeek: frequency.dayOfWeek } : {}),
+      hour: frequency.hour,
+      minute: frequency.minute,
       timezone: DEFAULT_TIMEZONE,
-      nextRunAt: computeNextRunAt(DEFAULT_FREQUENCY, DEFAULT_TIMEZONE, now),
+      nextRunAt: computeNextRunAt(frequency, DEFAULT_TIMEZONE, now),
       createdAt: now,
       updatedAt: now,
     });
