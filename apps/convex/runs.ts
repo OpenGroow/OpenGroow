@@ -339,7 +339,7 @@ export const markCompleted = internalMutation({
     // blocked_external carries no artifact either (only an external link).
     const artifactPatch =
       "artifact" in args.result && args.result.artifact != null
-        ? { lastArtifact: args.result.artifact }
+        ? { lastArtifact: args.result.artifact, lastResultRunId: args.runId }
         : {};
 
     await ctx.db.patch(parent.missionId, {

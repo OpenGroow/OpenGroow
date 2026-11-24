@@ -424,6 +424,11 @@ export default defineSchema({
     autoPublish: v.optional(v.boolean()),
     lastResult: v.optional(runResultV),
     lastArtifact: v.optional(artifactV),
+    // The Run that produced the current output (`lastArtifact`), written in the
+    // same mutation as the artifact (ADR-084). A later Run that carries no
+    // artifact (failed, blocked) leaves it alone. Absent on Missions that
+    // predate it: no backfill, no "latest Run" fallback.
+    lastResultRunId: v.optional(v.id("runs")),
     // Non-terminal value produced by an Intermediate External Job's
     // completion (ADR-026): `{ jobType, output }`. Replaced (never
     // accumulated) on each resumption; injected into the next Run's
