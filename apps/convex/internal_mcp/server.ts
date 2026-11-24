@@ -7,8 +7,8 @@ import { hasRunInProgress } from "./run_liveness.js";
 
 /**
  * Everything the Internal MCP decides, in one transaction (ADR-080): who the
- * token belongs to, whether that Agent has a Run in progress, which tools its
- * Template declares, and the tool itself. The HTTP layer only speaks JSON-RPC.
+ * token belongs to, which tools its Template declares, whether that Agent has a Run in
+ * progress (to call a tool, not to list them), and the tool itself. The HTTP layer only speaks JSON-RPC.
  */
 export type InternalMcpOutcome =
   | { kind: "refused"; status: 401 | 403; message: string }
@@ -47,10 +47,9 @@ export const handle = internalQuery({
     if (!agent) return UNAUTHORIZED;
     if (args.method === "initialize") return { kind: "ok" };
 
-    if (!(await hasRunInProgress(ctx, agent.scope.instanceId, agent.scope.templateId))) {
-      return { kind: "refused", status: 403, message: "The Agent has no Run in progress" };
-    }
-
+    // Discovery needs no Run: the runtime lists the tools when it probes the server before it starts the
+    // Agent (the Run may not be `running` yet) and when it opens a session. It only carries the names,
+    // descriptions and schemas of the tools the Template declares, never any Project data.
     if (args.method === "tools/list") {
       return {
         kind: "tools",
@@ -58,6 +57,11 @@ export const handle = internalQuery({
           .filter(([name]) => agent.declaredTools.has(name))
           .map(([name, tool]) => ({ name, description: tool.description, inputSchema: tool.inputSchema, annotations: { readOnlyHint: true as const } })),
       };
+    }
+
+    // Reading the Project's data is what the Run-only rule protects (ADR-080).
+    if (!(await hasRunInProgress(ctx, agent.scope.instanceId, agent.scope.templateId))) {
+      return { kind: "refused", status: 403, message: "The Agent has no Run in progress" };
     }
 
     const name = args.toolName ?? "";
