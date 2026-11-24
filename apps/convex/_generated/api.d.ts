@@ -180,6 +180,7 @@ import type * as source_thumbnails from "../source_thumbnails.js";
 import type * as sources from "../sources.js";
 import type * as sources_social from "../sources_social.js";
 import type * as strategic_review_rules from "../strategic_review_rules.js";
+import type * as strategic_review_jobs from "../strategic_review_jobs.js";
 import type * as strategic_reviews from "../strategic_reviews.js";
 import type * as template_install_local from "../template_install_local.js";
 import type * as template_manifest_contract from "../template_manifest_contract.js";
@@ -380,6 +381,7 @@ declare const fullApi: ApiFromModules<{
   sources: typeof sources;
   sources_social: typeof sources_social;
   strategic_review_rules: typeof strategic_review_rules;
+  strategic_review_jobs: typeof strategic_review_jobs;
   strategic_reviews: typeof strategic_reviews;
   template_install_local: typeof template_install_local;
   template_manifest_contract: typeof template_manifest_contract;

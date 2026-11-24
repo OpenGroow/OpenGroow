@@ -18,7 +18,7 @@ const reject = (reason: Extract<PersistResult, { ok: false }>["reason"], message
 const REFERENCE_TABLES = { familyIds: "creativeFamilies", recipeIds: "productionRecipes", publicationIds: "publications" } as const;
 
 /** The latest persisted Review of a Project, the current Strategic Memory. */
-async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"strategicReviews"> | null> {
+export async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"strategicReviews"> | null> {
   return await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", instanceId)).order("desc").first();
 }
 

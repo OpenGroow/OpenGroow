@@ -146,6 +146,17 @@ const genericInstanceRuntimeFields = {
 };
 
 const runSharedFields = {
+  // Strategic Review Runs only (ADR-085, issue #166): the analysis period and
+  // the base Review pinned by Convex when the Run starts, never taken from the
+  // Agent. Written once at creation (a retried Run copies them), so every
+  // dispatch of the Run, and its result handler, read the same values.
+  strategicReview: v.optional(
+    v.object({
+      periodStart: v.number(),
+      periodEnd: v.number(),
+      baseReviewId: v.optional(v.id("strategicReviews")),
+    }),
+  ),
   // Set on the execution a SourceJob resumes after an enrichment (issue
   // #533): the awaiting Run whose `intermediateResult` (the external job's
   // output, or its failure) it receives in context.md.
