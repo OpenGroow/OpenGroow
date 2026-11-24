@@ -1,5 +1,6 @@
 import type { InternalMcpToolName } from "@opengroow/agent-templates";
 import { DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS, listPublicationReadings, resolveWindow, summarizeProject } from "../analytics_summary.js";
+import { summarizeByRecipe } from "../analytics_recipe.js";
 import { recipeCatalog } from "../recipe_usage.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
@@ -128,9 +129,23 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   get_analytics_summary: {
     description:
-      "How the Project's Publications performed, aggregated by Analytics Adapter, platform, format and Mission type: counters summed, derived levels recomputed from the sums, plus the direction (better: higher or lower) of each metric. A group with status no_data is linked to analytics but not read yet; `unavailable` lists Publications whose channel has no Analytics Adapter, which is not the same as no data.",
-    inputSchema: { type: "object", properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES, platform: PLATFORM_PROPERTY }, additionalProperties: false },
-    run: (ctx, scope, args) => summarizeProject(ctx, scope.instanceId, windowOf(args), { platform: typeof args.platform === "string" ? args.platform : undefined }),
+      "How the Project's Publications performed, aggregated by Analytics Adapter, platform, format and Mission type: counters summed, derived levels recomputed from the sums, plus the direction (better: higher or lower) of each metric. With groupBy recipe the figures are grouped by Production Recipe (read through the Mission's Recipe Snapshot): per recipe, its versions, last publication date, Publication age, then per adapter and platform each metric's observations, sum (counters), mean and median, and for a ratio the value recomputed from the sums and the mean and median of per-Publication ratios; a missing metric is absent, never zero, and unattributed Publications are counted apart. recipeId narrows to one recipe. A group with status no_data is linked to analytics but not read yet; `unavailable` lists Publications whose channel has no Analytics Adapter, which is not the same as no data.",
+    inputSchema: { type: "object", properties: {
+        days: DAYS_PROPERTY,
+        ...RANGE_PROPERTIES,
+        platform: PLATFORM_PROPERTY,
+        groupBy: { type: "string", enum: ["recipe"], description: "Group by Production Recipe instead of platform, format and Mission type." },
+        recipeId: { type: "string", description: 'Only this Production Recipe (needs groupBy "recipe").' },
+      },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => {
+      const platform = typeof args.platform === "string" ? args.platform : undefined;
+      if (args.groupBy === "recipe") return summarizeByRecipe(ctx, scope.instanceId, windowOf(args), { platform, recipeId: typeof args.recipeId === "string" ? args.recipeId : undefined });
+      if (args.groupBy !== undefined) throw new Error('groupBy must be "recipe".');
+      if (args.recipeId !== undefined) throw new Error('recipeId needs groupBy "recipe".');
+      return summarizeProject(ctx, scope.instanceId, windowOf(args), { platform });
+    },
   },
   list_publications: {
     description:

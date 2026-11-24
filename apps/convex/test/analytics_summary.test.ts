@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
-import { summarizeProject, SCAN_LIMIT } from "../analytics_summary";
+import { summarizeProject, SCAN_LIMIT, type AnalyticsSummary } from "../analytics_summary";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
@@ -19,6 +19,10 @@ const modules = {
   "../publishers.ts": () => import("../publishers.js"),
   "../instances.ts": () => import("../instances.js"),
 };
+
+/** The default grouping: `groupBy` absent returns the platform/format/type summary. */
+const plain = (owner: { query: (...args: never[]) => unknown }, args: Record<string, unknown>) =>
+  (owner.query as (fn: unknown, a: unknown) => Promise<AnalyticsSummary | null>)(api.analytics_summary.summaryForProject, args);
 
 const INSTANCE_ID = "openclaw-summary";
 const OWNER = { name: "Owner", email: "o@e.com", tokenIdentifier: "test|sum", subject: "sum-owner" };
@@ -38,12 +42,13 @@ async function seed() {
   await owner.mutation(api.publishers.save, { instanceId: INSTANCE_ID, adapter: "postiz", url: "https://postiz.example.com", apiKey: "secret" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My TT", channelService: "tiktok", channelProfile: "me" });
-  const post = (o: { target: string; type: string; kind: string; ageDays?: number; snapshots?: Array<{ adapter?: string; metrics: Record<string, number>; takenAt?: number }> }) =>
+  const post = (o: { target: string; type: string; kind: string; ageDays?: number; recipe?: { id: unknown; name?: string; version?: number }; snapshots?: Array<{ adapter?: string; metrics: Record<string, number>; takenAt?: number }> }) =>
     t.run(async (ctx) => {
       const now = Date.now();
       const publishedAt = now - (o.ageDays ?? 1) * DAY;
       const missionId = await ctx.db.insert("missions", {
         ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@test/social", type: o.type,
+        ...(o.recipe ? { recipeSnapshot: { recipeId: o.recipe.id, recipeName: o.recipe.name ?? "R", version: o.recipe.version ?? 1, instructions: "i", constraints: [] } } : {}),
         payload: { publishTargets: [o.target] }, lastArtifact: { publishable: o.kind === "video" ? { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c" } : { kind: "image", imageUrl: "https://cdn.example.com/i.jpg", caption: "c" } }, status: "approved", createdAt: now, updatedAt: now,
       } as never);
       const publicationId = await ctx.db.insert("publications", {
@@ -60,7 +65,12 @@ async function seed() {
       }
       return publicationId;
     });
-  return { t, owner, post };
+  const recipe = (name: string, status: "active" | "archived" = "active") =>
+    t.run(async (ctx) => {
+      const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: name.toLowerCase(), name: `F ${name}`, description: "d" } as never);
+      return ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name, description: "d", status });
+    });
+  return { t, owner, post, recipe };
 }
 
 describe("analytics summary (issue #112)", () => {
@@ -68,7 +78,7 @@ describe("analytics summary (issue #112)", () => {
     const s = await seed();
     await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 50, likes: 5 }, takenAt: 1 }, { metrics: { views: 100, likes: 10 } }] });
     await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 900, likes: 10 } }] });
-    const summary = await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID });
+    const summary = await plain(s.owner, { instanceId: INSTANCE_ID });
     const postiz = summary!.adapters.find((a) => a.adapter === "postiz-analytics")!;
     expect(postiz.groups).toHaveLength(1);
     expect(postiz.groups[0]).toMatchObject({ platform: "instagram", format: "image", missionType: "make_image", publications: 2, measured: 2, status: "data" });
@@ -87,7 +97,7 @@ describe("analytics summary (issue #112)", () => {
     });
     await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 10, position: 4 } }] });
     await s.post({ target: "tiktok:me", type: "make_video", kind: "video", snapshots: [{ metrics: { views: 7 } }] });
-    const [postiz] = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID }))!.adapters;
+    const [postiz] = (await plain(s.owner, { instanceId: INSTANCE_ID }))!.adapters;
     expect(postiz.metrics.find((m) => m.key === "position")?.better).toBe("lower");
     expect(postiz.groups.map((g) => `${g.platform}/${g.format}/${g.missionType}`).sort()).toEqual(["instagram/image/make_image", "tiktok/video/make_video"]);
   });
@@ -98,10 +108,10 @@ describe("analytics summary (issue #112)", () => {
     await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
     await s.post({ target: "tiktok:me", type: "make_video", kind: "video" });
     await s.post({ target: "instagram:me", type: "make_image", kind: "image", ageDays: 60, snapshots: [{ metrics: { views: 1 } }] });
-    const summary = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID }))!;
+    const summary = (await plain(s.owner, { instanceId: INSTANCE_ID }))!;
     expect(summary.unavailable).toEqual([{ platform: "tiktok", format: "video", missionType: "make_video", publications: 1 }]);
     expect(summary.adapters[0].groups).toMatchObject([{ platform: "instagram", publications: 1, status: "no_data", measured: 0, metrics: {} }]);
-    const wide = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, days: 90 }))!;
+    const wide = (await plain(s.owner, { instanceId: INSTANCE_ID, days: 90 }))!;
     expect(wide.adapters[0].groups[0]).toMatchObject({ publications: 2, measured: 1 });
   });
 
@@ -110,14 +120,14 @@ describe("analytics summary (issue #112)", () => {
     await s.owner.mutation(api.analytics_connections.save, { instanceId: INSTANCE_ID, adapter: "web-analytics", url: "https://stats.example.com", apiKey: "k" });
     await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:me", analyticsAdapter: ["postiz-analytics", "web-analytics"] });
     await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 100 } }, { adapter: "web-analytics", metrics: { views: 5 } }] });
-    const { adapters } = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID }))!;
+    const { adapters } = (await plain(s.owner, { instanceId: INSTANCE_ID }))!;
     expect(adapters.map((a) => [a.adapter, a.groups[0].metrics.views])).toEqual([["postiz-analytics", 100], ["web-analytics", 5]]);
   });
 
   it("returns nothing to a stranger", async () => {
     const s = await seed();
     const stranger = s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" });
-    expect(await stranger.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID })).toBeNull();
+    expect(await plain(stranger, { instanceId: INSTANCE_ID })).toBeNull();
   });
 
   describe("bounded read (issue #153)", () => {
@@ -160,13 +170,13 @@ describe("analytics summary (issue #112)", () => {
         const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name: "R", description: "d", status: "active" });
         await ctx.db.patch(publication.missionId, { recipeSnapshot: { recipeId, recipeName: "R", version: 1, instructions: "i", constraints: [] } });
       });
-      const summary = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID }))!;
+      const summary = (await plain(s.owner, { instanceId: INSTANCE_ID }))!;
       expect(summary.unattributed).toBe(2);
     });
   });
 
   describe("period and platform filter (issue #154)", () => {
-    const q = (s: Awaited<ReturnType<typeof seed>>, args: Record<string, unknown>) => s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, ...args } as never);
+    const q = (s: Awaited<ReturnType<typeof seed>>, args: Record<string, unknown>) => plain(s.owner, { instanceId: INSTANCE_ID, ...args } as never);
 
     it("selects Publications by a number of days, then by a custom range", async () => {
       const s = await seed();
@@ -206,6 +216,116 @@ describe("analytics summary (issue #112)", () => {
       expect((await q(s, { platform: "instagram" }))!.unavailable).toEqual([]);
       expect((await q(s, { platform: "tiktok" }))!.unavailable).toHaveLength(1);
       expect((await q(s, { platform: "tiktok" }))!.adapters).toEqual([]);
+    });
+  });
+
+  describe("grouped by Production Recipe (issue #155)", () => {
+    const q = (s: Awaited<ReturnType<typeof seed>>, args: Record<string, unknown> = {}) =>
+      s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, groupBy: "recipe", ...args } as never) as Promise<any>;
+
+    it("keeps the default output when groupBy is absent", async () => {
+      const s = await seed();
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
+      const summary = (await plain(s.owner, { instanceId: INSTANCE_ID }))!;
+      expect(summary).not.toHaveProperty("recipes");
+      expect(summary.adapters[0].groups).toHaveLength(1);
+    });
+
+    it("reads each recipe through its Mission's snapshot, adapter by adapter with platforms inside, with per-metric statistics", async () => {
+      const s = await seed();
+      const a = await s.recipe("A");
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, version: 1 }, ageDays: 2, snapshots: [{ metrics: { views: 100, likes: 10 } }] });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, version: 2 }, ageDays: 4, snapshots: [{ metrics: { views: 300, likes: 90 } }] });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, version: 2 }, ageDays: 5, snapshots: [{ metrics: { views: 50 } }] });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, version: 2 }, ageDays: 6 });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", ageDays: 1, snapshots: [{ metrics: { views: 9999 } }] });
+      const res = await q(s);
+      expect(res.groupBy).toBe("recipe");
+      expect(res.unattributed).toBe(1);
+      expect(res.recipes).toHaveLength(1);
+      const [r] = res.recipes;
+      expect(r).toMatchObject({ recipeId: a, recipeName: "R", archived: false, publications: 4 });
+      expect(r.versions).toEqual([
+        expect.objectContaining({ version: 1, publications: 1 }),
+        expect.objectContaining({ version: 2, publications: 3 }),
+      ]);
+      expect(r.lastPublishedAt).toBeGreaterThan(Date.now() - 3 * DAY);
+      expect(r.publicationAge.newestMs).toBeGreaterThanOrEqual(2 * DAY);
+      expect(r.publicationAge.oldestMs).toBeGreaterThanOrEqual(6 * DAY);
+      expect(r.adapters).toHaveLength(1);
+      const [ad] = r.adapters;
+      expect(ad).toMatchObject({ adapter: "postiz-analytics", publications: 4, measured: 3 });
+      expect(ad.freshness.newestReadingAt).toBeGreaterThanOrEqual(ad.freshness.oldestReadingAt);
+      expect(ad.platforms).toHaveLength(1);
+      const p = ad.platforms[0];
+      expect(p).toMatchObject({ platform: "instagram", publications: 4, measured: 3 });
+      expect(p.metrics.views).toEqual({ observations: 3, sum: 450, mean: 150, median: 100 });
+      // Two Publications report likes: 10 and 90.
+      expect(p.metrics.likes).toEqual({ observations: 2, sum: 100, mean: 50, median: 50 });
+      // Absent, not zero.
+      expect(p.metrics).not.toHaveProperty("comments");
+      expect(p.metrics).not.toHaveProperty("reach");
+      // Recomputed from the sums (100 / 400), distinct from the mean of per-Publication ratios (10% and 30%).
+      expect(p.metrics.engagement).toEqual({ observations: 2, recomputed: 0.25, meanOfRatios: 0.2, medianOfRatios: 0.2 });
+      expect(ad).not.toHaveProperty("metrics.views");
+    });
+
+    it("does not count an empty reading as measured", async () => {
+      const s = await seed();
+      const a = await s.recipe("A");
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, snapshots: [{ metrics: {} }, { metrics: { unknown: 3 } }] });
+      const [r] = (await q(s)).recipes;
+      expect(r.adapters[0]).toMatchObject({ publications: 1, measured: 0 });
+      expect(r.adapters[0].platforms[0].metrics).toEqual({});
+    });
+
+    it("counts a Publication once per adapter, never totalling adapters", async () => {
+      const s = await seed();
+      const a = await s.recipe("A");
+      await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:me", analyticsAdapter: ["postiz-analytics", "web-analytics"] });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, snapshots: [{ metrics: { views: 10 } }, { adapter: "web-analytics", metrics: { views: 500 } }] });
+      const [r] = (await q(s)).recipes;
+      expect(r.publications).toBe(1);
+      const views = Object.fromEntries(r.adapters.map((x: any) => [x.adapter, x.platforms[0].metrics.views.sum]));
+      expect(views).toEqual({ "postiz-analytics": 10, "web-analytics": 500 });
+    });
+
+    it("lists a Publication with no linked adapter apart, and creates groups only for recipes with Publications in the period", async () => {
+      const s = await seed();
+      const a = await s.recipe("A");
+      const b = await s.recipe("B");
+      await s.recipe("Never used");
+      await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "tiktok:me", analyticsAdapter: [] });
+      await s.post({ target: "tiktok:me", type: "make_video", kind: "video", recipe: { id: a } });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: b }, ageDays: 100 });
+      const res = await q(s, { days: 30 });
+      expect(res.recipes).toHaveLength(1);
+      expect(res.recipes[0]).toMatchObject({ recipeId: a, publications: 1, adapters: [], unavailable: [{ platform: "tiktok", publications: 1 }] });
+    });
+
+    it("keeps the historical identity of an edited or archived recipe", async () => {
+      const s = await seed();
+      const a = await s.recipe("Old name");
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, name: "Old name", version: 1 } });
+      await s.t.run((ctx) => ctx.db.patch(a, { name: "Renamed", status: "archived" }));
+      const [r] = (await q(s)).recipes;
+      expect(r).toMatchObject({ recipeId: a, recipeName: "Old name", archived: true });
+      expect(r.versions[0].version).toBe(1);
+    });
+
+    it("filters by recipe, and another Project's recipe id returns nothing", async () => {
+      const s = await seed();
+      const a = await s.recipe("A");
+      const b = await s.recipe("B");
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a } });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: b } });
+      expect((await q(s, { recipeId: a })).recipes.map((r: any) => r.recipeId)).toEqual([a]);
+      const foreign = await s.t.run(async (ctx) => {
+        const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: "other", slug: "x", name: "X", description: "d" } as never);
+        return ctx.db.insert("productionRecipes", { instanceId: "other", creativeFamilyId, templateId: "@test/social", missionType: "make_image", name: "Z", description: "d", status: "active" });
+      });
+      expect((await q(s, { recipeId: foreign })).recipes).toEqual([]);
+      expect((await q(s, { recipeId: "not-an-id" })).recipes).toEqual([]);
     });
   });
 });
