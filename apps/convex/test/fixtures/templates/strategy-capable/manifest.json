@@ -1,0 +1,14 @@
+{
+  "id": "strategy-capable",
+  "name": "Job-capable fixture",
+  "description": "A fixture that explicitly declares all generic Jobs.",
+  "category": "demo",
+  "mcpServers": [],
+  "sources": [],
+  "jobTypes": [
+    {
+      "type": "strategic_review",
+      "agentsMd": "jobs/strategic-review.md"
+    }
+  ]
+}

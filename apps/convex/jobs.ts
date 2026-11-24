@@ -8,14 +8,19 @@ import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { ownerOfInstance } from "./projects.js";
 import { frequencyV } from "./schedules.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
+import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 
 const DEFAULT_FREQUENCY: Frequency = { unit: "daily", hour: 6, minute: 0 };
+// A Strategic Review learns from accumulated results: every 7 days (Monday), not every day.
+const STRATEGIC_REVIEW_DEFAULT_FREQUENCY: Frequency = { unit: "weekly", dayOfWeek: 1, hour: 6, minute: 0 };
 const DEFAULT_TIMEZONE = "UTC";
 
 const JOB_DISPLAY_ORDER: Record<string, number> = {
   source_ingestion: 0,
   source_scoring: 1,
   source_routing: 2,
+  strategic_review: 3,
 };
 
 function ownerSubjectOf(userId: string): string {
@@ -44,6 +49,7 @@ function jobLabel(type: Doc<"jobs">["type"]): string {
     case "source_ingestion": return "Social source ingestion";
     case "source_scoring": return "Source scoring";
     case "source_routing": return "Source routing";
+    case "strategic_review": return "Strategic review";
     default: return type;
   }
 }
@@ -142,19 +148,21 @@ export async function syncJobsWithAgentStatus(
       continue;
     }
 
+    const frequency = declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? STRATEGIC_REVIEW_DEFAULT_FREQUENCY : DEFAULT_FREQUENCY;
     await ctx.db.insert("jobs", {
       ownerId,
       instanceId: agent.instanceId,
       templateId: agent.templateId,
       type: declaration.type,
       state: "active",
-      config: {},
+      config: declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? { analysisDays: DEFAULT_ANALYSIS_DAYS } : {},
       runtime: declaration.type === "source_ingestion" ? { cursorAt: now } : {},
-      unit: DEFAULT_FREQUENCY.unit,
-      hour: DEFAULT_FREQUENCY.hour,
-      minute: DEFAULT_FREQUENCY.minute,
+      unit: frequency.unit,
+      ...(frequency.unit === "weekly" ? { dayOfWeek: frequency.dayOfWeek } : {}),
+      hour: frequency.hour,
+      minute: frequency.minute,
       timezone: DEFAULT_TIMEZONE,
-      nextRunAt: computeNextRunAt(DEFAULT_FREQUENCY, DEFAULT_TIMEZONE, now),
+      nextRunAt: computeNextRunAt(frequency, DEFAULT_TIMEZONE, now),
       createdAt: now,
       updatedAt: now,
     });
@@ -295,6 +303,8 @@ export const runNow = mutation({
       await ctx.scheduler.runAfter(0, internal.score_jobs.tick, {});
     } else if (job.type === "source_routing") {
       await ctx.scheduler.runAfter(0, internal.source_routing.tick, {});
+    } else if (job.type === STRATEGIC_REVIEW_JOB_TYPE) {
+      await ctx.scheduler.runAfter(0, internal.strategic_review_jobs.tick, {});
     } else {
       throw new Error(`Job type ${job.type} has no executor yet`);
     }

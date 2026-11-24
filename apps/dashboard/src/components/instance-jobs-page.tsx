@@ -10,6 +10,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
 import { Input } from "@/components/ui/input";
+import { analysisDaysOf, isValidAnalysisDays, MAX_ANALYSIS_DAYS, MIN_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
@@ -243,6 +244,8 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   const runNowJob = useMutation(api.jobs.runNow);
   const setReviewMode = useMutation(api.source_routing.setReviewMode);
   const [editing, setEditing] = useState(false);
+  const [editingPeriod, setEditingPeriod] = useState(false);
+  const analysisDays = job.type === "strategic_review" ? analysisDaysOf(job.config) : undefined;
 
   async function toggle(): Promise<void> {
     try {
@@ -313,6 +316,11 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   </span>
                 ) : null}
               </p>
+              {analysisDays !== undefined ? (
+                <p className="m-0 text-sm text-muted-foreground">
+                  Analyzes the last {analysisDays} {analysisDays === 1 ? "day" : "days"}
+                </p>
+              ) : null}
               {reviewRouting ? (
                 <p className="m-0 text-sm text-muted-foreground">
                   Each routing choice waits on the Sources page until you press Produce.
@@ -339,6 +347,12 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   <CalendarDays />
                   Edit recurrence
                 </DropdownMenuItem>
+                {analysisDays !== undefined ? (
+                  <DropdownMenuItem onClick={() => setEditingPeriod((open) => !open)}>
+                    <CalendarDays />
+                    Edit analysis period
+                  </DropdownMenuItem>
+                ) : null}
                 {job.type === "source_routing" ? (
                   <DropdownMenuItem onClick={() => void toggleReview()}>
                     <Route />
@@ -356,8 +370,63 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
           </div>
         </div>
         {editing ? <RecurrenceForm job={job} onDone={() => setEditing(false)} /> : null}
+        {editingPeriod && analysisDays !== undefined ? (
+          <AnalysisPeriodForm jobId={job._id} current={analysisDays} onDone={() => setEditingPeriod(false)} />
+        ) : null}
       </Card>
     </li>
+  );
+}
+
+const PERIOD_ERROR = `Enter a whole number of days between ${MIN_ANALYSIS_DAYS} and ${MAX_ANALYSIS_DAYS}.`;
+
+// The period is the Job's own setting (ADR-085), independent of its recurrence.
+function AnalysisPeriodForm({ jobId, current, onDone }: { jobId: string; current: number; onDone: () => void }) {
+  const setAnalysisDays = useMutation(api.strategic_review_jobs.setAnalysisDays);
+  const [value, setValue] = useState(String(current));
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(): Promise<void> {
+    setError(null);
+    const days = value.trim() === "" ? NaN : Number(value);
+    if (!isValidAnalysisDays(days)) {
+      setError(PERIOD_ERROR);
+      return;
+    }
+    try {
+      await setAnalysisDays({ jobId: jobId as Id<"jobs">, analysisDays: days });
+      onDone();
+    } catch (err: unknown) {
+      setError(extractConvexErrorMessage(err, "Failed to save the analysis period."));
+    }
+  }
+
+  return (
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+          Analysis period (days)
+          <Input
+            name="analysisDays"
+            type="number"
+            min={MIN_ANALYSIS_DAYS}
+            max={MAX_ANALYSIS_DAYS}
+            step={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-28"
+          />
+        </label>
+        <Button type="button" onClick={() => void save()}>
+          Save
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

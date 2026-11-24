@@ -199,6 +199,31 @@ describe("WorkspaceLogsPage", () => {
     expect(document.body.textContent).not.toContain("session");
   });
 
+  it("renders the Agent's Markdown and keeps the instruction as plain text", async () => {
+    getWorkspaceRunTranscriptMock.mockResolvedValue({
+      found: true,
+      turns: [
+        { kind: "message", role: "user", text: "Use **this** literally", timestamp: "2026-07-02T10:00:00.000Z" },
+        {
+          kind: "message",
+          role: "assistant",
+          text: "What the data showed:\n\n- **19 Publications** measured\n- see `report.json`",
+          timestamp: "2026-07-02T10:00:05.000Z",
+        },
+      ],
+      runId: "run-1",
+      parent: { kind: "mission", missionId: "mission-1" },
+    });
+
+    await renderPage();
+
+    expect(document.querySelector("strong")?.textContent).toBe("19 Publications");
+    expect(document.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelector("code")?.textContent).toBe("report.json");
+    expect(document.body.textContent).not.toContain("**19 Publications**");
+    expect(document.body.textContent).toContain("Use **this** literally");
+  });
+
   it("selecting a Run requests that Run's transcript", async () => {
     getWorkspaceRunTranscriptMock
       .mockResolvedValueOnce({ found: false, turns: [], runId: "run-1", parent: { kind: "mission", missionId: "mission-1" } })

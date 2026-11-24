@@ -31,6 +31,7 @@ import { buildSourceJobRunFile } from "./source_jobs/source_job_context.js";
 import { pollSourceEnrichmentRun } from "./source_jobs/enrichment_poll_node.js";
 import { buildSourceScoringRunFile } from "./source_scoring.js";
 import { buildSourceRoutingRunFile } from "./source_routing.js";
+import { buildStrategicReviewRunFile } from "./strategic_review_jobs.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
@@ -123,7 +124,8 @@ export const pollExternalJobs = internalAction({
       if (isSourceIngestion) await pollSourceEnrichmentRun(ctx, r, opts);
       else if (r.parent.kind === "job"
         && (await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: r._id })
-          || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id }))) continue;
+          || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id })
+          || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id }))) continue;
       else await pollExternalJobRun(ctx, r, opts, registry);
     }
   },
@@ -151,6 +153,7 @@ function loggedDecision(decision: ReconcileDecision) {
   if (decision.type === "ingestSources") {
     return { type: "ingestSources" as const, result: decision.result, sourceCount: decision.sources.length };
   }
+  if (decision.type === "persistStrategicReview") return { type: "persistStrategicReview" as const };
   if (decision.type === "markAwaitingJob") return { type: "markAwaitingJob" as const, job: decision.job };
   return decision;
 }
@@ -205,6 +208,7 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       sourceIngestion: state.sourceIngestion === true,
       sourceScoring: state.sourceScoring === true,
       sourceRouting: state.sourceRouting === true,
+      strategicReview: state.strategicReview === true,
       runId: state.runId,
       missionType: state.missionType,
       blockerCodes: await resolveMissionTypeBlockerCodes(
@@ -239,6 +243,13 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
         runId: state.runId,
         result: decision.result,
         sources: decision.sources,
+      });
+      return;
+    case "persistStrategicReview":
+      await ctx.runMutation(internal.runs.markCompleted, {
+        runId: state.runId,
+        result: { status: "success", summary: "Strategic Review result received" },
+        strategicReviewEnvelope: decision.envelope,
       });
       return;
     case "markFailed": {
@@ -325,6 +336,11 @@ export const dispatchPendingRuns = internalAction({
       if (claimed.parent.kind === "job"
         && await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: claimed.runId })) {
         if (await dispatchSourceRoutingRun(ctx, claimed.runId, claimed.parent)) continue;
+      }
+
+      if (claimed.parent.kind === "job"
+        && await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: claimed.runId })) {
+        if (await dispatchStrategicReviewRun(ctx, claimed.runId, claimed.parent)) continue;
       }
 
       const inputs = await ctx.runQuery(
@@ -703,6 +719,57 @@ async function dispatchSourceRoutingRun(
           ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
           ...(template?.jobInstructions?.source_routing
             ? [{ filePath: "jobs/source-routing.md", content: template.jobInstructions.source_routing }]
+            : []),
+        ],
+        runFilePath: runPath,
+        outputsFilePath: outputsPath,
+        requiredMcpServers: requiredMcpServers(template),
+      },
+    });
+    await ctx.runMutation(internal.runs.markRunning, {
+      runId,
+      dispatchCommandId: execResult.commandId,
+      agentsMdSnapshot: template?.agentsMd,
+      contextMdSnapshot: runMd,
+    });
+  } catch (err) {
+    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_failed", message: errorMessage(err) });
+  }
+  return true;
+}
+
+/** Dispatch a Strategic Review Run: its period and base were pinned on the Run when it started. */
+async function dispatchStrategicReviewRun(
+  ctx: ActionCtx,
+  runId: Id<"runs">,
+  parent: Extract<RunParent, { kind: "job" }>,
+): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.strategic_review_jobs.loadDispatchInputs, { runId });
+  if (!inputs) return false;
+  try {
+    const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
+    const runMd = buildStrategicReviewRunFile(inputs.pins);
+    const runPath = jobRunFilePath(parent.jobId);
+    const outputsPath = runOutputsFilePath(parent, runId);
+    const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    const execResult = await ctx.runMutation(enqueueCommandMutation, {
+      instanceId: inputs.instanceId,
+      type: RUNTIME_OPENCLAW_EXEC,
+      payload: {
+        commandText: buildOpenClawExecCommandText({
+          agentName: inputs.run.agentName,
+          sessionKey: inputs.run.sessionKey,
+          runFilePath: runPath,
+          outputsFilePath: outputsPath,
+          timeoutMs: execTimeoutMs,
+        }),
+        timeoutMs: execTimeoutMs,
+        workspaceKey: inputs.workspaceKey,
+        filesToWrite: [
+          { filePath: runPath, content: runMd },
+          ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
+          ...(template?.jobInstructions?.strategic_review
+            ? [{ filePath: "jobs/strategic-review.md", content: template.jobInstructions.strategic_review }]
             : []),
         ],
         runFilePath: runPath,

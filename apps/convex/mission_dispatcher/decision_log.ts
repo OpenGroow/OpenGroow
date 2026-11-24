@@ -62,6 +62,8 @@ export const reconcileDecisionLogV = v.union(
     result: v.object({ status: v.literal("success"), summary: v.string() }),
     sourceCount: v.number(),
   }),
+  // Only the fact: the Performance Report is data, not a decision (#168).
+  v.object({ type: v.literal("persistStrategicReview") }),
   v.object({
     type: v.literal("markResumed"),
     intermediateResult: v.record(v.string(), v.any()),
