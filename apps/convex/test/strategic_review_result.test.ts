@@ -202,6 +202,23 @@ describe("strategic_review Run result: get_strategic_memory", () => {
     expect(await read()).toMatchObject({ exists: true, memory: "newer memory" });
   });
 
+  it("serves the latest Review to a running Run of the same Agent that is not a strategic_review Run, even one holding pins", async () => {
+    const base = await addReview(NOW - DAY, "base memory");
+    await addReview(NOW + 1, "newer memory");
+    expect(base).toBeDefined();
+    await t.run(async (ctx) => {
+      const jobId = await ctx.db.insert("jobs", {
+        ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, type: "custom", state: "active", config: {}, runtime: {},
+        unit: "daily", hour: 6, minute: 0, timezone: "UTC", nextRunAt: NOW, createdAt: NOW, updatedAt: NOW,
+      });
+      await ctx.db.insert("runs", {
+        jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, agentName: "strategy", sessionKey: "other-run", status: "running",
+        strategicReview: { periodStart: 1, periodEnd: 2, baseReviewId: base }, createdAt: NOW, updatedAt: NOW,
+      });
+    });
+    expect(await read()).toMatchObject({ exists: true, memory: "newer memory" });
+  });
+
   it("serves no memory to a Run pinned without a base, even if a Review appeared since", async () => {
     await startRun(await insertJob());
     await addReview(NOW + 1, "newer memory");

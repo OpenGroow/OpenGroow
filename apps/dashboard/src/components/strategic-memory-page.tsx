@@ -109,12 +109,12 @@ function ReviewEntry({ instanceId, review }: { instanceId: string; review: Revie
   return (
     <li data-review={review._id}>
       <Card className="grid gap-4 p-4">
-        <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex items-center gap-3 text-left">
+        <Button type="button" variant="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)} className="h-auto w-full justify-start gap-3 whitespace-normal p-2 text-left">
           <Chevron aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           <span className="text-base font-semibold">{formatDay(review.createdAt)}</span>
           <span className="text-sm text-muted-foreground">Period {periodLabel(review)}</span>
           {review.memoryChanged ? null : <StatusBadge tone="neutral" label="Memory unchanged" />}
-        </button>
+        </Button>
         {open ? <ReviewDetail instanceId={instanceId} review={review} /> : null}
       </Card>
     </li>

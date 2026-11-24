@@ -8,7 +8,8 @@ import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { ownerOfInstance } from "./projects.js";
 import { frequencyV } from "./schedules.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
-import { DEFAULT_ANALYSIS_DAYS, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
+import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
+import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 
 const DEFAULT_FREQUENCY: Frequency = { unit: "daily", hour: 6, minute: 0 };
 const DEFAULT_TIMEZONE = "UTC";

@@ -10,6 +10,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
 import { Input } from "@/components/ui/input";
+import { analysisDaysOf, isValidAnalysisDays, MAX_ANALYSIS_DAYS, MIN_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
@@ -377,13 +378,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   );
 }
 
-const DEFAULT_ANALYSIS_DAYS = 30;
-const PERIOD_ERROR = "Enter a whole number of days between 1 and 365.";
-
-function analysisDaysOf(config: unknown): number {
-  const value = config && typeof config === "object" ? (config as { analysisDays?: unknown }).analysisDays : undefined;
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 365 ? value : DEFAULT_ANALYSIS_DAYS;
-}
+const PERIOD_ERROR = `Enter a whole number of days between ${MIN_ANALYSIS_DAYS} and ${MAX_ANALYSIS_DAYS}.`;
 
 // The period is the Job's own setting (ADR-085), independent of its recurrence.
 function AnalysisPeriodForm({ jobId, current, onDone }: { jobId: string; current: number; onDone: () => void }) {
@@ -394,7 +389,7 @@ function AnalysisPeriodForm({ jobId, current, onDone }: { jobId: string; current
   async function save(): Promise<void> {
     setError(null);
     const days = value.trim() === "" ? NaN : Number(value);
-    if (!Number.isInteger(days) || days < 1 || days > 365) {
+    if (!isValidAnalysisDays(days)) {
       setError(PERIOD_ERROR);
       return;
     }
@@ -414,8 +409,8 @@ function AnalysisPeriodForm({ jobId, current, onDone }: { jobId: string; current
           <Input
             name="analysisDays"
             type="number"
-            min={1}
-            max={365}
+            min={MIN_ANALYSIS_DAYS}
+            max={MAX_ANALYSIS_DAYS}
             step={1}
             value={value}
             onChange={(e) => setValue(e.target.value)}
