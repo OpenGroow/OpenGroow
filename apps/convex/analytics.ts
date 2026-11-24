@@ -8,6 +8,7 @@ import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { analyticsDeclarationFor } from "@opengroow/agent-templates";
+import { SCAN_LIMIT } from "./analytics_window.js";
 import { hasPublicThumbnail, postFace } from "./analytics_face.js";
 
 // Performance Snapshots (ADR-078, docs/domain/publishing.md): when a
@@ -199,18 +200,49 @@ async function activatedAdapters(ctx: Pick<QueryCtx, "db">, instanceId: string, 
  * Never a per-Mission total: each row is one Publication (ADR-078).
  */
 export const listForProject = query({
-  args: { instanceId: v.string(), adapter: v.optional(v.string()) },
+  args: {
+    instanceId: v.string(),
+    adapter: v.optional(v.string()),
+    // Drill-down from a recipe or family group (ADR-084): only the Publications attributed to it, by their Mission's
+    // Recipe Snapshot. An unattributed Publication is in no recipe and no family.
+    recipeId: v.optional(v.string()),
+    familyId: v.optional(v.string()),
+    // The period, by publication date.
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     if (!(await readOwnerId(ctx, args.instanceId))) return [];
-    const publications = await publishedOf(ctx, args.instanceId);
+    const narrowed = args.recipeId !== undefined || args.familyId !== undefined || args.from !== undefined || args.to !== undefined;
+    // A narrowed list reads as far as the summaries do, so a group's Publications are all reachable.
+    const publications = await publishedOf(ctx, args.instanceId, narrowed ? SCAN_LIMIT : LIST_LIMIT);
     const publishers = await projectPublishers(ctx, args.instanceId);
     const adapters = await installedAnalyticsAdapters(ctx);
+    const familyOfRecipe = new Map<string, Promise<{ familyId: string; familyName: string } | undefined>>();
+    const familyOf = (recipeId: Id<"productionRecipes">) => {
+      let known = familyOfRecipe.get(recipeId);
+      if (!known) {
+        known = (async () => {
+          const recipe = await ctx.db.get(recipeId);
+          // A recipe of another Project has no family here.
+          if (!recipe || recipe.instanceId !== args.instanceId) return undefined;
+          const family = await ctx.db.get(recipe.creativeFamilyId);
+          return family ? { familyId: family._id as string, familyName: family.name } : undefined;
+        })();
+        familyOfRecipe.set(recipeId, known);
+      }
+      return known;
+    };
     const chosen = args.adapter ?? (await activatedAdapters(ctx, args.instanceId, adapters, publishers))[0]?.id;
     // The reads of one Publication do not depend on another's: they run together.
     const rows = await Promise.all(
       publications.map(async (publication) => {
       const mission = await ctx.db.get(publication.missionId);
       if (!mission) return null;
+      const snapshot = mission.recipeSnapshot;
+      if (args.recipeId !== undefined && snapshot?.recipeId !== args.recipeId) return null;
+      const family = snapshot ? await familyOf(snapshot.recipeId) : undefined;
+      if (args.familyId !== undefined && family?.familyId !== args.familyId) return null;
       const found = channelOf(publishers, publication.target);
       const links = found ? linkedAdapters(adapters, found.publisher.adapter, found.channel.analyticsAdapter) : [];
       const series = publication.postSeries ?? 0;
@@ -221,6 +253,7 @@ export const listForProject = query({
       const row = seriesRows.find((r) => chosen === undefined || r.adapter === chosen);
       // A channel with no Analytics Adapter is not measured: nothing to show for it.
       if (!row || row.state === "unmeasured") return null;
+      if ((args.from !== undefined && row.publishedAt < args.from) || (args.to !== undefined && row.publishedAt > args.to)) return null;
       if (chosen !== undefined && !links.some((l) => l.adapter.id === chosen)) return null;
       const snapshots = (
         await ctx.db
@@ -242,6 +275,8 @@ export const listForProject = query({
         ...face,
         ...(pageImage ? { thumbnailUrl: pageImage } : {}),
         publishedAt: row.publishedAt,
+        // Absent: Unattributed. The recipe name and version are those of the Mission's snapshot, not the live recipe.
+        ...(snapshot ? { attribution: { recipeId: snapshot.recipeId as string, recipeName: snapshot.recipeName, version: snapshot.version, ...family } } : {}),
         publicationId: publication._id,
         missionId: mission._id,
         missionName: missionLabel(mission),
@@ -260,7 +295,7 @@ export const listForProject = query({
       };
       }),
     );
-    return rows.filter((r) => r !== null);
+    return rows.filter((r) => r !== null).slice(0, LIST_LIMIT);
   },
 });
 
