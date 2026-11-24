@@ -4,6 +4,21 @@ import { projectAgentSkillV, projectAgentStatusV } from "./validators.js";
 import { upsertSkillEntry } from "@opengroow/agent-templates/skills";
 import { syncJobsWithAgentStatus } from "./jobs.js";
 import { ownerOfInstance } from "./projects.js";
+import { parseAgentToken } from "./internal_mcp/agent_token.js";
+import type { Doc } from "./_generated/dataModel.js";
+
+/**
+ * What a client may see of an Agent: the Internal MCP Agent token (stored as
+ * `config.apiKey`, ADR-080) is a server-side credential and never leaves the
+ * backend. An `apiKey` the operator typed for a third-party service is theirs
+ * to see and edit, so it stays.
+ */
+function toClientAgent(agent: Doc<"projectAgents">): Doc<"projectAgents"> {
+  const apiKey = agent.config?.apiKey;
+  if (typeof apiKey !== "string" || !parseAgentToken(apiKey)) return agent;
+  const { apiKey: _token, ...config } = agent.config ?? {};
+  return { ...agent, config };
+}
 
 export async function canReadInstance(ctx: QueryCtx, instanceId: string) {
   const identity = await ctx.auth.getUserIdentity();
@@ -198,12 +213,13 @@ export const get = query({
     if (!(await canReadInstance(ctx, args.instanceId))) {
       return null;
     }
-    return await ctx.db
+    const agent = await ctx.db
       .query("projectAgents")
       .withIndex("by_instance_template", (q) =>
         q.eq("instanceId", args.instanceId).eq("templateId", args.templateId)
       )
       .unique();
+    return agent && toClientAgent(agent);
   },
 });
 
@@ -270,11 +286,12 @@ export const listByInstance = query({
     if (!(await canReadInstance(ctx, args.instanceId))) {
       return [];
     }
-    return await ctx.db
+    const agents = await ctx.db
       .query("projectAgents")
       .withIndex("by_instance_template", (q) =>
         q.eq("instanceId", args.instanceId)
       )
       .collect();
+    return agents.map(toClientAgent);
   },
 });

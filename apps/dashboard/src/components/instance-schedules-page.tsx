@@ -32,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
@@ -113,6 +114,34 @@ const FAMILY_TONES = [
 const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" };
 
 const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
+
+/** Creates a Mission from the Schedule now: shows it is running and says why when it is refused. */
+function RunNowButton({ run }: { run: () => Promise<unknown> }) {
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    setRunning(true);
+    setError(null);
+    try {
+      await run();
+    } catch (err) {
+      setError(extractConvexErrorMessage(err, "Failed to run the Schedule now."));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" className="rounded-full" data-action="run-now" loading={running} onClick={() => { void handleClick(); }}>
+        <Play />
+        Run now
+      </Button>
+      {error ? <span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
+    </>
+  );
+}
 
 export function InstanceSchedulesPage({ params }: Props) {
   const { instanceId } = use(params);
@@ -656,22 +685,16 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                 </span>
 
                                 <div className="ml-auto flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    className="rounded-full"
-                                    data-action="run-now"
-                                    onClick={() => {
-                                      void createMission({
+                                  <RunNowButton
+                                    run={() =>
+                                      createMission({
                                         instanceId,
                                         templateId: schedule.templateId,
                                         type: schedule.type,
                                         payload: schedule.payload,
-                                      });
-                                    }}
-                                  >
-                                    <Play />
-                                    Run now
-                                  </Button>
+                                      })
+                                    }
+                                  />
                                   {paused ? (
                                     <Button
                                       variant="outline"
