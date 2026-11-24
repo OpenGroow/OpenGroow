@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, type MutationCtx } from "./_generated/server.js";
-import { latestOf } from "./strategic_reviews.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
@@ -118,7 +117,8 @@ async function agentNameOf(ctx: MutationCtx, job: Doc<"jobs">): Promise<string> 
 
 /** Creates the Run with its pins: the period ends now, the base is the Project's latest Review. */
 async function startRun(ctx: MutationCtx, job: Doc<"jobs">, now: number): Promise<Id<"runs">> {
-  const latest = await latestOf(ctx, job.instanceId);
+  // The same read as `internal.strategic_reviews.latestByInstance`: a mutation cannot call a query.
+  const latest = await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", job.instanceId)).order("desc").first();
   const pins: StrategicReviewPins = {
     periodStart: now - analysisDaysOf(job) * DAY_MS,
     periodEnd: now,
