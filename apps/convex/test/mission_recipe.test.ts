@@ -80,10 +80,18 @@ async function setup() {
       } as never);
     }
     const nowMs = Date.now();
-    await ctx.db.insert("projectAgents", {
-      instanceId: INSTANCE, templateId: TEMPLATE_ID, workspaceKey: "ws-mr", openclawAgentName: "video", status: "active",
-      mcpServerKeys: [], createdAt: nowMs, updatedAt: nowMs,
-    });
+    // An active Agent per (Project, Template) the tests create Missions for: the Mission rules
+    // check it before the recipe, so a recipe refusal is only reachable behind it.
+    for (const [instanceId, templateId, key] of [
+      [INSTANCE, TEMPLATE_ID, "ws-mr"],
+      [INSTANCE, "@example/other", "ws-mr-other"],
+      [OTHER_INSTANCE, TEMPLATE_ID, "ws-mr-stranger"],
+    ] as const) {
+      await ctx.db.insert("projectAgents", {
+        instanceId, templateId, workspaceKey: key, openclawAgentName: "video", status: "active",
+        mcpServerKeys: [], createdAt: nowMs, updatedAt: nowMs,
+      });
+    }
   });
   const familyId = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "s", name: "F", description: "d" } as never));
   const otherFamily = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: OTHER_INSTANCE, slug: "s", name: "F", description: "d" } as never));
