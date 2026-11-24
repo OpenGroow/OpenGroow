@@ -138,7 +138,7 @@ describe("analytics summary (issue #112)", () => {
 
     it("reads the newest-created Publications only and flags the limited read", async () => {
       const s = await seed();
-      const ids = [];
+      const ids: Awaited<ReturnType<typeof s.post>>[] = [];
       for (let i = 0; i < 4; i++) ids.push(await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 10 } }] }));
       const summary = await s.t.run((ctx) => summarizeProject(ctx, INSTANCE_ID, window(), { scanLimit: 3 }));
       expect(summary.scanLimited).toBe(true);
