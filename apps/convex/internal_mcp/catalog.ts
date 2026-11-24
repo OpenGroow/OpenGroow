@@ -1,5 +1,6 @@
 import type { InternalMcpToolName } from "@opengroow/agent-templates";
 import { DEFAULT_WINDOW_DAYS, listPublicationReadings, summarizeProject } from "../analytics_summary.js";
+import { recipeCatalog } from "../recipe_usage.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
 
@@ -148,6 +149,12 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
     description: "The Project's Brand Core: audience, tone, offer, positioning, editorial rules, constraints, what to avoid and notes. Null when none is written yet.",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => getBrandCore(ctx, scope),
+  },
+  list_production_recipes: {
+    description:
+      "The Project's Production Recipes with their Creative Family, an archived flag and their usage, step by step: Missions created with the recipe (even cancelled before any Run), Production Attempts (Runs sent to the Agent) and successful ones, Publications and measured Publications, each over the recipe's lifetime and over the period (by its own date), with the last Mission, attempt and publication dates. Includes recipes that never produced a Publication. neverUsedEver and neverPublishedEver are present only when the data read was complete; otherwise they are absent (unknown). `partial` says a read hit its limit, `truncated` that the list was cut.",
+    inputSchema: { type: "object", properties: { days: { type: "integer", minimum: 1, maximum: 365, description: `Period in days for the period counters (default ${DEFAULT_WINDOW_DAYS}).` } }, additionalProperties: false },
+    run: (ctx, scope, args) => recipeCatalog(ctx, scope.instanceId, windowOf(args)),
   },
 };
 

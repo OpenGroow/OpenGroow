@@ -90,7 +90,7 @@ type PublicationInWindow = {
 };
 
 /** The Project's published Publications whose publication date falls in `[from, to]`, each with its Mission and channel. */
-async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, cap: number = LIST_LIMIT) {
+export async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, cap: number = LIST_LIMIT) {
   const publications = await publishedOf(ctx, instanceId, cap);
   const publishers = await projectPublishers(ctx, instanceId);
   const installed = await installedAnalyticsAdapters(ctx);
