@@ -42,7 +42,7 @@ async function seed() {
   await owner.mutation(api.publishers.save, { instanceId: INSTANCE_ID, adapter: "postiz", url: "https://postiz.example.com", apiKey: "secret" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: INSTANCE_ID, channelId: "ch-2", channelName: "My TT", channelService: "tiktok", channelProfile: "me" });
-  const post = (o: { target: string; type: string; kind: string; ageDays?: number; recipe?: { id: unknown; name?: string; version?: number }; snapshots?: Array<{ adapter?: string; metrics: Record<string, number>; takenAt?: number }> }) =>
+  const post = (o: { target: string; type: string; kind: string; ageDays?: number; recipe?: { id: unknown; name?: string; version?: number }; externalUrl?: string; snapshots?: Array<{ adapter?: string; metrics: Record<string, number>; takenAt?: number }> }) =>
     t.run(async (ctx) => {
       const now = Date.now();
       const publishedAt = now - (o.ageDays ?? 1) * DAY;
@@ -52,7 +52,7 @@ async function seed() {
         payload: { publishTargets: [o.target] }, lastArtifact: { publishable: o.kind === "video" ? { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c" } : { kind: "image", imageUrl: "https://cdn.example.com/i.jpg", caption: "c" } }, status: "approved", createdAt: now, updatedAt: now,
       } as never);
       const publicationId = await ctx.db.insert("publications", {
-        missionId, instanceId: INSTANCE_ID, target: o.target, status: "published", externalId: "p", createdAt: publishedAt, updatedAt: publishedAt,
+        missionId, instanceId: INSTANCE_ID, target: o.target, status: "published", externalId: "p", ...(o.externalUrl ? { externalUrl: o.externalUrl } : {}), createdAt: publishedAt, updatedAt: publishedAt,
       } as never);
       await ctx.db.insert("publicationAnalytics", {
         publicationId, postSeries: 0, instanceId: INSTANCE_ID, adapter: "postiz-analytics", publisherAdapter: "postiz", publishedAt, delays: [DAY], taken: 0,
@@ -290,6 +290,63 @@ describe("analytics summary (issue #112)", () => {
       expect(r.publications).toBe(1);
       const views = Object.fromEntries(r.adapters.map((x: any) => [x.adapter, x.platforms[0].metrics.views.sum]));
       expect(views).toEqual({ "postiz-analytics": 10, "web-analytics": 500 });
+    });
+
+    describe("a measurement key shared by several Publications (issue #157)", () => {
+      const PAGE = "https://example.com/article-1";
+      const seedWeb = async () => {
+        const s = await seed();
+        await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "instagram:me", analyticsAdapter: "web-analytics" });
+        return s;
+      };
+      const web = (r: any) => r.adapters.find((x: any) => x.adapter === "web-analytics");
+
+      it("counts the metrics of a page once within a recipe, however many Publications point at it", async () => {
+        const s = await seedWeb();
+        const a = await s.recipe("A");
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: PAGE, ageDays: 3, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: `${PAGE}/?utm_source=x`, ageDays: 2, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: "https://example.com/article-2", ageDays: 2, snapshots: [{ adapter: "web-analytics", metrics: { views: 40 } }] });
+        const [r] = (await q(s)).recipes;
+        expect(r.publications).toBe(3);
+        const ad = web(r);
+        expect(ad).toMatchObject({ publications: 3, measured: 2, sharedMeasurements: 1 });
+        expect(ad.platforms[0].metrics.views).toEqual({ observations: 2, sum: 140, mean: 70, median: 70 });
+      });
+
+      it("credits a page shared by two recipes to neither, and says so", async () => {
+        const s = await seedWeb();
+        const a = await s.recipe("A");
+        const b = await s.recipe("B");
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: b }, externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        const res = await q(s);
+        expect(res.recipes).toHaveLength(2);
+        for (const r of res.recipes) {
+          expect(r.publications).toBe(1);
+          expect(web(r)).toMatchObject({ publications: 1, measured: 0, ambiguous: 1 });
+          expect(web(r).platforms[0].metrics).toEqual({});
+        }
+      });
+
+      it("treats a page shared with an unattributed Publication as ambiguous too", async () => {
+        const s = await seedWeb();
+        const a = await s.recipe("A");
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        const [r] = (await q(s)).recipes;
+        expect(web(r)).toMatchObject({ measured: 0, ambiguous: 1 });
+      });
+
+      it("does not mix keys of different adapters or leave a clean key flagged", async () => {
+        const s = await seedWeb();
+        const a = await s.recipe("A");
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 7 } }] });
+        const [r] = (await q(s)).recipes;
+        expect(web(r)).toMatchObject({ measured: 1 });
+        expect(web(r)).not.toHaveProperty("ambiguous");
+        expect(web(r)).not.toHaveProperty("sharedMeasurements");
+      });
     });
 
     it("lists a Publication with no linked adapter apart, and creates groups only for recipes with Publications in the period", async () => {

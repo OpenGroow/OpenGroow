@@ -87,7 +87,7 @@ async function seedPublishing() {
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: PROJECT_A, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: PROJECT_A, channelId: "ch-2", channelName: "My TT", channelService: "tiktok", channelProfile: "me" });
   await owner.mutation(api.publishers.setAnalyticsLink, { instanceId: PROJECT_A, adapter: "postiz", target: "tiktok:me", analyticsAdapter: [] });
-  return (o: { target: string; type: string; ageDays?: number; metrics?: Record<string, number> }) =>
+  return (o: { target: string; type: string; ageDays?: number; metrics?: Record<string, number>; recipe?: { id: string; name?: string; version?: number }; runId?: string; instanceId?: string }) =>
     t.run(async (ctx) => {
       const now = Date.now();
       const publishedAt = now - (o.ageDays ?? 1) * DAY;
@@ -95,8 +95,9 @@ async function seedPublishing() {
         ownerId: "owner", instanceId: PROJECT_A, templateId: WRITER, type: o.type, name: `Post ${o.type}`,
         payload: {}, lastArtifact: { publishable: { kind: "video", videoUrl: "https://cdn.example.com/v.mp4", caption: "c", title: "A title" } },
         status: "done", createdAt: now, updatedAt: now,
+        ...(o.recipe ? { recipeSnapshot: { recipeId: o.recipe.id, recipeName: o.recipe.name ?? "R", version: o.recipe.version ?? 1, instructions: "i", constraints: [] } } : {}),
       } as never);
-      const publicationId = await ctx.db.insert("publications", { missionId, instanceId: PROJECT_A, target: o.target, status: "published", externalId: "p", externalUrl: "https://example.com/p/1", createdAt: publishedAt, updatedAt: publishedAt } as never);
+      const publicationId = await ctx.db.insert("publications", { missionId, instanceId: PROJECT_A, target: o.target, status: "published", externalId: "p", externalUrl: "https://example.com/p/1", createdAt: publishedAt, updatedAt: publishedAt, ...(o.runId ? { runId: o.runId } : {}) } as never);
       await ctx.db.insert("publicationAnalytics", { publicationId, postSeries: 0, instanceId: PROJECT_A, adapter: "postiz-analytics", publisherAdapter: "postiz", publishedAt, delays: [DAY], taken: 0, state: "waiting", nextAt: publishedAt + DAY, done: false, updatedAt: now });
       if (o.metrics) {
         await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: PROJECT_A, delayMs: DAY, takenAt: now, metrics: o.metrics, adapter: "postiz-analytics", source: "adapter" });
@@ -149,6 +150,97 @@ describe("get_analytics_summary", () => {
   });
 });
 
+async function seedRecipe(name: string, familyName: string) {
+  return t.run(async (ctx) => {
+    const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: PROJECT_A, slug: familyName.toLowerCase(), name: familyName, description: "d" } as never);
+    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name, description: "d", status: "active" } as never);
+    const runId = await ctx.db.query("runs").first();
+    return { recipeId: recipeId as string, familyId: creativeFamilyId as string, runId: runId!._id as string };
+  });
+}
+
+describe("get_analytics_summary: attribution", () => {
+  it("groups by recipe and by family, narrowed by recipeId/familyId, over the MCP", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    const a = await seedRecipe("Zoom", "Hooks");
+    const b = await seedRecipe("Pan", "Reveals");
+    await post({ target: "instagram:me", type: "make_image", metrics: { views: 10 }, recipe: { id: a.recipeId, version: 2 } });
+    await post({ target: "instagram:me", type: "make_image", metrics: { views: 30 }, recipe: { id: b.recipeId } });
+    await post({ target: "instagram:me", type: "make_image", metrics: { views: 5 } });
+    const byRecipe = await result(t, token, "get_analytics_summary", { groupBy: "recipe" });
+    expect(byRecipe).toMatchObject({ groupBy: "recipe", unattributed: 1 });
+    expect(byRecipe.recipes.map((r: { recipeId: string }) => r.recipeId).sort()).toEqual([a.recipeId, b.recipeId].sort());
+    const one = await result(t, token, "get_analytics_summary", { groupBy: "recipe", recipeId: a.recipeId });
+    expect(one.recipes).toHaveLength(1);
+    expect(one.recipes[0].versions).toMatchObject([{ version: 2, publications: 1 }]);
+    const byFamily = await result(t, token, "get_analytics_summary", { groupBy: "family", familyId: b.familyId });
+    expect(byFamily.families).toHaveLength(1);
+    expect(byFamily.families[0]).toMatchObject({ familyId: b.familyId, familyName: "Reveals" });
+    expect(byFamily.families[0].recipes[0].recipeId).toBe(b.recipeId);
+  });
+
+  it("never reads another Project's recipes, and refuses a mismatched filter", async () => {
+    await seedProject(t, PROJECT_A);
+    const tokenB = await seedProject(t, PROJECT_B);
+    const post = await seedPublishing();
+    const a = await seedRecipe("Zoom", "Hooks");
+    await post({ target: "instagram:me", type: "make_image", metrics: { views: 10 }, recipe: { id: a.recipeId } });
+    expect((await result(t, tokenB, "get_analytics_summary", { groupBy: "recipe" })).recipes).toEqual([]);
+    expect((await result(t, tokenB, "get_analytics_summary", { groupBy: "family" })).families).toEqual([]);
+    const error = (await (await call(t, tokenB, "get_analytics_summary", { groupBy: "family", recipeId: a.recipeId })).json());
+    expect(JSON.stringify(error)).toContain('recipeId needs groupBy');
+  });
+});
+
+describe("list_publications: attribution", () => {
+  it("carries Run, recipe, version, family and age, or marks the Publication unattributed", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    const a = await seedRecipe("Zoom", "Hooks");
+    await post({ target: "instagram:me", type: "make_image", ageDays: 3, metrics: { views: 10 }, recipe: { id: a.recipeId, name: "Zoom", version: 2 }, runId: a.runId });
+    await post({ target: "instagram:me", type: "make_image", ageDays: 1 });
+    const out = await result(t, token, "list_publications");
+    expect(out).toMatchObject({ truncated: false, partial: false, unattributed: 1 });
+    const [newest, older] = out.publications;
+    expect(newest.attribution).toEqual({ status: "unattributed" });
+    expect(newest).not.toHaveProperty("runId");
+    expect(older).toMatchObject({ runId: a.runId, ageDays: 3, attribution: { status: "attributed", recipeId: a.recipeId, recipeName: "Zoom", version: 2, familyId: a.familyId, familyName: "Hooks" } });
+  });
+
+  it("filters by recipe and by family", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    const a = await seedRecipe("Zoom", "Hooks");
+    const b = await seedRecipe("Pan", "Reveals");
+    await post({ target: "instagram:me", type: "make_image", ageDays: 1, recipe: { id: a.recipeId } });
+    await post({ target: "instagram:me", type: "make_image", ageDays: 2, recipe: { id: b.recipeId } });
+    await post({ target: "instagram:me", type: "make_image", ageDays: 3 });
+    const byRecipe = await result(t, token, "list_publications", { recipeId: a.recipeId });
+    expect(byRecipe.publications.map((p: { attribution: { recipeId: string } }) => p.attribution.recipeId)).toEqual([a.recipeId]);
+    const byFamily = await result(t, token, "list_publications", { familyId: b.familyId });
+    expect(byFamily.publications.map((p: { attribution: { familyId: string } }) => p.attribution.familyId)).toEqual([b.familyId]);
+  });
+
+  it("is bounded: says truncated when more match than the limit, and flags a scan-limited read as partial", async () => {
+    const token = await seedProject(t, PROJECT_A);
+    const post = await seedPublishing();
+    for (const ageDays of [1, 2, 3]) await post({ target: "instagram:me", type: "make_image", ageDays });
+    const out = await result(t, token, "list_publications", { limit: 2 });
+    expect(out.publications).toHaveLength(2);
+    expect(out).toMatchObject({ truncated: true, partial: false });
+  });
+
+  it("returns Publications of the period only, and none of another Project", async () => {
+    await seedProject(t, PROJECT_A);
+    const tokenB = await seedProject(t, PROJECT_B);
+    const post = await seedPublishing();
+    const a = await seedRecipe("Zoom", "Hooks");
+    await post({ target: "instagram:me", type: "make_image", recipe: { id: a.recipeId } });
+    expect((await result(t, tokenB, "list_publications", { recipeId: a.recipeId })).publications).toEqual([]);
+  });
+});
+
 describe("list_publications", () => {
   it("returns each Publication with its measurements and tells unavailable from no data", async () => {
     const token = await seedProject(t, PROJECT_A);
@@ -156,7 +248,7 @@ describe("list_publications", () => {
     await post({ target: "instagram:me", type: "make_image", ageDays: 2, metrics: { views: 100 } });
     await post({ target: "instagram:me", type: "make_image", ageDays: 1 });
     await post({ target: "tiktok:me", type: "make_video", ageDays: 3 });
-    const publications = await result(t, token, "list_publications");
+    const publications = (await result(t, token, "list_publications")).publications;
     // Newest first.
     expect(publications.map((p: { status: string }) => p.status)).toEqual(["no_data", "data", "unavailable"]);
     const measured = publications[1];
@@ -171,7 +263,7 @@ describe("list_publications", () => {
     const tokenB = await seedProject(t, PROJECT_B);
     const post = await seedPublishing();
     await post({ target: "instagram:me", type: "make_image", metrics: { views: 1 } });
-    expect(await result(t, tokenB, "list_publications")).toEqual([]);
+    expect((await result(t, tokenB, "list_publications")).publications).toEqual([]);
   });
 });
 
