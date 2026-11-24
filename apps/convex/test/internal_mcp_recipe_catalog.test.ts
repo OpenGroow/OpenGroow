@@ -114,6 +114,42 @@ async function setupPublishing(projectId: string) {
   await owner.mutation(api.publishers.addChannel, { adapter: "postiz", instanceId: projectId, channelId: "ch-1", channelName: "My IG", channelService: "instagram", channelProfile: "me" });
 }
 
+describe("list_production_recipes period", () => {
+  async function seedPeriod() {
+    const token = await seedProject(PROJECT_A);
+    const r = await recipe(PROJECT_A, await family(PROJECT_A, "F"), "R");
+    await mission(PROJECT_A, r, { ageDays: 40 });
+    await mission(PROJECT_A, r, { ageDays: 10 });
+    await mission(PROJECT_A, r, { ageDays: 2 });
+    return token;
+  }
+  const errorOf = async (token: string, args: unknown) => JSON.stringify((await call(token, "list_production_recipes", args)).result ?? (await call(token, "list_production_recipes", args)).error);
+
+  it("counts the period of an explicit from and to exactly", async () => {
+    const token = await seedPeriod();
+    const now = Date.now();
+    const e = entry(await recipes(token, { from: now - 20 * DAY, to: now - 5 * DAY }), "R");
+    expect(e.usage.period).toMatchObject({ missions: 1 });
+    expect(e.usage.lifetime).toMatchObject({ missions: 3 });
+  });
+
+  it("refuses from/to with days, a missing half, or a span over 365 days, readably", async () => {
+    const token = await seedPeriod();
+    const now = Date.now();
+    for (const args of [{ days: 7, from: now - DAY, to: now }, { from: now - DAY }, { to: now }, { from: now - 400 * DAY, to: now }]) {
+      const text = await errorOf(token, args);
+      expect(text).toMatch(/days|from|to|365/i);
+      expect(text).not.toMatch(/\bstack\b/i);
+    }
+  });
+
+  it("with days only behaves as before", async () => {
+    const token = await seedPeriod();
+    expect(entry(await recipes(token, { days: 30 }), "R").usage.period).toMatchObject({ missions: 2 });
+    expect(entry(await recipes(token), "R").usage.period).toMatchObject({ missions: 2 });
+  });
+});
+
 describe("list_production_recipes", () => {
   it("counts a recipe selected only by a cancelled Mission as a Mission, not as a Production Attempt", async () => {
     const token = await seedProject(PROJECT_A);
