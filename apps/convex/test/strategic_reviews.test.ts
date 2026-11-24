@@ -195,6 +195,6 @@ describe("strategic_reviews.persist", () => {
 
   it("exposes no way to change or remove a review", async () => {
     const mod = await import("../strategic_reviews.js");
-    expect(Object.keys(mod).sort()).toEqual(["getById", "latestByInstance", "persist", "readStrategicMemory"]);
+    expect(Object.keys(mod).sort()).toEqual(["getById", "latestByInstance", "persist", "persistStrategicReview", "readStrategicMemory"]);
   });
 });

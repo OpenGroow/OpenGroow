@@ -11,6 +11,7 @@ export type ReconcileRun = {
   sourceIngestion?: boolean;
   sourceScoring?: boolean;
   sourceRouting?: boolean;
+  strategicReview?: boolean;
   ownerId: string;
   missionType: string;
   missionPayload?: unknown;

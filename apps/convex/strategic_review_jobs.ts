@@ -3,6 +3,8 @@ import { internalMutation, internalQuery, mutation, type MutationCtx } from "./_
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import { persistStrategicReview } from "./strategic_reviews.js";
+import type { RunResult } from "./run_result.js";
 import { CONTEXT_PROVIDER_RENDERERS } from "./mission_dispatcher/context_providers.js";
 
 // The `strategic_review` Job type (ADR-085, issue #166). A Job of the Strategy
@@ -188,6 +190,37 @@ export async function failStrategicReviewRun(ctx: MutationCtx, run: Doc<"runs">,
     return;
   }
   await finishStrategicReviewJob(ctx, job, "failed", undefined, error);
+}
+
+/** What a failed Review says: a memory conflict has its own reason, the rest quote the validation message. */
+function persistFailureMessage(reason: "invalid_result" | "invalid_references" | "memory_conflict", message: string): string {
+  return reason === "memory_conflict" ? `memory_conflict: ${message} Nothing was saved; the next Run starts from the newest memory.` : `${reason}: ${message}`;
+}
+
+/**
+ * A strategic_review Run ended with its result file (#168): the envelope is validated and persisted as a Review
+ * with the pins taken at dispatch. A result that cannot be persisted fails the Run with a readable reason and
+ * changes nothing; an invalid one is retried like any invalid result, a memory conflict never is.
+ */
+export async function settleStrategicReviewRun(ctx: MutationCtx, run: Doc<"runs">, jobId: Id<"jobs">, result: RunResult, envelope: unknown): Promise<void> {
+  const now = Date.now();
+  const pins = run.strategicReview;
+  const outcome = !pins
+    ? ({ ok: false, reason: "invalid_result", message: "The Run carries no period to analyze." } as const)
+    : envelope === undefined
+      ? ({ ok: false, reason: "invalid_result", message: "The Run returned no Strategic Review result." } as const)
+      : await persistStrategicReview(ctx, { instanceId: run.instanceId, runId: run._id, periodStart: pins.periodStart, periodEnd: pins.periodEnd, ...(pins.baseReviewId ? { baseReviewId: pins.baseReviewId } : {}), envelope });
+  if (outcome.ok) {
+    await ctx.db.patch(run._id, { status: "completed", result, completedAt: now, updatedAt: now });
+    const job = await ctx.db.get(jobId);
+    if (job && runtimeOf(job).inFlightRunId === run._id) {
+      await finishStrategicReviewJob(ctx, job, "succeeded", outcome.memoryChanged ? "Strategic Memory updated" : "Strategic Memory unchanged");
+    }
+    return;
+  }
+  const errorMessage = persistFailureMessage(outcome.reason, outcome.message);
+  await ctx.db.patch(run._id, { status: "failed", errorMessage, completedAt: now, updatedAt: now });
+  await failStrategicReviewRun(ctx, run, jobId, errorMessage, outcome.reason !== "memory_conflict");
 }
 
 /** Starts the due Runs: scheduled passes of active Jobs and queued Run Now requests. */

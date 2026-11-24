@@ -7,7 +7,7 @@ import { settleSourceJobRun } from "./source_jobs.js";
 import { ingestAndDecideOutcome, ingestHandoff } from "./source_jobs/ingest_sources.js";
 import { failScoringRun, settleScoringRun } from "./score_jobs.js";
 import { failRoutingRun, settleRoutingRun } from "./source_routing.js";
-import { failStrategicReviewRun, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
+import { failStrategicReviewRun, settleStrategicReviewRun, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 import { runParent, type RunParentRecord } from "./run_parent.js";
 import { exclusiveResourcesOf } from "@opengroow/agent-templates";
 import { getTemplateRegistry } from "./template_registry.js";
@@ -259,7 +259,8 @@ export const markAwaitingJob = internalMutation({
 export const markCompleted = internalMutation({
   // `sources`: the Sources of a SourceJob execution's result file (#564),
   // ingested here so a cancelled Run (early return below) inserts nothing.
-  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())) },
+  // `strategicReviewEnvelope`: the result file of a strategic_review Run (#168), persisted here.
+  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())), strategicReviewEnvelope: v.optional(v.any()) },
   handler: async (ctx, args): Promise<{ applied: boolean }> => {
     const run = await ctx.db.get(args.runId);
     if (!run) throw new Error(`Run not found: ${args.runId}`);
@@ -276,6 +277,12 @@ export const markCompleted = internalMutation({
     }
     const now = Date.now();
     const parent = runParent(run);
+
+    // A Strategic Review's result is validated and persisted with the pins taken at dispatch.
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
+      await settleStrategicReviewRun(ctx, run, parent.jobId, args.result, args.strategicReviewEnvelope);
+      return { applied: true };
+    }
 
     // Source ingestion is a generic Job capability. Its Run has no Mission to
     // carry the outcome, and its validated Sources settle the Job cursor.
