@@ -92,21 +92,16 @@ function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metri
           <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
             {leading.map((metric) => {
               const stats = reading.metrics[metric.key];
-              const ratio = stats.recomputed !== undefined;
-              const fmt = (v: number | undefined) => formatValue(metric, v);
               return (
                 <div key={metric.key} className="grid gap-1">
                   <dt className="text-sm text-muted-foreground">{metric.label}</dt>
-                  <dd className="m-0 text-3xl font-semibold tabular-nums">{fmt(mainOf(stats))}</dd>
-                  <dd className="m-0 text-sm tabular-nums text-muted-foreground">
-                    Avg {fmt(ratio ? stats.meanOfRatios : stats.mean)} · Med {fmt(ratio ? stats.medianOfRatios : stats.median)}
-                  </dd>
+                  <dd className="m-0 text-3xl font-semibold tabular-nums">{formatValue(metric, mainOf(stats))}</dd>
                 </div>
               );
             })}
           </dl>
           {others.length ? (
-            <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            <dl className="m-0 flex flex-wrap gap-x-10 gap-y-3">
               {others.map((metric) => (
                 <div key={metric.key} className="grid gap-0.5">
                   <dt className="text-sm text-muted-foreground">{metric.label}</dt>
