@@ -151,13 +151,13 @@ export const forPublication = query({
 /** The most Publications the Analytics page lists (newest first). */
 export const LIST_LIMIT = 200;
 
-/** The published Publications of a Project, newest first, at most `LIST_LIMIT`. */
-export function publishedOf(ctx: Pick<QueryCtx, "db">, instanceId: string) {
+/** The published Publications of a Project, newest created first (the id breaks ties), at most `limit` (default `LIST_LIMIT`); never reads more. */
+export function publishedOf(ctx: Pick<QueryCtx, "db">, instanceId: string, limit: number = LIST_LIMIT) {
   return ctx.db
     .query("publications")
     .withIndex("by_instance_and_status", (q) => q.eq("instanceId", instanceId).eq("status", "published"))
     .order("desc")
-    .take(LIST_LIMIT);
+    .take(limit);
 }
 
 const missionLabel = (mission: Doc<"missions">) => mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission");

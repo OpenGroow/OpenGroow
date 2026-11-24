@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
+import { summarizeProject, SCAN_LIMIT } from "../analytics_summary";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
@@ -117,5 +118,50 @@ describe("analytics summary (issue #112)", () => {
     const s = await seed();
     const stranger = s.t.withIdentity({ name: "X", email: "x@e.com", tokenIdentifier: "test|x", subject: "x" });
     expect(await stranger.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID })).toBeNull();
+  });
+
+  describe("bounded read (issue #153)", () => {
+    const window = () => ({ from: Date.now() - 30 * DAY, to: Date.now() });
+
+    it("caps the scan at 2,000 Publications", () => {
+      expect(SCAN_LIMIT).toBe(2000);
+    });
+
+    it("reports a complete read without any partial marker", async () => {
+      const s = await seed();
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 1 } }] });
+      const summary = await s.t.run((ctx) => summarizeProject(ctx, INSTANCE_ID, window(), { scanLimit: 3 }));
+      expect(summary.scanLimited).toBe(false);
+      expect(summary.partial).toBe(false);
+      expect(summary.oldestScannedCreatedAt).toBeUndefined();
+    });
+
+    it("reads the newest-created Publications only and flags the limited read", async () => {
+      const s = await seed();
+      const ids = [];
+      for (let i = 0; i < 4; i++) ids.push(await s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ metrics: { views: 10 } }] }));
+      const summary = await s.t.run((ctx) => summarizeProject(ctx, INSTANCE_ID, window(), { scanLimit: 3 }));
+      expect(summary.scanLimited).toBe(true);
+      expect(summary.partial).toBe(true);
+      // Only the 3 newest are read: the 4th is never loaded.
+      expect(summary.adapters[0].groups[0].publications).toBe(3);
+      const oldestRead = await s.t.run(async (ctx) => (await ctx.db.get(ids[1]))!._creationTime);
+      expect(summary.oldestScannedCreatedAt).toBe(oldestRead);
+    });
+
+    it("counts Publications without a Recipe Snapshot as unattributed", async () => {
+      const s = await seed();
+      const withRecipe = await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
+      await s.post({ target: "tiktok:me", type: "make_video", kind: "video" });
+      await s.t.run(async (ctx) => {
+        const publication = (await ctx.db.get(withRecipe))!;
+        const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "f", name: "F", description: "d" });
+        const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name: "R", description: "d", status: "active" });
+        await ctx.db.patch(publication.missionId, { recipeSnapshot: { recipeId, recipeName: "R", version: 1, instructions: "i", constraints: [] } });
+      });
+      const summary = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID }))!;
+      expect(summary.unattributed).toBe(2);
+    });
   });
 });

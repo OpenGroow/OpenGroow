@@ -4,7 +4,7 @@ import { query, type QueryCtx } from "./_generated/server.js";
 import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
-import { publishedOf } from "./analytics.js";
+import { LIST_LIMIT, publishedOf } from "./analytics.js";
 import { postFace } from "./analytics_face.js";
 import type { Doc } from "./_generated/dataModel.js";
 
@@ -14,6 +14,8 @@ import type { Doc } from "./_generated/dataModel.js";
 const DAY_MS = 24 * 60 * 60_000;
 /** The window read when none is given. */
 export const DEFAULT_WINDOW_DAYS = 30;
+/** The most published Publications the summary reads, newest created first (ADR-084). It bounds the database reads. */
+export const SCAN_LIMIT = 2000;
 
 type Metrics = Record<string, number>;
 
@@ -67,6 +69,14 @@ export type AnalyticsSummary = {
   }>;
   /** Publications whose channel is linked to no adapter: analytics unavailable, not "no data yet". */
   unavailable: Array<{ platform: string; format?: string; missionType: string; publications: number }>;
+  /** Publications in the period whose Mission has no Recipe Snapshot (no recipe, no family). */
+  unattributed: number;
+  /** The read stopped at the scan limit: older Publications may be missing. Distinct from truncating a list. */
+  scanLimited: boolean;
+  /** Creation date of the oldest Publication read; present only when `scanLimited`. */
+  oldestScannedCreatedAt?: number;
+  /** The totals above are incomplete (same as `scanLimited`). */
+  partial: boolean;
 };
 
 type PublicationInWindow = {
@@ -80,8 +90,8 @@ type PublicationInWindow = {
 };
 
 /** The Project's published Publications whose publication date falls in `[from, to]`, each with its Mission and channel. */
-async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }) {
-  const publications = await publishedOf(ctx, instanceId);
+async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, cap: number = LIST_LIMIT) {
+  const publications = await publishedOf(ctx, instanceId, cap);
   const publishers = await projectPublishers(ctx, instanceId);
   const installed = await installedAnalyticsAdapters(ctx);
   const inWindow: PublicationInWindow[] = [];
@@ -99,16 +109,26 @@ async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: strin
     const platform = found?.channel.channelService ?? publication.target.split(":")[0];
     inWindow.push({ publication, mission, series, publishedAt, found, platform });
   }
-  return { inWindow, installed };
+  // A full page may hide older rows; a shorter one is the whole set.
+  const scanLimited = publications.length >= cap;
+  const oldestScannedCreatedAt = scanLimited ? publications[publications.length - 1]._creationTime : undefined;
+  return { inWindow, installed, scanLimited, oldestScannedCreatedAt };
 }
 
 /** The summary of a Project's published Publications whose publication date falls in `[from, to]`. */
-export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }): Promise<AnalyticsSummary> {
-  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
+export async function summarizeProject(
+  ctx: Pick<QueryCtx, "db">,
+  instanceId: string,
+  window: { from: number; to: number },
+  options: { scanLimit?: number } = {},
+): Promise<AnalyticsSummary> {
+  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT);
+  let unattributed = 0;
   type Acc = SummaryGroup & { latest: Metrics[] };
   const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
   const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
   for (const { publication, mission, series, found, platform } of inWindow) {
+    if (!mission.recipeSnapshot) unattributed += 1;
     const format = postFace(mission, platform).kind;
     const key = `${platform}\u0000${format ?? ""}\u0000${mission.type}`;
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
@@ -157,6 +177,10 @@ export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: st
         })),
       })),
     unavailable: [...unavailable.values()],
+    unattributed,
+    scanLimited,
+    ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
+    partial: scanLimited,
   };
 }
 
