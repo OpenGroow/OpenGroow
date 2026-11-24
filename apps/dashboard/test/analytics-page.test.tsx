@@ -12,7 +12,7 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 // Seam 3: `analytics.listForProject` is simulated.
 const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
 // `rows` may depend on the adapter the page asks for; `adapters` is what `analytics.adaptersForProject` answers.
-let rows: unknown[] | undefined | ((args: { adapter?: string }) => unknown[]) = [];
+let rows: unknown[] | undefined | ((args: { adapter?: string; familyId?: string }) => unknown[]) = [];
 let adapters: unknown[] = [];
 let unavailable: unknown[] = [];
 let emptyReason: unknown = { reason: "none" };
