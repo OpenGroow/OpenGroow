@@ -391,15 +391,14 @@ describe("Analytics page", () => {
       await open("Recipes");
       const list = container.querySelector('ul[aria-label="Recipes"]')!;
       expect(list.textContent).toContain("Close-up");
-      expect(list.textContent).toContain("3 Publications");
-      expect(list.textContent).toContain("2 measured");
+      expect(list.textContent).toContain("3 publications · 1 version");
       expect(list.textContent).not.toContain("Views");
       expect(text()).toContain("4 Unattributed Publications are in no recipe");
       await act(async () => list.querySelector<HTMLButtonElement>("button[aria-expanded]")!.click());
       const figures = list.textContent ?? "";
       expect(figures).toContain("Instagram");
-      expect(figures).toContain("reported by 2 of 3");
-      expect(figures).toContain("v2 (3 Publications)");
+      expect(figures).toContain("2/3 measured");
+      expect(figures).toContain("2 of 3");
     });
 
     it("shows no Mission, Run or usage figure and no recipe without Publications", async () => {
@@ -423,18 +422,18 @@ describe("Analytics page", () => {
       await render();
       await open("Families");
       await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Families"] button[aria-expanded]')!.click());
-      expect(container.querySelector('ul[aria-label="Families"]')!.textContent).toContain("Recipes: Close-up (3 Publications)");
+      expect(container.querySelector('ul[aria-label="Families"]')!.textContent).toContain("3 publications · 1 recipe");
     });
 
-    it("counts a family's recipe Publications for the adapter being viewed only", async () => {
+    it("counts a family's Publications and recipes for the adapter being viewed only", async () => {
       const split = recipe({ publications: 5, adapters: [reading("postiz", { publications: 2 }), reading("search", { publications: 3 })] });
       familySummary = { groupBy: "family", families: [family({ recipes: [split] })], unattributed: 0, partial: false };
       await render();
       await open("Families");
       await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Families"] button[aria-expanded]')!.click());
       const text = container.querySelector('ul[aria-label="Families"]')!.textContent!;
-      expect(text).toContain("Recipes: Close-up (2 Publications)");
-      expect(text).not.toContain("5 Publications");
+      expect(text).toContain("3 publications · 1 recipe");
+      expect(text).not.toContain("5 publications");
     });
 
     it("drills down from a group to its Publications through the same filters", async () => {
@@ -443,7 +442,7 @@ describe("Analytics page", () => {
       await render();
       await open("Recipes");
       await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Recipes"] button[aria-expanded]')!.click());
-      const show = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Show Publications")!;
+      const show = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.startsWith("View publications"))!;
       await act(async () => show.click());
       expect(view("Publications").getAttribute("aria-pressed")).toBe("true");
       expect(listArgs.at(-1)).toMatchObject({ recipeId: "rec-1" });

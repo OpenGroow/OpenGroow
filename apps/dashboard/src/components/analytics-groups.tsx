@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { platformName } from "@/src/components/platform-logo";
+import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { formatValue, type MetricDecl } from "@/src/lib/analytics-figures";
 
 // The Recipes and Families views of the Analytics page (ADR-084): one row per group, read for one Analytics
@@ -23,55 +23,62 @@ export type FamilyGroup = PerformanceGroup & { familyId: string; familyName: str
 const day = (at: number) => new Date(at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The figures of one metric on one platform, each with what it is: a stat is never a bare number. */
-function figuresOf(metric: MetricDecl, stats: MetricStats): Array<[string, string]> {
-  const fmt = (v: number | undefined) => formatValue(metric, v);
-  if (stats.recomputed !== undefined) {
-    return [
-      ["From the sums", fmt(stats.recomputed)],
-      ["Mean of Publications", fmt(stats.meanOfRatios)],
-      ["Median of Publications", fmt(stats.medianOfRatios)],
-    ];
-  }
-  return [...(stats.sum !== undefined ? ([["Total", fmt(stats.sum)]] as Array<[string, string]>) : []), ["Mean", fmt(stats.mean)], ["Median", fmt(stats.median)]];
-}
+const COLUMN = "py-2 text-right font-normal tabular-nums";
 
+/** One platform's figures as a table: a metric the Publications do not report is absent, never zero. */
 function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metrics: MetricDecl[] }) {
   const reported = metrics.filter((m) => reading.metrics[m.key]);
+  const hasRatio = reported.some((m) => reading.metrics[m.key].recomputed !== undefined);
   return (
-    <section aria-label={`${platformName(reading.platform)} figures`} className="grid gap-3 rounded-xl border border-border p-4">
-      <h4 className="m-0 text-base font-medium">
-        {platformName(reading.platform)}
-        <span className="ml-2 text-sm font-normal text-muted-foreground">
-          {plural(reading.publications, "Publication")}, {reading.measured} measured
+    <section aria-label={`${platformName(reading.platform)} figures`} className="grid gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="m-0 flex items-center gap-2 text-base font-medium">
+          <PlatformLogo service={reading.platform} className="size-5" />
+          {platformName(reading.platform)}
+        </h4>
+        <span className="text-sm text-muted-foreground">
+          {reading.measured}/{reading.publications} measured
         </span>
-      </h4>
+      </div>
       {reported.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">No readings yet.</p>
       ) : (
-        <dl className="m-0 grid gap-3 sm:grid-cols-2">
-          {reported.map((metric) => {
-            const stats = reading.metrics[metric.key];
-            return (
-              <div key={metric.key} className="grid gap-1">
-                <dt className="text-sm font-medium">
-                  {metric.label}
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    reported by {stats.observations} of {reading.publications}
-                  </span>
-                </dt>
-                <dd className="m-0 flex flex-wrap gap-x-4 text-sm tabular-nums text-muted-foreground">
-                  {figuresOf(metric, stats).map(([label, value]) => (
-                    <span key={label}>
-                      {label} <span className="text-foreground">{value}</span>
-                    </span>
-                  ))}
-                </dd>
-              </div>
-            );
-          })}
-        </dl>
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th scope="col" className="py-2 text-left font-normal">Metric</th>
+              <th scope="col" className={COLUMN}>Total</th>
+              <th scope="col" className={COLUMN}>Average</th>
+              <th scope="col" className={COLUMN}>Median</th>
+            </tr>
+          </thead>
+          <tbody>
+            {reported.map((metric) => {
+              const stats = reading.metrics[metric.key];
+              const fmt = (v: number | undefined) => formatValue(metric, v);
+              const ratio = stats.recomputed !== undefined;
+              return (
+                <tr key={metric.key} className="border-b border-border last:border-0">
+                  <th scope="row" className="py-2 text-left font-normal">
+                    {metric.label}
+                    <span className="ml-2 text-xs text-muted-foreground">{stats.observations} of {reading.publications}</span>
+                  </th>
+                  <td className={COLUMN} title={ratio ? "Recomputed from the sums" : undefined}>
+                    {fmt(ratio ? stats.recomputed : stats.sum)}
+                  </td>
+                  <td className={COLUMN} title={ratio ? "Mean of the Publications' own ratios" : undefined}>
+                    {fmt(ratio ? stats.meanOfRatios : stats.mean)}
+                  </td>
+                  <td className={COLUMN} title={ratio ? "Median of the Publications' own ratios" : undefined}>
+                    {fmt(ratio ? stats.medianOfRatios : stats.median)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       )}
+      {hasRatio ? <p className="m-0 text-xs text-muted-foreground">Ratios: Total is recomputed from the sums; Average and Median are taken over each Publication's own ratio.</p> : null}
     </section>
   );
 }
@@ -79,60 +86,50 @@ function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metri
 function GroupRow({
   name,
   badges,
-  group,
+  subtitle,
   adapter,
   metrics,
-  detail,
   onShowPublications,
 }: {
   name: string;
   badges: string[];
-  group: PerformanceGroup;
+  subtitle: string;
   adapter: AdapterReading;
   metrics: MetricDecl[];
-  detail: React.ReactNode;
   onShowPublications: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const Chevron = open ? ChevronDown : ChevronRight;
+  const Chevron = open ? ChevronUp : ChevronDown;
   return (
     <li>
-      <Card className="grid gap-4 p-4">
-        <Button type="button" variant="ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="h-auto w-full justify-between gap-4 px-0 py-0 text-left font-normal whitespace-normal hover:bg-transparent">
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="font-medium">{name}</span>
-            {badges.map((b) => (
-              <Badge key={b} variant="outline">
-                {b}
-              </Badge>
-            ))}
+      <Card className="gap-0 p-0">
+        <Button type="button" variant="ghost" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="h-auto w-full items-start justify-between gap-4 rounded-b-none px-5 py-4 text-left font-normal whitespace-normal hover:bg-transparent">
+          <span className="grid min-w-0 gap-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="text-lg font-semibold">{name}</span>
+              {badges.map((b) => (
+                <Badge key={b} variant="outline">
+                  {b}
+                </Badge>
+              ))}
+            </span>
+            <span className="text-sm text-muted-foreground">{subtitle}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-4 text-sm text-muted-foreground">
-            <span>{plural(adapter.publications, "Publication")}</span>
-            <span>{adapter.measured} measured</span>
-            <span className="max-sm:hidden">Last published {day(group.lastPublishedAt)}</span>
-            <Chevron aria-hidden="true" className="size-4" />
-          </span>
+          <Chevron aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground" />
         </Button>
         {open ? (
-          <div className="grid gap-4">
-            {adapter.freshness ? (
-              <p className="m-0 text-sm text-muted-foreground">
-                Readings taken {day(adapter.freshness.oldestReadingAt)}
-                {adapter.freshness.newestReadingAt !== adapter.freshness.oldestReadingAt ? ` to ${day(adapter.freshness.newestReadingAt)}` : ""}.
-              </p>
-            ) : (
-              <p className="m-0 text-sm text-muted-foreground">No Publication measured yet.</p>
-            )}
-            {detail}
-            <div className="grid gap-3 lg:grid-cols-2">
-              {adapter.platforms.map((p) => (
-                <PlatformFigures key={p.platform} reading={p} metrics={metrics} />
-              ))}
+          <div className="grid gap-6 border-t border-border px-5 py-4">
+            {adapter.platforms.map((p) => (
+              <PlatformFigures key={p.platform} reading={p} metrics={metrics} />
+            ))}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">
+                {adapter.freshness ? `Updated ${day(adapter.freshness.newestReadingAt)}` : "No Publication measured yet"}
+              </span>
+              <Button type="button" variant="link" className="h-auto p-0" onClick={onShowPublications}>
+                View publications <ArrowRight aria-hidden="true" className="size-4" />
+              </Button>
             </div>
-            <Button type="button" variant="outline" className="w-fit" onClick={onShowPublications}>
-              Show Publications
-            </Button>
           </div>
         ) : null}
       </Card>
@@ -153,14 +150,9 @@ export function RecipeGroups({ groups, adapterId, metrics, onShowPublications }:
             key={group.recipeId}
             name={group.recipeName}
             badges={group.archived ? ["Archived"] : []}
-            group={group}
+            subtitle={`${plural(adapter.publications, "publication")} · ${plural(group.versions.length, "version")}`}
             adapter={adapter}
             metrics={metrics}
-            detail={
-              <p className="m-0 text-sm text-muted-foreground">
-                Versions published: {group.versions.map((v) => `v${v.version} (${plural(v.publications, "Publication")})`).join(", ")}
-              </p>
-            }
             onShowPublications={() => onShowPublications(group.recipeId)}
           />,
         ];
@@ -180,18 +172,9 @@ export function FamilyGroups({ groups, adapterId, metrics, onShowPublications }:
             key={group.familyId}
             name={group.familyName}
             badges={group.archived ? ["Archived"] : []}
-            group={group}
+            subtitle={`${plural(adapter.publications, "publication")} · ${plural(group.recipes.filter((r) => readingOf(r, adapterId)).length, "recipe")}`}
             adapter={adapter}
             metrics={metrics}
-            detail={
-              <p className="m-0 text-sm text-muted-foreground">
-                Recipes: {group.recipes.flatMap((r) => {
-                  // The count of the adapter being viewed, never the recipe's total across adapters.
-                  const own = readingOf(r, adapterId);
-                  return own ? [`${r.recipeName} (${plural(own.publications, "Publication")})`] : [];
-                }).join(", ")}
-              </p>
-            }
             onShowPublications={() => onShowPublications(group.familyId)}
           />,
         ];
