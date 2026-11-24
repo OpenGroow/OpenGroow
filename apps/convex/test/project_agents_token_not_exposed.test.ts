@@ -13,7 +13,7 @@ const modules = {
 };
 
 const INSTANCE = "instance-token";
-const TEMPLATE = "example/planner";
+const TEMPLATE = "example/reader";
 const OWNER = { name: "Owner", email: "owner@example.com", tokenIdentifier: "test|owner", subject: "owner" };
 
 async function seed(t: ReturnType<typeof convexTest>, config: Record<string, unknown>) {

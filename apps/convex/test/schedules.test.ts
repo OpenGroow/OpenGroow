@@ -396,24 +396,24 @@ describe("publishTargets in a Schedule payload", () => {
 
 describe("schedules.createDefaults", () => {
   const WEEKLY = { unit: "weekly" as const, dayOfWeek: 1, hour: 8, minute: 0 };
-  const defaults = [{ type: "plan", payload: {}, frequency: WEEKLY }];
+  const defaults = [{ type: "report", payload: {}, frequency: WEEKLY }];
 
   it("creates the declared weekly Schedule, in the user's timezone", async () => {
     const t = convexTest(schema, modules);
     await seedInstance(t);
 
-    await t.mutation(internal.schedules.createDefaults, { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@opengroow/strategy", timezone: "Europe/Paris", defaults });
+    await t.mutation(internal.schedules.createDefaults, { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@example/reporter", timezone: "Europe/Paris", defaults });
 
     const rows = await t.run((ctx) => ctx.db.query("schedules").collect());
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ type: "plan", unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0, timezone: "Europe/Paris", status: "active", ownerId: OWNER.subject });
+    expect(rows[0]).toMatchObject({ type: "report", unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0, timezone: "Europe/Paris", status: "active", ownerId: OWNER.subject });
     expect(rows[0]!.nextRunAt).toBeGreaterThan(Date.now());
   });
 
   it("creates it only once for a Mission type", async () => {
     const t = convexTest(schema, modules);
     await seedInstance(t);
-    const args = { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@opengroow/strategy", timezone: "UTC", defaults };
+    const args = { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@example/reporter", timezone: "UTC", defaults };
 
     await t.mutation(internal.schedules.createDefaults, args);
     await t.mutation(internal.schedules.createDefaults, args);

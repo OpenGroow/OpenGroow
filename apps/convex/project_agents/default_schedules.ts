@@ -21,7 +21,7 @@ function defaultPayload(raw: string): unknown {
 }
 
 /**
- * Creates the Schedules a Template declares with `missionTypes[].defaultSchedule` (ADR-081) once
+ * Creates the Schedules a Template declares with `missionTypes[].defaultSchedule` once
  * the Agent is active. A Mission type that already has a Schedule is left alone. A failure here
  * never fails the activation: the Agent is active and the user can create the Schedule by hand.
  */

@@ -7,7 +7,7 @@ import { fixtureTemplate } from "./helpers/template_registry.helpers";
 // Activation of a Template that declares the Internal MCP (ADR-080): the URL
 // is derived from the deployment, and the Agent gets its own token.
 
-const internalTemplate = fixtureTemplate("example/planner", {
+const internalTemplate = fixtureTemplate("example/reader", {
   mcpServers: [{ name: "opengroow", transport: "streamable-http", url: "", internal: { tools: ["list_mission_types"] } }],
 });
 
@@ -41,14 +41,14 @@ describe("Internal MCP URL", () => {
 
 describe("Agent token at activation", () => {
   it("is generated as the Agent's apiKey, bound to its Project and Template", () => {
-    const config = withInternalMcpToken(internalTemplate, "project-a", "example/planner", { other: "kept" });
+    const config = withInternalMcpToken(internalTemplate, "project-a", "example/reader", { other: "kept" });
     expect(config?.other).toBe("kept");
-    expect(parseAgentToken(String(config?.apiKey))).toEqual({ instanceId: "project-a", templateId: "example/planner" });
+    expect(parseAgentToken(String(config?.apiKey))).toEqual({ instanceId: "project-a", templateId: "example/reader" });
   });
 
   it("is new at each activation, so deactivating and reactivating rotates it", () => {
-    const first = withInternalMcpToken(internalTemplate, "project-a", "example/planner", undefined);
-    const second = withInternalMcpToken(internalTemplate, "project-a", "example/planner", first);
+    const first = withInternalMcpToken(internalTemplate, "project-a", "example/reader", undefined);
+    const second = withInternalMcpToken(internalTemplate, "project-a", "example/reader", first);
     expect(second?.apiKey).not.toBe(first?.apiKey);
   });
 

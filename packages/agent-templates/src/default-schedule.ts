@@ -1,5 +1,5 @@
 /**
- * Manifest validation for a Mission type's `defaultSchedule` (ADR-081): the cadence of the
+ * Manifest validation for a Mission type's `defaultSchedule`: the cadence of the
  * Schedule OpenGroow creates when the Agent is first activated. The user can change it
  * afterwards. The timezone is the user's, never declared by a Template.
  */

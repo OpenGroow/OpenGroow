@@ -421,7 +421,7 @@ describe("InstanceSchedulesContent", () => {
 
   it("Run now creates a Mission from the Schedule's type and payload, without waiting for its slot", async () => {
     useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance") return [makeSchedule({ type: "plan", payload: { a: 1 } })];
+      if (key === "schedules.listByInstance") return [makeSchedule({ type: "report", payload: { a: 1 } })];
       if (key === "project_agents.listByInstance") return [];
       return undefined;
     });
@@ -436,14 +436,14 @@ describe("InstanceSchedulesContent", () => {
     expect(createMission).toHaveBeenCalledWith({
       instanceId: "instance-1",
       templateId: "@opengroow/seo",
-      type: "plan",
+      type: "report",
       payload: { a: 1 },
     });
   });
 
   it("Run now shows why the Mission was refused and is enabled again afterwards", async () => {
     useQueryMock.mockImplementation((key: string) => {
-      if (key === "schedules.listByInstance") return [makeSchedule({ type: "plan" })];
+      if (key === "schedules.listByInstance") return [makeSchedule({ type: "report" })];
       if (key === "project_agents.listByInstance") return [];
       return undefined;
     });

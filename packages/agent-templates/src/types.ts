@@ -429,7 +429,7 @@ export type MissionType = {
   analytics?: AnalyticsDeclaration;
   /**
    * Cadence of the Schedule OpenGroow creates for this Mission type when the Agent is first
-   * activated (ADR-081). The user can change or delete it. Absent: no Schedule is created.
+   * activated. The user can change or delete it. Absent: no Schedule is created.
    */
   defaultSchedule?: DefaultScheduleDeclaration;
 };

@@ -7,7 +7,7 @@ import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS, WEB_ANALYTICS } from "./analytics_fixture";
 
-// Issue #112: the aggregated read the Strategy Agent uses (ADR-081).
+// Issue #112: the aggregated read an Agent uses through the Internal MCP.
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),

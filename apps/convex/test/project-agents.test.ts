@@ -1452,38 +1452,38 @@ describe("activateProjectAgent", () => {
   });
 
   it("creates the default Schedule a Template declares, once, in the user's timezone", async () => {
-    const STRATEGY_ID = "@opengroow/strategy-fixture";
+    const REPORTER_ID = "@example/reporter";
     const t = convexTest(schema, modules);
     const waitForRuntimeEvent = await getWaitForRuntimeEvent();
     await seedInstance(t);
-    const strategy = fixtureTemplate(STRATEGY_ID, {
+    const reporter = fixtureTemplate(REPORTER_ID, {
       visibility: "production",
-      missionTypes: [{ type: "plan", label: "Plan", payload: "{}", agentsMd: "plan.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
+      missionTypes: [{ type: "report", label: "Report", payload: "{}", agentsMd: "report.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
     });
-    strategy.missionAgentsMd = { plan: "# Plan\n" };
-    const restore = installTemplateRegistry([INSTANCE_ID], [strategy]);
+    reporter.missionAgentsMd = { report: "# Report\n" };
+    const restore = installTemplateRegistry([INSTANCE_ID], [reporter]);
 
     waitForRuntimeEvent
       .mockResolvedValueOnce({
         status: 200, found: true, type: RUNTIME_WORKSPACE_CREATE_RESULT,
-        payload: { ok: true, commandId: "cmd-1", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-strategy", label: STRATEGY_ID, absolutePath: "/home/node/.openclaw/workspace-ws-strategy" } },
+        payload: { ok: true, commandId: "cmd-1", instanceId: INSTANCE_ID, data: { workspaceKey: "ws-reporter", label: REPORTER_ID, absolutePath: "/home/node/.openclaw/workspace-ws-reporter" } },
       })
       .mockResolvedValueOnce({
         status: 200, found: true, type: RUNTIME_AGENT_REGISTER_AND_CONFIGURE_RESULT,
-        payload: { ok: true, commandId: "cmd-3", instanceId: INSTANCE_ID, data: { agentId: STRATEGY_ID, registered: true, configured: false } },
+        payload: { ok: true, commandId: "cmd-3", instanceId: INSTANCE_ID, data: { agentId: REPORTER_ID, registered: true, configured: false } },
       });
-    addFileDeleteMocks(waitForRuntimeEvent, "ws-strategy");
+    addFileDeleteMocks(waitForRuntimeEvent, "ws-reporter");
     waitForRuntimeEvent
-      .mockResolvedValueOnce(fileWriteResult("ws-strategy", "AGENTS.md"))
-      .mockResolvedValueOnce(fileWriteResult("ws-strategy", "plan.md"));
+      .mockResolvedValueOnce(fileWriteResult("ws-reporter", "AGENTS.md"))
+      .mockResolvedValueOnce(fileWriteResult("ws-reporter", "report.md"));
     try {
       const result = await t.withIdentity(TEST_USER).action(api.project_agents_node.addProjectAgent, {
-        instanceId: INSTANCE_ID, templateId: STRATEGY_ID, timezone: "Europe/Paris",
+        instanceId: INSTANCE_ID, templateId: REPORTER_ID, timezone: "Europe/Paris",
       });
       expect(result.status).toBe("active");
       const rows = await t.run((ctx) => ctx.db.query("schedules").collect());
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ templateId: STRATEGY_ID, type: "plan", unit: "weekly", dayOfWeek: 1, timezone: "Europe/Paris", status: "active" });
+      expect(rows[0]).toMatchObject({ templateId: REPORTER_ID, type: "report", unit: "weekly", dayOfWeek: 1, timezone: "Europe/Paris", status: "active" });
     } finally {
       restore();
     }

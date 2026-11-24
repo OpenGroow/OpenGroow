@@ -27,7 +27,7 @@ export async function activeProjectAgent(
 
 /** The rules that decide whether a Mission can be created (publication date, known and compatible channels,
  * scheduling, active agent of the Mission type). Read-only: it creates nothing, so it checks a manual
- * Mission and a candidate Mission (a Plan item) with the same rules. Throws on the first refusal. */
+ * Mission and a candidate Mission (one not created yet) with the same rules. Throws on the first refusal. */
 export async function assertMissionCreatable(ctx: QueryCtx, candidate: CandidateMission): Promise<void> {
   assertValidPublishAt(candidate.payload);
   await assertKnownPublishTargets(ctx, candidate.instanceId, candidate.payload);

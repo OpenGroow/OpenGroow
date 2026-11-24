@@ -2,12 +2,12 @@ import { describe, it, expect } from "vitest";
 import { validateManifest } from "./index.js";
 
 const withSchedule = (defaultSchedule: unknown) => ({
-  id: "strategy",
-  name: "Strategy",
-  description: "Plans the next Missions",
+  id: "reporter",
+  name: "Reporter",
+  description: "Writes a weekly report",
   category: "demo",
   mcpServers: [],
-  missionTypes: [{ type: "plan", label: "Plan", payload: "{}", agentsMd: "plan.md", defaultSchedule }],
+  missionTypes: [{ type: "report", label: "Report", payload: "{}", agentsMd: "report.md", defaultSchedule }],
 });
 
 describe("missionTypes[].defaultSchedule", () => {

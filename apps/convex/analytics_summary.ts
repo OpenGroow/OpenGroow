@@ -8,8 +8,8 @@ import { publishedOf } from "./analytics.js";
 import { postFace } from "./analytics_face.js";
 import type { Doc } from "./_generated/dataModel.js";
 
-// Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for the Strategy
-// Agent (ADR-081): figures by platform, format and Mission type, not raw rows.
+// Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for Agents reading
+// through the Internal MCP (ADR-080): figures by platform, format and Mission type, not raw rows.
 
 const DAY_MS = 24 * 60 * 60_000;
 /** The window read when none is given. */

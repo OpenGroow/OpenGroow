@@ -56,7 +56,7 @@ async function seedProject(t: ReturnType<typeof convexTest>, projectId: string, 
       await insertInstance(ctx, { jobId: `job-${projectId}`, status: "running", runtimeStatus: "linked", runtimeReady: true, createdAt: new Date().toISOString(), openclawId: projectId, updatedAt: new Date().toISOString(), userId: OWNER.tokenIdentifier });
     }
     await ctx.db.insert("projectAgents", { instanceId: projectId, templateId, status: "active", mcpServerKeys: ["opengroow"], config: { apiKey: token }, createdAt: now, updatedAt: now });
-    const missionId = await ctx.db.insert("missions", { ownerId: "owner", instanceId: projectId, templateId, type: "plan", payload: {}, status: "doing", createdAt: now, updatedAt: now });
+    const missionId = await ctx.db.insert("missions", { ownerId: "owner", instanceId: projectId, templateId, type: "report", payload: {}, status: "doing", createdAt: now, updatedAt: now });
     await ctx.db.insert("runs", { missionId, ownerId: "owner", instanceId: projectId, templateId, agentName: "a", sessionKey: `s-${projectId}-${templateId}`, status: "running", createdAt: now, updatedAt: now });
   });
   return token;

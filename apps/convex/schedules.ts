@@ -65,7 +65,7 @@ export const create = mutation({
   },
 });
 
-// Default Schedules a Template declares (`missionTypes[].defaultSchedule`, ADR-081), created at
+// Default Schedules a Template declares (`missionTypes[].defaultSchedule`), created at
 // activation. A Mission type that already has a Schedule for this Agent is left alone, so
 // reactivating never duplicates one.
 export const createDefaults = internalMutation({
