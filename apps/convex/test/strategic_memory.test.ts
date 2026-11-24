@@ -130,6 +130,22 @@ describe("strategic_memory.references", () => {
     expect(refs?.publications).toEqual([expect.objectContaining({ id: publication, target: "instagram:me" })]);
   });
 
+  it("never resolves an entity of another Project referenced by a review", async () => {
+    const foreign = await t.run(async (ctx) => {
+      const now = Date.now();
+      const family = await ctx.db.insert("creativeFamilies", { instanceId: OTHER_INSTANCE_ID, slug: "x", name: "Foreign family", description: "d" });
+      const recipe = await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE_ID, creativeFamilyId: family, templateId: "tpl", missionType: "make_reel", name: "Foreign recipe", description: "d", status: "active" } as never);
+      const missionId = await ctx.db.insert("missions", { ownerId: STRANGER.subject, instanceId: OTHER_INSTANCE_ID, templateId: "tpl", type: "make_reel", payload: {}, status: "done", createdAt: now, updatedAt: now });
+      const publication = await ctx.db.insert("publications", { missionId, instanceId: OTHER_INSTANCE_ID, target: "instagram:other", status: "published", createdAt: now, updatedAt: now });
+      return { family, recipe, publication };
+    });
+    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { familyIds: [foreign.family], recipeIds: [foreign.recipe], publicationIds: [foreign.publication] } });
+    const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
+    expect(refs?.families).toEqual([{ id: foreign.family, name: null, archived: false }]);
+    expect(refs?.recipes).toEqual([{ id: foreign.recipe, name: null, archived: false, familyId: null }]);
+    expect(refs?.publications).toEqual([{ id: foreign.publication, target: null, missionId: null }]);
+  });
+
   it("is null for another Project's review or a stranger", async () => {
     const other = await review(OTHER_INSTANCE_ID, { createdAt: 10 });
     expect(await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: other })).toBeNull();

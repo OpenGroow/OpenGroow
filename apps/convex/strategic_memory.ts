@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel.js";
 import { query } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
+import { latestOf } from "./strategic_reviews.js";
 
 // Dashboard reads of the Strategic Memory (ADR-085, issue #167). Read-only and
 // scoped to the caller's Project: persistence lives in `strategic_reviews.ts`,
@@ -21,7 +22,7 @@ export const current = query({
   args: { instanceId: v.string() },
   handler: async (ctx, args) => {
     if ((await readOwnerId(ctx, args.instanceId)) === null) return null;
-    const latest = await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", args.instanceId)).order("desc").first();
+    const latest = await latestOf(ctx, args.instanceId);
     return latest ? reviewView(latest) : null;
   },
 });

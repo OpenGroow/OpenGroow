@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./runtime-workspace": "./src/runtime-workspace.ts",
-    "./optional-plugins": "./src/optional-plugins.ts"
+    "./optional-plugins": "./src/optional-plugins.ts",
+    "./strategic-review-period": "./src/strategic-review-period.ts"
   }
 }

@@ -3,7 +3,8 @@ import { internalMutation, internalQuery, mutation, type MutationCtx } from "./_
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
-import { persistStrategicReview } from "./strategic_reviews.js";
+import { latestOf, persistStrategicReview } from "./strategic_reviews.js";
+import { analysisDaysOf, isValidAnalysisDays, MAX_ANALYSIS_DAYS, MIN_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import type { RunResult } from "./run_result.js";
 import { CONTEXT_PROVIDER_RENDERERS } from "./mission_dispatcher/context_providers.js";
 
@@ -12,12 +13,9 @@ import { CONTEXT_PROVIDER_RENDERERS } from "./mission_dispatcher/context_provide
 // Mission and no Production Recipe. When a Run starts, Convex pins on the Run
 // (`run.strategicReview`) the analysis period resolved from `analysisDays` and
 // the Project's latest Strategic Review as its base; neither comes from the
-// Agent. What the Run returns is handled elsewhere (#168).
+// Agent. Its result is validated and persisted by `settleStrategicReviewRun`.
 
 export const STRATEGIC_REVIEW_JOB_TYPE = "strategic_review" as const;
-export const DEFAULT_ANALYSIS_DAYS = 30;
-export const MIN_ANALYSIS_DAYS = 1;
-export const MAX_ANALYSIS_DAYS = 365;
 /** Tries of one execution (the first plus its retries after an invalid result). */
 export const MAX_STRATEGIC_REVIEW_TRIES = 3;
 
@@ -50,17 +48,6 @@ function frequencyOf(job: Doc<"jobs">): Frequency {
 
 function nextRunPatch(job: Doc<"jobs">, now: number) {
   return job.state === "active" ? { nextRunAt: computeNextRunAt(frequencyOf(job), job.timezone, now) } : {};
-}
-
-export function isValidAnalysisDays(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= MIN_ANALYSIS_DAYS && value <= MAX_ANALYSIS_DAYS;
-}
-
-/** The Job's `analysisDays`; the default when the config holds none or an invalid one. */
-export function analysisDaysOf(job: Pick<Doc<"jobs">, "config">): number {
-  const config = job.config;
-  const value = config && typeof config === "object" && !Array.isArray(config) ? (config as Record<string, unknown>).analysisDays : undefined;
-  return isValidAnalysisDays(value) ? value : DEFAULT_ANALYSIS_DAYS;
 }
 
 /** The text a Strategic Review Run reads: the pinned period and how to use it (context provider). */
@@ -119,10 +106,9 @@ async function agentNameOf(ctx: MutationCtx, job: Doc<"jobs">): Promise<string> 
 
 /** Creates the Run with its pins: the period ends now, the base is the Project's latest Review. */
 async function startRun(ctx: MutationCtx, job: Doc<"jobs">, now: number): Promise<Id<"runs">> {
-  // The same read as `internal.strategic_reviews.latestByInstance`: a mutation cannot call a query.
-  const latest = await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", job.instanceId)).order("desc").first();
+  const latest = await latestOf(ctx, job.instanceId);
   const pins: StrategicReviewPins = {
-    periodStart: now - analysisDaysOf(job) * DAY_MS,
+    periodStart: now - analysisDaysOf(job.config) * DAY_MS,
     periodEnd: now,
     ...(latest ? { baseReviewId: latest._id } : {}),
   };

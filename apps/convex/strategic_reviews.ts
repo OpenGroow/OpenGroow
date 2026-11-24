@@ -18,7 +18,7 @@ const reject = (reason: Extract<PersistResult, { ok: false }>["reason"], message
 const REFERENCE_TABLES = { familyIds: "creativeFamilies", recipeIds: "productionRecipes", publicationIds: "publications" } as const;
 
 /** The latest persisted Review of a Project, the current Strategic Memory. */
-async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"strategicReviews"> | null> {
+export async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"strategicReviews"> | null> {
   return await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", instanceId)).order("desc").first();
 }
 
@@ -42,19 +42,24 @@ async function pinsOfRunningStrategicReview(ctx: QueryCtx, instanceId: string, t
     .query("runs")
     .withIndex("by_instance_template_status", (q) => q.eq("instanceId", instanceId).eq("templateId", templateId).eq("status", "running"))
     .take(20);
-  return running.find((run) => run.strategicReview !== undefined)?.strategicReview;
+  for (const run of running) {
+    if (run.strategicReview === undefined || !("jobId" in run) || run.jobId === undefined) continue;
+    // Only a Run whose parent is a strategic_review Job is pinned.
+    const job = await ctx.db.get(run.jobId);
+    if (job?.type === "strategic_review") return run.strategicReview;
+  }
+  return undefined;
 }
 
 /**
- * The Strategic Memory an Agent of this Project reads. This is the seam for the
- * Run's pinned base (#168): a `strategic_review` Run will be served its
- * `baseReviewId` (through `reviewOf`) instead of the latest Review. Every other
- * Agent gets the latest one.
+ * The Strategic Memory an Agent of this Project reads. A Run of the Agent that
+ * is a running `strategic_review` Run is served the base it was dispatched with
+ * (its `baseReviewId`, through `reviewOf`), even if a newer Review landed since;
+ * every other reader gets the latest Review.
  */
 export async function readStrategicMemory(ctx: QueryCtx, scope: { instanceId: string; templateId?: string }): Promise<StrategicMemoryReading> {
   const pins = scope.templateId === undefined ? undefined : await pinsOfRunningStrategicReview(ctx, scope.instanceId, scope.templateId);
-  // A strategic_review Run reads the base it was dispatched with (even if a newer Review landed since);
-  // a Run pinned without a base reads no memory.
+  // A Run pinned without a base reads no memory.
   const review = pins ? (pins.baseReviewId ? await reviewOf(ctx, scope.instanceId, pins.baseReviewId) : null) : await latestOf(ctx, scope.instanceId);
   if (!review) return { exists: false, message: "No Strategic Review exists for this Project yet: there is no Strategic Memory." };
   return { exists: true, reviewId: review._id, periodStart: review.periodStart, periodEnd: review.periodEnd, memory: review.consolidatedMemory, references: review.references, createdAt: review.createdAt };
