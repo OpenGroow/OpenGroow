@@ -285,13 +285,20 @@ export const beginAll = internalMutation({
       }
       let publicationId = existing?._id;
       if (existing) {
-        await ctx.db.patch(existing._id, { status: "pending", error: undefined, updatedAt: now });
+        // A retry keeps its Run unless a new Run produced the output now sent.
+        await ctx.db.patch(existing._id, {
+          status: "pending",
+          error: undefined,
+          ...(mission.lastResultRunId !== undefined ? { runId: mission.lastResultRunId } : {}),
+          updatedAt: now,
+        });
       } else {
         publicationId = await ctx.db.insert("publications", {
           missionId: args.missionId,
           instanceId: mission.instanceId,
           target,
           status: "pending",
+          ...(mission.lastResultRunId !== undefined ? { runId: mission.lastResultRunId } : {}),
           createdAt: now,
           updatedAt: now,
         });
@@ -353,6 +360,7 @@ export const recordFailure = internalMutation({
         target,
         status: "failed",
         error: args.error,
+        ...(mission.lastResultRunId !== undefined ? { runId: mission.lastResultRunId } : {}),
         createdAt: now,
         updatedAt: now,
       });
