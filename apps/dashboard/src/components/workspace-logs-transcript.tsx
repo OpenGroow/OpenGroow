@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
+import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 import type { SessionTranscriptTurn, TranscriptState } from "@/src/components/workspace-logs.types";
 
 /** The selected Run's session transcript — what the Agent said and did. */
@@ -64,9 +65,13 @@ function TranscriptTurnCard({ turn }: { turn: SessionTranscriptTurn }) {
             </span>
           ) : null}
         </div>
-        <p className="m-0 whitespace-pre-wrap text-base leading-7 text-foreground">
-          {turn.text}
-        </p>
+        {turn.role === "assistant" ? (
+          <WorkspaceMarkdown content={turn.text} />
+        ) : (
+          <p className="m-0 whitespace-pre-wrap text-base leading-7 text-foreground">
+            {turn.text}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
