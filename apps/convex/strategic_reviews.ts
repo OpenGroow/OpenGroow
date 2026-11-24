@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { v, type ObjectType } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { REFERENCE_KEYS, normalizeMemory, parseEnvelope, type ReferenceKey } from "./strategic_review_rules.js";
@@ -36,14 +36,26 @@ export type StrategicMemoryReading =
   | { exists: false; message: string }
   | { exists: true; reviewId: Id<"strategicReviews">; periodStart: number; periodEnd: number; memory: string; references: Doc<"strategicReviews">["references"]; createdAt: number };
 
+/** The pins of the strategic_review Run this Agent is running, if it has one (the token carries no Run). */
+async function pinsOfRunningStrategicReview(ctx: QueryCtx, instanceId: string, templateId: string): Promise<NonNullable<Doc<"runs">["strategicReview"]> | undefined> {
+  const running = await ctx.db
+    .query("runs")
+    .withIndex("by_instance_template_status", (q) => q.eq("instanceId", instanceId).eq("templateId", templateId).eq("status", "running"))
+    .take(20);
+  return running.find((run) => run.strategicReview !== undefined)?.strategicReview;
+}
+
 /**
  * The Strategic Memory an Agent of this Project reads. This is the seam for the
  * Run's pinned base (#168): a `strategic_review` Run will be served its
  * `baseReviewId` (through `reviewOf`) instead of the latest Review. Every other
  * Agent gets the latest one.
  */
-export async function readStrategicMemory(ctx: QueryCtx, scope: { instanceId: string }): Promise<StrategicMemoryReading> {
-  const review = await latestOf(ctx, scope.instanceId);
+export async function readStrategicMemory(ctx: QueryCtx, scope: { instanceId: string; templateId?: string }): Promise<StrategicMemoryReading> {
+  const pins = scope.templateId === undefined ? undefined : await pinsOfRunningStrategicReview(ctx, scope.instanceId, scope.templateId);
+  // A strategic_review Run reads the base it was dispatched with (even if a newer Review landed since);
+  // a Run pinned without a base reads no memory.
+  const review = pins ? (pins.baseReviewId ? await reviewOf(ctx, scope.instanceId, pins.baseReviewId) : null) : await latestOf(ctx, scope.instanceId);
   if (!review) return { exists: false, message: "No Strategic Review exists for this Project yet: there is no Strategic Memory." };
   return { exists: true, reviewId: review._id, periodStart: review.periodStart, periodEnd: review.periodEnd, memory: review.consolidatedMemory, references: review.references, createdAt: review.createdAt };
 }
@@ -67,6 +79,16 @@ async function unknownReferences(ctx: QueryCtx, instanceId: string, ids: string[
   return { bad, good };
 }
 
+const persistArgs = {
+  instanceId: v.string(),
+  runId: v.id("runs"),
+  baseReviewId: v.optional(v.id("strategicReviews")),
+  periodStart: v.number(),
+  periodEnd: v.number(),
+  envelope: v.any(),
+};
+export type PersistArgs = ObjectType<typeof persistArgs>;
+
 /**
  * Validates an Agent's result envelope and persists it as the Project's next
  * Strategic Review, in one atomic mutation: (1) the Review already persisted
@@ -76,61 +98,57 @@ async function unknownReferences(ctx: QueryCtx, instanceId: string, ids: string[
  * `baseReviewId` are the values pinned at dispatch, never read from the envelope.
  */
 export const persist = internalMutation({
-  args: {
-    instanceId: v.string(),
-    runId: v.id("runs"),
-    baseReviewId: v.optional(v.id("strategicReviews")),
-    periodStart: v.number(),
-    periodEnd: v.number(),
-    envelope: v.any(),
-  },
-  handler: async (ctx: MutationCtx, args): Promise<PersistResult> => {
-    const run = await ctx.db.get(args.runId);
-    if (!run || run.instanceId !== args.instanceId) return reject("invalid_result", "The Run does not belong to this Project.");
-
-    const existing = await ctx.db.query("strategicReviews").withIndex("by_instance_run", (q) => q.eq("instanceId", args.instanceId).eq("runId", args.runId)).first();
-    if (existing) return { ok: true, reviewId: existing._id, created: false, memoryChanged: existing.memoryChanged };
-
-    const parsed = parseEnvelope(args.envelope);
-    if (!parsed.ok) return reject("invalid_result", parsed.message);
-
-    const latest = await latestOf(ctx, args.instanceId);
-    if ((latest?._id ?? null) !== (args.baseReviewId ?? null)) {
-      return reject("memory_conflict", "Another Strategic Review was persisted since this Run started; its memory was not based on the latest one.");
-    }
-
-    const { report, consolidatedMemory, references: requested } = parsed.value;
-    const refs = {} as Record<ReferenceKey, string[]>;
-    const problems: string[] = [];
-    for (const key of REFERENCE_KEYS) {
-      const held = new Set<string>(latest?.references[key] ?? []);
-      const { bad, good } = await unknownReferences(ctx, args.instanceId, requested[key], key, held);
-      refs[key] = good;
-      if (bad.length > 0) problems.push(`${key}: ${bad.join(", ")}`);
-    }
-    if (problems.length > 0) return reject("invalid_references", `Unknown or foreign references (${problems.join("; ")}).`);
-
-    const memoryChanged = normalizeMemory(consolidatedMemory) !== normalizeMemory(latest?.consolidatedMemory ?? "");
-    const reviewId = await ctx.db.insert("strategicReviews", {
-      ownerId: run.ownerId,
-      instanceId: args.instanceId,
-      runId: args.runId,
-      ...(latest ? { baseReviewId: latest._id } : {}),
-      periodStart: args.periodStart,
-      periodEnd: args.periodEnd,
-      report,
-      consolidatedMemory,
-      references: {
-        familyIds: refs.familyIds as Id<"creativeFamilies">[],
-        recipeIds: refs.recipeIds as Id<"productionRecipes">[],
-        publicationIds: refs.publicationIds as Id<"publications">[],
-      },
-      memoryChanged,
-      createdAt: Date.now(),
-    });
-    return { ok: true, reviewId, created: true, memoryChanged };
-  },
+  args: persistArgs,
+  handler: async (ctx: MutationCtx, args): Promise<PersistResult> => await persistStrategicReview(ctx, args),
 });
+
+/** The persistence itself, callable from another mutation (the Run result handler) in its own transaction. */
+export async function persistStrategicReview(ctx: MutationCtx, args: PersistArgs): Promise<PersistResult> {
+  const run = await ctx.db.get(args.runId);
+  if (!run || run.instanceId !== args.instanceId) return reject("invalid_result", "The Run does not belong to this Project.");
+
+  const existing = await ctx.db.query("strategicReviews").withIndex("by_instance_run", (q) => q.eq("instanceId", args.instanceId).eq("runId", args.runId)).first();
+  if (existing) return { ok: true, reviewId: existing._id, created: false, memoryChanged: existing.memoryChanged };
+
+  const parsed = parseEnvelope(args.envelope);
+  if (!parsed.ok) return reject("invalid_result", parsed.message);
+
+  const latest = await latestOf(ctx, args.instanceId);
+  if ((latest?._id ?? null) !== (args.baseReviewId ?? null)) {
+    return reject("memory_conflict", "Another Strategic Review was persisted since this Run started; its memory was not based on the latest one.");
+  }
+
+  const { report, consolidatedMemory, references: requested } = parsed.value;
+  const refs = {} as Record<ReferenceKey, string[]>;
+  const problems: string[] = [];
+  for (const key of REFERENCE_KEYS) {
+    const held = new Set<string>(latest?.references[key] ?? []);
+    const { bad, good } = await unknownReferences(ctx, args.instanceId, requested[key], key, held);
+    refs[key] = good;
+    if (bad.length > 0) problems.push(`${key}: ${bad.join(", ")}`);
+  }
+  if (problems.length > 0) return reject("invalid_references", `Unknown or foreign references (${problems.join("; ")}).`);
+
+  const memoryChanged = normalizeMemory(consolidatedMemory) !== normalizeMemory(latest?.consolidatedMemory ?? "");
+  const reviewId = await ctx.db.insert("strategicReviews", {
+    ownerId: run.ownerId,
+    instanceId: args.instanceId,
+    runId: args.runId,
+    ...(latest ? { baseReviewId: latest._id } : {}),
+    periodStart: args.periodStart,
+    periodEnd: args.periodEnd,
+    report,
+    consolidatedMemory,
+    references: {
+      familyIds: refs.familyIds as Id<"creativeFamilies">[],
+      recipeIds: refs.recipeIds as Id<"productionRecipes">[],
+      publicationIds: refs.publicationIds as Id<"publications">[],
+    },
+    memoryChanged,
+    createdAt: Date.now(),
+  });
+  return { ok: true, reviewId, created: true, memoryChanged };
+}
 
 /** The Project's current Strategic Review (its latest), or null before the first one. */
 export const latestByInstance = internalQuery({

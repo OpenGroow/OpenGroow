@@ -153,6 +153,7 @@ function loggedDecision(decision: ReconcileDecision) {
   if (decision.type === "ingestSources") {
     return { type: "ingestSources" as const, result: decision.result, sourceCount: decision.sources.length };
   }
+  if (decision.type === "persistStrategicReview") return { type: "persistStrategicReview" as const };
   if (decision.type === "markAwaitingJob") return { type: "markAwaitingJob" as const, job: decision.job };
   return decision;
 }
@@ -207,6 +208,7 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       sourceIngestion: state.sourceIngestion === true,
       sourceScoring: state.sourceScoring === true,
       sourceRouting: state.sourceRouting === true,
+      strategicReview: state.strategicReview === true,
       runId: state.runId,
       missionType: state.missionType,
       blockerCodes: await resolveMissionTypeBlockerCodes(
@@ -241,6 +243,13 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
         runId: state.runId,
         result: decision.result,
         sources: decision.sources,
+      });
+      return;
+    case "persistStrategicReview":
+      await ctx.runMutation(internal.runs.markCompleted, {
+        runId: state.runId,
+        result: { status: "success", summary: "Strategic Review result received" },
+        strategicReviewEnvelope: decision.envelope,
       });
       return;
     case "markFailed": {
