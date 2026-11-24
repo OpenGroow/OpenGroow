@@ -5,6 +5,7 @@ import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
 import { insertInstance } from "./instance_fixture";
+import type { Id } from "../_generated/dataModel";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 
 // ADR-078, issue #94: the Analytics page lists a Project's Publications with
@@ -57,6 +58,8 @@ async function seed(options: { adapter?: boolean } = {}) {
     name?: string;
     publishable?: Record<string, unknown>;
     postSeries?: number;
+    recipe?: { id: Id<"productionRecipes">; name: string; version: number };
+    publishedAt?: number;
     state?: "unmeasured" | "waiting" | "no_data" | "failed" | "post_unknown" | "complete";
     reason?: string;
     done?: boolean;
@@ -73,6 +76,7 @@ async function seed(options: { adapter?: boolean } = {}) {
         status: "done",
         number: 1,
         ...(opts.name ? { name: opts.name } : {}),
+        ...(opts.recipe ? { recipeSnapshot: { recipeId: opts.recipe.id, recipeName: opts.recipe.name, version: opts.recipe.version, instructions: "i", constraints: [] } } : {}),
         ...(opts.publishable ? { lastArtifact: { publishable: opts.publishable } } : {}),
         createdAt: now,
         updatedAt: now,
@@ -95,7 +99,7 @@ async function seed(options: { adapter?: boolean } = {}) {
           // An unmeasured row has no adapter to read through.
           ...(opts.state === "unmeasured" ? {} : { adapter: "postiz-analytics" }),
           publisherAdapter: "postiz",
-          publishedAt: now,
+          publishedAt: opts.publishedAt ?? now,
           delays: [DAY, 3 * DAY, 7 * DAY],
           taken: opts.snapshots?.length ?? 0,
           state: opts.state,
@@ -119,8 +123,14 @@ async function seed(options: { adapter?: boolean } = {}) {
       }
       return publicationId;
     });
-  const list = () => owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID });
-  return { t, owner, publish, list };
+  const list = (filters: { recipeId?: string; familyId?: string; from?: number; to?: number } = {}) => owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, ...filters });
+  const recipe = (familyName: string, name: string) =>
+    t.run(async (ctx) => {
+      const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: familyName.toLowerCase(), name: familyName, description: "d" });
+      const id = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: TEMPLATE_ID, missionType: "make_reel", name, description: "d", status: "active" } as never);
+      return { id, familyId: creativeFamilyId, name, version: 2 };
+    });
+  return { t, owner, publish, list, recipe };
 }
 
 describe("analytics.listForProject", () => {
@@ -201,6 +211,32 @@ describe("analytics.listForProject", () => {
     await s.publish({ target: "instagram:me", state: "waiting" });
     expect(await s.list()).toHaveLength(1);
     expect(await s.t.withIdentity(STRANGER).query(api.analytics.listForProject, { instanceId: INSTANCE_ID })).toEqual([]);
+  });
+});
+
+describe("analytics.listForProject attribution (ADR-084)", () => {
+  it("gives each Publication the recipe, version and family of its Mission's snapshot, and none when unattributed", async () => {
+    const s = await seed();
+    const r = await s.recipe("Reaction", "Close-up");
+    await s.publish({ target: "instagram:me", state: "waiting", name: "A", recipe: r });
+    await s.publish({ target: "instagram:me", state: "waiting", name: "B" });
+    const rows = await s.list();
+    expect(rows.find((x) => x.missionName === "A")?.attribution).toEqual({ recipeId: r.id, recipeName: "Close-up", version: 2, familyId: r.familyId, familyName: "Reaction" });
+    expect(rows.find((x) => x.missionName === "B")?.attribution).toBeUndefined();
+  });
+
+  it("narrows to a recipe, a family or a period, leaving out unattributed Publications when a recipe or family is asked", async () => {
+    const s = await seed();
+    const a = await s.recipe("Reaction", "Close-up");
+    const b = await s.recipe("Tutorial", "Steps");
+    const now = Date.now();
+    await s.publish({ target: "instagram:me", state: "waiting", name: "A", recipe: a });
+    await s.publish({ target: "instagram:me", state: "waiting", name: "B", recipe: b, publishedAt: now - 40 * DAY });
+    await s.publish({ target: "instagram:me", state: "waiting", name: "C" });
+    const names = async (f: Parameters<typeof s.list>[0]) => (await s.list(f)).map((x) => x.missionName).sort();
+    expect(await names({ recipeId: a.id })).toEqual(["A"]);
+    expect(await names({ familyId: b.familyId })).toEqual(["B"]);
+    expect(await names({ from: now - 7 * DAY, to: now + DAY })).toEqual(["A", "C"]);
   });
 });
 

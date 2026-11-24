@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
@@ -210,5 +213,28 @@ describe("production_recipes", () => {
         owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
       ).rejects.toThrow("provider");
     });
+  });
+});
+
+// Family performance (ADR-084, #156) attributes a Publication to the family of its recipe on read. That is
+// only correct while a Production Recipe never changes Creative Family.
+describe("a Production Recipe never changes Creative Family", () => {
+  it("keeps its family through every recipe operation", async () => {
+    const { t, owner, familyId, recipeId } = await setup();
+    const args = { instanceId: INSTANCE_ID, recipeId };
+    await owner.mutation(api.production_recipes.saveVersion, { ...args, ...content });
+    await owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/video-b", missionType: "create_letter_video" });
+    await owner.mutation(api.production_recipes.archive, args);
+    await owner.mutation(api.production_recipes.unarchive, args);
+    const row = await t.run((ctx) => ctx.db.get(recipeId));
+    expect(row!.creativeFamilyId).toBe(familyId);
+  });
+
+  it("is written only when the recipe is inserted: no code patches or replaces creativeFamilyId", () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const offenders = readdirSync(dir)
+      .filter((f) => f.endsWith(".ts"))
+      .filter((f) => /ctx\.db\.(patch|replace)\([^)]*\{[^}]*creativeFamilyId/s.test(readFileSync(join(dir, f), "utf8")) && !/creative_family_(merge|sources)/.test(f));
+    expect(offenders).toEqual([]);
   });
 });

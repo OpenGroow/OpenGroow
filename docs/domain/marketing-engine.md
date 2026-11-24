@@ -81,6 +81,25 @@ What a **Production Recipe** resolved to when a Mission was created with it: the
 
 See ADR-083.
 
+### Production Attempt
+
+A Run of a Mission that was actually sent to its Agent. A Run still waiting to be dispatched, or cancelled before it was sent, is not an attempt; a Run that failed or was cancelled after it was sent is one. A **successful** attempt is a Run that finished with a result (success or validation required); a failed one and an intermediate one (resumed after an External Job) are not.
+
+### Recipe usage
+
+What a **Production Recipe** has gone through, step by step, because "used" alone hides the difference between choosing a recipe and getting a result from it:
+
+1. **Missions** created with it: the recipe was selected, whatever happened next, including a Mission cancelled before any Run.
+2. **Production Attempts**, and the successful ones.
+3. **Publications**, those that reached `published`.
+4. **Measured Publications**: published ones with usable performance data, meaning at least one declared Metric was read; a Snapshot with no usable figure does not count.
+
+Each step is counted over the whole life of the recipe (**lifetime**) and over a requested period (**period**); each step is dated by its own event (Mission creation, dispatch of the Run, publication date). A recipe that was never selected is "never used"; one never published is "never published", and a recipe executed but never published is still unexplored from a marketing point of view. These are derived from the data, never stored as a state. When the data read is incomplete, a lifetime claim of "never" is not made.
+
+Recipe usage is read through the Internal MCP, never shown on the Analytics page, which shows marketing performance only.
+
+See ADR-084.
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.

@@ -1,12 +1,16 @@
 import { v } from "convex/values";
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import { query, type QueryCtx } from "./_generated/server.js";
-import { installedAnalyticsAdapters, linkedAdapters } from "./analytics_adapters.js";
+import type { Id } from "./_generated/dataModel.js";
+import { linkedAdapters } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
-import { channelOf, projectPublishers } from "./project_publishers.js";
-import { publishedOf } from "./analytics.js";
 import { postFace } from "./analytics_face.js";
-import type { Doc } from "./_generated/dataModel.js";
+import { publicationsInWindow } from "./analytics_window.js";
+import { claimStatus, measurementClaims } from "./analytics_claims.js";
+import { summarizeByRecipe, type RecipeSummary } from "./analytics_recipe.js";
+import { summarizeByFamily, type FamilySummary } from "./analytics_family.js";
+
+import { SCAN_LIMIT } from "./analytics_window.js";
 
 // Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for Agents reading
 // through the Internal MCP (ADR-080): figures by platform, format and Mission type, not raw rows.
@@ -14,6 +18,27 @@ import type { Doc } from "./_generated/dataModel.js";
 const DAY_MS = 24 * 60 * 60_000;
 /** The window read when none is given. */
 export const DEFAULT_WINDOW_DAYS = 30;
+/** The longest period a summary can cover, in days. */
+export const MAX_WINDOW_DAYS = 365;
+
+/**
+ * The period asked for: a number of days back from `now`, or a start and an end, never both. Publications are
+ * selected by publication date in it. `days` keeps its historical lenient reading (an unusable value is the default,
+ * a fraction is floored, a long one is capped at the maximum); a conflicting or oversized custom range is an error (#154).
+ */
+export function resolveWindow(args: { days?: number; from?: number; to?: number }, now: number = Date.now()): { from: number; to: number } {
+  const { days, from, to } = args;
+  const hasRange = from !== undefined || to !== undefined;
+  if (days !== undefined && hasRange) throw new Error("Give either days or a from/to range, not both.");
+  if (hasRange) {
+    if (from === undefined || to === undefined || !Number.isFinite(from) || !Number.isFinite(to)) throw new Error("A custom range needs both from and to (timestamps in milliseconds).");
+    if (from > to) throw new Error("The range starts after it ends: from must be before to.");
+    if (to - from > MAX_WINDOW_DAYS * DAY_MS) throw new Error(`The range covers more than ${MAX_WINDOW_DAYS} days.`);
+    return { from, to };
+  }
+  const n = typeof days === "number" && Number.isFinite(days) && days >= 1 ? Math.min(Math.floor(days), MAX_WINDOW_DAYS) : DEFAULT_WINDOW_DAYS;
+  return { from: now - n * DAY_MS, to: now };
+}
 
 type Metrics = Record<string, number>;
 
@@ -50,6 +75,10 @@ export type SummaryGroup = {
   status: "data" | "no_data";
   /** Publications with at least one Snapshot. */
   measured: number;
+  /** Publications measuring the same page as an earlier Publication of the group (ADR-084): counted, their figures are not read twice. */
+  sharedMeasurements?: number;
+  /** Publications whose page is also measured in another group: credited to none, no figure read here. */
+  ambiguous?: number;
   metrics: Metrics;
 };
 
@@ -67,48 +96,33 @@ export type AnalyticsSummary = {
   }>;
   /** Publications whose channel is linked to no adapter: analytics unavailable, not "no data yet". */
   unavailable: Array<{ platform: string; format?: string; missionType: string; publications: number }>;
+  /** Publications in the period whose Mission has no Recipe Snapshot (no recipe, no family). */
+  unattributed: number;
+  /** The read stopped at the scan limit: older Publications may be missing. Distinct from truncating a list. */
+  scanLimited: boolean;
+  /** Creation date of the oldest Publication read; present only when `scanLimited`. */
+  oldestScannedCreatedAt?: number;
+  /** The totals above are incomplete: the scan was limited, or a read they rest on was cut. */
+  partial: boolean;
 };
-
-type PublicationInWindow = {
-  publication: Doc<"publications">;
-  mission: Doc<"missions">;
-  /** The post of the Publication that is current (`postSeries`, 0 when it has no series). */
-  series: number;
-  publishedAt: number;
-  found: ReturnType<typeof channelOf>;
-  platform: string;
-};
-
-/** The Project's published Publications whose publication date falls in `[from, to]`, each with its Mission and channel. */
-async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }) {
-  const publications = await publishedOf(ctx, instanceId);
-  const publishers = await projectPublishers(ctx, instanceId);
-  const installed = await installedAnalyticsAdapters(ctx);
-  const inWindow: PublicationInWindow[] = [];
-  for (const publication of publications) {
-    const mission = await ctx.db.get(publication.missionId);
-    if (!mission) continue;
-    const series = publication.postSeries ?? 0;
-    const analytics = await ctx.db
-      .query("publicationAnalytics")
-      .withIndex("by_publication_and_series", (q) => q.eq("publicationId", publication._id).eq("postSeries", series))
-      .first();
-    const publishedAt = analytics?.publishedAt ?? publication.updatedAt;
-    if (publishedAt < window.from || publishedAt > window.to) continue;
-    const found = channelOf(publishers, publication.target);
-    const platform = found?.channel.channelService ?? publication.target.split(":")[0];
-    inWindow.push({ publication, mission, series, publishedAt, found, platform });
-  }
-  return { inWindow, installed };
-}
 
 /** The summary of a Project's published Publications whose publication date falls in `[from, to]`. */
-export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }): Promise<AnalyticsSummary> {
-  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
+export async function summarizeProject(
+  ctx: Pick<QueryCtx, "db">,
+  instanceId: string,
+  window: { from: number; to: number },
+  options: { scanLimit?: number; platform?: string } = {},
+): Promise<AnalyticsSummary> {
+  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
+  let unattributed = 0;
   type Acc = SummaryGroup & { latest: Metrics[] };
+  const groupKeyOf = ({ mission, platform }: (typeof inWindow)[number]) => `${platform}\u0000${postFace(mission, platform).kind ?? ""}\u0000${mission.type}`;
+  const claims = measurementClaims(inWindow, installed, groupKeyOf);
   const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
   const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
-  for (const { publication, mission, series, found, platform } of inWindow) {
+  for (const item of inWindow) {
+    const { publication, mission, series, found, platform } = item;
+    if (!mission.recipeSnapshot) unattributed += 1;
     const format = postFace(mission, platform).kind;
     const key = `${platform}\u0000${format ?? ""}\u0000${mission.type}`;
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
@@ -130,6 +144,12 @@ export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: st
         ({ platform, ...(format ? { format } : {}), missionType: mission.type, publications: 0, status: "no_data", measured: 0, metrics: {}, latest: [] } as Acc);
       entry.groups.set(key, group);
       group.publications += 1;
+      const status = claimStatus(claims, adapter, publication);
+      if (status !== "own") {
+        const field = status === "shared" ? "sharedMeasurements" : "ambiguous";
+        group[field] = (group[field] ?? 0) + 1;
+        continue;
+      }
       // Snapshots of other adapters, and of an earlier post of the Publication, are not this reading.
       const own = snapshots
         .filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === series)
@@ -157,11 +177,21 @@ export async function summarizeProject(ctx: Pick<QueryCtx, "db">, instanceId: st
         })),
       })),
     unavailable: [...unavailable.values()],
+    unattributed,
+    scanLimited,
+    ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
+    partial: scanLimited,
   };
 }
 
+export type PublicationAttribution =
+  | { status: "attributed"; recipeId: string; recipeName: string; version: number; familyId?: string; familyName?: string }
+  | { status: "unattributed" };
+
 export type PublicationReading = {
   publicationId: string;
+  /** The Run whose approved output was published; absent on a Publication that predates the reference. */
+  runId?: string;
   missionId: string;
   missionName: string;
   missionType: string;
@@ -172,17 +202,57 @@ export type PublicationReading = {
   title?: string;
   externalUrl?: string;
   publishedAt: number;
+  /** Whole days since publication. */
+  ageDays: number;
+  /** Through the Mission's Recipe Snapshot (never the live recipe); `unattributed` when the Mission has none. */
+  attribution: PublicationAttribution;
   /** `unavailable`: the channel is linked to no adapter. `no_data`: linked, nothing read yet. `data`: at least one Snapshot. */
   status: "unavailable" | "no_data" | "data";
   /** The latest Snapshot of the current post, one per adapter; adapters' numbers are never combined. */
   measurements: Array<{ adapter: string; takenAt: number; metrics: Metrics }>;
 };
 
-/** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its latest measurements. */
-export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number): Promise<PublicationReading[]> {
-  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
+export type PublicationList = {
+  from: number;
+  to: number;
+  publications: PublicationReading[];
+  /** More Publications matched than `limit`: the list was cut (newest kept). */
+  truncated: boolean;
+  /** Publications of the period (before the recipe and family filters) with no Recipe Snapshot. */
+  unattributed: number;
+  scanLimited: boolean;
+  oldestScannedCreatedAt?: number;
+  /** The read stopped at the scan limit: older Publications may be missing. */
+  partial: boolean;
+};
+
+const DAY = 24 * 60 * 60_000;
+
+/** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its attribution and latest measurements. */
+export async function listPublicationReadings(
+  ctx: Pick<QueryCtx, "db">,
+  instanceId: string,
+  window: { from: number; to: number },
+  limit: number,
+  options: { platform?: string; recipeId?: string; familyId?: string; scanLimit?: number; now?: number } = {},
+): Promise<PublicationList> {
+  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
+  const now = options.now ?? Date.now();
+  const unattributed = inWindow.filter(({ mission }) => !mission.recipeSnapshot).length;
+  const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId)).take(2000);
+  const recipesCut = recipes.length >= 2000;
+  const familyIdOf = new Map<string, string>(recipes.map((r) => [r._id as string, r.creativeFamilyId as string]));
+  const familyNames = new Map<string, string>();
+  const matching = inWindow
+    .filter(({ mission }) => {
+      const recipeId = mission.recipeSnapshot?.recipeId;
+      if (options.recipeId !== undefined && recipeId !== options.recipeId) return false;
+      if (options.familyId !== undefined && (recipeId === undefined || familyIdOf.get(recipeId) !== options.familyId)) return false;
+      return true;
+    })
+    .sort((a, b) => b.publishedAt - a.publishedAt);
   const rows: PublicationReading[] = [];
-  for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {
+  for (const { publication, mission, series, publishedAt, found, platform } of matching.slice(0, limit)) {
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
     const snapshots = links.length
       ? await ctx.db
@@ -195,8 +265,22 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       return latest ? [{ adapter: adapter.id, takenAt: latest.takenAt, metrics: latest.metrics as Metrics }] : [];
     });
     const face = postFace(mission, platform);
+    const snapshot = mission.recipeSnapshot;
+    let attribution: PublicationAttribution = { status: "unattributed" };
+    if (snapshot) {
+      const familyId = familyIdOf.get(snapshot.recipeId);
+      if (familyId && !familyNames.has(familyId)) familyNames.set(familyId, (await ctx.db.get(familyId as never as Id<"creativeFamilies">))?.name ?? "");
+      attribution = {
+        status: "attributed",
+        recipeId: snapshot.recipeId,
+        recipeName: snapshot.recipeName,
+        version: snapshot.version,
+        ...(familyId ? { familyId, familyName: familyNames.get(familyId) ?? "" } : {}),
+      };
+    }
     rows.push({
       publicationId: publication._id,
+      ...(publication.runId ? { runId: publication.runId } : {}),
       missionId: mission._id,
       missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
       missionType: mission.type,
@@ -206,19 +290,49 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       ...(face.title ? { title: face.title } : {}),
       ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
       publishedAt,
+      ageDays: Math.max(0, Math.floor((now - publishedAt) / DAY)),
+      attribution,
       status: links.length === 0 ? "unavailable" : measurements.length > 0 ? "data" : "no_data",
       measurements,
     });
   }
-  return rows.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
+  return {
+    from: window.from,
+    to: window.to,
+    publications: rows,
+    truncated: matching.length > limit,
+    unattributed,
+    scanLimited,
+    ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
+    partial: scanLimited || recipesCut,
+  };
 }
 
-/** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30). */
+/**
+ * Summary of a Project's Publications over the last `days` (default 30) or a `from`/`to` range, optionally for one platform.
+ * By default grouped by platform, format and Mission type; `groupBy: "recipe"` groups by Production Recipe (optionally one `recipeId`), `groupBy: "family"` by Creative Family (optionally one `familyId`).
+ */
 export const summaryForProject = query({
-  args: { instanceId: v.string(), days: v.optional(v.number()) },
-  handler: async (ctx, args): Promise<AnalyticsSummary | null> => {
+  args: {
+    instanceId: v.string(),
+    days: v.optional(v.number()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    platform: v.optional(v.string()),
+    groupBy: v.optional(v.union(v.literal("recipe"), v.literal("family"))),
+    recipeId: v.optional(v.string()),
+    familyId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<AnalyticsSummary | RecipeSummary | FamilySummary | null> => {
     if (!(await readOwnerId(ctx, args.instanceId))) return null;
-    const to = Date.now();
-    return summarizeProject(ctx, args.instanceId, { from: to - (args.days ?? DEFAULT_WINDOW_DAYS) * DAY_MS, to });
+    const window = resolveWindow(args);
+    if (args.groupBy === "recipe") {
+      if (args.familyId !== undefined) throw new Error('familyId needs groupBy "family".');
+      return summarizeByRecipe(ctx, args.instanceId, window, { platform: args.platform, recipeId: args.recipeId });
+    }
+    if (args.groupBy === "family") return summarizeByFamily(ctx, args.instanceId, window, { platform: args.platform, familyId: args.familyId });
+    if (args.recipeId !== undefined) throw new Error('recipeId needs groupBy "recipe".');
+    if (args.familyId !== undefined) throw new Error('familyId needs groupBy "family".');
+    return summarizeProject(ctx, args.instanceId, window, { platform: args.platform });
   },
 });

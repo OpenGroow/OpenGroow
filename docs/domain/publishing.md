@@ -64,6 +64,22 @@ A dated reading of the metrics of **one Publication** (never of a Mission: the n
 
 - _Avoid_: "Source" (a Source is something an Agent saw in the outside world, not a reading of our own post), "Engagement Score" (it rates inspiration Sources).
 
+### Approved output
+
+The result of a Mission that the human approved, which is what a Publication sends. A Mission's latest result is not necessarily its approved output: further Runs can happen between approval and publication, and a result can be replaced by a revision. A Publication references the Run that produced the output actually approved and published, never "the latest Run". Publications made before this reference existed have none, and none is inferred for them.
+
+### Attributed Publication
+
+A Publication whose Mission was created with a **Recipe Snapshot**. Its Production Recipe is read from that snapshot and its **Creative Family** from the recipe, so it counts once in the aggregates of its recipe and of its family. A Publication is never attributed to a recipe by similarity, by its Source or by its Mission type.
+
+- A Creative Family is derived from the recipe and never copied: a Production Recipe never changes Creative Family.
+- Attribution follows the Publication, not the Analytics Adapter: every adapter's groupings can be read by recipe and by family, each adapter on its own, and the numbers of two adapters are never added.
+- _Avoid_: "tagged" or "labelled" Publication, and saying a recipe was "used" without saying which step is meant (see **Recipe usage**).
+
+### Unattributed Publication
+
+A Publication whose Mission has no Recipe Snapshot (created without a recipe, by a Schedule, from a Source's pipeline, or before recipes existed). It stays in the general analytics, is reported as unattributed, and contributes to no recipe or family aggregate. No attribution is invented for it.
+
 ### Postiz translation (V1)
 
 - `image`, `video` and `carousel` all go through Postiz `upload-from-url` then `POST /posts`. A `carousel` uploads its slides **sequentially** (the upload order is the slide order) and sends them as the media list of one post; a `video` is a post with one media.

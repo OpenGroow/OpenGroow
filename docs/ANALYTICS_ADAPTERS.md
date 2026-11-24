@@ -57,7 +57,7 @@ interface AnalyticsAdapter {
 
 ## The key
 
-The adapter declares which key it needs from the Publication to find the post on its side (ADR-078): `externalId` (the id the publishing service gave, Postiz) or `url` (the public URL of the page, Google Analytics). An adapter that needs `externalId` only works with the Publisher named in `publisher`: the id only means something to that service. The key is free for now. The core tries no reading before the Publication has the key (the reading is postponed and retried in an hour).
+The adapter declares which key it needs from the Publication to find the post on its side (ADR-078): `externalId` (the id the publishing service gave, Postiz) or `url` (the public URL of the page, Google Analytics). An adapter that needs `externalId` only works with the Publisher named in `publisher`: the id only means something to that service. The key is free for now. The core tries no reading before the Publication has the key (the reading is postponed and retried in an hour). The key is not unique: two Publications can carry the same `url` (two Missions publishing the same page). Per recipe and family readings then count the page once and credit it to no group when several groups share it (`sharedMeasurements`, `ambiguous`; ADR-084). An adapter does not need to handle this.
 
 Channel linking: a Publish target may be linked to several adapters (ADR-079). By default a channel uses the installed adapter whose `publisher` is its Publisher (`linkedAdapter`); a link can be made by hand to another adapter that can measure it (`canMeasure`), or removed. A channel with no link is "analytics unavailable", which is not "no data yet".
 
