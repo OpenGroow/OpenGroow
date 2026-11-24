@@ -22,6 +22,32 @@ export async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"
   return await ctx.db.query("strategicReviews").withIndex("by_instance_created", (q) => q.eq("instanceId", instanceId)).order("desc").first();
 }
 
+/** One Review of a Project; null when it does not exist or belongs to another Project. */
+async function reviewOf(ctx: QueryCtx, instanceId: string, reviewId: Id<"strategicReviews">): Promise<Doc<"strategicReviews"> | null> {
+  const review = await ctx.db.get(reviewId);
+  return review && review.instanceId === instanceId ? review : null;
+}
+
+/**
+ * What `get_strategic_memory` serves: a Review without its Performance Report
+ * (the report is never exposed to an Agent), or an explicit "none yet".
+ */
+export type StrategicMemoryReading =
+  | { exists: false; message: string }
+  | { exists: true; reviewId: Id<"strategicReviews">; periodStart: number; periodEnd: number; memory: string; references: Doc<"strategicReviews">["references"]; createdAt: number };
+
+/**
+ * The Strategic Memory an Agent of this Project reads. This is the seam for the
+ * Run's pinned base (#168): a `strategic_review` Run will be served its
+ * `baseReviewId` (through `reviewOf`) instead of the latest Review. Every other
+ * Agent gets the latest one.
+ */
+export async function readStrategicMemory(ctx: QueryCtx, scope: { instanceId: string }): Promise<StrategicMemoryReading> {
+  const review = await latestOf(ctx, scope.instanceId);
+  if (!review) return { exists: false, message: "No Strategic Review exists for this Project yet: there is no Strategic Memory." };
+  return { exists: true, reviewId: review._id, periodStart: review.periodStart, periodEnd: review.periodEnd, memory: review.consolidatedMemory, references: review.references, createdAt: review.createdAt };
+}
+
 /** The ids that do not resolve to an entity of this Project, unless the base already held them. */
 async function unknownReferences(ctx: QueryCtx, instanceId: string, ids: string[], key: ReferenceKey, held: Set<string>) {
   const table = REFERENCE_TABLES[key];
@@ -115,8 +141,5 @@ export const latestByInstance = internalQuery({
 /** One Review of a Project (the base pinned on a Run); null when it belongs to another Project. */
 export const getById = internalQuery({
   args: { instanceId: v.string(), reviewId: v.id("strategicReviews") },
-  handler: async (ctx, args) => {
-    const review = await ctx.db.get(args.reviewId);
-    return review && review.instanceId === args.instanceId ? review : null;
-  },
+  handler: async (ctx, args) => await reviewOf(ctx, args.instanceId, args.reviewId),
 });

@@ -122,6 +122,7 @@ describe("Project layout navigation", () => {
       "Brand",
       "Publish",
       "Analytics",
+      "Strategic Memory",
       "Settings",
       "Developer",
     ]);

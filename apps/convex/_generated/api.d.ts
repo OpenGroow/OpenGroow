@@ -179,6 +179,7 @@ import type * as source_scoring from "../source_scoring.js";
 import type * as source_thumbnails from "../source_thumbnails.js";
 import type * as sources from "../sources.js";
 import type * as sources_social from "../sources_social.js";
+import type * as strategic_memory from "../strategic_memory.js";
 import type * as strategic_review_rules from "../strategic_review_rules.js";
 import type * as strategic_review_jobs from "../strategic_review_jobs.js";
 import type * as strategic_reviews from "../strategic_reviews.js";
@@ -380,6 +381,7 @@ declare const fullApi: ApiFromModules<{
   source_thumbnails: typeof source_thumbnails;
   sources: typeof sources;
   sources_social: typeof sources_social;
+  strategic_memory: typeof strategic_memory;
   strategic_review_rules: typeof strategic_review_rules;
   strategic_review_jobs: typeof strategic_review_jobs;
   strategic_reviews: typeof strategic_reviews;
