@@ -3,6 +3,7 @@ import { DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS, listPublicationReadings, resolveW
 import { summarizeByRecipe } from "../analytics_recipe.js";
 import { summarizeByFamily } from "../analytics_family.js";
 import { recipeCatalog } from "../recipe_usage.js";
+import { readStrategicMemory } from "../strategic_reviews.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
 
@@ -194,6 +195,12 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
       "The Project's Production Recipes with their Creative Family, an archived flag and their usage, step by step: Missions created with the recipe (even cancelled before any Run), Production Attempts (Runs sent to the Agent) and successful ones, Publications and measured Publications, each over the recipe's lifetime and over the period (by its own date; days, or an explicit from and to), with the last Mission, attempt and publication dates. Includes recipes that never produced a Publication. neverUsedEver and neverPublishedEver are present only when the data read was complete; otherwise they are absent (unknown). `partial` says a read hit its limit, `truncated` that the list was cut.",
     inputSchema: { type: "object", properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES }, additionalProperties: false },
     run: (ctx, scope, args) => recipeCatalog(ctx, scope.instanceId, windowOf(args)),
+  },
+  get_strategic_memory: {
+    description:
+      "The Project's current Strategic Memory: the consolidated Markdown knowledge kept by its latest Strategic Review. Returns exists (false, with a message, when no Review has been persisted yet), then the Review's id, the period it analyzed (periodStart, periodEnd), the memory, the entities it references (familyIds, recipeIds, publicationIds) and its creation date. Never returns the Performance Report.",
+    inputSchema: NO_ARGUMENTS,
+    run: (ctx, scope) => readStrategicMemory(ctx, scope),
   },
 };
 
