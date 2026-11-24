@@ -8,7 +8,7 @@ import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { analyticsDeclarationFor } from "@opengroow/agent-templates";
-import { SCAN_LIMIT } from "./analytics_window.js";
+import { LIST_LIMIT, publishedOf, SCAN_LIMIT } from "./analytics_window.js";
 import { hasPublicThumbnail, postFace } from "./analytics_face.js";
 
 // Performance Snapshots (ADR-078, docs/domain/publishing.md): when a
@@ -148,18 +148,6 @@ export const forPublication = query({
     };
   },
 });
-
-/** The most Publications the Analytics page lists (newest first). */
-export const LIST_LIMIT = 200;
-
-/** The published Publications of a Project, newest created first (the id breaks ties), at most `limit` (default `LIST_LIMIT`); never reads more. */
-export function publishedOf(ctx: Pick<QueryCtx, "db">, instanceId: string, limit: number = LIST_LIMIT) {
-  return ctx.db
-    .query("publications")
-    .withIndex("by_instance_and_status", (q) => q.eq("instanceId", instanceId).eq("status", "published"))
-    .order("desc")
-    .take(limit);
-}
 
 const missionLabel = (mission: Doc<"missions">) => mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission");
 

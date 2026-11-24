@@ -1,9 +1,9 @@
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import type { QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
-import { normalizePostUrl } from "./post_url.js";
 import { linkedAdapters } from "./analytics_adapters.js";
 import { isMeasured, metricStats, type MetricStats } from "./analytics_metric_stats.js";
+import { claimStatus, measurementClaims } from "./analytics_claims.js";
 import { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 
 // The generic part of an attributed grouping (ADR-084): Publications are attributed to a group by their
@@ -68,27 +68,13 @@ export async function readAttributed(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { keyOf: (mission: Doc<"missions">) => string | undefined; keep?: (key: string) => boolean; scanLimit?: number; platform?: string; now?: number },
+  options: { keyOf: (mission: Doc<"missions">) => string | undefined; /** Which group claims a shared page, when it is not the grouping read (a family's recipes agree with their family). */
+    claimKeyOf?: (mission: Doc<"missions">) => string | undefined;
+    keep?: (key: string) => boolean; scanLimit?: number; platform?: string; now?: number },
 ): Promise<AttributedRead> {
   const now = options.now ?? Date.now();
   const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
-  // A measurement key (a page URL) can be shared by several Publications of one adapter (ADR-084). Who claims
-  // it is settled before any group is read: all in one group, the first Publication carries the figures; in
-  // several groups (or one and no group), no group is credited.
-  const claims = new Map<string, { groups: Set<string | undefined>; first: Doc<"publications"> }>();
-  const keyFor = (adapter: AnalyticsAdapterMeta, publication: Doc<"publications">) =>
-    adapter.needs === "url" && publication.externalUrl ? `${adapter.id}\n${normalizePostUrl(publication.externalUrl)}` : undefined;
-  for (const { publication, mission, found } of inWindow) {
-    if (!found) continue;
-    for (const { adapter } of linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter)) {
-      const sharedKey = keyFor(adapter, publication);
-      if (sharedKey === undefined) continue;
-      const claim = claims.get(sharedKey) ?? { groups: new Set(), first: publication };
-      claims.set(sharedKey, claim);
-      claim.groups.add(options.keyOf(mission));
-      if (publication._creationTime < claim.first._creationTime || (publication._creationTime === claim.first._creationTime && publication._id < claim.first._id)) claim.first = publication;
-    }
-  }
+  const claims = measurementClaims(inWindow, installed, (item) => (options.claimKeyOf ?? options.keyOf)(item.mission));
   let unattributed = 0;
   const accs = new Map<string, Acc>();
   for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {
@@ -117,12 +103,12 @@ export async function readAttributed(
       entry.platforms.set(platform, bucket);
       entry.publications += 1;
       bucket.publications += 1;
-      const claim = claims.get(keyFor(adapter, publication) ?? "");
-      if (claim && claim.groups.size > 1) {
+      const status = claimStatus(claims, adapter, publication);
+      if (status === "ambiguous") {
         entry.ambiguous += 1;
         continue;
       }
-      if (claim && claim.first._id !== publication._id) {
+      if (status === "shared") {
         entry.shared += 1;
         continue;
       }

@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { SearchField } from "@/components/opengroow/filter-bar";
+import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
@@ -451,20 +451,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
         <EmptyReason reason={emptyReason} />
       ) : (
         <>
-          <div className="flex gap-2 border-b border-border" role="tablist" aria-label="Analytics view">
-            {VIEWS.map(({ view: v, label }) => (
-              <button
-                key={v}
-                type="button"
-                role="tab"
-                aria-selected={view === v}
-                className={`border-b-2 px-4 pb-3 text-sm font-medium ${view === v ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-                onClick={() => setView(v)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <FilterChips label="Analytics view" options={VIEWS.map(({ view: v, label }) => ({ id: v, label }))} value={view} onChange={(v) => setView(v as View)} />
 
           <div role="group" aria-label="Filters" className="flex flex-col gap-3 sm:flex-row">
             <NativeSelect aria-label="Filter by period" className="h-11 sm:w-44" value={String(days)} onChange={(e) => setDays(Number(e.target.value))}>

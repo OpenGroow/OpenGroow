@@ -5,7 +5,7 @@ import { api } from "../_generated/api";
 import schema from "../schema";
 import { generateAgentToken } from "../internal_mcp/agent_token";
 import { installPostiz } from "./postiz_fixture";
-import { installAnalyticsAdapter, POSTIZ_ANALYTICS } from "./analytics_fixture";
+import { installAnalyticsAdapter, POSTIZ_ANALYTICS, WEB_ANALYTICS } from "./analytics_fixture";
 import { fixtureTemplate, useTemplateRegistry } from "./helpers/template_registry.helpers";
 import { recipeCatalog } from "../recipe_usage";
 import type { Id } from "../_generated/dataModel";
@@ -97,13 +97,13 @@ async function run(projectId: string, missionId: Id<"missions">, o: { dispatched
     } as never);
   });
 }
-async function publish(projectId: string, missionId: Id<"missions">, o: { ageDays?: number; metrics?: Record<string, number> } = {}) {
+async function publish(projectId: string, missionId: Id<"missions">, o: { ageDays?: number; metrics?: Record<string, number>; externalUrl?: string; adapter?: string } = {}) {
   await t.run(async (ctx) => {
     const now = Date.now();
     const publishedAt = now - (o.ageDays ?? 1) * DAY;
-    const publicationId = await ctx.db.insert("publications", { missionId, instanceId: projectId, target: "instagram:me", status: "published", externalId: "p", createdAt: publishedAt, updatedAt: publishedAt } as never);
+    const publicationId = await ctx.db.insert("publications", { missionId, instanceId: projectId, target: "instagram:me", status: "published", externalId: "p", ...(o.externalUrl ? { externalUrl: o.externalUrl } : {}), createdAt: publishedAt, updatedAt: publishedAt } as never);
     await ctx.db.insert("publicationAnalytics", { publicationId, postSeries: 0, instanceId: projectId, adapter: "postiz-analytics", publisherAdapter: "postiz", publishedAt, delays: [DAY], taken: 0, state: "waiting", nextAt: publishedAt + DAY, done: false, updatedAt: now });
-    if (o.metrics) await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: projectId, delayMs: DAY, takenAt: now, metrics: o.metrics, adapter: "postiz-analytics", source: "adapter" });
+    if (o.metrics) await ctx.db.insert("performanceSnapshots", { publicationId, postSeries: 0, instanceId: projectId, delayMs: DAY, takenAt: now, metrics: o.metrics, adapter: o.adapter ?? "postiz-analytics", source: "adapter" });
   });
 }
 async function setupPublishing(projectId: string) {
@@ -163,6 +163,37 @@ describe("list_production_recipes", () => {
     expect(e.usage.period).toMatchObject({ missions: 1, publications: 2, measuredPublications: 1 });
     expect(e.neverPublishedEver).toBe(false);
     expect(e.usage.lastPublicationAt).toBeGreaterThan(0);
+  });
+
+  it("counts a page shared by several Publications as measured once, and for no recipe when two recipes share it", async () => {
+    const token = await seedProject(PROJECT_A);
+    await setupPublishing(PROJECT_A);
+    await installAnalyticsAdapter(t, WEB_ANALYTICS);
+    await t.withIdentity(OWNER).mutation(api.publishers.setAnalyticsLink, { instanceId: PROJECT_A, adapter: "postiz", target: "instagram:me", analyticsAdapter: "web-analytics" });
+    const f = await family(PROJECT_A, "F");
+    const a = await recipe(PROJECT_A, f, "A");
+    const b = await recipe(PROJECT_A, f, "B");
+    const shared = { externalUrl: "https://example.com/article-1", adapter: "web-analytics", metrics: { views: 10 } };
+    await publish(PROJECT_A, await mission(PROJECT_A, a), shared);
+    await publish(PROJECT_A, await mission(PROJECT_A, a), { ...shared, externalUrl: "https://example.com/article-1/?utm_source=x" });
+    const once = await recipes(token);
+    expect(entry(once, "A").usage.lifetime).toMatchObject({ publications: 2, measuredPublications: 1 });
+    await publish(PROJECT_A, await mission(PROJECT_A, b), shared);
+    const split = await recipes(token);
+    expect(entry(split, "A").usage.lifetime).toMatchObject({ publications: 2, measuredPublications: 0 });
+    expect(entry(split, "B").usage.lifetime).toMatchObject({ publications: 1, measuredPublications: 0 });
+  });
+
+  it("is partial, and asserts no never flag, when a Mission has more Runs than were read", async () => {
+    const token = await seedProject(PROJECT_A);
+    const f = await family(PROJECT_A, "F");
+    const r = await recipe(PROJECT_A, f, "Busy");
+    await recipe(PROJECT_A, f, "Idle");
+    const m = await mission(PROJECT_A, r);
+    for (let i = 0; i < 100; i += 1) await run(PROJECT_A, m, { dispatched: true, result: "success" });
+    const answer = await recipes(token);
+    expect(answer.partial).toBe(true);
+    expect(entry(answer, "Idle").neverUsedEver).toBeUndefined();
   });
 
   it("flags archived recipes, and lists a never-used one", async () => {

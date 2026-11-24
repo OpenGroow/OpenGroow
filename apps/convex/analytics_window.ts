@@ -2,7 +2,18 @@ import type { QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { installedAnalyticsAdapters } from "./analytics_adapters.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
-import { LIST_LIMIT, publishedOf } from "./analytics.js";
+
+/** The most Publications the Analytics page lists (newest first). */
+export const LIST_LIMIT = 200;
+
+/** The published Publications of a Project, newest created first (the id breaks ties), at most `limit` (default `LIST_LIMIT`); never reads more. */
+export function publishedOf(ctx: Pick<QueryCtx, "db">, instanceId: string, limit: number = LIST_LIMIT) {
+  return ctx.db
+    .query("publications")
+    .withIndex("by_instance_and_status", (q) => q.eq("instanceId", instanceId).eq("status", "published"))
+    .order("desc")
+    .take(limit);
+}
 
 /** The most published Publications the summary reads, newest created first (ADR-084). It bounds the database reads. */
 export const SCAN_LIMIT = 2000;

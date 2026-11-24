@@ -1,5 +1,5 @@
 import type { QueryCtx } from "./_generated/server.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { readAttributed, type AttributedGroup } from "./analytics_attributed.js";
 
 // Performance by Production Recipe (ADR-084): a Publication is attributed through its Mission's Recipe
@@ -32,12 +32,13 @@ export async function summarizeByRecipe(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number } = {},
+  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number; claimKeyOf?: (mission: Doc<"missions">) => string | undefined } = {},
 ): Promise<RecipeSummary> {
   const read = await readAttributed(ctx, instanceId, window, {
     keyOf: (mission) => mission.recipeSnapshot?.recipeId,
     // A recipe id of another Project (or no id at all) matches no snapshot of this one.
     keep: options.recipeId === undefined ? undefined : (key) => key === options.recipeId,
+    claimKeyOf: options.claimKeyOf,
     scanLimit: options.scanLimit,
     platform: options.platform,
     now: options.now,

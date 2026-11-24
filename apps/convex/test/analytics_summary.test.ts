@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
-import { summarizeProject, SCAN_LIMIT, type AnalyticsSummary } from "../analytics_summary";
+import { summarizeProject, type AnalyticsSummary } from "../analytics_summary";
+import { SCAN_LIMIT } from "../analytics_window";
 import schema from "../schema";
 import { installPostiz } from "./postiz_fixture";
 import { insertInstance } from "./instance_fixture";
@@ -201,9 +202,20 @@ describe("analytics summary (issue #112)", () => {
       await expect(q(s, { from: now - 366 * DAY, to: now })).rejects.toThrow(/365/);
       await expect(q(s, { from: now, to: now - DAY })).rejects.toThrow(/before/i);
       await expect(q(s, { from: now - DAY })).rejects.toThrow(/both/i);
-      await expect(q(s, { days: 366 })).rejects.toThrow(/365/);
-      await expect(q(s, { days: 1.5 })).rejects.toThrow(/whole/i);
-      await expect(q(s, { days: 0 })).rejects.toThrow(/whole|1/i);
+    });
+
+    it("clamps the existing days argument as it always did, instead of refusing it", async () => {
+      const s = await seed();
+      const now = Date.now();
+      const spanDays = async (days: number) => {
+        const r = (await q(s, { days }))!;
+        return Math.round((r.to - r.from) / DAY);
+      };
+      expect(await spanDays(366)).toBe(365);
+      expect(await spanDays(1.5)).toBe(1);
+      expect(await spanDays(0)).toBe(30);
+      expect(await spanDays(-3)).toBe(30);
+      expect(Math.abs((await q(s, { days: 0 }))!.to - now)).toBeLessThan(60_000);
     });
 
     it("narrows every grouping with the platform filter", async () => {
@@ -336,6 +348,40 @@ describe("analytics summary (issue #112)", () => {
         await s.post({ target: "instagram:me", type: "make_image", kind: "image", externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
         const [r] = (await q(s)).recipes;
         expect(web(r)).toMatchObject({ measured: 0, ambiguous: 1 });
+      });
+
+      it("reads a page shared by Publications of one default group once, and credits none of a page split across groups", async () => {
+        const s = await seedWeb();
+        const one = async (extra: Record<string, unknown>) =>
+          s.post({ target: "instagram:me", type: "make_image", kind: "image", snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }], ...extra } as never);
+        await one({ externalUrl: PAGE, ageDays: 3 });
+        await one({ externalUrl: `${PAGE}/?utm_source=x`, ageDays: 2 });
+        const grouped = (await plain(s.owner as never, { instanceId: INSTANCE_ID }))!;
+        const g = grouped.adapters.find((x) => x.adapter === "web-analytics")!.groups[0];
+        expect(g).toMatchObject({ publications: 2, measured: 1, sharedMeasurements: 1, metrics: { views: 100 } });
+        // The same page published as another Mission type lands in a second group: ambiguous in both.
+        await s.post({ target: "instagram:me", type: "make_video", kind: "video", externalUrl: PAGE, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        const split = (await plain(s.owner as never, { instanceId: INSTANCE_ID }))!;
+        for (const group of split.adapters.find((x) => x.adapter === "web-analytics")!.groups) {
+          expect(group).toMatchObject({ measured: 0, status: "no_data" });
+          expect(group.ambiguous).toBeGreaterThan(0);
+        }
+      });
+
+      it("keeps a family's nested recipes consistent with the family on a page shared by two of its recipes", async () => {
+        const s = await seedWeb();
+        const f = await s.family("Fam");
+        const a = await s.recipe("A", "active", f);
+        const b = await s.recipe("B", "active", f);
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a }, externalUrl: PAGE, ageDays: 3, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: b }, externalUrl: PAGE, ageDays: 2, snapshots: [{ adapter: "web-analytics", metrics: { views: 100 } }] });
+        const res = (await s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, groupBy: "family" } as never)) as any;
+        const [fam] = res.families;
+        expect(web(fam)).toMatchObject({ publications: 2, measured: 1, sharedMeasurements: 1 });
+        const measuredByRecipes = fam.recipes.reduce((n: number, r: any) => n + (web(r)?.measured ?? 0), 0);
+        const ambiguousByRecipes = fam.recipes.reduce((n: number, r: any) => n + (web(r)?.ambiguous ?? 0), 0);
+        expect(measuredByRecipes).toBe(1);
+        expect(ambiguousByRecipes).toBe(0);
       });
 
       it("does not mix keys of different adapters or leave a clean key flagged", async () => {

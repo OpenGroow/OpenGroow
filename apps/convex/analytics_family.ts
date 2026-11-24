@@ -1,5 +1,5 @@
 import type { QueryCtx } from "./_generated/server.js";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { readAttributed, type AttributedGroup } from "./analytics_attributed.js";
 import { summarizeByRecipe, type RecipePerformance } from "./analytics_recipe.js";
 
@@ -39,15 +39,18 @@ export async function summarizeByFamily(
   options: { scanLimit?: number; platform?: string; familyId?: string; now?: number } = {},
 ): Promise<FamilySummary> {
   const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId)).take(MAX_RECIPES);
+  // At the cap, a recipe may be missing: its Publications would read as unattributed.
+  const recipesCut = recipes.length >= MAX_RECIPES;
   const familyOf = new Map<string, string>(recipes.map((r) => [r._id, r.creativeFamilyId]));
   const common = { scanLimit: options.scanLimit, platform: options.platform, now: options.now };
+  // A snapshot of a recipe unknown to this Project has no family.
+  const familyKeyOf = (mission: Doc<"missions">) => familyOf.get(mission.recipeSnapshot?.recipeId ?? "");
   const read = await readAttributed(ctx, instanceId, window, {
-    // A snapshot of a recipe unknown to this Project has no family.
-    keyOf: (mission) => familyOf.get(mission.recipeSnapshot?.recipeId ?? ""),
+    keyOf: familyKeyOf,
     keep: options.familyId === undefined ? undefined : (key) => key === options.familyId,
     ...common,
   });
-  const byRecipe = read.groups.size === 0 ? undefined : await summarizeByRecipe(ctx, instanceId, window, common);
+  const byRecipe = read.groups.size === 0 ? undefined : await summarizeByRecipe(ctx, instanceId, window, { ...common, claimKeyOf: familyKeyOf });
   const families: FamilyPerformance[] = [];
   for (const [familyId, { members: _members, ...group }] of read.groups) {
     const family = await ctx.db.get(familyId as Id<"creativeFamilies">);
@@ -69,6 +72,6 @@ export async function summarizeByFamily(
     unattributed: read.unattributed,
     scanLimited: read.scanLimited,
     ...(read.oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt: read.oldestScannedCreatedAt } : {}),
-    partial: read.scanLimited,
+    partial: read.scanLimited || recipesCut,
   };
 }

@@ -6,10 +6,10 @@ import { linkedAdapters } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { postFace } from "./analytics_face.js";
 import { publicationsInWindow } from "./analytics_window.js";
+import { claimStatus, measurementClaims } from "./analytics_claims.js";
 import { summarizeByRecipe, type RecipeSummary } from "./analytics_recipe.js";
 import { summarizeByFamily, type FamilySummary } from "./analytics_family.js";
 
-export { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 import { SCAN_LIMIT } from "./analytics_window.js";
 
 // Aggregated read of how a Project's Publications performed (ADR-078, ADR-079), for Agents reading
@@ -23,7 +23,8 @@ export const MAX_WINDOW_DAYS = 365;
 
 /**
  * The period asked for: a number of days back from `now`, or a start and an end, never both. Publications are
- * selected by publication date in it. Anything unusable is an error, not a silent clamp.
+ * selected by publication date in it. `days` keeps its historical lenient reading (an unusable value is the default,
+ * a fraction is floored, a long one is capped at the maximum); a conflicting or oversized custom range is an error (#154).
  */
 export function resolveWindow(args: { days?: number; from?: number; to?: number }, now: number = Date.now()): { from: number; to: number } {
   const { days, from, to } = args;
@@ -35,9 +36,7 @@ export function resolveWindow(args: { days?: number; from?: number; to?: number 
     if (to - from > MAX_WINDOW_DAYS * DAY_MS) throw new Error(`The range covers more than ${MAX_WINDOW_DAYS} days.`);
     return { from, to };
   }
-  const n = days ?? DEFAULT_WINDOW_DAYS;
-  if (!Number.isInteger(n) || n < 1) throw new Error("days must be a whole number of at least 1.");
-  if (n > MAX_WINDOW_DAYS) throw new Error(`days cannot exceed ${MAX_WINDOW_DAYS}.`);
+  const n = typeof days === "number" && Number.isFinite(days) && days >= 1 ? Math.min(Math.floor(days), MAX_WINDOW_DAYS) : DEFAULT_WINDOW_DAYS;
   return { from: now - n * DAY_MS, to: now };
 }
 
@@ -76,6 +75,10 @@ export type SummaryGroup = {
   status: "data" | "no_data";
   /** Publications with at least one Snapshot. */
   measured: number;
+  /** Publications measuring the same page as an earlier Publication of the group (ADR-084): counted, their figures are not read twice. */
+  sharedMeasurements?: number;
+  /** Publications whose page is also measured in another group: credited to none, no figure read here. */
+  ambiguous?: number;
   metrics: Metrics;
 };
 
@@ -99,7 +102,7 @@ export type AnalyticsSummary = {
   scanLimited: boolean;
   /** Creation date of the oldest Publication read; present only when `scanLimited`. */
   oldestScannedCreatedAt?: number;
-  /** The totals above are incomplete (same as `scanLimited`). */
+  /** The totals above are incomplete: the scan was limited, or a read they rest on was cut. */
   partial: boolean;
 };
 
@@ -113,9 +116,12 @@ export async function summarizeProject(
   const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
   let unattributed = 0;
   type Acc = SummaryGroup & { latest: Metrics[] };
+  const groupKeyOf = ({ mission, platform }: (typeof inWindow)[number]) => `${platform}\u0000${postFace(mission, platform).kind ?? ""}\u0000${mission.type}`;
+  const claims = measurementClaims(inWindow, installed, groupKeyOf);
   const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
   const unavailable = new Map<string, AnalyticsSummary["unavailable"][number]>();
-  for (const { publication, mission, series, found, platform } of inWindow) {
+  for (const item of inWindow) {
+    const { publication, mission, series, found, platform } = item;
     if (!mission.recipeSnapshot) unattributed += 1;
     const format = postFace(mission, platform).kind;
     const key = `${platform}\u0000${format ?? ""}\u0000${mission.type}`;
@@ -138,6 +144,12 @@ export async function summarizeProject(
         ({ platform, ...(format ? { format } : {}), missionType: mission.type, publications: 0, status: "no_data", measured: 0, metrics: {}, latest: [] } as Acc);
       entry.groups.set(key, group);
       group.publications += 1;
+      const status = claimStatus(claims, adapter, publication);
+      if (status !== "own") {
+        const field = status === "shared" ? "sharedMeasurements" : "ambiguous";
+        group[field] = (group[field] ?? 0) + 1;
+        continue;
+      }
       // Snapshots of other adapters, and of an earlier post of the Publication, are not this reading.
       const own = snapshots
         .filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === series)
@@ -228,6 +240,7 @@ export async function listPublicationReadings(
   const now = options.now ?? Date.now();
   const unattributed = inWindow.filter(({ mission }) => !mission.recipeSnapshot).length;
   const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId)).take(2000);
+  const recipesCut = recipes.length >= 2000;
   const familyIdOf = new Map<string, string>(recipes.map((r) => [r._id as string, r.creativeFamilyId as string]));
   const familyNames = new Map<string, string>();
   const matching = inWindow
@@ -291,7 +304,7 @@ export async function listPublicationReadings(
     unattributed,
     scanLimited,
     ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
-    partial: scanLimited,
+    partial: scanLimited || recipesCut,
   };
 }
 

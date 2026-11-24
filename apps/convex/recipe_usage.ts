@@ -1,7 +1,8 @@
 import type { QueryCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { linkedAdapters } from "./analytics_adapters.js";
-import { publicationsInWindow, SCAN_LIMIT } from "./analytics_summary.js";
+import { claimStatus, measurementClaims } from "./analytics_claims.js";
+import { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 
 // The Production Recipe catalog with its usage history (ADR-084, issue #158), read through the
 // Internal MCP. Computed on read from Missions, Runs and Publications; nothing is stored. Marketing
@@ -36,7 +37,7 @@ export type RecipeCatalog = {
     neverPublishedEver?: boolean;
   }>;
   total: number;
-  /** The list was cut at its size limit. */
+  /** The list was cut at its size limit (or the Project has more families or recipes than were read). */
   truncated: boolean;
   missionsScanLimited: boolean;
   publicationsScanLimited: boolean;
@@ -79,6 +80,8 @@ export async function recipeCatalog(
 
   // Missions: the Project's, per status (newest updated first), bounded.
   let missionsScanLimited = false;
+  // A Mission with more Runs than we read: its attempt counters are incomplete.
+  let runsCut = false;
   for (const status of MISSION_STATUSES) {
     const missions = await ctx.db.query("missions").withIndex("by_instance_status_updated", (q) => q.eq("instanceId", instanceId).eq("status", status)).order("desc").take(scanLimit);
     if (missions.length >= scanLimit) missionsScanLimited = true;
@@ -87,6 +90,7 @@ export async function recipeCatalog(
       if (!recipeId || !usage.has(recipeId)) continue;
       bump(recipeId, "missions", mission.createdAt, "lastMissionAt");
       const runs = await ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(RUNS_PER_MISSION);
+      if (runs.length >= RUNS_PER_MISSION) runsCut = true;
       for (const run of runs) {
         if (!isAttempt(run)) continue;
         bump(recipeId, "productionAttempts", run.dispatchedAt!, "lastAttemptAt");
@@ -97,6 +101,8 @@ export async function recipeCatalog(
 
   // Publications: those that reached `published`, attributed through their Mission's Recipe Snapshot.
   const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, { from: -Infinity, to: Infinity }, scanLimit);
+  // A shared page is measured once, for the one recipe that owns it (ADR-084): never twice, never for an ambiguous one.
+  const claims = measurementClaims(inWindow, installed, ({ mission }) => mission.recipeSnapshot?.recipeId);
   for (const { publication, mission, series, publishedAt, found } of inWindow) {
     const recipeId = mission.recipeSnapshot?.recipeId;
     if (!recipeId || !usage.has(recipeId)) continue;
@@ -106,6 +112,7 @@ export async function recipeCatalog(
     const snapshots = await ctx.db.query("performanceSnapshots").withIndex("by_publication", (q) => q.eq("publicationId", publication._id)).collect();
     // Measured: at least one declared metric was read, by any linked adapter.
     const measured = links.some(({ adapter }) => {
+      if (claimStatus(claims, adapter, publication) !== "own") return false;
       const own = snapshots.filter((s) => (s.adapter ?? links[0].adapter.id) === adapter.id && s.postSeries === series).sort((a, b) => b.takenAt - a.takenAt)[0];
       return own !== undefined && adapter.metrics.some((m) => !m.derive && typeof (own.metrics as Record<string, unknown>)[m.key] === "number");
     });
@@ -118,8 +125,9 @@ export async function recipeCatalog(
       const u = usage.get(recipe._id)!;
       const used = u.lifetime.missions > 0 || u.lifetime.productionAttempts > 0;
       const published = u.lifetime.publications > 0;
-      const neverUsedEver = used ? false : missionsScanLimited ? undefined : true;
-      const neverPublishedEver = published ? false : scanLimited ? undefined : true;
+      // A flag is `true` only on a complete read: a cut recipe list or Run read may hide usage.
+      const neverUsedEver = used ? false : missionsScanLimited || runsCut || recipesCut ? undefined : true;
+      const neverPublishedEver = published ? false : scanLimited || recipesCut ? undefined : true;
       return {
         recipeId: recipe._id as string,
         name: recipe.name,
@@ -143,6 +151,6 @@ export async function recipeCatalog(
     missionsScanLimited,
     publicationsScanLimited: scanLimited,
     ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
-    partial: missionsScanLimited || scanLimited,
+    partial: missionsScanLimited || scanLimited || runsCut || recipesCut,
   };
 }

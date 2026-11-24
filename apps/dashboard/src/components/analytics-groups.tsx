@@ -18,7 +18,7 @@ export type PlatformReading = { platform: string; publications: number; measured
 export type AdapterReading = { adapter: string; publications: number; measured: number; freshness?: { oldestReadingAt: number; newestReadingAt: number }; platforms: PlatformReading[] };
 export type PerformanceGroup = { publications: number; lastPublishedAt: number; adapters: AdapterReading[] };
 export type RecipeGroup = PerformanceGroup & { recipeId: string; recipeName: string; archived: boolean; versions: Array<{ version: number; publications: number }> };
-export type FamilyGroup = PerformanceGroup & { familyId: string; familyName: string; archived: boolean; recipes: Array<{ recipeId: string; recipeName: string; publications: number }> };
+export type FamilyGroup = PerformanceGroup & { familyId: string; familyName: string; archived: boolean; recipes: Array<{ recipeId: string; recipeName: string; adapters: AdapterReading[] }> };
 
 const day = (at: number) => new Date(at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -140,7 +140,7 @@ function GroupRow({
   );
 }
 
-const readingOf = (group: PerformanceGroup, adapterId: string) => group.adapters.find((a) => a.adapter === adapterId);
+const readingOf = (group: { adapters: AdapterReading[] }, adapterId: string) => group.adapters.find((a) => a.adapter === adapterId);
 
 export function RecipeGroups({ groups, adapterId, metrics, onShowPublications }: { groups: RecipeGroup[]; adapterId: string; metrics: MetricDecl[]; onShowPublications: (recipeId: string) => void }) {
   return (
@@ -185,7 +185,11 @@ export function FamilyGroups({ groups, adapterId, metrics, onShowPublications }:
             metrics={metrics}
             detail={
               <p className="m-0 text-sm text-muted-foreground">
-                Recipes: {group.recipes.map((r) => `${r.recipeName} (${plural(r.publications, "Publication")})`).join(", ")}
+                Recipes: {group.recipes.flatMap((r) => {
+                  // The count of the adapter being viewed, never the recipe's total across adapters.
+                  const own = readingOf(r, adapterId);
+                  return own ? [`${r.recipeName} (${plural(own.publications, "Publication")})`] : [];
+                }).join(", ")}
               </p>
             }
             onShowPublications={() => onShowPublications(group.familyId)}

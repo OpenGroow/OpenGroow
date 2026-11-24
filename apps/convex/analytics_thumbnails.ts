@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server.js";
 import { ownerIdFor } from "./instance_ownership.js";
 import { hasPublicThumbnail, postFace } from "./analytics_face.js";
-import { publishedOf } from "./analytics.js";
+import { publishedOf } from "./analytics_window.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 
 // The thumbnail of a published article, read from its public page and cached (the Publishable has none).

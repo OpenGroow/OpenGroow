@@ -186,6 +186,31 @@ describe("a Publication references the Run of its approved output", () => {
     expect(await publicationRunId(s)).toBe(run);
   });
 
+  it("takes the Run of the output actually sent when a later Run succeeded between approval and publication", async () => {
+    const s = await seed();
+    await produce(s, "v1");
+    await approve(s);
+    // A revision lands after approval: the Mission now carries (and sends) its output.
+    const revision = await produce(s, "v2");
+    await approve(s);
+    const sent = await begin(s);
+    expect((sent.publishable as { caption: string }).caption).toBe("v2");
+    expect(await publicationRunId(s)).toBe(revision);
+  });
+
+  it("keeps the sent output and its Run together on a retry after a later Run with an artifact", async () => {
+    const s = await seed();
+    const first = await produce(s, "v1");
+    await approve(s);
+    await begin(s);
+    await markFailed(s);
+    await fail(s);
+    await approve(s);
+    const retried = await begin(s);
+    expect((retried.publishable as { caption: string }).caption).toBe("v1");
+    expect(await publicationRunId(s)).toBe(first);
+  });
+
   it("keeps the Run on a retry whose output did not change", async () => {
     const s = await seed();
     const run = await produce(s, "v1");

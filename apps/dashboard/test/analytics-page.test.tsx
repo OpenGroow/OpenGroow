@@ -317,7 +317,7 @@ describe("Analytics page", () => {
   });
 
   describe("Publications, Recipes and Families views (ADR-084)", () => {
-    const view = (name: string) => Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Analytics view"] [role="tab"]')).find((t) => t.textContent === name)!;
+    const view = (name: string) => Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Analytics view"] button')).find((t) => t.textContent === name)!;
     const open = async (name: string) => act(async () => view(name).click());
     const trigger = (label: string) => container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
     const nativeSelect = (label: string) => trigger(label).closest('[data-slot="native-select-wrapper"]')!.querySelector<HTMLSelectElement>("select")!;
@@ -365,7 +365,7 @@ describe("Analytics page", () => {
     it("offers the three views in each adapter tab, opening on Publications", async () => {
       rows = [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })];
       await render();
-      expect(Array.from(container.querySelectorAll('[aria-label="Analytics view"] [role="tab"]')).map((t) => [t.textContent, t.getAttribute("aria-selected")])).toEqual([
+      expect(Array.from(container.querySelectorAll('[aria-label="Analytics view"] button')).map((t) => [t.textContent, t.getAttribute("aria-pressed")])).toEqual([
         ["Publications", "true"],
         ["Recipes", "false"],
         ["Families", "false"],
@@ -426,6 +426,17 @@ describe("Analytics page", () => {
       expect(container.querySelector('ul[aria-label="Families"]')!.textContent).toContain("Recipes: Close-up (3 Publications)");
     });
 
+    it("counts a family's recipe Publications for the adapter being viewed only", async () => {
+      const split = recipe({ publications: 5, adapters: [reading("postiz", { publications: 2 }), reading("search", { publications: 3 })] });
+      familySummary = { groupBy: "family", families: [family({ recipes: [split] })], unattributed: 0, partial: false };
+      await render();
+      await open("Families");
+      await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Families"] button[aria-expanded]')!.click());
+      const text = container.querySelector('ul[aria-label="Families"]')!.textContent!;
+      expect(text).toContain("Recipes: Close-up (2 Publications)");
+      expect(text).not.toContain("5 Publications");
+    });
+
     it("drills down from a group to its Publications through the same filters", async () => {
       recipeSummary = { groupBy: "recipe", recipes: [recipe()], unattributed: 0, partial: false };
       familySummary = { groupBy: "family", families: [family()], unattributed: 0, partial: false };
@@ -434,7 +445,7 @@ describe("Analytics page", () => {
       await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Recipes"] button[aria-expanded]')!.click());
       const show = Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Show Publications")!;
       await act(async () => show.click());
-      expect(view("Publications").getAttribute("aria-selected")).toBe("true");
+      expect(view("Publications").getAttribute("aria-pressed")).toBe("true");
       expect(listArgs.at(-1)).toMatchObject({ recipeId: "rec-1" });
       expect(nativeSelect("Filter by recipe").value).toBe("rec-1");
     });
