@@ -13,7 +13,7 @@ import { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 type Metrics = Record<string, number>;
 const DAY_MS = 24 * 60 * 60_000;
 
-export type PlatformReading = { platform: string; publications: number; measured: number; metrics: Record<string, MetricStats> };
+export type PlatformReading = { platform: string; /** The Publisher that posts there: where its logo comes from. */ publisherAdapter?: string; publications: number; measured: number; metrics: Record<string, MetricStats> };
 export type AdapterReading = {
   adapter: string;
   name: string;
@@ -51,12 +51,12 @@ export type AttributedRead = {
   oldestScannedCreatedAt?: number;
 };
 
-type Bucket = { publications: number; measured: number; latest: Metrics[] };
+type Bucket = { publications: number; measured: number; latest: Metrics[]; publisherAdapter?: string };
 type AdapterAcc = { meta: AnalyticsAdapterMeta; publications: number; measured: number; shared: number; ambiguous: number; takenAt: number[]; platforms: Map<string, Bucket> };
 type Acc = {
   members: AttributedGroup["members"];
   unavailable: Map<string, number>;
-  byAdapter: Map<string, { meta: AnalyticsAdapterMeta; publications: number; measured: number; shared: number; ambiguous: number; takenAt: number[]; platforms: Map<string, { publications: number; measured: number; latest: Metrics[] }> }>;
+  byAdapter: Map<string, { meta: AnalyticsAdapterMeta; publications: number; measured: number; shared: number; ambiguous: number; takenAt: number[]; platforms: Map<string, Bucket> }>;
 };
 
 /**
@@ -99,7 +99,7 @@ export async function readAttributed(
     for (const { adapter } of links) {
       const entry: AdapterAcc = acc.byAdapter.get(adapter.id) ?? { meta: adapter, publications: 0, measured: 0, shared: 0, ambiguous: 0, takenAt: [], platforms: new Map() };
       acc.byAdapter.set(adapter.id, entry);
-      const bucket: Bucket = entry.platforms.get(platform) ?? { publications: 0, measured: 0, latest: [] };
+      const bucket: Bucket = entry.platforms.get(platform) ?? { publications: 0, measured: 0, latest: [], publisherAdapter: found?.publisher.adapter };
       entry.platforms.set(platform, bucket);
       entry.publications += 1;
       bucket.publications += 1;
@@ -146,7 +146,7 @@ export async function readAttributed(
           ...(takenAt.length ? { freshness: { oldestReadingAt: Math.min(...takenAt), newestReadingAt: Math.max(...takenAt) } } : {}),
           platforms: [...platforms.entries()]
             .sort(([a], [b]) => a.localeCompare(b))
-            .map(([platform, p]) => ({ platform, publications: p.publications, measured: p.measured, metrics: metricStats(meta.metrics, p.latest) })),
+            .map(([platform, p]) => ({ platform, ...(p.publisherAdapter ? { publisherAdapter: p.publisherAdapter } : {}), publications: p.publications, measured: p.measured, metrics: metricStats(meta.metrics, p.latest) })),
         })),
       unavailable: [...acc.unavailable.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([platform, publications]) => ({ platform, publications })),
       members: acc.members,

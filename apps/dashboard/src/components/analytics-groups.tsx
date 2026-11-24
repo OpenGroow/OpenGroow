@@ -14,7 +14,7 @@ import { formatValue, type MetricDecl } from "@/src/lib/analytics-figures";
 // only: no Mission, Run or usage figure, and a recipe with no Publication is not a group.
 
 export type MetricStats = { observations: number; sum?: number; mean?: number; median?: number; recomputed?: number; meanOfRatios?: number; medianOfRatios?: number };
-export type PlatformReading = { platform: string; publications: number; measured: number; metrics: Record<string, MetricStats> };
+export type PlatformReading = { platform: string; publisherAdapter?: string; publications: number; measured: number; metrics: Record<string, MetricStats> };
 export type AdapterReading = { adapter: string; publications: number; measured: number; freshness?: { oldestReadingAt: number; newestReadingAt: number }; platforms: PlatformReading[] };
 export type PerformanceGroup = { publications: number; lastPublishedAt: number; adapters: AdapterReading[] };
 export type RecipeGroup = PerformanceGroup & { recipeId: string; recipeName: string; archived: boolean; versions: Array<{ version: number; publications: number }> };
@@ -33,7 +33,7 @@ function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metri
     <section aria-label={`${platformName(reading.platform)} figures`} className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
         <h4 className="m-0 flex items-center gap-2 text-base font-medium">
-          <PlatformLogo service={reading.platform} className="size-5" />
+          <PlatformLogo service={reading.platform} adapter={reading.publisherAdapter} className="size-5" />
           {platformName(reading.platform)}
         </h4>
         <span className="text-sm text-muted-foreground">
@@ -61,7 +61,7 @@ function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metri
                 <tr key={metric.key} className="border-b border-border last:border-0">
                   <th scope="row" className="py-2 text-left font-normal">
                     {metric.label}
-                    <span className="ml-2 text-xs text-muted-foreground">{stats.observations} of {reading.publications}</span>
+                    {stats.observations < reading.publications ? <span className="ml-2 text-xs text-muted-foreground">{stats.observations}/{reading.publications} reported</span> : null}
                   </th>
                   <td className={COLUMN} title={ratio ? "Recomputed from the sums" : undefined}>
                     {fmt(ratio ? stats.recomputed : stats.sum)}

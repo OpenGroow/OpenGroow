@@ -398,7 +398,7 @@ describe("Analytics page", () => {
       const figures = list.textContent ?? "";
       expect(figures).toContain("Instagram");
       expect(figures).toContain("2/3 measured");
-      expect(figures).toContain("2 of 3");
+      expect(figures).toContain("2/3 reported");
     });
 
     it("shows no Mission, Run or usage figure and no recipe without Publications", async () => {
