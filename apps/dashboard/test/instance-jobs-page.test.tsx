@@ -14,6 +14,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "jobs.resume": vi.fn(),
   "jobs.runNow": vi.fn(),
   "jobs.setFrequency": vi.fn(),
+  "strategic_review_jobs.setAnalysisDays": vi.fn(),
 };
 
 vi.mock("convex/react", () => ({
@@ -30,6 +31,7 @@ vi.mock("@convex/_generated/api", () => ({
       runNow: "jobs.runNow",
       setFrequency: "jobs.setFrequency",
     },
+    strategic_review_jobs: { setAnalysisDays: "strategic_review_jobs.setAnalysisDays" },
     source_routing: { setReviewMode: "source_routing.setReviewMode" },
   },
 }));
@@ -228,5 +230,68 @@ async function render(jobs: unknown) {
     await render([makeJob({ workspaceKey: "ws-social" })]);
     await openMenu();
     expect(document.body.textContent).not.toContain("View logs");
+  });
+
+  describe("Strategic review analysis period", () => {
+    const review = (config?: unknown) =>
+      makeJob({ type: "strategic_review", label: "Strategic review", agentName: "Strategy", config });
+
+    async function openPeriodForm() {
+      await openMenu();
+      await click(
+        Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Edit analysis period"),
+      );
+    }
+    async function setDays(value: string) {
+      const el = document.querySelector('[name="analysisDays"]') as HTMLInputElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+
+    it("shows the period, 30 days by default, next to the schedule", async () => {
+      await render([review({})]);
+      expect(document.body.textContent).toContain("Analyzes the last 30 days");
+    });
+
+    it("shows the configured period", async () => {
+      await render([review({ analysisDays: 90 })]);
+      expect(document.body.textContent).toContain("Analyzes the last 90 days");
+    });
+
+    it("offers no period for other job types", async () => {
+      await render([makeJob()]);
+      expect(document.body.textContent).not.toContain("Analyzes the last");
+      await openMenu();
+      expect(document.body.textContent).not.toContain("Edit analysis period");
+    });
+
+    it("saves a new period without touching the schedule", async () => {
+      await render([review({ analysisDays: 90 })]);
+      await openPeriodForm();
+      expect((document.querySelector('[name="analysisDays"]') as HTMLInputElement).value).toBe("90");
+      await setDays("14");
+      await click(button("Save"));
+      expect(mutations["strategic_review_jobs.setAnalysisDays"]).toHaveBeenCalledWith({ jobId: "job-1", analysisDays: 14 });
+      expect(mutations["jobs.setFrequency"]).not.toHaveBeenCalled();
+    });
+
+    it.each(["0", "366", "1.5", ""])("refuses %j with a clear message", async (value) => {
+      await render([review()]);
+      await openPeriodForm();
+      await setDays(value);
+      await click(button("Save"));
+      expect(mutations["strategic_review_jobs.setAnalysisDays"]).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("Enter a whole number of days between 1 and 365.");
+    });
+
+    it("shows a server refusal", async () => {
+      mutations["strategic_review_jobs.setAnalysisDays"]!.mockRejectedValue(new Error("Forbidden"));
+      await render([review()]);
+      await openPeriodForm();
+      await click(button("Save"));
+      expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    });
   });
 });
