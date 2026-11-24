@@ -25,12 +25,57 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 const COLUMN = "py-2 text-right font-normal tabular-nums";
 
-/** One platform's figures as a table: a metric the Publications do not report is absent, never zero. */
-function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metrics: MetricDecl[] }) {
-  const reported = metrics.filter((m) => reading.metrics[m.key]);
+const HEADLINE = 3;
+
+/** The figure a metric is summed up by: a counter's total, a ratio recomputed from the sums, a level's mean. */
+const mainOf = (stats: MetricStats) => stats.recomputed ?? stats.sum ?? stats.mean;
+
+/** The detailed statistics of one platform as a table: a metric the Publications do not report is absent, never zero. */
+function DetailedTable({ reading, reported }: { reading: PlatformReading; reported: MetricDecl[] }) {
   const hasRatio = reported.some((m) => reading.metrics[m.key].recomputed !== undefined);
   return (
-    <section aria-label={`${platformName(reading.platform)} figures`} className="grid gap-3">
+    <div className="grid gap-2">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border text-muted-foreground">
+            <th scope="col" className="py-2 text-left font-normal">Metric</th>
+            <th scope="col" className={COLUMN}>Total</th>
+            <th scope="col" className={COLUMN}>Average</th>
+            <th scope="col" className={COLUMN}>Median</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reported.map((metric) => {
+            const stats = reading.metrics[metric.key];
+            const fmt = (v: number | undefined) => formatValue(metric, v);
+            const ratio = stats.recomputed !== undefined;
+            return (
+              <tr key={metric.key} className="border-b border-border last:border-0">
+                <th scope="row" className="py-2 text-left font-normal">
+                  {metric.label}
+                  {stats.observations < reading.publications ? <span className="ml-2 text-xs text-muted-foreground">{stats.observations}/{reading.publications} reported</span> : null}
+                </th>
+                <td className={COLUMN} title={ratio ? "Recomputed from the sums" : undefined}>{fmt(ratio ? stats.recomputed : stats.sum)}</td>
+                <td className={COLUMN} title={ratio ? "Mean of the Publications' own ratios" : undefined}>{fmt(ratio ? stats.meanOfRatios : stats.mean)}</td>
+                <td className={COLUMN} title={ratio ? "Median of the Publications' own ratios" : undefined}>{fmt(ratio ? stats.medianOfRatios : stats.median)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {hasRatio ? <p className="m-0 text-xs text-muted-foreground">Ratios: Total is recomputed from the sums; Average and Median are taken over each Publication's own ratio.</p> : null}
+    </div>
+  );
+}
+
+/** One platform: its leading figures, the others in a row, the detail on demand. Nothing is added up across platforms. */
+function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metrics: MetricDecl[] }) {
+  const [detailed, setDetailed] = useState(false);
+  const reported = metrics.filter((m) => reading.metrics[m.key]);
+  const leading = reported.slice(0, HEADLINE);
+  const others = reported.slice(HEADLINE);
+  return (
+    <section aria-label={`${platformName(reading.platform)} figures`} className="grid gap-4">
       <div className="flex items-center justify-between gap-3">
         <h4 className="m-0 flex items-center gap-2 text-base font-medium">
           <PlatformLogo service={reading.platform} adapter={reading.publisherAdapter} className="size-5" />
@@ -43,42 +88,41 @@ function PlatformFigures({ reading, metrics }: { reading: PlatformReading; metri
       {reported.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">No readings yet.</p>
       ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border text-muted-foreground">
-              <th scope="col" className="py-2 text-left font-normal">Metric</th>
-              <th scope="col" className={COLUMN}>Total</th>
-              <th scope="col" className={COLUMN}>Average</th>
-              <th scope="col" className={COLUMN}>Median</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reported.map((metric) => {
+        <>
+          <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+            {leading.map((metric) => {
               const stats = reading.metrics[metric.key];
-              const fmt = (v: number | undefined) => formatValue(metric, v);
               const ratio = stats.recomputed !== undefined;
+              const fmt = (v: number | undefined) => formatValue(metric, v);
               return (
-                <tr key={metric.key} className="border-b border-border last:border-0">
-                  <th scope="row" className="py-2 text-left font-normal">
-                    {metric.label}
-                    {stats.observations < reading.publications ? <span className="ml-2 text-xs text-muted-foreground">{stats.observations}/{reading.publications} reported</span> : null}
-                  </th>
-                  <td className={COLUMN} title={ratio ? "Recomputed from the sums" : undefined}>
-                    {fmt(ratio ? stats.recomputed : stats.sum)}
-                  </td>
-                  <td className={COLUMN} title={ratio ? "Mean of the Publications' own ratios" : undefined}>
-                    {fmt(ratio ? stats.meanOfRatios : stats.mean)}
-                  </td>
-                  <td className={COLUMN} title={ratio ? "Median of the Publications' own ratios" : undefined}>
-                    {fmt(ratio ? stats.medianOfRatios : stats.median)}
-                  </td>
-                </tr>
+                <div key={metric.key} className="grid gap-1">
+                  <dt className="text-sm text-muted-foreground">{metric.label}</dt>
+                  <dd className="m-0 text-3xl font-semibold tabular-nums">{fmt(mainOf(stats))}</dd>
+                  <dd className="m-0 text-sm tabular-nums text-muted-foreground">
+                    Avg {fmt(ratio ? stats.meanOfRatios : stats.mean)} · Med {fmt(ratio ? stats.medianOfRatios : stats.median)}
+                  </dd>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </dl>
+          {others.length ? (
+            <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+              {others.map((metric) => (
+                <div key={metric.key} className="grid gap-0.5">
+                  <dt className="text-sm text-muted-foreground">{metric.label}</dt>
+                  <dd className="m-0 font-semibold tabular-nums">{formatValue(metric, mainOf(reading.metrics[metric.key]))}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <div className="border-t border-border pt-3">
+            <Button type="button" variant="ghost" aria-expanded={detailed} onClick={() => setDetailed((d) => !d)} className="h-auto gap-2 px-0 py-1 font-normal hover:bg-transparent">
+              Detailed statistics {detailed ? <ChevronUp aria-hidden="true" className="size-4" /> : <ChevronDown aria-hidden="true" className="size-4" />}
+            </Button>
+            {detailed ? <DetailedTable reading={reading} reported={reported} /> : null}
+          </div>
+        </>
       )}
-      {hasRatio ? <p className="m-0 text-xs text-muted-foreground">Ratios: Total is recomputed from the sums; Average and Median are taken over each Publication's own ratio.</p> : null}
     </section>
   );
 }
