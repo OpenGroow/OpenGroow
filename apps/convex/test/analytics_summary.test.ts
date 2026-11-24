@@ -65,12 +65,14 @@ async function seed() {
       }
       return publicationId;
     });
-  const recipe = (name: string, status: "active" | "archived" = "active") =>
+  const family = (name: string, extra: Record<string, unknown> = {}) =>
+    t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: name.toLowerCase(), name: `F ${name}`, description: "d", ...extra } as never));
+  const recipe = (name: string, status: "active" | "archived" = "active", familyId?: unknown) =>
     t.run(async (ctx) => {
-      const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: name.toLowerCase(), name: `F ${name}`, description: "d" } as never);
+      const creativeFamilyId = (familyId ?? (await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: name.toLowerCase(), name: `F ${name}`, description: "d" } as never))) as never;
       return ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name, description: "d", status });
     });
-  return { t, owner, post, recipe };
+  return { t, owner, post, recipe, family };
 }
 
 describe("analytics summary (issue #112)", () => {
@@ -326,6 +328,65 @@ describe("analytics summary (issue #112)", () => {
       });
       expect((await q(s, { recipeId: foreign })).recipes).toEqual([]);
       expect((await q(s, { recipeId: "not-an-id" })).recipes).toEqual([]);
+    });
+  });
+
+  describe("grouped by Creative Family (issue #156)", () => {
+    const q = (s: Awaited<ReturnType<typeof seed>>, args: Record<string, unknown> = {}) =>
+      s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, groupBy: "family", ...args } as never) as Promise<any>;
+    const img = (s: Awaited<ReturnType<typeof seed>>, recipeId: unknown, metrics?: Record<string, number>, ageDays = 2) =>
+      s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: recipeId }, ageDays, snapshots: metrics ? [{ metrics }] : [] });
+
+    it("computes a family over the union of its Publications, not from its recipes' averages, and lists the recipes inside", async () => {
+      const s = await seed();
+      const f = await s.family("Fam");
+      const a = await s.recipe("A", "active", f);
+      const b = await s.recipe("B", "active", f);
+      await img(s, a, { views: 100, likes: 10 });
+      await img(s, b, { views: 10, likes: 5 });
+      await img(s, b, { views: 10, likes: 5 });
+      const res = await q(s);
+      expect(res.groupBy).toBe("family");
+      expect(res.families).toHaveLength(1);
+      const [fam] = res.families;
+      expect(fam).toMatchObject({ familyId: f, familyName: "F Fam", archived: false, publications: 3 });
+      const metrics = fam.adapters[0].platforms[0].metrics;
+      expect(metrics.views).toMatchObject({ observations: 3, sum: 120, mean: 40, median: 10 });
+      expect(fam.recipes.map((r: any) => [r.recipeId, r.publications]).sort()).toEqual([[a, 1], [b, 2]].sort());
+      expect(fam.recipes.reduce((n: number, r: any) => n + r.publications, 0)).toBe(fam.publications);
+      expect(fam.recipes.find((r: any) => r.recipeId === b).adapters[0].platforms[0].metrics.views.sum).toBe(20);
+    });
+
+    it("keeps archived and merged families under their own identity, with a flag", async () => {
+      const s = await seed();
+      const into = await s.family("Into");
+      const old = await s.family("Old", { status: "archived", mergedIntoId: into });
+      await img(s, await s.recipe("A", "active", old));
+      await img(s, await s.recipe("B", "active", into));
+      const res = await q(s);
+      const byId = new Map(res.families.map((f: any) => [f.familyId, f]));
+      expect(byId.get(old)).toMatchObject({ archived: true, mergedIntoId: into, publications: 1 });
+      expect(byId.get(into)).toMatchObject({ archived: false, publications: 1 });
+      expect(byId.get(into)).not.toHaveProperty("mergedIntoId");
+    });
+
+    it("filters by family, and another Project's family id returns nothing", async () => {
+      const s = await seed();
+      const f1 = await s.family("One");
+      const f2 = await s.family("Two");
+      await img(s, await s.recipe("A", "active", f1));
+      await img(s, await s.recipe("B", "active", f2));
+      expect((await q(s, { familyId: f1 })).families.map((f: any) => f.familyId)).toEqual([f1]);
+      const foreign = await s.t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: "other", slug: "x", name: "X", description: "d" } as never));
+      expect((await q(s, { familyId: foreign })).families).toEqual([]);
+      expect((await q(s, { familyId: "not-an-id" })).families).toEqual([]);
+    });
+
+    it("counts a Publication without a Recipe Snapshot as unattributed, and rejects familyId without groupBy family", async () => {
+      const s = await seed();
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
+      expect((await q(s)).unattributed).toBe(1);
+      await expect(s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, familyId: "x" } as never)).rejects.toThrow(/familyId/);
     });
   });
 });
