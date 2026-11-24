@@ -155,13 +155,25 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   list_publications: {
     description:
-      "The Project's published Publications, newest first, each with its platform, format, Mission, link and latest measurements per Analytics Adapter. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter).",
+      "The Project's published Publications of the period, newest first, each with its platform, format, Mission, link, Run (runId), age in days, attribution and latest measurements per Analytics Adapter. attribution is attributed (recipe, recipe version and Creative Family, read from the Mission's Recipe Snapshot) or unattributed. recipeId or familyId keep only that recipe's or family's Publications. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter). The result says truncated when more matched than limit, and partial (scanLimited) when the read stopped at its scan limit so older Publications may be missing; unattributed counts the period's Publications with no Recipe Snapshot.",
     inputSchema: {
       type: "object",
-      properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES, limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` } },
+      properties: {
+        days: DAYS_PROPERTY,
+        ...RANGE_PROPERTIES,
+        platform: PLATFORM_PROPERTY,
+        recipeId: { type: "string", description: "Only Publications of this Production Recipe." },
+        familyId: { type: "string", description: "Only Publications of this Creative Family." },
+        limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` },
+      },
       additionalProperties: false,
     },
-    run: (ctx, scope, args) => listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT)),
+    run: (ctx, scope, args) =>
+      listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT), {
+        platform: typeof args.platform === "string" ? args.platform : undefined,
+        recipeId: typeof args.recipeId === "string" ? args.recipeId : undefined,
+        familyId: typeof args.familyId === "string" ? args.familyId : undefined,
+      }),
   },
   list_recent_missions: {
     description: "The Project's most recent Missions, newest first, with their type, status and outcome (the Run's summary, and the error when it failed).",

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import { query, type QueryCtx } from "./_generated/server.js";
+import type { Id } from "./_generated/dataModel.js";
 import { linkedAdapters } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { postFace } from "./analytics_face.js";
@@ -171,8 +172,14 @@ export async function summarizeProject(
   };
 }
 
+export type PublicationAttribution =
+  | { status: "attributed"; recipeId: string; recipeName: string; version: number; familyId?: string; familyName?: string }
+  | { status: "unattributed" };
+
 export type PublicationReading = {
   publicationId: string;
+  /** The Run whose approved output was published; absent on a Publication that predates the reference. */
+  runId?: string;
   missionId: string;
   missionName: string;
   missionType: string;
@@ -183,17 +190,56 @@ export type PublicationReading = {
   title?: string;
   externalUrl?: string;
   publishedAt: number;
+  /** Whole days since publication. */
+  ageDays: number;
+  /** Through the Mission's Recipe Snapshot (never the live recipe); `unattributed` when the Mission has none. */
+  attribution: PublicationAttribution;
   /** `unavailable`: the channel is linked to no adapter. `no_data`: linked, nothing read yet. `data`: at least one Snapshot. */
   status: "unavailable" | "no_data" | "data";
   /** The latest Snapshot of the current post, one per adapter; adapters' numbers are never combined. */
   measurements: Array<{ adapter: string; takenAt: number; metrics: Metrics }>;
 };
 
-/** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its latest measurements. */
-export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, limit: number): Promise<PublicationReading[]> {
-  const { inWindow, installed } = await publicationsInWindow(ctx, instanceId, window);
+export type PublicationList = {
+  from: number;
+  to: number;
+  publications: PublicationReading[];
+  /** More Publications matched than `limit`: the list was cut (newest kept). */
+  truncated: boolean;
+  /** Publications of the period (before the recipe and family filters) with no Recipe Snapshot. */
+  unattributed: number;
+  scanLimited: boolean;
+  oldestScannedCreatedAt?: number;
+  /** The read stopped at the scan limit: older Publications may be missing. */
+  partial: boolean;
+};
+
+const DAY = 24 * 60 * 60_000;
+
+/** The Project's published Publications whose date falls in `[from, to]`, newest first, each with its attribution and latest measurements. */
+export async function listPublicationReadings(
+  ctx: Pick<QueryCtx, "db">,
+  instanceId: string,
+  window: { from: number; to: number },
+  limit: number,
+  options: { platform?: string; recipeId?: string; familyId?: string; scanLimit?: number; now?: number } = {},
+): Promise<PublicationList> {
+  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
+  const now = options.now ?? Date.now();
+  const unattributed = inWindow.filter(({ mission }) => !mission.recipeSnapshot).length;
+  const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId)).take(2000);
+  const familyIdOf = new Map<string, string>(recipes.map((r) => [r._id as string, r.creativeFamilyId as string]));
+  const familyNames = new Map<string, string>();
+  const matching = inWindow
+    .filter(({ mission }) => {
+      const recipeId = mission.recipeSnapshot?.recipeId;
+      if (options.recipeId !== undefined && recipeId !== options.recipeId) return false;
+      if (options.familyId !== undefined && (recipeId === undefined || familyIdOf.get(recipeId) !== options.familyId)) return false;
+      return true;
+    })
+    .sort((a, b) => b.publishedAt - a.publishedAt);
   const rows: PublicationReading[] = [];
-  for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {
+  for (const { publication, mission, series, publishedAt, found, platform } of matching.slice(0, limit)) {
     const links = found ? linkedAdapters(installed, found.publisher.adapter, found.channel.analyticsAdapter) : [];
     const snapshots = links.length
       ? await ctx.db
@@ -206,8 +252,22 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       return latest ? [{ adapter: adapter.id, takenAt: latest.takenAt, metrics: latest.metrics as Metrics }] : [];
     });
     const face = postFace(mission, platform);
+    const snapshot = mission.recipeSnapshot;
+    let attribution: PublicationAttribution = { status: "unattributed" };
+    if (snapshot) {
+      const familyId = familyIdOf.get(snapshot.recipeId);
+      if (familyId && !familyNames.has(familyId)) familyNames.set(familyId, (await ctx.db.get(familyId as never as Id<"creativeFamilies">))?.name ?? "");
+      attribution = {
+        status: "attributed",
+        recipeId: snapshot.recipeId,
+        recipeName: snapshot.recipeName,
+        version: snapshot.version,
+        ...(familyId ? { familyId, familyName: familyNames.get(familyId) ?? "" } : {}),
+      };
+    }
     rows.push({
       publicationId: publication._id,
+      ...(publication.runId ? { runId: publication.runId } : {}),
       missionId: mission._id,
       missionName: mission.name ?? mission.summary ?? (mission.number !== undefined ? `Mission #${mission.number}` : "Mission"),
       missionType: mission.type,
@@ -217,11 +277,22 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
       ...(face.title ? { title: face.title } : {}),
       ...(publication.externalUrl ? { externalUrl: publication.externalUrl } : {}),
       publishedAt,
+      ageDays: Math.max(0, Math.floor((now - publishedAt) / DAY)),
+      attribution,
       status: links.length === 0 ? "unavailable" : measurements.length > 0 ? "data" : "no_data",
       measurements,
     });
   }
-  return rows.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
+  return {
+    from: window.from,
+    to: window.to,
+    publications: rows,
+    truncated: matching.length > limit,
+    unattributed,
+    scanLimited,
+    ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
+    partial: scanLimited,
+  };
 }
 
 /**
