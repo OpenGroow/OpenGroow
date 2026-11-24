@@ -164,4 +164,48 @@ describe("analytics summary (issue #112)", () => {
       expect(summary.unattributed).toBe(2);
     });
   });
+
+  describe("period and platform filter (issue #154)", () => {
+    const q = (s: Awaited<ReturnType<typeof seed>>, args: Record<string, unknown>) => s.owner.query(api.analytics_summary.summaryForProject, { instanceId: INSTANCE_ID, ...args } as never);
+
+    it("selects Publications by a number of days, then by a custom range", async () => {
+      const s = await seed();
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", ageDays: 3 });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", ageDays: 20 });
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image", ageDays: 60 });
+      expect((await q(s, { days: 7 }))!.adapters[0].groups[0].publications).toBe(1);
+      expect((await q(s, { days: 90 }))!.adapters[0].groups[0].publications).toBe(3);
+      const now = Date.now();
+      const range = (await q(s, { from: now - 30 * DAY, to: now - 10 * DAY }))!;
+      expect(range.adapters[0].groups[0].publications).toBe(1);
+      expect(range.from).toBe(now - 30 * DAY);
+      expect(range.to).toBe(now - 10 * DAY);
+    });
+
+    it("refuses both forms together, a range over 365 days and unusable values", async () => {
+      const s = await seed();
+      const now = Date.now();
+      await expect(q(s, { days: 7, from: now - DAY, to: now })).rejects.toThrow(/either/i);
+      await expect(q(s, { from: now - 366 * DAY, to: now })).rejects.toThrow(/365/);
+      await expect(q(s, { from: now, to: now - DAY })).rejects.toThrow(/before/i);
+      await expect(q(s, { from: now - DAY })).rejects.toThrow(/both/i);
+      await expect(q(s, { days: 366 })).rejects.toThrow(/365/);
+      await expect(q(s, { days: 1.5 })).rejects.toThrow(/whole/i);
+      await expect(q(s, { days: 0 })).rejects.toThrow(/whole|1/i);
+    });
+
+    it("narrows every grouping with the platform filter", async () => {
+      const s = await seed();
+      await s.post({ target: "instagram:me", type: "make_image", kind: "image" });
+      await s.post({ target: "tiktok:me", type: "make_video", kind: "video" });
+      const unfiltered = (await q(s, {}))!;
+      expect(unfiltered.adapters[0].groups).toHaveLength(2);
+      const ig = (await q(s, { platform: "instagram" }))!;
+      expect(ig.adapters[0].groups).toMatchObject([{ platform: "instagram" }]);
+      await s.owner.mutation(api.publishers.setAnalyticsLink, { instanceId: INSTANCE_ID, adapter: "postiz", target: "tiktok:me", analyticsAdapter: [] });
+      expect((await q(s, { platform: "instagram" }))!.unavailable).toEqual([]);
+      expect((await q(s, { platform: "tiktok" }))!.unavailable).toHaveLength(1);
+      expect((await q(s, { platform: "tiktok" }))!.adapters).toEqual([]);
+    });
+  });
 });

@@ -16,6 +16,28 @@ const DAY_MS = 24 * 60 * 60_000;
 export const DEFAULT_WINDOW_DAYS = 30;
 /** The most published Publications the summary reads, newest created first (ADR-084). It bounds the database reads. */
 export const SCAN_LIMIT = 2000;
+/** The longest period a summary can cover, in days. */
+export const MAX_WINDOW_DAYS = 365;
+
+/**
+ * The period asked for: a number of days back from `now`, or a start and an end, never both. Publications are
+ * selected by publication date in it. Anything unusable is an error, not a silent clamp.
+ */
+export function resolveWindow(args: { days?: number; from?: number; to?: number }, now: number = Date.now()): { from: number; to: number } {
+  const { days, from, to } = args;
+  const hasRange = from !== undefined || to !== undefined;
+  if (days !== undefined && hasRange) throw new Error("Give either days or a from/to range, not both.");
+  if (hasRange) {
+    if (from === undefined || to === undefined || !Number.isFinite(from) || !Number.isFinite(to)) throw new Error("A custom range needs both from and to (timestamps in milliseconds).");
+    if (from > to) throw new Error("The range starts after it ends: from must be before to.");
+    if (to - from > MAX_WINDOW_DAYS * DAY_MS) throw new Error(`The range covers more than ${MAX_WINDOW_DAYS} days.`);
+    return { from, to };
+  }
+  const n = days ?? DEFAULT_WINDOW_DAYS;
+  if (!Number.isInteger(n) || n < 1) throw new Error("days must be a whole number of at least 1.");
+  if (n > MAX_WINDOW_DAYS) throw new Error(`days cannot exceed ${MAX_WINDOW_DAYS}.`);
+  return { from: now - n * DAY_MS, to: now };
+}
 
 type Metrics = Record<string, number>;
 
@@ -90,7 +112,7 @@ type PublicationInWindow = {
 };
 
 /** The Project's published Publications whose publication date falls in `[from, to]`, each with its Mission and channel. */
-async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, cap: number = LIST_LIMIT) {
+async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: string, window: { from: number; to: number }, cap: number = LIST_LIMIT, platformFilter?: string) {
   const publications = await publishedOf(ctx, instanceId, cap);
   const publishers = await projectPublishers(ctx, instanceId);
   const installed = await installedAnalyticsAdapters(ctx);
@@ -107,6 +129,7 @@ async function publicationsInWindow(ctx: Pick<QueryCtx, "db">, instanceId: strin
     if (publishedAt < window.from || publishedAt > window.to) continue;
     const found = channelOf(publishers, publication.target);
     const platform = found?.channel.channelService ?? publication.target.split(":")[0];
+    if (platformFilter !== undefined && platform !== platformFilter) continue;
     inWindow.push({ publication, mission, series, publishedAt, found, platform });
   }
   // A full page may hide older rows; a shorter one is the whole set.
@@ -120,9 +143,9 @@ export async function summarizeProject(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { scanLimit?: number } = {},
+  options: { scanLimit?: number; platform?: string } = {},
 ): Promise<AnalyticsSummary> {
-  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT);
+  const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
   let unattributed = 0;
   type Acc = SummaryGroup & { latest: Metrics[] };
   const byAdapter = new Map<string, { meta: AnalyticsAdapterMeta; groups: Map<string, Acc> }>();
@@ -237,12 +260,11 @@ export async function listPublicationReadings(ctx: Pick<QueryCtx, "db">, instanc
   return rows.sort((a, b) => b.publishedAt - a.publishedAt).slice(0, limit);
 }
 
-/** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30). */
+/** Summary of a Project's Publications by platform, format and Mission type over the last `days` (default 30) or a `from`/`to` range, optionally for one platform. */
 export const summaryForProject = query({
-  args: { instanceId: v.string(), days: v.optional(v.number()) },
+  args: { instanceId: v.string(), days: v.optional(v.number()), from: v.optional(v.number()), to: v.optional(v.number()), platform: v.optional(v.string()) },
   handler: async (ctx, args): Promise<AnalyticsSummary | null> => {
     if (!(await readOwnerId(ctx, args.instanceId))) return null;
-    const to = Date.now();
-    return summarizeProject(ctx, args.instanceId, { from: to - (args.days ?? DEFAULT_WINDOW_DAYS) * DAY_MS, to });
+    return summarizeProject(ctx, args.instanceId, resolveWindow(args), { platform: args.platform });
   },
 });

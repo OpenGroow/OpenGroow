@@ -1,5 +1,5 @@
 import type { InternalMcpToolName } from "@opengroow/agent-templates";
-import { DEFAULT_WINDOW_DAYS, listPublicationReadings, summarizeProject } from "../analytics_summary.js";
+import { DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS, listPublicationReadings, resolveWindow, summarizeProject } from "../analytics_summary.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
 
@@ -52,7 +52,6 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
   return types.sort((a, b) => a.templateId.localeCompare(b.templateId) || a.type.localeCompare(b.type));
 }
 
-const DAY_MS = 24 * 60 * 60_000;
 const MISSIONS_DEFAULT_LIMIT = 20;
 const MISSIONS_MAX_LIMIT = 50;
 const PUBLICATIONS_DEFAULT_LIMIT = 50;
@@ -64,12 +63,19 @@ function boundedInt(value: unknown, fallback: number, max: number) {
   return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.min(Math.floor(value), max) : fallback;
 }
 
+const numberArg = (value: unknown) => (value === undefined || value === null ? undefined : (value as number));
+
+/** The period of a call: `days`, or `from` and `to` (never both); a bad one is an error the Agent can read. */
 function windowOf(args: Record<string, unknown>) {
-  const to = Date.now();
-  return { from: to - boundedInt(args.days, DEFAULT_WINDOW_DAYS, 365) * DAY_MS, to };
+  return resolveWindow({ days: numberArg(args.days), from: numberArg(args.from), to: numberArg(args.to) });
 }
 
-const DAYS_PROPERTY = { type: "integer", minimum: 1, maximum: 365, description: `Look-back window in days, by publication date (default ${DEFAULT_WINDOW_DAYS}).` } as const;
+const DAYS_PROPERTY = { type: "integer", minimum: 1, maximum: MAX_WINDOW_DAYS, description: `Look-back window in days, by publication date (default ${DEFAULT_WINDOW_DAYS}). Not with from/to.` } as const;
+const RANGE_PROPERTIES = {
+  from: { type: "integer", description: `Start of a custom period (ms timestamp), by publication date. Needs to; at most ${MAX_WINDOW_DAYS} days before it. Not with days.` },
+  to: { type: "integer", description: "End of a custom period (ms timestamp). Needs from." },
+} as const;
+const PLATFORM_PROPERTY = { type: "string", description: "Only this platform (for instance instagram)." } as const;
 
 /** The Project's most recently updated Missions, newest first, with their status and outcome. */
 async function listRecentMissions(ctx: QueryCtx, scope: InternalMcpScope, limit: number) {
@@ -122,15 +128,15 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   get_analytics_summary: {
     description:
       "How the Project's Publications performed, aggregated by Analytics Adapter, platform, format and Mission type: counters summed, derived levels recomputed from the sums, plus the direction (better: higher or lower) of each metric. A group with status no_data is linked to analytics but not read yet; `unavailable` lists Publications whose channel has no Analytics Adapter, which is not the same as no data.",
-    inputSchema: { type: "object", properties: { days: DAYS_PROPERTY }, additionalProperties: false },
-    run: (ctx, scope, args) => summarizeProject(ctx, scope.instanceId, windowOf(args)),
+    inputSchema: { type: "object", properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES, platform: PLATFORM_PROPERTY }, additionalProperties: false },
+    run: (ctx, scope, args) => summarizeProject(ctx, scope.instanceId, windowOf(args), { platform: typeof args.platform === "string" ? args.platform : undefined }),
   },
   list_publications: {
     description:
       "The Project's published Publications, newest first, each with its platform, format, Mission, link and latest measurements per Analytics Adapter. status is data (measured), no_data (linked, nothing read yet) or unavailable (the channel has no Analytics Adapter).",
     inputSchema: {
       type: "object",
-      properties: { days: DAYS_PROPERTY, limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` } },
+      properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES, limit: { type: "integer", minimum: 1, maximum: PUBLICATIONS_MAX_LIMIT, description: `At most this many (default ${PUBLICATIONS_DEFAULT_LIMIT}).` } },
       additionalProperties: false,
     },
     run: (ctx, scope, args) => listPublicationReadings(ctx, scope.instanceId, windowOf(args), boundedInt(args.limit, PUBLICATIONS_DEFAULT_LIMIT, PUBLICATIONS_MAX_LIMIT)),
