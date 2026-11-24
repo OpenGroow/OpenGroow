@@ -91,6 +91,10 @@ export const publisherTables = {
     // (ADR-074, #62): its presence is what prevents a second call on a replay.
     // Never blocking: `failed` is a warning, the Publication stays published.
     notification: v.optional(publicationNotificationV),
+    // The Run that produced the output approved and published (ADR-084): copied
+    // from the Mission's `lastResultRunId` on creation, replaced on a retry only
+    // when the output sent changed. Absent on Publications that predate it.
+    runId: v.optional(v.id("runs")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
