@@ -273,6 +273,36 @@ function renderProductionRecipeFromUnknown(data: unknown): string | null {
   return renderProductionRecipeSection(data as ProductionRecipeInfo);
 }
 
+// ─── Strategic Review period provider (ADR-085, issue #166) ────────────────
+
+/** The period OpenGroow pinned on a Strategic Review Run (epoch ms). */
+export type StrategicReviewPeriodInfo = { periodStart: number; periodEnd: number } | null;
+
+/**
+ * Pure renderer for the strategic-review-period provider: tells the Agent the
+ * window OpenGroow resolved and to pass it as `from`/`to` to every analytics
+ * call, so all the calls of one Run read the same data.
+ */
+export function renderStrategicReviewPeriodSection(info: StrategicReviewPeriodInfo): string | null {
+  if (!info) return null;
+  return [
+    "# Analysis period",
+    "",
+    `From: ${new Date(info.periodStart).toISOString()} (\`from\` = ${info.periodStart})`,
+    `To: ${new Date(info.periodEnd).toISOString()} (\`to\` = ${info.periodEnd})`,
+    "",
+    "OpenGroow fixed this period when the Run started. Pass it unchanged as `from` and `to` (epoch milliseconds) to every analytics call (never `days`), so that every call of this Run reads the same window. Do not choose another period.",
+    "",
+  ].join("\n");
+}
+
+function renderStrategicReviewPeriodFromUnknown(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const { periodStart, periodEnd } = data as Record<string, unknown>;
+  if (typeof periodStart !== "number" || typeof periodEnd !== "number") return null;
+  return renderStrategicReviewPeriodSection({ periodStart, periodEnd });
+}
+
 // ─── Provider registry ──────────────────────────────────────────────────────
 
 type ContextProviderRenderer = (data: unknown) => string | null;
@@ -298,6 +328,7 @@ export const CONTEXT_PROVIDER_RENDERERS: Record<ContextProviderName, ContextProv
   "observation-production-source": renderCarouselPlanningSourceFromUnknown,
   "platform-account": renderPlatformAccountFromUnknown,
   [RECIPE_PROVIDER]: renderProductionRecipeFromUnknown,
+  "strategic-review-period": renderStrategicReviewPeriodFromUnknown,
 };
 
 /** Providers that render the Agent's config: a Run cannot dispatch for them on an absent config. */

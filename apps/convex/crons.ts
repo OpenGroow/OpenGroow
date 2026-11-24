@@ -33,6 +33,14 @@ crons.interval(
   internal.score_jobs.tick,
 );
 
+// Strategic Review Job (ADR-085): pins the period and the base Review, then
+// queues the Run for the Strategy Agent.
+crons.interval(
+  "strategic-review-job-tick",
+  { minutes: 1 },
+  internal.strategic_review_jobs.tick,
+);
+
 // Issue #493: a WhatsApp channel stuck "configured but never linked" made
 // OpenClaw retry every ~30-40s forever, each retry re-running a full LLM
 // agent turn (946.9M tokens burned in a day). Probes such channels and
