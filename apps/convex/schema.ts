@@ -523,6 +523,31 @@ export default defineSchema({
     // Callers keep only Runs with a `missionId` (Runs of Missions).
     .index("by_instance_template_status_completed", ["instanceId", "templateId", "status", "completedAt"])
     .index("by_dispatch_command", ["dispatchCommandId"]),
+  // A Strategic Review (ADR-085): immutable, attached to the Project. No update,
+  // delete or purge function exists. Each row holds its own whole memory.
+  strategicReviews: defineTable({
+    ownerId: v.string(),
+    instanceId: v.string(),
+    runId: v.id("runs"),
+    // The latest Review when the Run was dispatched (none for the first one).
+    baseReviewId: v.optional(v.id("strategicReviews")),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    // Markdown.
+    report: v.string(),
+    consolidatedMemory: v.string(),
+    references: v.object({
+      familyIds: v.array(v.id("creativeFamilies")),
+      recipeIds: v.array(v.id("productionRecipes")),
+      publicationIds: v.array(v.id("publications")),
+    }),
+    memoryChanged: v.boolean(),
+    createdAt: v.number(),
+  })
+    // "Latest Review of a Project" and the history, newest first.
+    .index("by_instance_created", ["instanceId", "createdAt"])
+    // Idempotency: the Review already persisted for a Run (no uniqueness constraint in Convex).
+    .index("by_instance_run", ["instanceId", "runId"]),
   jobs: defineTable({
     ownerId: v.string(),
     instanceId: v.string(),
