@@ -100,6 +100,15 @@ Recipe usage is read through the Internal MCP, never shown on the Analytics page
 
 See ADR-084.
 
+### Strategic Review
+
+One periodic analysis of the Project's content performance by the Strategy Agent, run as a **Job** (not a Mission: nobody triggers or approves it), that produces a **Performance Report** and a new **Strategic Memory**. Each persisted Strategic Review is immutable, carries the analysis period OpenGroow resolved when the Run started, and records the Strategic Review it was consolidated from.
+
+- **Performance Report**: the Markdown analysis of the period. Observed facts, interpretations and hypotheses are kept apart.
+- **Strategic Memory**: the Markdown consolidated understanding of the Project's content performance as of that Strategic Review: previous memory plus new evidence, never an append-only log. The memory of the latest persisted Strategic Review is the current one. It records knowledge, not operational decisions.
+- A Run that fails, is invalid or is based on an outdated memory persists nothing and never replaces the current memory.
+- _Avoid_: "Review" alone (it means the human review of a Mission, see **Mission**), "Memory Agent" (the Strategy Agent does both the analysis and the consolidation).
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.
