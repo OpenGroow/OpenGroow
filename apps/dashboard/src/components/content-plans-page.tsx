@@ -2,21 +2,18 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { CalendarDays, Check, ChevronRight, X } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { DraftPlan } from "@/src/components/content-plan-draft";
-import { periodLabel, type DraftPlanView, type PlanHistoryView } from "@/src/components/content-plan-types";
+import { HistoryPlan } from "@/src/components/content-plan-history";
+import { type DraftPlanView, type PlanHistoryView } from "@/src/components/content-plan-types";
 
 // The Content Plans page (ADR-086): the current draft Content Plan to review, then the history of approved and
 // rejected plans.
 
 export type { DraftPlanView, PlanHistoryView, PlannedContentView, PublishTargetView } from "@/src/components/content-plan-types";
-
-const formatTimestamp = (timestamp: number) => new Date(timestamp).toLocaleDateString("en-US", { dateStyle: "medium" });
 
 type Props = { params: Promise<{ instanceId: string }> };
 
@@ -61,18 +58,7 @@ export function ContentPlansContent({ instanceId }: { instanceId: string }) {
           <ul className="m-0 grid list-none gap-3 p-0">
             {history.map((plan) => (
               <li key={plan._id} id={`plan-${plan._id}`} data-plan={plan._id}>
-                <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
-                  <CalendarDays aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
-                  <span className="text-base font-semibold">{periodLabel(plan)}</span>
-                  <Badge variant="tag">
-                    {plan.status === "approved" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-                    {plan.status === "approved" ? "Approved" : "Rejected"}
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    Planned {formatTimestamp(plan.createdAt)} · {plan.counts.total} {plan.counts.total === 1 ? "content" : "contents"}
-                  </span>
-                  <ChevronRight aria-hidden="true" className="ml-auto size-4 text-muted-foreground" />
-                </Card>
+                <HistoryPlan plan={plan} />
               </li>
             ))}
           </ul>

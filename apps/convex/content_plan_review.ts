@@ -97,3 +97,15 @@ export const history = query({
     );
   },
 });
+
+/** The Planned Contents of one plan (by date, removed and rejected ones included) for the read-only history view, or null. */
+export const planDetail = query({
+  args: { planId: v.id("contentPlans") },
+  handler: async (ctx, args) => {
+    const plan = await ctx.db.get(args.planId);
+    if (!plan || (await readOwnerId(ctx, plan.instanceId)) === null) return null;
+    const publishers = await projectPublishers(ctx, plan.instanceId);
+    const rows = (await contentsOf(ctx, plan._id)).sort((a, b) => a.plannedAt.localeCompare(b.plannedAt) || a.createdAt - b.createdAt);
+    return await Promise.all(rows.map((row) => contentView(ctx, row, publishers)));
+  },
+});

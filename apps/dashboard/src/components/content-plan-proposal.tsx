@@ -44,7 +44,7 @@ function ProductionBrief({ brief }: { brief: string }) {
   );
 }
 
-export function PlannedContentCard({ content, period }: { content: PlannedContentView; period: { periodStart: string; periodEnd: string } }) {
+export function PlannedContentCard({ content, period, readOnly = false }: { content: PlannedContentView; period: { periodStart: string; periodEnd: string }; readOnly?: boolean }) {
   const removed = content.status === "rejected";
   return (
     <li data-content={content._id}>
@@ -112,7 +112,7 @@ export function PlannedContentCard({ content, period }: { content: PlannedConten
           </div>
         </div>
         <ProductionBrief brief={content.brief} />
-        {removed ? null : <ContentEditor content={content} period={period} />}
+        {removed || readOnly ? null : <ContentEditor content={content} period={period} />}
       </Card>
     </li>
   );

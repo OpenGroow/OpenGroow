@@ -27,7 +27,7 @@ vi.mock("convex/react", () => ({
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
-    content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" },
+    content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history", planDetail: "content_plan_review.planDetail" },
     content_plan_edit: { update: "content_plan_edit.update", remove: "content_plan_edit.remove", recipeOptions: "content_plan_edit.recipeOptions" },
     content_plan_decision: { approve: "content_plan_decision.approve", reject: "content_plan_decision.reject" },
   },
@@ -76,8 +76,8 @@ describe("ContentPlansContent", () => {
     vi.useRealTimers();
   });
 
-  async function render({ draft, history = [] }: { draft?: unknown; history?: unknown[] }) {
-    useQueryMock.mockImplementation((key: string) => (key === "content_plan_review.current" ? draft : key === "content_plan_review.history" ? history : key === "content_plan_edit.recipeOptions" ? [{ id: "rec-1", name: "Reel recipe" }, { id: "rec-2", name: "Other recipe" }] : undefined));
+  async function render({ draft, history = [], detail }: { draft?: unknown; history?: unknown[]; detail?: unknown }) {
+    useQueryMock.mockImplementation((key: string, args: unknown) => (key === "content_plan_review.planDetail" ? (args === "skip" ? undefined : detail) : key === "content_plan_review.current" ? draft : key === "content_plan_review.history" ? history : key === "content_plan_edit.recipeOptions" ? [{ id: "rec-1", name: "Reel recipe" }, { id: "rec-2", name: "Other recipe" }] : undefined));
     await act(async () => {
       root.render(<ContentPlansContent instanceId="instance-1" />);
     });
@@ -188,6 +188,40 @@ describe("ContentPlansContent", () => {
     await render({ draft: null, history: [] });
     expect(text()).toContain("No approved or rejected plan yet.");
   });
+  describe("history rows", () => {
+    const row = { _id: "p-1", periodStart: "2030-02-19", periodEnd: "2030-02-25", rationale: "## Past strategy\n\nWhy then.", status: "approved", createdAt: Date.UTC(2030, 1, 18), counts: { total: 2, approved: 1, rejected: 1 } };
+    const toggle = () => document.querySelector("li[data-plan='p-1'] button[aria-expanded]") as HTMLButtonElement;
+    const detail = [makeContent({ _id: "h-1", title: "Kept one", status: "approved" }), makeContent({ _id: "h-2", title: "Dropped one", status: "rejected" })];
+
+    it("stays closed and does not fetch the plan until the row is opened", async () => {
+      await render({ draft: null, history: [row], detail });
+      expect(toggle().getAttribute("aria-expanded")).toBe("false");
+      expect(text()).not.toContain("Kept one");
+      expect(useQueryMock.mock.calls.some(([key, args]) => key === "content_plan_review.planDetail" && args !== "skip")).toBe(false);
+    });
+
+    it("opens on click, showing the rationale and the contents read-only, with removed ones marked", async () => {
+      await render({ draft: null, history: [row], detail });
+      await click(toggle());
+      expect(toggle().getAttribute("aria-expanded")).toBe("true");
+      expect(useQueryMock).toHaveBeenCalledWith("content_plan_review.planDetail", { planId: "p-1" });
+      expect(text()).toContain("Past strategy");
+      expect(text()).toContain("Kept one");
+      expect(document.querySelector("li[data-content='h-2']")!.textContent).toContain("Removed");
+      expect(document.querySelector("li[data-plan='p-1'] li[data-content='h-1']")!.textContent).toContain("Reel recipe");
+      expect(Array.from(document.querySelectorAll("li[data-plan='p-1'] button")).map((b) => b.textContent)).not.toEqual(expect.arrayContaining(["Edit"]));
+      expect(Array.from(document.querySelectorAll("li[data-plan='p-1'] button")).map((b) => b.textContent)).not.toContain("Remove");
+    });
+
+    it("closes again on a second click", async () => {
+      await render({ draft: null, history: [row], detail });
+      await click(toggle());
+      await click(toggle());
+      expect(toggle().getAttribute("aria-expanded")).toBe("false");
+      expect(text()).not.toContain("Kept one");
+    });
+  });
+
   describe("editing a draft", () => {
     const card = (id = "pc-1") => document.querySelector(`li[data-content='${id}']`)!;
     const button = (root: Element, name: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === name) as HTMLButtonElement;

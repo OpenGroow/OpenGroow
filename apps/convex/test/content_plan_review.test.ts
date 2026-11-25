@@ -149,3 +149,30 @@ describe("content_plan_review.history", () => {
     expect(await stranger().query(api.content_plan_review.history, { instanceId: INSTANCE })).toEqual([]);
   });
 });
+
+describe("content_plan_review.planDetail", () => {
+  it("returns the contents of a decided plan by date, rejected ones included, with references resolved", async () => {
+    const planId = await plan({ status: "approved" });
+    await content(planId, { plannedAt: "2030-03-08", title: "Later", status: "approved" });
+    await content(planId, { plannedAt: "2030-03-06", title: "Sooner", status: "rejected" });
+    const contents = (await owner().query(api.content_plan_review.planDetail, { planId }))!;
+    expect(contents.map((c) => [c.title, c.status])).toEqual([["Sooner", "rejected"], ["Later", "approved"]]);
+    expect(contents[0]).toMatchObject({
+      recipe: { id: recipeId, name: "Reel recipe" }, creativeFamily: { id: familyId, name: "Reaction" }, source: { id: sourceId, label: "Article 1" },
+      publishTargets: [{ target: "social:example", uncertain: true, reason: expect.any(String) }],
+    });
+    expect(contents[0]).not.toHaveProperty("ownerId");
+  });
+
+  it("is null for a stranger", async () => {
+    const planId = await plan({ status: "rejected" });
+    await content(planId);
+    expect(await stranger().query(api.content_plan_review.planDetail, { planId })).toBeNull();
+  });
+
+  it("is null for a plan that no longer exists", async () => {
+    const planId = await plan({ status: "rejected" });
+    await t.run((ctx) => ctx.db.delete(planId));
+    expect(await owner().query(api.content_plan_review.planDetail, { planId })).toBeNull();
+  });
+});
