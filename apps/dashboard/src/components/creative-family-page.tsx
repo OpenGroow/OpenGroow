@@ -144,7 +144,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
       {tab === "recipes" ? (
         <>
           <FamilyGenerations instanceId={instanceId} familyId={familyId} onReview={setReviewed} />
-          <RecipeProposalReview instanceId={instanceId} familyId={familyId} generation={reviewed} onClose={() => setReviewed(null)} />
+          <RecipeProposalReview instanceId={instanceId} familyId={familyId} familyName={family.name} generation={reviewed} onClose={() => setReviewed(null)} />
           <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} />
         </>
       ) : null}

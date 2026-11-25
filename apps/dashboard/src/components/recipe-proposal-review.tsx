@@ -1,14 +1,16 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
+import { ArrowUpRight, ChevronDown, Film, Sparkles } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import type { Generation } from "@/src/components/recipe-generation";
+import { cn } from "@/lib/utils";
 import { recipeTargetLabel, type RecipeTarget } from "@/src/lib/production-recipe-form";
 
 // Review of a Recipe Proposal (ADR-087, ticket #195): the existing Production Recipe form, prefilled and editable,
@@ -34,39 +36,66 @@ export function proposalOf(generation: Generation): RecipeProposal | undefined {
   return { ...p, name: p.name, instructions: p.instructions, description: p.description ?? "", templateId: p.templateId ?? "", missionType: p.missionType ?? "", constraints: p.constraints ?? [], rationale: p.rationale ?? "" };
 }
 
+const VISIBLE_SOURCES = 4;
+
 function CitedSources({ instanceId, runId }: { instanceId: string; runId: string }) {
   const sources = useQuery(api.recipe_generation_views.proposalSources, { instanceId, runId: runId as Id<"runs"> }) as CitedSource[] | undefined;
+  const [all, setAll] = React.useState(false);
+  const shown = sources && !all ? sources.slice(0, VISIBLE_SOURCES) : sources;
   return (
-    <div className="grid gap-1">
-      <h3 className="m-0 text-sm font-semibold text-foreground">Inspiration Sources</h3>
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between">
+        <h4 className="m-0 text-sm font-semibold text-foreground">Inspiration sources</h4>
+        {sources ? <span className="text-sm text-muted-foreground">{sources.length}</span> : null}
+      </div>
       {sources === undefined ? (
         <p className="m-0 text-sm text-muted-foreground">Loading…</p>
       ) : sources.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">The cited Sources are no longer available.</p>
       ) : (
-        <ul className="m-0 grid gap-1 pl-5 text-sm">
-          {sources.map((source) => (
+        <ul className="m-0 grid list-none gap-1 p-0">
+          {shown?.map((source) => (
             <li key={source.sourceId}>
-              <Link href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source.sourceId)}`} target="_blank" className="text-primary underline underline-offset-2">
-                {source.title}
+              <Link href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source.sourceId)}`} target="_blank" className="flex items-center gap-3 rounded-lg p-2 text-sm text-foreground hover:bg-card">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-card text-muted-foreground">
+                  <Film className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{source.title}</span>
+                <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
               </Link>
             </li>
           ))}
         </ul>
       )}
+      {sources && sources.length > VISIBLE_SOURCES ? (
+        <Button type="button" variant="link" className="h-auto w-fit p-0" onClick={() => setAll((v) => !v)}>
+          {all ? "Show fewer sources" : `View all ${sources.length} sources`}
+        </Button>
+      ) : null}
     </div>
   );
 }
 
+/** The read-only "Creative insights" of a proposal: why it exists and the Sources it draws from. */
 function ProposalContext({ instanceId, generation, proposal }: { instanceId: string; generation: Generation; proposal: RecipeProposal }) {
+  const [fullRationale, setFullRationale] = React.useState(false);
   return (
-    <Card size="sm" className="gap-3 px-4">
+    <div className="grid gap-5">
+      <h3 className="m-0 flex items-center gap-2 text-base font-semibold text-foreground">
+        <Sparkles className="size-4 text-primary" /> Creative insights
+      </h3>
       <div className="grid gap-1">
-        <h3 className="m-0 text-sm font-semibold text-foreground">Rationale</h3>
-        <p className="m-0 whitespace-pre-wrap text-sm text-muted-foreground">{proposal.rationale}</p>
+        <h4 className="m-0 text-sm font-semibold text-foreground">Why this recipe?</h4>
+        <p className={cn("m-0 whitespace-pre-wrap text-sm text-muted-foreground", !fullRationale && "line-clamp-5")}>{proposal.rationale}</p>
       </div>
-      <CitedSources instanceId={instanceId} runId={generation.runId} />
-    </Card>
+      <div className="border-t border-border pt-4">
+        <CitedSources instanceId={instanceId} runId={generation.runId} />
+      </div>
+      <Button type="button" variant="ghost" aria-expanded={fullRationale} onClick={() => setFullRationale((v) => !v)} className="h-auto justify-between border-t border-border px-0 pt-4 text-sm font-normal text-muted-foreground">
+        Full rationale
+        <ChevronDown className={cn("size-4 transition-transform", fullRationale && "rotate-180")} />
+      </Button>
+    </div>
   );
 }
 
@@ -82,11 +111,14 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 export function RecipeProposalReview({
   instanceId,
   familyId,
+  familyName,
   generation,
   onClose,
 }: {
   instanceId: string;
   familyId: string;
+  /** Shown as "Generated from …" in the review header. */
+  familyName?: string;
   /** The generation under review; null when the review is closed. */
   generation: Generation | null;
   onClose: () => void;
@@ -101,7 +133,7 @@ export function RecipeProposalReview({
     const target = targets?.find((t) => t.templateId === proposal.templateId && t.missionType === proposal.missionType);
     return (
       <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[min(94vw,56rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{proposal.name}</DialogTitle>
             <DialogDescription>A Production Recipe was already created from this proposal.</DialogDescription>
@@ -132,11 +164,11 @@ export function RecipeProposalReview({
       mode="create"
       open
       onOpenChange={(open) => (open ? undefined : onClose())}
-      title="Review Recipe Proposal"
+      title="Review recipe"
+      review={{ subtitle: familyName ? `Generated from ${familyName}` : "Generated from this Creative Family", aside: <ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} /> }}
       targets={targets}
       initial={{ ...(proposal.prompt ? { prompt: proposal.prompt } : {}), instructions: proposal.instructions, constraints: proposal.constraints }}
       prefill={{ name: proposal.name, description: proposal.description, templateId: proposal.templateId, missionType: proposal.missionType }}
-      context={<ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} />}
       onSubmit={async (fields) => {
         await create({ instanceId, familyId: familyId as Id<"creativeFamilies">, ...fields, proposalRunId: generation.runId as Id<"runs"> });
       }}
