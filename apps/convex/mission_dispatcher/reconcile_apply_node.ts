@@ -13,6 +13,7 @@ export type ReconcileRun = {
   sourceRouting?: boolean;
   strategicReview?: boolean;
   contentPlanning?: boolean;
+  recipeGeneration?: boolean;
   ownerId: string;
   missionType: string;
   missionPayload?: unknown;

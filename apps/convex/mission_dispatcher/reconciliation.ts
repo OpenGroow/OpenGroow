@@ -87,6 +87,8 @@ export type ReconcileDecision =
   // A Content Planning Job's result file (#176): validated and persisted by Convex while the Run completes.
   // The plan is data, never logged (only that an envelope arrived).
   | { type: "persistContentPlan"; envelope: unknown }
+  // A Recipe Generation's result file (ADR-087): validated and stored by Convex while the Run completes.
+  | { type: "persistRecipeProposal"; envelope: unknown }
   // A Source ingestion Job's success (#564): the Sources of its result file are ingested
   // by Convex while the Run completes. They never enter the decision log.
   | { type: "ingestSources"; result: { status: "success"; summary: string }; sources: unknown[] }
@@ -111,11 +113,11 @@ export type ReconcileDecision =
  */
 function decideInvalidOutput(
   message: string,
-  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; sourceRouting?: boolean; strategicReview?: boolean; contentPlanning?: boolean },
+  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; sourceRouting?: boolean; strategicReview?: boolean; contentPlanning?: boolean; recipeGeneration?: boolean },
 ): ReconcileDecision {
   // A Job has no Mission to resume: the failure is settled on the Job,
   // which resumes its own execution with the error (bounded, #567).
-  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.sourceRouting === true || ctx.strategicReview === true || ctx.contentPlanning === true) {
+  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.sourceRouting === true || ctx.strategicReview === true || ctx.contentPlanning === true || ctx.recipeGeneration === true) {
     return { type: "markFailed", code: "file_invalid", message, retryWithFeedback: true };
   }
   const decision = decideBoundedRetry(
@@ -245,6 +247,7 @@ export function decideReconciliation(
     sourceRouting?: boolean;
     strategicReview?: boolean;
     contentPlanning?: boolean;
+    recipeGeneration?: boolean;
     runId: Id<"runs">;
     missionType: string;
     blockerCodes?: readonly string[];
@@ -402,6 +405,9 @@ export function decideReconciliation(
 
   // A Content Planning result is the envelope itself; Convex validates it where it persists it.
   if (ctx.contentPlanning === true) return { type: "persistContentPlan", envelope: parsed };
+
+  // A Recipe Generation's result is the envelope itself; Convex validates it where it stores it.
+  if (ctx.recipeGeneration === true) return { type: "persistRecipeProposal", envelope: parsed };
 
   // A Source ingestion Job's result has its own type.
   if (ctx.sourceIngestion === true) {

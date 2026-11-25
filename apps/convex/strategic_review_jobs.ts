@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, type MutationCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
+import { standaloneInFlight } from "./recipe_generation_shared.js";
 import { requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { latestOf, persistStrategicReview } from "./strategic_reviews.js";
@@ -223,6 +224,8 @@ export const tick = internalMutation({
       const manual = job.runNowAt !== undefined;
       const restorePaused = manual && runtimeOf(job).runNowRestorePaused === true;
       if (job.state === "paused" && !manual) continue;
+      // A Standalone Run holds the Agent (ADR-087): postpone without writing, the Job stays due and a Run Now stays queued.
+      if (await standaloneInFlight(ctx, job.instanceId, job.templateId)) continue;
       const settleManual = {
         ...(manual ? { runNowAt: undefined, ...(restorePaused ? { state: "paused" as const } : {}) } : {}),
       };

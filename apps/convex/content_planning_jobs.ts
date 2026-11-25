@@ -5,6 +5,7 @@ import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { allChannels, projectPublishers } from "./project_publishers.js";
+import { standaloneInFlight } from "./recipe_generation_shared.js";
 import { startRun } from "./content_planning_runs.js";
 import { approvedCountsByKind } from "./content_plan_counts.js";
 import { CONTENT_PLANNING_JOB_TYPE, runtimeOf, type ContentPlanningPins, type Runtime } from "./content_planning_shared.js";
@@ -180,6 +181,8 @@ export const tick = internalMutation({
     for (const job of due) {
       const manual = job.runNowAt !== undefined;
       if (job.state === "paused" && !manual) continue;
+      // A Standalone Run holds the Agent (ADR-087): postpone without writing, the Job stays due and a Run Now stays queued.
+      if (await standaloneInFlight(ctx, job.instanceId, job.templateId)) continue;
       const restorePaused = manual && runtimeOf(job).runNowRestorePaused === true;
       const settled = {
         ...(manual ? { runNowAt: undefined, ...(restorePaused ? { state: "paused" as const } : {}) } : {}),
