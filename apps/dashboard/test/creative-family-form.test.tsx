@@ -38,6 +38,8 @@ vi.mock("@convex/_generated/api", () => ({
     production_recipes: { list: "production_recipes.list", create: "production_recipes.create", listTargets: "production_recipes.listTargets" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
+    recipe_generation: { generateRecipe: "recipe_generation.generateRecipe" },
+    recipe_generation_views: { listGenerations: "recipe_generation_views.listGenerations" },
   },
 }));
 
