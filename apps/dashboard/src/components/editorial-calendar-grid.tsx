@@ -16,11 +16,11 @@ function DayChip({ item, selected, onSelect }: { item: CalendarItem; selected: b
       type="button"
       variant="outline"
       aria-pressed={selected}
-      className={cn("h-auto w-full min-w-0 flex-col items-start justify-start gap-1.5 whitespace-normal rounded-lg bg-muted/40 p-2 text-left", selected && "ring-2 ring-primary")}
+      className={cn("h-auto w-full min-w-0 flex-col items-start justify-start gap-1.5 whitespace-normal rounded-lg bg-muted/40 p-1.5 text-left", selected && "ring-2 ring-primary")}
       onClick={() => onSelect(item._id)}
     >
       <span className="line-clamp-2 w-full break-words text-xs font-medium">{item.title}</span>
-      <span className="flex min-w-0 flex-wrap gap-1">
+      <span className="flex min-w-0 max-w-full flex-nowrap gap-1 [&>*]:min-w-0 [&>*]:gap-1 [&>*]:px-1.5">
         <Badge variant="tag" size="xs">
           <Icon aria-hidden="true" />
           {formatLabel(item.kind)}
@@ -44,7 +44,7 @@ export function MonthGrid({ cursor, byDay, selectedId, onSelect }: { cursor: Mon
         const key = dayKey(cursor.year, cursor.month, day);
         const dayItems = byDay.get(key) ?? [];
         return (
-          <div key={key} data-day={key} className="grid min-h-24 min-w-0 content-start gap-2 rounded-xl border bg-card/40 p-2.5">
+          <div key={key} data-day={key} className="grid min-h-24 min-w-0 content-start gap-2 rounded-xl border bg-card/40 p-2">
             <span className={cn("px-0.5 text-sm leading-none text-muted-foreground", dayItems.length > 0 && "font-bold text-foreground")}>{day}</span>
             {dayItems.map((item) => (
               <DayChip key={item._id} item={item} selected={selectedId === item._id} onSelect={onSelect} />
