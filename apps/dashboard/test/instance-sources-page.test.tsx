@@ -15,6 +15,7 @@ const useQueryMock = vi.fn();
 const usePaginatedQueryMock = vi.fn();
 const removeManyMock = vi.fn();
 
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   usePaginatedQuery: (...args: unknown[]) => usePaginatedQueryMock(...args),

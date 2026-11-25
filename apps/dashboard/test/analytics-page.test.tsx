@@ -36,6 +36,7 @@ const listArgs: Array<{ adapter?: string; recipeId?: string; familyId?: string; 
 let recipeSummary: unknown = { groupBy: "recipe", recipes: [], unattributed: 0, partial: false };
 let familySummary: unknown = { groupBy: "family", families: [], unattributed: 0, partial: false };
 const summaryArgs: Array<Record<string, unknown>> = [];
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useAction: () => refreshAction,
   useMutation: () => async () => undefined,

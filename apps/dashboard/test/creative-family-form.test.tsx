@@ -15,6 +15,7 @@ const createMock = vi.fn();
 const updateMock = vi.fn();
 const otherMutation = vi.fn();
 
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (key: string) =>
     key === "creative_families.list"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useAction, useQuery } from "convex/react";
@@ -353,7 +354,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const [adapterId, setAdapterId] = useState<string | null>(null);
   const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
   const unavailable = useQuery(api.analytics.unavailableForProject, instanceId ? { instanceId } : "skip") ?? [];
-  const [view, setView] = useState<View>("publications");
+  const [view, setView] = useUrlTab<View>(["publications", "recipes", "families"], "publications", "view");
   const [days, setDays] = useState(365);
   const [familyId, setFamilyId] = useState("all");
   const [recipeId, setRecipeId] = useState("all");

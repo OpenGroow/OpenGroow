@@ -28,9 +28,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
-}));
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock({ push: (url) => routerPushMock(url), replace: (url) => routerReplaceMock(url) }));
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryWithTemplates(useQueryMock)(...args),

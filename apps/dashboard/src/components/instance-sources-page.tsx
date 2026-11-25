@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
@@ -97,7 +98,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   const [stage, setStage] = useState("all");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"ready" | "other">("ready");
+  const [tab, setTab] = useUrlTab<"ready" | "other">(["ready", "other"], "ready");
   const {
     results: sources,
     status,

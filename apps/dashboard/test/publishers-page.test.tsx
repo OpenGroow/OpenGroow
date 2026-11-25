@@ -21,6 +21,7 @@ const actions: Record<string, ReturnType<typeof vi.fn<any[], any>>> = {};
 
 // `publishers.list`: a test's single Publisher (or null for none) is the Project's only one (ADR-075).
 const asPublisherList = (value: unknown) => (value === undefined ? undefined : value === null ? [] : Array.isArray(value) ? value : [value]);
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) =>
     args[0] === "analytics_connections.list" ? analyticsAdapters : args[0] === PUBLISHER_PACKAGES_LIST ? installedPublishers : args[0] === "publishers.list" ? asPublisherList(useQueryMock(...args)) : useQueryMock(...args),

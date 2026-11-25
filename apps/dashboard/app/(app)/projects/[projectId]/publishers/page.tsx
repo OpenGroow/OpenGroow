@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import { useCallback, useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { BarChart3, Download, Eye, EyeOff, KeyRound, Layers, Link2, Loader2, Plug, Plus, RefreshCw, Save, Settings, Trash2, TriangleAlert } from "lucide-react";
@@ -297,7 +298,7 @@ function PublisherPanel({
   const [installError, setInstallError] = useState<string | null>(null);
   // A Publisher exists but its package is not installed (it predates installable packages): the hub's entry that provides it.
   const [missing, setMissing] = useState<{ entry?: { packageId: string; name: string; icon?: string }; error?: string } | null>(null);
-  const [tab, setTab] = useState<"configuration" | "channels" | "analytics">("configuration");
+  const [tab, setTab] = useUrlTab<"configuration" | "channels" | "analytics">(["configuration", "channels", "analytics"], "configuration");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "remove" | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);

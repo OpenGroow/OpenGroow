@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import { use, useState } from "react";
 import Link from "next/link";
 import { usePaginatedQuery, useQuery } from "convex/react";
@@ -72,7 +73,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { instanceId, familyId: id },
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
-  const [tab, setTab] = useState<FamilyTab>("sources");
+  const [tab, setTab] = useUrlTab<FamilyTab>(TABS.map((t) => t.key), "sources");
   const [reviewed, setReviewed] = useState<Generation | null>(null);
   const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
   const { removeMany, error: removeError, pending: removing } = useRemoveSources(instanceId);
