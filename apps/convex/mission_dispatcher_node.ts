@@ -815,7 +815,7 @@ async function dispatchContentPlanningRun(
   if (!inputs) return false;
   try {
     const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
-    const runMd = buildContentPlanningRunFile(inputs.pins);
+    const runMd = buildContentPlanningRunFile(inputs.pins, inputs.feedback);
     const runPath = jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
