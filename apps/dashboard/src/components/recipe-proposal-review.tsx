@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, Film, Sparkles } from "lucide-react";
+import { ArrowUpRight, Film, ListChecks, ListOrdered, ScrollText, Sparkles, X } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
+import { GuidelineRow, ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import type { Generation } from "@/src/components/recipe-generation";
 import { cn } from "@/lib/utils";
 import { recipeTargetLabel, type RecipeTarget } from "@/src/lib/production-recipe-form";
@@ -98,14 +98,16 @@ function ProposalContext({ instanceId, generation, proposal }: { instanceId: str
   );
 }
 
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
+function ReadOnlyField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1">
-      <dt className="font-semibold text-foreground">{label}</dt>
-      <dd className="m-0 whitespace-pre-wrap text-muted-foreground">{value}</dd>
+      <dt className="text-sm font-medium text-foreground">{label}</dt>
+      <dd className="m-0 whitespace-pre-wrap break-words rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">{children}</dd>
     </div>
   );
 }
+
+const countLines = (text: string) => text.split("\n").filter((line) => line.trim() !== "").length;
 
 export function RecipeProposalReview({
   instanceId,
@@ -132,20 +134,43 @@ export function RecipeProposalReview({
     const target = targets?.find((t) => t.templateId === proposal.templateId && t.missionType === proposal.missionType);
     return (
       <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-        <DialogContent className="max-h-[92vh] w-[min(94vw,56rem)] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{proposal.name}</DialogTitle>
-            <DialogDescription>A Production Recipe was already created from this proposal.</DialogDescription>
+        <DialogContent className="max-h-[92vh] w-[min(94vw,64rem)] overflow-x-hidden overflow-y-auto">
+          <DialogHeader className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Sparkles className="size-5" />
+            </span>
+            <div className="grid gap-0.5">
+              <DialogTitle>{proposal.name}</DialogTitle>
+              <DialogDescription>A Production Recipe was already created from this proposal.</DialogDescription>
+            </div>
+            <Button type="button" variant="ghost" size="icon" aria-label="Close" className="ml-auto" onClick={onClose}>
+              <X className="size-4" />
+            </Button>
           </DialogHeader>
-          <ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} />
-          <dl className="m-0 grid gap-3 text-sm">
-            <ReadOnlyField label="Description" value={proposal.description} />
-            <ReadOnlyField label="Mission type" value={target ? recipeTargetLabel(target) : proposal.missionType} />
-            {proposal.prompt ? <ReadOnlyField label="Prompt" value={proposal.prompt} /> : null}
-            <ReadOnlyField label="Instructions" value={proposal.instructions} />
-            {proposal.constraints.length > 0 ? <ReadOnlyField label="Constraints" value={proposal.constraints.join("\n")} /> : null}
-          </dl>
-          <DialogFooter>
+          <div className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <dl className="m-0 grid min-w-0 content-start gap-5">
+              <h3 className="m-0 text-base font-semibold text-foreground">Recipe details</h3>
+              <ReadOnlyField label="Name">{proposal.name}</ReadOnlyField>
+              <ReadOnlyField label="Description">{proposal.description}</ReadOnlyField>
+              <ReadOnlyField label="Mission type">{target ? recipeTargetLabel(target) : proposal.missionType}</ReadOnlyField>
+              <h3 className="m-0 mt-2 text-base font-semibold text-foreground">Production guidelines</h3>
+              <div className="rounded-lg border border-border">
+                <GuidelineRow icon={ScrollText} label="Prompt" summary={proposal.prompt ? "Set" : "None"}>
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{proposal.prompt || "No prompt."}</p>
+                </GuidelineRow>
+                <GuidelineRow icon={ListOrdered} label="Instructions" summary={`${countLines(proposal.instructions)} steps`}>
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{proposal.instructions}</p>
+                </GuidelineRow>
+                <GuidelineRow icon={ListChecks} label="Constraints" summary={`${proposal.constraints.length} rules`}>
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm text-muted-foreground">{proposal.constraints.join("\n") || "No constraints."}</p>
+                </GuidelineRow>
+              </div>
+            </dl>
+            <aside className="min-w-0 content-start rounded-xl bg-background/60 p-4">
+              <ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} />
+            </aside>
+          </div>
+          <DialogFooter className="border-t border-border pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               Close
             </Button>

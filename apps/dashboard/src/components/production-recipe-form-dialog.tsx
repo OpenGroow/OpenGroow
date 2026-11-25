@@ -32,7 +32,7 @@ type Props = {
 };
 
 /** A collapsed-by-default section of the production guidelines; its field stays mounted so the form keeps its value. */
-function GuidelineRow({ icon: Icon, label, summary, defaultOpen = false, children }: { icon: React.ComponentType<{ className?: string }>; label: string; summary: string; defaultOpen?: boolean; children: React.ReactNode }) {
+export function GuidelineRow({ icon: Icon, label, summary, defaultOpen = false, children }: { icon: React.ComponentType<{ className?: string }>; label: string; summary: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(defaultOpen);
   return (
     <div className="border-b border-border last:border-b-0">
