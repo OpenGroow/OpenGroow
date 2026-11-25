@@ -35,7 +35,7 @@ export function buildRecipeGenerationRunFile(input: { familyName: string; instru
     "- `prompt` is optional. It is the text the Production Agent starts from, meant for one precise field of what the Mission type produces (for example a video prompt). It describes what to produce, never a task such as \"write a letter\". Use it only when the existing Recipes or the Mission type's description show what the prompt is for; otherwise leave it out and put everything in `instructions`.",
     "- If the prompt is a template with placeholders such as {PERSON}, the `instructions` must say, for each placeholder, how to choose its value (with examples), that every other sentence stays unchanged, which field of the Mission the completed prompt goes to, and that an unresolved placeholder is never sent. Otherwise write the prompt in full, with no placeholder.",
     "- `instructions` are what the Production Agent reads for each Mission: the steps and the choices it makes itself, and the variation rules (what to change from one Mission to the next). `constraints` are short rules, one per item.",
-    "- The Recipe steers only what its Mission type lets a Recipe steer. Do not give instructions for fields the Template fills itself.",
+    "- The Recipe steers only what its Mission type lets a Recipe steer: the creative content. Never set technical or schema fields in the prompt, the instructions or the constraints: providers, presets, models, durations, themes, layouts, ids, versions, enums. You do not know their valid values, and the Template's own instructions set them. If a technical value seems needed, copy it from an existing Recipe of the same Mission type, or leave it out.",
     "",
     "## Before you write the result",
     "",
