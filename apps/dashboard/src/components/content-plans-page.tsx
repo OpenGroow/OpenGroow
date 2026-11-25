@@ -2,6 +2,7 @@
 
 import { use, useState } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -61,6 +62,42 @@ const formatTimestamp = (timestamp: number) => new Date(timestamp).toLocaleDateS
 const periodLabel = (plan: { periodStart: string; periodEnd: string }) => `${formatDay(plan.periodStart)} to ${formatDay(plan.periodEnd)}`;
 /** The period is inclusive and in UTC: a draft is stale from the day after its last day. Nothing expires. */
 const isStale = (plan: { periodEnd: string }, now: Date) => now.toISOString().slice(0, 10) > plan.periodEnd;
+
+const RATIONALE_PREVIEW_CHARS = 600;
+
+/** The first ~600 characters, cut at the last paragraph, line or word boundary so no word is split. */
+function previewOf(markdown: string): string | null {
+  if (markdown.length <= RATIONALE_PREVIEW_CHARS) return null;
+  const head = markdown.slice(0, RATIONALE_PREVIEW_CHARS);
+  const cut = Math.max(head.lastIndexOf("\n\n"), head.lastIndexOf("\n"), head.lastIndexOf(" "));
+  return `${head.slice(0, cut > RATIONALE_PREVIEW_CHARS / 2 ? cut : RATIONALE_PREVIEW_CHARS).trimEnd()}…`;
+}
+
+function ToggleButton({ expanded, onClick, children }: { expanded: boolean; onClick: () => void; children: string }) {
+  const Icon = expanded ? ChevronUp : ChevronDown;
+  return (
+    <Button type="button" variant="ghost" size="sm" aria-expanded={expanded} className="w-fit" onClick={onClick}>
+      <Icon aria-hidden="true" />
+      {children}
+    </Button>
+  );
+}
+
+/** The plan's Markdown rationale: a short preview when it is long, with a toggle for the whole text. */
+function PlanRationale({ rationale }: { rationale: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = previewOf(rationale);
+  return (
+    <section aria-label="Rationale" className="grid gap-2">
+      <WorkspaceMarkdown content={preview === null || expanded ? rationale : preview} />
+      {preview === null ? null : (
+        <ToggleButton expanded={expanded} onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : "Show full rationale"}
+        </ToggleButton>
+      )}
+    </section>
+  );
+}
 
 type Props = { params: Promise<{ instanceId: string }> };
 
@@ -141,9 +178,7 @@ function DraftPlan({ draft }: { draft: DraftPlanView }) {
           <span className="text-base font-semibold">Planning period {periodLabel(draft)}</span>
           <StatusBadge tone="info" label="Draft" />
         </div>
-        <section aria-label="Rationale">
-          <WorkspaceMarkdown content={draft.rationale} />
-        </section>
+        <PlanRationale rationale={draft.rationale} />
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <ul aria-label="Quantities by format" className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
             {draft.quantities.map(({ kind, count }) => (
@@ -169,6 +204,7 @@ function DraftPlan({ draft }: { draft: DraftPlanView }) {
 
 function PlannedContentCard({ content, period }: { content: PlannedContentView; period: { periodStart: string; periodEnd: string } }) {
   const removed = content.status === "rejected";
+  const [briefOpen, setBriefOpen] = useState(false);
   return (
     <li data-content={content._id}>
       <Card className={`grid gap-3 p-4${removed ? " opacity-60" : ""}`}>
@@ -179,8 +215,10 @@ function PlannedContentCard({ content, period }: { content: PlannedContentView; 
           <StatusBadge tone="neutral" label={content.kind} />
           {removed ? <StatusBadge tone="neutral" label="Removed" /> : null}
         </div>
-        <p className="m-0 text-sm">{content.brief}</p>
-        <p className="m-0 text-sm text-muted-foreground">{content.rationale}</p>
+        <div className="grid gap-1">
+          <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Why this content?</p>
+          <p className="m-0 text-sm">{content.rationale}</p>
+        </div>
         <dl className="m-0 grid gap-1 text-sm">
           <Detail label="Recipe" value={content.recipe?.name ?? "Deleted"} />
           <Detail label="Creative Family" value={content.creativeFamily?.name ?? "Deleted"} />
@@ -201,6 +239,12 @@ function PlannedContentCard({ content, period }: { content: PlannedContentView; 
             </li>
           ))}
         </ul>
+        <div className="grid gap-1">
+          <ToggleButton expanded={briefOpen} onClick={() => setBriefOpen(!briefOpen)}>
+            {briefOpen ? "Hide production brief" : "Full production brief"}
+          </ToggleButton>
+          {briefOpen ? <p className="m-0 whitespace-pre-wrap text-sm text-muted-foreground">{content.brief}</p> : null}
+        </div>
         {removed ? null : <ContentEditor content={content} period={period} />}
       </Card>
     </li>

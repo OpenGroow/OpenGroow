@@ -83,6 +83,11 @@ describe("ContentPlansContent", () => {
     });
   }
   const text = () => document.body.textContent ?? "";
+  async function click(el: Element) {
+    await act(async () => {
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+  }
 
   it("shows an empty state pointing to the Jobs page when there is no draft", async () => {
     await render({ draft: null });
@@ -101,11 +106,44 @@ describe("ContentPlansContent", () => {
   it("lists every proposal with its title, Recipe, Creative Family, date, targets, intent, brief, rationale and Source", async () => {
     await render({ draft: makeDraft() });
     const first = document.querySelector("li[data-content='pc-1']")!;
-    for (const expected of ["Reaction to article 1", "Mar 6, 2030", "Exploit", "Film a silent close-up reaction.", "Reactions led last month.", "Reel recipe", "Reaction", "Article 1", "social:example"]) {
+    for (const expected of ["Reaction to article 1", "Mar 6, 2030", "Exploit", "Why this content?", "Reactions led last month.", "Reel recipe", "Reaction", "Article 1", "social:example"]) {
       expect(first.textContent).toContain(expected);
     }
+    expect(first.textContent).not.toContain("Film a silent close-up reaction.");
     expect(document.querySelector("li[data-content='pc-2']")?.textContent).toContain("Explore");
     expect(document.querySelector("li[data-content='pc-2']")?.textContent).not.toContain("Source");
+  });
+
+  it("keeps the production brief collapsed until asked, and collapses it again", async () => {
+    await render({ draft: makeDraft() });
+    const first = document.querySelector("li[data-content='pc-1']")!;
+    const toggle = () => [...first.querySelectorAll("button")].find((b) => /Full production brief|Hide production brief/.test(b.textContent ?? ""))!;
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    await click(toggle());
+    expect(first.textContent).toContain("Film a silent close-up reaction.");
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    await click(toggle());
+    expect(first.textContent).not.toContain("Film a silent close-up reaction.");
+  });
+
+  it("shows a long plan rationale as a preview with a Show full rationale toggle", async () => {
+    const tail = "FINAL-SENTENCE-MARKER";
+    await render({ draft: makeDraft({ rationale: `## Strategy\n\n${"Reactions keep performing well. ".repeat(60)}\n\n${tail}` }) });
+    const section = () => document.querySelector("section[aria-label='Rationale']")!;
+    expect(section().textContent).not.toContain(tail);
+    expect(section().querySelector("h2")?.textContent).toBe("Strategy");
+    const toggle = () => section().querySelector("button")!;
+    expect(toggle().textContent).toBe("Show full rationale");
+    await click(toggle());
+    expect(section().textContent).toContain(tail);
+    expect(toggle().textContent).toBe("Show less");
+    await click(toggle());
+    expect(section().textContent).not.toContain(tail);
+  });
+
+  it("offers no rationale toggle when the rationale is short", async () => {
+    await render({ draft: makeDraft() });
+    expect(document.querySelector("section[aria-label='Rationale'] button")).toBeNull();
   });
 
   it("flags a publish target whose compatibility is uncertain, and only that one", async () => {
@@ -151,11 +189,6 @@ describe("ContentPlansContent", () => {
       await act(async () => {
         Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
         el.dispatchEvent(new Event("input", { bubbles: true }));
-      });
-    }
-    async function click(el: Element) {
-      await act(async () => {
-        el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
     }
     const field = <T extends Element>(name: string) => card().querySelector<T>(`[aria-label='${name}']`)!;
