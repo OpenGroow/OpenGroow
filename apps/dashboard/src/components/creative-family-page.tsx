@@ -19,7 +19,8 @@ import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/cre
 import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
 import { FamilyRecipes } from "@/src/components/family-recipes";
-import { FamilyGenerations, GenerateRecipeButton } from "@/src/components/recipe-generation";
+import { RecipeProposalReview } from "@/src/components/recipe-proposal-review";
+import { FamilyGenerations, GenerateRecipeButton, type Generation } from "@/src/components/recipe-generation";
 import { AddSourceButton, useRemoveSources } from "@/src/components/creative-family-source-actions";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
@@ -72,6 +73,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
   const [tab, setTab] = useState<FamilyTab>("sources");
+  const [reviewed, setReviewed] = useState<Generation | null>(null);
   const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
   const { removeMany, error: removeError, pending: removing } = useRemoveSources(instanceId);
   const platformFor = useSourcePlatforms(instanceId);
@@ -141,7 +143,8 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
 
       {tab === "recipes" ? (
         <>
-          <FamilyGenerations instanceId={instanceId} familyId={familyId} />
+          <FamilyGenerations instanceId={instanceId} familyId={familyId} onReview={setReviewed} />
+          <RecipeProposalReview instanceId={instanceId} familyId={familyId} generation={reviewed} onClose={() => setReviewed(null)} />
           <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} />
         </>
       ) : null}

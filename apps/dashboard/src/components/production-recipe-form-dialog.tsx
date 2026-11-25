@@ -20,12 +20,18 @@ type Props = {
   initial?: RecipeVersionContent;
   /** The Mission types a new recipe can be written for (create mode). */
   targets?: RecipeTarget[];
+  /** Create mode: values the form opens with (a Recipe Proposal to review). Every field stays editable. */
+  prefill?: { name: string; description: string; templateId: string; missionType: string };
+  /** Read-only context shown above the fields (the rationale and cited Sources of a proposal). */
+  context?: React.ReactNode;
+  /** Replaces the default dialog title. */
+  title?: string;
   onSubmit: (fields: { name: string; description: string; templateId: string; missionType: string } & RecipeVersionContent) => void | Promise<void>;
 };
 
-export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, targets = [], onSubmit }: Props) {
-  const [name, setName] = React.useState("");
-  const [description, setDescription] = React.useState("");
+export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, targets = [], prefill, context, title, onSubmit }: Props) {
+  const [name, setName] = React.useState(prefill?.name ?? "");
+  const [description, setDescription] = React.useState(prefill?.description ?? "");
   const [targetIndex, setTargetIndex] = React.useState("");
   const [draft, setDraft] = React.useState<RecipeDraft>(() => (initial ? draftFromVersion(initial) : emptyDraft()));
   const [submitting, setSubmitting] = React.useState(false);
@@ -34,14 +40,21 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
 
   React.useEffect(() => {
     if (open && !wasOpen.current) {
-      setName("");
-      setDescription("");
+      setName(prefill?.name ?? "");
+      setDescription(prefill?.description ?? "");
       setTargetIndex("");
       setDraft(initial ? draftFromVersion(initial) : emptyDraft());
       setError(null);
     }
     wasOpen.current = open;
-  }, [open, initial]);
+  }, [open, initial, prefill]);
+
+  // The Mission types may load after the form opened: preselect the proposal's one once known.
+  React.useEffect(() => {
+    if (!open || !prefill || targetIndex !== "") return;
+    const index = targets.findIndex((t) => t.templateId === prefill.templateId && t.missionType === prefill.missionType);
+    if (index >= 0) setTargetIndex(String(index));
+  }, [open, prefill, targets, targetIndex]);
 
   const set = (patch: Partial<RecipeDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
@@ -67,13 +80,14 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "New Production Recipe" : "Edit Production Recipe"}</DialogTitle>
+          <DialogTitle>{title ?? (mode === "create" ? "New Production Recipe" : "Edit Production Recipe")}</DialogTitle>
           <DialogDescription>
             {mode === "create"
               ? "Describe how to reproduce this family's mechanic."
               : "Saving appends a new version. Earlier versions are never changed."}
           </DialogDescription>
         </DialogHeader>
+        {context}
         <form className="grid gap-4" onSubmit={handleSubmit}>
           {mode === "create" ? (
             <>

@@ -185,9 +185,9 @@ function GenerationRow({ generation, onReview }: { generation: Generation; onRev
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge tone={tone} label={label} />
         <span className="text-sm text-muted-foreground tabular-nums">{dateTime(generation.createdAt)}</span>
-        {generation.state === "ready_to_review" && onReview ? (
-          <Button type="button" size="sm" className="ml-auto" onClick={() => onReview(generation)}>
-            Review
+        {(generation.state === "ready_to_review" || (generation.state === "created" && generation.proposal !== undefined)) && onReview ? (
+          <Button type="button" size="sm" variant={generation.state === "created" ? "outline" : "default"} className="ml-auto" onClick={() => onReview(generation)}>
+            {generation.state === "created" ? "View proposal" : "Review"}
           </Button>
         ) : null}
       </div>

@@ -207,3 +207,32 @@ describe("listGenerations", () => {
     expect(await list(t.withIdentity(STRANGER))).toEqual({ generations: [], inFlight: false });
   });
 });
+
+describe("proposalSources", () => {
+  const sourcesOf = (runId: Id<"runs">, as = owner()) => as.query(api.recipe_generation_views.proposalSources, { instanceId: INSTANCE, runId });
+
+  it("lists the Sources a proposal cites, with their title", async () => {
+    const a = await addSource();
+    const { runId } = await generate();
+    await running(runId);
+    await complete(runId, proposal([a]));
+    expect(await sourcesOf(runId)).toEqual([{ sourceId: a, title: "about" }]);
+  });
+
+  it("skips a cited Source that no longer exists", async () => {
+    const a = await addSource();
+    const { runId } = await generate();
+    await running(runId);
+    await complete(runId, proposal([a]));
+    await t.run((ctx) => ctx.db.delete(a));
+    expect(await sourcesOf(runId)).toEqual([]);
+  });
+
+  it("is empty for a stranger", async () => {
+    const a = await addSource();
+    const { runId } = await generate();
+    await running(runId);
+    await complete(runId, proposal([a]));
+    expect(await sourcesOf(runId, t.withIdentity(STRANGER))).toEqual([]);
+  });
+});

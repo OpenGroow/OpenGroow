@@ -75,3 +75,22 @@ export const listGenerations = query({
     return { generations, inFlight: generations.some((g) => g.state === "in_progress") };
   },
 });
+
+/** The Sources a Recipe Proposal cites (read-only on the review form): id and title. Sources since deleted are skipped. */
+export const proposalSources = query({
+  args: { instanceId: v.string(), runId: v.id("runs") },
+  handler: async (ctx, args) => {
+    const ownerId = await readOwnerId(ctx, args.instanceId);
+    if (ownerId === null) return [];
+    const run = await ctx.db.get(args.runId);
+    if (!run || run.instanceId !== args.instanceId || !isGenerationRun(run)) return [];
+    const proposal = outcomeOf(run)?.proposal as { sourceIds?: string[] } | undefined;
+    const cited = [];
+    for (const raw of (proposal?.sourceIds ?? []).slice(0, 50)) {
+      const id = ctx.db.normalizeId("sources", raw);
+      const source = id ? await ctx.db.get(id) : null;
+      if (source && source.instanceId === args.instanceId) cited.push({ sourceId: source._id, title: source.marketing.summary ?? source.origin });
+    }
+    return cited;
+  },
+});
