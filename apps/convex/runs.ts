@@ -468,7 +468,7 @@ export const markFailed = internalMutation({
       return { applied: true };
     }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === CONTENT_PLANNING_JOB_TYPE) {
-      await failContentPlanningRun(ctx, run, parent.jobId, errorMessage);
+      await failContentPlanningRun(ctx, run, parent.jobId, errorMessage, args.retryWithFeedback ? [args.message] : undefined);
       return { applied: true };
     }
     await settleSourceJobRun(ctx, run, {

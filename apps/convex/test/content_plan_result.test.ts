@@ -5,6 +5,7 @@ import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
+import { buildContentPlanningRunFile } from "../content_planning_jobs";
 import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation";
 
 // Issue #176: what a content_planning Run returns becomes one draft Content Plan with its proposed Planned
@@ -209,8 +210,8 @@ describe("an invalid result", () => {
     expect(run!.errorMessage).toMatch(message);
     expect(await plans()).toHaveLength(0);
     expect(await contents()).toHaveLength(0);
-    expect(await getJob()).toMatchObject({ lastOutcome: "failed" });
-    expect((await getJob())!.runtime).not.toHaveProperty("inFlightRunId");
+    // An invalid result is retried (see "retries"): the Job is not failed yet.
+    expect((await getJob())!.lastOutcome).not.toBe("failed");
   };
 
   it("rejects a malformed result, naming each faulty item", async () => {
@@ -222,8 +223,10 @@ describe("an invalid result", () => {
     expect(await getRun(runId)).toMatchObject({ status: "failed" });
     expect(await plans()).toHaveLength(0);
   });
-  it("rejects a Recipe of another Project, unknown, archived or for another Mission type", async () => {
+  it("rejects a Recipe of another Project", async () => {
     await fails({ rationale: "r", items: [await item({ recipeId: await recipe("make_video", "active", OTHER_INSTANCE) })] }, /items\[0\].*Recipe of this Project/);
+  });
+  it("rejects an unknown Recipe", async () => {
     await fails({ rationale: "r", items: [await item({ recipeId: "nope" })] }, /items\[0\].*Recipe of this Project/);
   });
   it("rejects an archived Recipe", async () => {
@@ -255,6 +258,96 @@ describe("an invalid result", () => {
   });
   it("rejects a pinned Publish target the Mission type cannot publish to (unsupported)", async () => {
     await fails({ rationale: "r", items: [await item({ missionType: "make_tiktok", recipeId: await recipe("make_tiktok") })] }, /items\[0\].*social:example/);
+  });
+});
+
+describe("retries", () => {
+  const runsOfJob = () => t.run((ctx) => ctx.db.query("runs").collect());
+  const runtime = async () => (await getJob())!.runtime as { inFlightRunId?: Id<"runs">; inFlightTries?: number; inFlightErrors?: string[] };
+  /** The Run now in flight, put in running state as dispatch does. */
+  const inFlight = async () => {
+    const id = (await runtime()).inFlightRunId!;
+    await t.run((ctx) => ctx.db.patch(id, { status: "running" }));
+    return id;
+  };
+  const bad = async (over: Record<string, unknown>) => ({ rationale: "r", items: [await item(), await item(over)] });
+
+  it("retries an invalid result with the same pins and the reasons of each faulty item, even if the Job config changed", async () => {
+    const first = await startRun();
+    const pins = (await getRun(first))!.contentPlanning;
+    await complete(first, await bad({ title: "" }));
+    await configure([{ kind: "video", quantity: 5, publishTargets: ["blog:example"] }]);
+    const retryId = (await runtime()).inFlightRunId!;
+    expect(retryId).not.toBe(first);
+    expect(await getRun(first)).toMatchObject({ status: "failed" });
+    expect(await getRun(retryId)).toMatchObject({ status: "pending", resumedFromRunId: first, contentPlanning: pins });
+    expect(await getJob()).not.toMatchObject({ lastOutcome: "failed" });
+    const inputs = await t.query(internal.content_planning_jobs.loadDispatchInputs, { runId: retryId });
+    expect(inputs!.pins).toEqual(pins);
+    expect(inputs!.feedback).toEqual([expect.stringMatching(/items\[1\]/)]);
+    expect(inputs!.feedback![0]).not.toMatch(/items\[0\]/);
+    const md = buildContentPlanningRunFile(inputs!.pins, inputs!.feedback);
+    expect(md).toMatch(/Previous attempt feedback/);
+    expect(md).toMatch(/items\[1\]/);
+    expect(buildContentPlanningRunFile(pins!)).not.toMatch(/Previous attempt feedback/);
+  });
+
+  it("fails after 3 tries with the reasons in the Run errorMessage and the Job lastError", async () => {
+    let id = await startRun();
+    for (let i = 0; i < 3; i++) {
+      await complete(id, await bad({ title: "" }));
+      if (i < 2) id = await inFlight();
+    }
+    expect(await runsOfJob()).toHaveLength(3);
+    expect(await getRun(id)).toMatchObject({ status: "failed", errorMessage: expect.stringMatching(/invalid_result.*items\[1\]/) });
+    const job = await getJob();
+    expect(job).toMatchObject({ lastOutcome: "failed", lastError: expect.stringMatching(/invalid_result.*items\[1\]/) });
+    expect(job!.runtime).not.toHaveProperty("inFlightRunId");
+    expect(await plans()).toHaveLength(0);
+  });
+
+  it("a retry that succeeds settles the Job", async () => {
+    const first = await startRun();
+    await complete(first, await bad({ title: "" }));
+    const second = await inFlight();
+    await complete(second, { rationale: "r", items: [await item()] });
+    expect(await getRun(second)).toMatchObject({ status: "completed" });
+    expect(await getJob()).toMatchObject({ lastOutcome: "succeeded" });
+    expect(await plans()).toHaveLength(1);
+  });
+
+  it("retries a result file that cannot be read when asked", async () => {
+    const first = await startRun();
+    await t.mutation(internal.runs.markFailed, { runId: first, code: "file_invalid", message: "bad json", retryWithFeedback: true });
+    const retryId = (await runtime()).inFlightRunId!;
+    expect(retryId).not.toBe(first);
+    expect((await t.query(internal.content_planning_jobs.loadDispatchInputs, { runId: retryId }))!.feedback).toEqual([expect.stringContaining("bad json")]);
+  });
+
+  it("never retries draft_exists", async () => {
+    const runId = await startRun();
+    await t.run(async (ctx) => {
+      const other = await ctx.db.insert("runs", { jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, agentName: "a", sessionKey: "s", status: "completed", createdAt: NOW, updatedAt: NOW } as never);
+      await ctx.db.insert("contentPlans", { ownerId: OWNER.subject, instanceId: INSTANCE, runId: other, periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "r", status: "draft", createdAt: NOW });
+    });
+    await complete(runId, { rationale: "r", items: [await item()] });
+    expect(await runsOfJob()).toHaveLength(2);
+    expect(await getJob()).toMatchObject({ lastOutcome: "failed", lastError: expect.stringContaining("draft_exists") });
+  });
+
+  it("never retries a plain failure or a cancellation", async () => {
+    const runId = await startRun();
+    await t.mutation(internal.runs.markFailed, { runId, code: "timeout", message: "late" });
+    expect(await runsOfJob()).toHaveLength(1);
+    expect(await getJob()).toMatchObject({ lastOutcome: "failed" });
+  });
+
+  it("a Job with no usable target starts no Run, so there is nothing to retry", async () => {
+    await configure([]);
+    await owner().mutation(api.jobs.runNow, { jobId });
+    await t.mutation(internal.content_planning_jobs.tick, {});
+    expect(await runsOfJob()).toHaveLength(0);
+    expect(await getJob()).toMatchObject({ lastOutcome: "skipped" });
   });
 });
 
