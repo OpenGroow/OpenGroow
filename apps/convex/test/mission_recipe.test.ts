@@ -268,6 +268,11 @@ describe("renderProductionRecipeSection", () => {
     expect(md).not.toContain("## Variables");
     expect(md).toMatch(/technical instructions[\s\S]*Brand Core[\s\S]*take precedence/);
   });
+  it("tells the Agent to fill every placeholder of the prompt and never send one unresolved", () => {
+    const md = renderProductionRecipeSection({ ...snapshot, prompt: "A {PERSON} smiling." })!;
+    expect(md).toMatch(/unchanged[\s\S]*every `\{PLACEHOLDER\}`[\s\S]*Never leave an unresolved/);
+    expect(md).toContain("A {PERSON} smiling.");
+  });
   it("omits the prompt subsection without a prompt and renders nothing without a snapshot", () => {
     expect(renderProductionRecipeSection({ ...snapshot, prompt: undefined })).not.toContain("Prompt (verbatim)");
     expect(renderProductionRecipeSection(null)).toBeNull();

@@ -242,6 +242,13 @@ function fenceFor(text: string): string {
 }
 
 /**
+ * How to use the prompt. A `{PLACEHOLDER}` is a slot the Instructions explain how to fill: it is resolved before the
+ * prompt is sent, and never reaches a tool unresolved. Everything else in the prompt stays as written.
+ */
+const PROMPT_RULE =
+  "Send this text unchanged, never rephrase it, with one exception: every `{PLACEHOLDER}` in it is a slot to fill with a value chosen as the Instructions describe. Never leave an unresolved `{PLACEHOLDER}` in anything you send or write.";
+
+/**
  * Pure renderer for the production-recipe provider: the `Production Recipe`
  * section, built from the Mission's Recipe Snapshot alone (no query), so every
  * Run of the Mission receives the same text. Returns `null` for a Mission
@@ -259,7 +266,7 @@ export function renderProductionRecipeSection(info: ProductionRecipeInfo): strin
   ];
   if (info.prompt !== undefined) {
     const fence = fenceFor(info.prompt);
-    lines.push("## Prompt (verbatim)", "", "Send this text unchanged; never rephrase it.", "", fence, info.prompt, fence, "");
+    lines.push("## Prompt (verbatim)", "", PROMPT_RULE, "", fence, info.prompt, fence, "");
   }
   lines.push("## Instructions", "", info.instructions, "");
   if (info.constraints.length > 0) {
