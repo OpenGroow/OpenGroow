@@ -3,6 +3,7 @@ import { DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS, listPublicationReadings, resolveW
 import { summarizeByRecipe } from "../analytics_recipe.js";
 import { summarizeByFamily } from "../analytics_family.js";
 import { recipeCatalog } from "../recipe_usage.js";
+import { listPlannedContents, listSources, missionTypeFormats, formatOf } from "../planning_reads.js";
 import { readStrategicMemory } from "../strategic_reviews.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
@@ -37,7 +38,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
     .withIndex("by_instance_status", (q) => q.eq("instanceId", scope.instanceId).eq("status", "active"))
     .take(100);
   const registry = getTemplateRegistry(ctx);
-  const types: { templateId: string; templateName: string; type: string; label: string; description: string }[] = [];
+  const types: ({ templateId: string; templateName: string; type: string; label: string; description: string } & ReturnType<typeof formatOf>)[] = [];
   for (const agent of agents) {
     const template = await registry.resolve(scope.instanceId, agent.templateId);
     if (!template) continue;
@@ -50,6 +51,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
         type: missionType.type,
         label: missionType.label,
         description: missionType.description ?? template.manifest.description,
+        ...formatOf(missionType as never),
       });
     }
   }
@@ -125,7 +127,7 @@ async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
 export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> = {
   list_mission_types: {
     description:
-      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label and a description of what it produces.",
+      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, its format (kind: video, image, carousel, article, or null when it publishes nothing and cannot be planned), the platforms it can publish to (empty: any) and sourceRequired (it needs a Source to be produced).",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => listMissionTypes(ctx, scope),
   },
@@ -194,7 +196,46 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
     description:
       "The Project's Production Recipes with their Creative Family, an archived flag and their usage, step by step: Missions created with the recipe (even cancelled before any Run), Production Attempts (Runs sent to the Agent) and successful ones, Publications and measured Publications, each over the recipe's lifetime and over the period (by its own date; days, or an explicit from and to), with the last Mission, attempt and publication dates. Includes recipes that never produced a Publication. neverUsedEver and neverPublishedEver are present only when the data read was complete; otherwise they are absent (unknown). `partial` says a read hit its limit, `truncated` that the list was cut.",
     inputSchema: { type: "object", properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES }, additionalProperties: false },
-    run: (ctx, scope, args) => recipeCatalog(ctx, scope.instanceId, windowOf(args)),
+    run: async (ctx, scope, args) => {
+      const catalog = await recipeCatalog(ctx, scope.instanceId, windowOf(args));
+      const formatOfRecipe = missionTypeFormats(ctx, scope.instanceId);
+      const recipes = await Promise.all(
+        catalog.recipes.map(async (recipe) => {
+          const { kind, sourceRequired } = await formatOfRecipe(recipe.templateId, recipe.missionType);
+          return { ...recipe, kind, sourceRequired };
+        }),
+      );
+      return { ...catalog, recipes };
+    },
+  },
+  list_sources: {
+    description:
+      "The Project's Sources (inspiration posts) for planning, bounded. Each has its id, label, origin, status, capture date, Replication Score and its sub-scores (scores), the analysis summary, its Creative Family, whether it was selected and whether it was produced. Excluded Sources are left out. Sources neither selected nor produced come first, then by Replication Score. Defaults to status ready; produced narrows to produced or not-yet-produced ones. truncated says more matched than limit; scanLimited that only the newest Sources were read.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["processing", "ready", "failed", "unavailable"], description: "Only Sources of this status (default ready)." },
+        produced: { type: "boolean", description: "true: only produced Sources; false: only not-yet-produced ones." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "At most this many (default 20)." },
+      },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listSources(ctx, scope.instanceId, args),
+  },
+  list_planned_contents: {
+    description:
+      "The Project's Planned Contents (editorial calendar entries) whose planned date falls in a range, by date, bounded. Give both from and to (YYYY-MM-DD, UTC, at most 92 days apart), or neither for the next 30 days from today. Each has its id, Content Plan, kind, Mission type, Recipe, Source, Publish targets, title, brief, date, intent (explore or exploit), rationale and status (proposed, approved, rejected; all by default). truncated says more matched than limit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "First day of the range, YYYY-MM-DD (UTC). Needs to." },
+        to: { type: "string", description: "Last day of the range (inclusive), YYYY-MM-DD. Needs from." },
+        status: { type: "string", enum: ["proposed", "approved", "rejected"], description: "Only Planned Contents of this status." },
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "At most this many (default 50)." },
+      },
+      additionalProperties: false,
+    },
+    run: (ctx, scope, args) => listPlannedContents(ctx, scope.instanceId, args),
   },
   get_strategic_memory: {
     description:

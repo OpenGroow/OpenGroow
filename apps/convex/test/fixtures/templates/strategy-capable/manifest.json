@@ -3,7 +3,25 @@
   "name": "Job-capable fixture",
   "description": "A fixture that explicitly declares all generic Jobs.",
   "category": "demo",
-  "mcpServers": [],
+  "mcpServers": [
+    {
+      "name": "opengroow",
+      "transport": "streamable-http",
+      "url": "",
+      "internal": {
+        "tools": [
+          "get_brand_core",
+          "get_strategic_memory",
+          "get_analytics_summary",
+          "list_production_recipes",
+          "list_publications",
+          "list_mission_types",
+          "list_sources",
+          "list_planned_contents"
+        ]
+      }
+    }
+  ],
   "sources": [],
   "jobTypes": [
     {
