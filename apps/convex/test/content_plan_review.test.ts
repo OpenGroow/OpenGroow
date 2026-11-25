@@ -114,7 +114,7 @@ describe("content_plan_review.current", () => {
   it("recomputes Publisher compatibility: a channel the capabilities do not state is flagged uncertain", async () => {
     await content(await plan());
     const draft = (await owner().query(api.content_plan_review.current, { instanceId: INSTANCE }))!;
-    expect(draft.contents[0]!.publishTargets).toEqual([{ target: "social:example", uncertain: true, reason: expect.any(String) }]);
+    expect(draft.contents[0]!.publishTargets).toEqual([{ target: "social:example", uncertain: true, reason: expect.any(String), service: "instagram", adapter: "example", label: "@example" }]);
   });
 
   it("flags a destination removed since as unavailable rather than failing", async () => {
@@ -159,7 +159,7 @@ describe("content_plan_review.planDetail", () => {
     expect(contents.map((c) => [c.title, c.status])).toEqual([["Sooner", "rejected"], ["Later", "approved"]]);
     expect(contents[0]).toMatchObject({
       recipe: { id: recipeId, name: "Reel recipe" }, creativeFamily: { id: familyId, name: "Reaction" }, source: { id: sourceId, label: "Article 1" },
-      publishTargets: [{ target: "social:example", uncertain: true, reason: expect.any(String) }],
+      publishTargets: [{ target: "social:example", uncertain: true, reason: expect.any(String), service: "instagram", adapter: "example", label: "@example" }],
     });
     expect(contents[0]).not.toHaveProperty("ownerId");
   });

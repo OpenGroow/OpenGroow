@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { BookOpen, CalendarDays, ChevronDown, ChevronUp, FileText, Film, Layers, Link2, Send, Sparkles } from "lucide-react";
+import { PlatformLogo } from "@/src/components/platform-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -86,8 +87,9 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
               <ul aria-label="Publish targets" className="m-0 flex list-none flex-wrap gap-2 p-0">
                 {content.publishTargets.map((target) => (
                   <li key={target.target} data-target={target.target} className="flex flex-wrap items-center gap-2">
-                    <Badge variant="tag" size="xs">
-                      {target.target}
+                    <Badge variant="tag" size="xs" className="gap-1.5">
+                      {target.service ? <PlatformLogo service={target.service} adapter={target.adapter} className="size-4" /> : null}
+                      {target.label ?? target.target}
                     </Badge>
                     {target.uncertain ? (
                       <StatusBadge tone="warning" label="Compatibility uncertain" />

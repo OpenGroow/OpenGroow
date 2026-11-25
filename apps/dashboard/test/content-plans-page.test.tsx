@@ -161,6 +161,17 @@ describe("ContentPlansContent", () => {
     expect(document.querySelector("li[data-target='blog:example']")?.textContent).not.toContain("uncertain");
   });
 
+  it("shows a publish target as its account handle, and falls back to the raw key when unavailable", async () => {
+    const contents = [makeContent({ publishTargets: [
+      { target: "instagram:account_1", uncertain: false, service: "instagram", adapter: "example", label: "@account_1" },
+      { target: "gone:example", uncertain: false, unavailable: true },
+    ] })];
+    await render({ draft: makeDraft({ contents }) });
+    expect(document.querySelector("li[data-target='instagram:account_1']")?.textContent).toContain("@account_1");
+    expect(document.querySelector("li[data-target='instagram:account_1']")?.textContent).not.toContain("instagram:");
+    expect(document.querySelector("li[data-target='gone:example']")?.textContent).toContain("gone:example");
+  });
+
   it("warns when the period has passed, and keeps the draft", async () => {
     await render({ draft: makeDraft({ periodEnd: "2030-03-07" }) });
     expect(document.querySelector("[role='alert']")?.textContent).toContain("period has passed");

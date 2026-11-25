@@ -4,7 +4,7 @@ import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
-import { channelOf, projectPublishers } from "./project_publishers.js";
+import { channelOf, projectPublishers, type PublisherChannelEntry } from "./project_publishers.js";
 import { publisherMetaOf } from "./publisher_packages.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -22,6 +22,14 @@ const planView = (plan: Doc<"contentPlans">) => {
 /** Every Planned Content of a plan, whatever its status. */
 export const contentsOf = (ctx: QueryCtx | MutationCtx, planId: Id<"contentPlans">) => ctx.db.query("plannedContents").withIndex("by_plan", (q) => q.eq("planId", planId)).collect();
 
+/** A channel's display label: `@handle` (stored profile, else the key's part after the service), the bare name when it is not a handle (e.g. a repository). */
+function channelLabel(channel: PublisherChannelEntry): string {
+  const colon = channel.target.indexOf(":");
+  const handle = channel.channelProfile ?? (colon >= 0 ? channel.target.slice(colon + 1) : undefined);
+  if (!handle) return channel.channelName ?? channel.target;
+  return handle.includes("/") ? handle : `@${handle}`;
+}
+
 /** What a Planned Content shows: its references resolved by name, and its destinations re-checked against the Publishers. */
 async function contentView(ctx: QueryCtx, content: Doc<"plannedContents">, publishers: Awaited<ReturnType<typeof projectPublishers>>) {
   const own = <T extends { instanceId: string }>(doc: T | null) => (doc && doc.instanceId === content.instanceId ? doc : null);
@@ -38,12 +46,14 @@ async function contentView(ctx: QueryCtx, content: Doc<"plannedContents">, publi
       publishTargets.push({ target, uncertain: false, unavailable: true });
       continue;
     }
+    const { channel, publisher } = found;
+    const identity = { service: channel.channelService, adapter: publisher.adapter, label: channelLabel(channel) };
     const capabilities = (await publisherMetaOf(ctx, found.publisher.adapter))?.capabilities;
     const capability = capabilityFor(capabilities, found.channel.channelService, content.kind, declaration?.platforms);
     publishTargets.push(
-      capability.level === "uncertain" ? { target, uncertain: true, reason: capability.reason ?? "" }
-      : capability.level === "unsupported" ? { target, uncertain: false, unsupported: true, reason: capability.reason ?? "" }
-      : { target, uncertain: false },
+      capability.level === "uncertain" ? { target, uncertain: true, reason: capability.reason ?? "", ...identity }
+      : capability.level === "unsupported" ? { target, uncertain: false, unsupported: true, reason: capability.reason ?? "", ...identity }
+      : { target, uncertain: false, ...identity },
     );
   }
   const { _id, kind, missionType, title, brief, plannedAt, intent, rationale, status } = content;
