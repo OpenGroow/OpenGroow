@@ -29,6 +29,7 @@ vi.mock("@convex/_generated/api", () => ({
   api: {
     content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history", planDetail: "content_plan_review.planDetail" },
     content_plan_edit: { update: "content_plan_edit.update", remove: "content_plan_edit.remove", recipeOptions: "content_plan_edit.recipeOptions" },
+    publisher_packages: { list: "publisher_packages.list" },
     content_plan_decision: { approve: "content_plan_decision.approve", reject: "content_plan_decision.reject" },
   },
 }));
