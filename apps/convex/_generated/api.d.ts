@@ -59,6 +59,7 @@ import type * as creative_family_sources from "../creative_family_sources.js";
 import type * as crons from "../crons.js";
 import type * as env from "../env.js";
 import type * as error_message from "../error_message.js";
+import type * as editorial_calendar from "../editorial_calendar.js";
 import type * as events from "../events.js";
 import type * as events_node from "../events_node.js";
 import type * as health from "../health.js";
@@ -268,6 +269,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   env: typeof env;
   error_message: typeof error_message;
+  editorial_calendar: typeof editorial_calendar;
   events: typeof events;
   events_node: typeof events_node;
   health: typeof health;

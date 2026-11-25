@@ -104,7 +104,7 @@ export function ContentPlansContent({ instanceId }: { instanceId: string }) {
         ) : (
           <ul className="m-0 grid list-none gap-3 p-0">
             {history.map((plan) => (
-              <li key={plan._id} data-plan={plan._id}>
+              <li key={plan._id} id={`plan-${plan._id}`} data-plan={plan._id}>
                 <Card className="grid gap-2 p-4">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="text-base font-semibold">{periodLabel(plan)}</span>

@@ -21,6 +21,7 @@ export type InstanceView =
   | "publishers"
   | "analytics"
   | "content-plans"
+  | "editorial-calendar"
   | "memory"
   | "developer"
   | "settings";

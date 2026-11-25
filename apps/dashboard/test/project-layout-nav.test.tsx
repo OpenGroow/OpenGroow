@@ -123,6 +123,7 @@ describe("Project layout navigation", () => {
       "Publish",
       "Analytics",
       "Content Plans",
+      "Editorial Calendar",
       "Strategic Memory",
       "Settings",
       "Developer",
