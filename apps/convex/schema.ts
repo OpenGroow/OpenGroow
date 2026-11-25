@@ -538,6 +538,8 @@ export default defineSchema({
           instructions: v.optional(v.string()),
           // 1 for the first try, +1 per retry after a refused result.
           tryCount: v.number(),
+          // The first Run of the generation (itself for the first try): links the tries as one operation.
+          generationId: v.optional(v.id("runs")),
           // What made the previous result invalid, handed to the next try.
           feedback: v.optional(v.string()),
         }),
@@ -576,7 +578,10 @@ export default defineSchema({
     .index("by_instance_template_status_completed", ["instanceId", "templateId", "status", "completedAt"])
     .index("by_dispatch_command", ["dispatchCommandId"])
     // Standalone Runs of a Project for a Creative Family (Recipe Generation).
-    .index("by_instance_family", ["instanceId", "recipeGeneration.familyId"]),
+    .index("by_instance_family", ["instanceId", "recipeGeneration.familyId"])
+    // The tries of one generation, and (tryCount 1) the latest generations of a Project.
+    .index("by_generation", ["recipeGeneration.generationId"])
+    .index("by_instance_try", ["instanceId", "recipeGeneration.tryCount"]),
   // A Strategic Review (ADR-085): immutable, attached to the Project. No update,
   // delete or purge function exists. Each row holds its own whole memory.
   strategicReviews: defineTable({

@@ -309,6 +309,24 @@ describe("retries", () => {
     await expect(generate()).resolves.toBeDefined();
   });
 
+  it("links every try of a generation to its first Run, and finds the latest generations from their first Runs", async () => {
+    const sourceId = await addSource();
+    const { runId: first } = await generate();
+    await running(first);
+    await complete(first, proposal([sourceId], { missionType: "nothing" }));
+    const second = (await runs()).find((r) => r.status === "pending")!;
+    expect(await getRun(first)).toMatchObject({ recipeGeneration: { generationId: first } });
+    expect(second.recipeGeneration).toMatchObject({ generationId: first, tryCount: 2 });
+    await running(second._id);
+    await complete(second._id, proposal([sourceId]));
+    const { runId: other } = await generate();
+    const chain = await t.run((ctx) => ctx.db.query("runs").withIndex("by_generation" as never, ((q: any) => q.eq("recipeGeneration.generationId", first)) as never).collect());
+    expect(chain.map((r) => r._id)).toEqual([first, second._id]);
+    const latest = await t.run((ctx) =>
+      ctx.db.query("runs").withIndex("by_instance_try" as never, ((q: any) => q.eq("instanceId", INSTANCE).eq("recipeGeneration.tryCount", 1)) as never).order("desc").take(5));
+    expect(latest.map((r) => r._id)).toEqual([other, first]);
+  });
+
   it("retries an unreadable result file with the parse error as feedback", async () => {
     const { runId } = await started();
     await fail(runId, "Unexpected token", true);

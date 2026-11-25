@@ -78,7 +78,7 @@ export const generateRecipe = mutation({
       updatedAt: now,
       recipeGeneration: { familyId: args.familyId, ...(instructions ? { instructions } : {}), tryCount: 1 },
     });
-    await ctx.db.patch(runId, { sessionKey: `mega-run-${runId}` });
+    await ctx.db.patch(runId, { sessionKey: `mega-run-${runId}`, recipeGeneration: { familyId: args.familyId, ...(instructions ? { instructions } : {}), tryCount: 1, generationId: runId } });
     return { runId };
   },
 });
@@ -103,7 +103,7 @@ export async function failRecipeGenerationRun(ctx: MutationCtx, run: Doc<"runs">
     createdAt: now,
     updatedAt: now,
     resumedFromRunId: run._id,
-    recipeGeneration: { familyId: pin.familyId, ...(pin.instructions ? { instructions: pin.instructions } : {}), tryCount: pin.tryCount + 1, feedback: reasons.join("\n") },
+    recipeGeneration: { familyId: pin.familyId, ...(pin.instructions ? { instructions: pin.instructions } : {}), tryCount: pin.tryCount + 1, generationId: pin.generationId ?? run._id, feedback: reasons.join("\n") },
   });
   await ctx.db.patch(runId, { sessionKey: `mega-run-${runId}` });
 }
