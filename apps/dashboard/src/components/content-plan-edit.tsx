@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -51,8 +52,8 @@ export function ContentEditor({ content, period }: { content: EditableContent; p
     return (
       <div className="grid gap-2">
         <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>
-          <Button type="button" size="sm" variant="outline" onClick={() => void attempt(() => remove({ contentId }))}>Remove</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(true)}><Pencil aria-hidden="true" />Edit</Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => void attempt(() => remove({ contentId }))}><Trash2 aria-hidden="true" />Remove</Button>
         </div>
         {alert}
       </div>

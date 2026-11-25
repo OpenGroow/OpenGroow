@@ -95,12 +95,22 @@ describe("ContentPlansContent", () => {
     expect(Array.from(document.querySelectorAll("a")).find((a) => a.textContent?.includes("Jobs"))?.getAttribute("href")).toBe("/projects/instance-1/jobs");
   });
 
-  it("shows the draft period, rationale, quantities by format and exploration distribution", async () => {
+  it("shows the draft period, status, content count and exploration distribution in the card header", async () => {
     await render({ draft: makeDraft() });
-    expect(text()).toContain("Mar 5, 2030 to Mar 11, 2030");
-    expect(document.querySelector("section[aria-label='Rationale'] h2")?.textContent).toBe("Strategy");
-    expect(Array.from(document.querySelectorAll("ul[aria-label='Quantities by format'] li")).map((li) => li.textContent)).toEqual(["1 video", "1 carousel"]);
-    expect(document.querySelector("[aria-label='Exploration and exploitation']")?.textContent).toBe("1 exploring · 1 exploiting");
+    const header = document.querySelector("[aria-label='Plan summary']")!;
+    expect(header.textContent).toContain("Planning period");
+    expect(header.textContent).toContain("Mar 5, 2030 to Mar 11, 2030");
+    expect(header.textContent).toContain("Draft");
+    expect(header.querySelector("[aria-label='Content count']")?.textContent).toBe("2 contents");
+    expect(header.querySelector("[aria-label='Exploring']")?.textContent).toBe("1 exploring");
+    expect(header.querySelector("[aria-label='Exploiting']")?.textContent).toBe("1 exploiting");
+    expect(header.textContent).toContain("Approve plan");
+    expect(text()).toContain("Planned contents (2)");
+  });
+
+  it("does not count removed proposals in the header, and uses the singular for one content", async () => {
+    await render({ draft: makeDraft({ contents: [makeContent(), makeContent({ _id: "pc-2", status: "rejected" })] }) });
+    expect(document.querySelector("[aria-label='Content count']")?.textContent).toBe("1 content");
   });
 
   it("lists every proposal with its title, Recipe, Creative Family, date, targets, intent, brief, rationale and Source", async () => {
@@ -109,39 +119,38 @@ describe("ContentPlansContent", () => {
     for (const expected of ["Reaction to article 1", "Mar 6, 2030", "Exploit", "Why this content?", "Reactions led last month.", "Reel recipe", "Reaction", "Article 1", "social:example"]) {
       expect(first.textContent).toContain(expected);
     }
-    expect(first.textContent).not.toContain("Film a silent close-up reaction.");
+    expect(first.querySelector("[aria-label='Full production brief']")).toBeNull();
     expect(document.querySelector("li[data-content='pc-2']")?.textContent).toContain("Explore");
     expect(document.querySelector("li[data-content='pc-2']")?.textContent).not.toContain("Source");
   });
 
-  it("keeps the production brief collapsed until asked, and collapses it again", async () => {
+  it("keeps the production brief collapsed with a one-line preview, expands it on click and collapses it again", async () => {
     await render({ draft: makeDraft() });
     const first = document.querySelector("li[data-content='pc-1']")!;
-    const toggle = () => [...first.querySelectorAll("button")].find((b) => /Full production brief|Hide production brief/.test(b.textContent ?? ""))!;
+    const toggle = () => [...first.querySelectorAll("button")].find((b) => b.textContent?.includes("Production brief"))!;
+    const full = () => first.querySelector("[aria-label='Full production brief']");
+    expect(toggle().getAttribute("aria-expanded")).toBe("false");
+    expect(toggle().textContent).toContain("Film a silent close-up reaction.");
+    expect(full()).toBeNull();
+    await click(toggle());
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(full()?.textContent).toBe("Film a silent close-up reaction.");
+    await click(toggle());
+    expect(full()).toBeNull();
+  });
+
+  it("shows the plan rationale as a clamped preview with a Show more button that expands it for good", async () => {
+    await render({ draft: makeDraft() });
+    const section = () => document.querySelector("section[aria-label='Rationale']")!;
+    expect(section().textContent).toContain("Strategic rationale");
+    expect(section().querySelector("[data-clamped='true']")?.textContent).toContain("Double down on reactions.");
+    const toggle = () => section().querySelector("button")!;
+    expect(toggle().textContent).toContain("Show more");
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     await click(toggle());
-    expect(first.textContent).toContain("Film a silent close-up reaction.");
-    expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    await click(toggle());
-    expect(first.textContent).not.toContain("Film a silent close-up reaction.");
-  });
-
-  it("shows a long plan rationale as a preview with a Show full rationale button", async () => {
-    const tail = "FINAL-SENTENCE-MARKER";
-    await render({ draft: makeDraft({ rationale: `## Strategy\n\n${"Reactions keep performing well. ".repeat(60)}\n\n${tail}` }) });
-    const section = () => document.querySelector("section[aria-label='Rationale']")!;
-    expect(section().textContent).not.toContain(tail);
+    expect(section().querySelector("[data-clamped='true']")).toBeNull();
     expect(section().querySelector("h2")?.textContent).toBe("Strategy");
-    const toggle = () => section().querySelector("button")!;
-    expect(toggle().textContent).toBe("Show full rationale");
-    await click(toggle());
-    expect(section().textContent).toContain(tail);
     expect(section().querySelector("button")).toBeNull();
-  });
-
-  it("offers no rationale toggle when the rationale is short", async () => {
-    await render({ draft: makeDraft() });
-    expect(document.querySelector("section[aria-label='Rationale'] button")).toBeNull();
   });
 
   it("flags a publish target whose compatibility is uncertain, and only that one", async () => {
@@ -175,7 +184,7 @@ describe("ContentPlansContent", () => {
     expect(entries.map((e) => e.getAttribute("data-plan"))).toEqual(["p-2", "p-1"]);
     expect(entries[0]!.textContent).toContain("Rejected");
     expect(entries[1]!.textContent).toContain("Approved");
-    expect(entries[1]!.textContent).toContain("3 approved");
+    expect(entries[1]!.textContent).toContain("Planned Feb 18, 2030 · 4 contents");
     await render({ draft: null, history: [] });
     expect(text()).toContain("No approved or rejected plan yet.");
   });
