@@ -157,7 +157,7 @@ function ProjectNavLinks({
             <p
               data-nav-heading
               className={cn(
-                "m-0 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                "m-0 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60",
                 collapsed && "xl:hidden",
               )}
             >
