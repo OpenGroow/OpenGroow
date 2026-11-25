@@ -210,6 +210,16 @@ describe("list_sources and list_mission_types", () => {
     expect((await call(m.token, "list_sources")).sources).toHaveLength(2);
   });
 
+  it("list_sources ignores a non-ready status during a generation", async () => {
+    const { token, familyId } = await seed(PROJECT_A);
+    await source(PROJECT_A, "ready", { familyId });
+    await source(PROJECT_A, "failed", { familyId, status: "failed" });
+    await source(PROJECT_A, "excluded", { familyId, excluded: true });
+    for (const status of ["failed", "processing"]) {
+      expect((await call(token, "list_sources", { status })).sources.map((s: { label: string }) => s.label)).toEqual(["ready"]);
+    }
+  });
+
   it("list_mission_types says which types accept a recipe", async () => {
     const { token } = await seed(PROJECT_A);
     const types = await call(token, "list_mission_types");

@@ -1,6 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { boundedLimit } from "./planning_reads.js";
+import { runningGenerationRun } from "./recipe_generation_shared.js";
 import { latestVersion } from "./production_recipes.js";
 
 // The Internal MCP's reads for a Recipe Generation (ADR-087, ticket #190). Read-only. The
@@ -22,13 +23,8 @@ type Pin = { familyId: Id<"creativeFamilies">; ownerId: string };
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: true }): Promise<Pin>;
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: false }): Promise<Pin | undefined>;
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: boolean }): Promise<Pin | undefined> {
-  const running = await ctx.db
-    .query("runs")
-    .withIndex("by_instance_template_status", (q) => q.eq("instanceId", scope.instanceId).eq("templateId", scope.templateId).eq("status", "running"))
-    .take(20);
-  for (const run of running) {
-    if ("recipeGeneration" in run && run.recipeGeneration) return { familyId: run.recipeGeneration.familyId, ownerId: run.ownerId };
-  }
+  const run = await runningGenerationRun(ctx, scope.instanceId, scope.templateId);
+  if (run && "recipeGeneration" in run && run.recipeGeneration) return { familyId: run.recipeGeneration.familyId, ownerId: run.ownerId };
   if (options.required) throw new Error(NOT_RUNNING);
   return undefined;
 }

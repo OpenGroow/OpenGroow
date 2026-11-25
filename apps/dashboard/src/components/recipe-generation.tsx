@@ -16,12 +16,15 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 // Recipe Generation from a Creative Family (ADR-087, ticket #194): the action that asks the Strategy Agent for a
 // proposal, and the five latest generations with their state. States come from the Runs, nothing is stored here.
 
-/** Matches the server's `MAX_INSTRUCTIONS_LENGTH`. */
-export const MAX_INSTRUCTIONS_LENGTH = 2000;
+/**
+ * Mirrors `MAX_INSTRUCTIONS_LENGTH` of apps/convex/recipe_generation_shared.ts (the dashboard only maps the
+ * `@convex` modules it needs in tsconfig; the server enforces the limit).
+ */
+const MAX_INSTRUCTIONS_LENGTH = 2000;
 
 export type Generation = {
   generationId: string;
-  /** The Run to review and create from (ticket #195). */
+  /** The Run to review and create from. */
   runId: string;
   createdAt: number;
   tryCount: number;
@@ -29,7 +32,7 @@ export type Generation = {
   state: "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created";
   reason?: string;
   details?: string;
-  /** The validated Recipe Proposal, for the review form (ticket #195). */
+  /** The validated Recipe Proposal, for the review form. */
   proposal?: unknown;
   recipeId?: string;
 };
@@ -152,10 +155,10 @@ function GenerateRecipeDialog({
 }
 
 /**
- * The five latest generations of the family, one row each (retries are hidden). `onReview` is the hook point of the
- * review form (ticket #195): it receives the generation (Run id and proposal) of a row ready to review.
+ * The five latest generations of the family, one row each (retries are hidden). `onReview` receives the generation
+ * (Run id and proposal) of a row to review.
  */
-export function FamilyGenerations({ instanceId, familyId, onReview }: { instanceId: string; familyId: string; onReview?: (generation: Generation) => void }) {
+export function FamilyGenerations({ instanceId, familyId, onReview }: { instanceId: string; familyId: string; onReview: (generation: Generation) => void }) {
   const data = useGenerations(instanceId, familyId);
   if (data === undefined || data.generations.length === 0) return null;
   return (
@@ -172,7 +175,7 @@ export function FamilyGenerations({ instanceId, familyId, onReview }: { instance
   );
 }
 
-function GenerationRow({ generation, onReview }: { generation: Generation; onReview?: (generation: Generation) => void }) {
+function GenerationRow({ generation, onReview }: { generation: Generation; onReview: (generation: Generation) => void }) {
   const { label, tone } = STATES[generation.state];
   const explanation =
     generation.state === "no_opportunity"
@@ -185,7 +188,7 @@ function GenerationRow({ generation, onReview }: { generation: Generation; onRev
       <div className="flex flex-wrap items-center gap-3">
         <StatusBadge tone={tone} label={label} />
         <span className="text-sm text-muted-foreground tabular-nums">{dateTime(generation.createdAt)}</span>
-        {(generation.state === "ready_to_review" || (generation.state === "created" && generation.proposal !== undefined)) && onReview ? (
+        {(generation.state === "ready_to_review" || (generation.state === "created" && generation.proposal !== undefined)) ? (
           <Button type="button" size="sm" variant={generation.state === "created" ? "outline" : "default"} className="ml-auto" onClick={() => onReview(generation)}>
             {generation.state === "created" ? "View proposal" : "Review"}
           </Button>

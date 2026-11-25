@@ -226,7 +226,8 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
     run: async (ctx, scope, args) => {
       // During a Recipe Generation the Agent reads only the pinned family's Sources (ADR-087).
       const pin = await pinnedGeneration(ctx, scope, { required: false });
-      return listSources(ctx, scope.instanceId, { ...args, ...(pin ? { familyId: pin.familyId } : {}) });
+      // The pinned family's Sources are ready and not excluded only: the caller's status is ignored then.
+      return listSources(ctx, scope.instanceId, pin ? { ...args, status: "ready", familyId: pin.familyId } : args);
     },
   },
   get_creative_family: {

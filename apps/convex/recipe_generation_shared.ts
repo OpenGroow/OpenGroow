@@ -20,10 +20,20 @@ export const RECIPE_GENERATION_TOOLS = [
   "list_mission_types",
 ] as const;
 
-const IN_FLIGHT_STATUSES = ["pending", "dispatching", "running", "awaiting_job"] as const;
+/** The statuses of a Run in flight. */
+export const IN_FLIGHT_STATUSES = ["pending", "dispatching", "running", "awaiting_job"] as const;
+
+type RunStatus = (typeof IN_FLIGHT_STATUSES)[number];
+type Ctx = Pick<QueryCtx, "db">;
+export type GenerationPin = NonNullable<Extract<Doc<"runs">, { recipeGeneration?: unknown }>["recipeGeneration"]>;
+
+/** The `recipeGeneration` pin of a Run: the family and the instructions carry over, the rest is set per try. */
+export function buildGenerationPin(base: { familyId: GenerationPin["familyId"]; instructions?: string }, extra: { tryCount: number; generationId?: GenerationPin["generationId"]; feedback?: string }): GenerationPin {
+  return { familyId: base.familyId, ...(base.instructions ? { instructions: base.instructions } : {}), tryCount: extra.tryCount, ...(extra.generationId ? { generationId: extra.generationId } : {}), ...(extra.feedback ? { feedback: extra.feedback } : {}) };
+}
 
 /** An Agent's Run in flight (any kind), or null. One bounded read per status, through the shared index. */
-export async function runInFlight(ctx: Pick<QueryCtx, "db">, instanceId: string, templateId: string): Promise<Doc<"runs"> | null> {
+export async function runInFlight(ctx: Ctx, instanceId: string, templateId: string): Promise<Doc<"runs"> | null> {
   for (const status of IN_FLIGHT_STATUSES) {
     const run = await ctx.db
       .query("runs")
@@ -34,17 +44,26 @@ export async function runInFlight(ctx: Pick<QueryCtx, "db">, instanceId: string,
   return null;
 }
 
+/** The first Standalone (Recipe Generation) Run of the Agent in one of `statuses`. The index range is streamed, so the answer is exact whatever the number of other Runs. */
+async function firstGenerationRun(ctx: Ctx, instanceId: string, templateId: string, statuses: readonly RunStatus[]): Promise<Doc<"runs"> | null> {
+  for (const status of statuses) {
+    const runs = ctx.db
+      .query("runs")
+      .withIndex("by_instance_template_status", (q) => q.eq("instanceId", instanceId).eq("templateId", templateId).eq("status", status));
+    for await (const run of runs) {
+      if ("recipeGeneration" in run && run.recipeGeneration) return run;
+    }
+  }
+  return null;
+}
+
+/** The Agent's running Standalone Run, or null. */
+export const runningGenerationRun = (ctx: Ctx, instanceId: string, templateId: string) => firstGenerationRun(ctx, instanceId, templateId, ["running"]);
+
 /**
  * True while a Standalone Run is in flight for the Agent: the scheduled passes of its Jobs then leave everything
  * untouched (the Job stays due, a Run Now stays queued).
  */
-export async function standaloneInFlight(ctx: Pick<QueryCtx, "db">, instanceId: string, templateId: string): Promise<boolean> {
-  for (const status of IN_FLIGHT_STATUSES) {
-    const runs = await ctx.db
-      .query("runs")
-      .withIndex("by_instance_template_status", (q) => q.eq("instanceId", instanceId).eq("templateId", templateId).eq("status", status))
-      .take(100);
-    if (runs.some((run) => "recipeGeneration" in run && run.recipeGeneration)) return true;
-  }
-  return false;
+export async function standaloneInFlight(ctx: Ctx, instanceId: string, templateId: string): Promise<boolean> {
+  return (await firstGenerationRun(ctx, instanceId, templateId, IN_FLIGHT_STATUSES)) !== null;
 }

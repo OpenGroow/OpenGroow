@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, type QueryCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
+import { IN_FLIGHT_STATUSES, type GenerationPin } from "./recipe_generation_shared.js";
 import { readOwnerId } from "./instance_ownership.js";
 
 // What the Creative Library shows of Recipe Generations (ADR-087, ticket #194). Read-only: the state of a generation
@@ -13,9 +14,9 @@ const FAMILY_RUN_SCAN = 100;
 
 export type GenerationState = "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created";
 
-const IN_FLIGHT = new Set(["pending", "dispatching", "running", "awaiting_job"]);
+const IN_FLIGHT = new Set<string>(IN_FLIGHT_STATUSES);
 
-type RunPin = NonNullable<Extract<Doc<"runs">, { recipeGeneration?: unknown }>["recipeGeneration"]>;
+type RunPin = GenerationPin;
 type GenerationRun = Doc<"runs"> & { recipeGeneration: RunPin };
 const isGenerationRun = (run: Doc<"runs">): run is GenerationRun => "recipeGeneration" in run && run.recipeGeneration !== undefined;
 

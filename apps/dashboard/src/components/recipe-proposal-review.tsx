@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import type { Generation } from "@/src/components/recipe-generation";
@@ -59,13 +60,13 @@ function CitedSources({ instanceId, runId }: { instanceId: string; runId: string
 
 function ProposalContext({ instanceId, generation, proposal }: { instanceId: string; generation: Generation; proposal: RecipeProposal }) {
   return (
-    <div className="grid gap-3 rounded-lg border border-border bg-surface-raised p-3">
+    <Card size="sm" className="gap-3 px-4">
       <div className="grid gap-1">
         <h3 className="m-0 text-sm font-semibold text-foreground">Rationale</h3>
         <p className="m-0 whitespace-pre-wrap text-sm text-muted-foreground">{proposal.rationale}</p>
       </div>
       <CitedSources instanceId={instanceId} runId={generation.runId} />
-    </div>
+    </Card>
   );
 }
 
