@@ -156,6 +156,7 @@ function loggedDecision(decision: ReconcileDecision) {
     return { type: "ingestSources" as const, result: decision.result, sourceCount: decision.sources.length };
   }
   if (decision.type === "persistStrategicReview") return { type: "persistStrategicReview" as const };
+  if (decision.type === "persistContentPlan") return { type: "persistContentPlan" as const };
   if (decision.type === "markAwaitingJob") return { type: "markAwaitingJob" as const, job: decision.job };
   return decision;
 }
@@ -253,6 +254,13 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
         runId: state.runId,
         result: { status: "success", summary: "Strategic Review result received" },
         strategicReviewEnvelope: decision.envelope,
+      });
+      return;
+    case "persistContentPlan":
+      await ctx.runMutation(internal.runs.markCompleted, {
+        runId: state.runId,
+        result: { status: "success", summary: "Content Plan result received" },
+        contentPlanEnvelope: decision.envelope,
       });
       return;
     case "markFailed": {

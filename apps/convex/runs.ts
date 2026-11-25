@@ -7,7 +7,7 @@ import { settleSourceJobRun } from "./source_jobs.js";
 import { ingestAndDecideOutcome, ingestHandoff } from "./source_jobs/ingest_sources.js";
 import { failScoringRun, settleScoringRun } from "./score_jobs.js";
 import { failRoutingRun, settleRoutingRun } from "./source_routing.js";
-import { CONTENT_PLANNING_JOB_TYPE, failContentPlanningRun } from "./content_planning_jobs.js";
+import { CONTENT_PLANNING_JOB_TYPE, failContentPlanningRun, settleContentPlanningRun } from "./content_planning_jobs.js";
 import { failStrategicReviewRun, settleStrategicReviewRun, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 import { runParent, type RunParentRecord } from "./run_parent.js";
 import { exclusiveResourcesOf } from "@opengroow/agent-templates";
@@ -261,7 +261,7 @@ export const markCompleted = internalMutation({
   // `sources`: the Sources of a SourceJob execution's result file (#564),
   // ingested here so a cancelled Run (early return below) inserts nothing.
   // `strategicReviewEnvelope`: the result file of a strategic_review Run (#168), persisted here.
-  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())), strategicReviewEnvelope: v.optional(v.any()) },
+  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())), strategicReviewEnvelope: v.optional(v.any()), contentPlanEnvelope: v.optional(v.any()) },
   handler: async (ctx, args): Promise<{ applied: boolean }> => {
     const run = await ctx.db.get(args.runId);
     if (!run) throw new Error(`Run not found: ${args.runId}`);
@@ -273,6 +273,8 @@ export const markCompleted = internalMutation({
     // to follow up with writes derived from a result that was never actually
     // recorded.
     if (run.status === "cancelled") return { applied: false };
+    // A Content Planning completion repeated for a Run already settled changes nothing.
+    if ((run.status === "completed" || run.status === "failed") && run.contentPlanning !== undefined) return { applied: false };
     if (run.status !== "running" && run.status !== "awaiting_job") {
       throw new Error(`illegal transition: markCompleted from status ${run.status}`);
     }
@@ -282,6 +284,12 @@ export const markCompleted = internalMutation({
     // A Strategic Review's result is validated and persisted with the pins taken at dispatch.
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
       await settleStrategicReviewRun(ctx, run, parent.jobId, args.result, args.strategicReviewEnvelope);
+      return { applied: true };
+    }
+
+    // A Content Planning result is validated as a whole and persisted as a draft Content Plan.
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === CONTENT_PLANNING_JOB_TYPE) {
+      await settleContentPlanningRun(ctx, run, parent.jobId, args.result, args.contentPlanEnvelope);
       return { applied: true };
     }
 

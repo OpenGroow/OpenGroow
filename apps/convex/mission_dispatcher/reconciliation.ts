@@ -84,6 +84,9 @@ export type ReconcileDecision =
   // A Strategic Review Job's result file (#168): validated and persisted by Convex while the Run completes.
   // The Performance Report is data, never logged (only that an envelope arrived).
   | { type: "persistStrategicReview"; envelope: unknown }
+  // A Content Planning Job's result file (#176): validated and persisted by Convex while the Run completes.
+  // The plan is data, never logged (only that an envelope arrived).
+  | { type: "persistContentPlan"; envelope: unknown }
   // A Source ingestion Job's success (#564): the Sources of its result file are ingested
   // by Convex while the Run completes. They never enter the decision log.
   | { type: "ingestSources"; result: { status: "success"; summary: string }; sources: unknown[] }
@@ -396,10 +399,8 @@ export function decideReconciliation(
   // A Strategic Review's result file is the envelope itself; Convex validates it where it persists it.
   if (ctx.strategicReview === true) return { type: "persistStrategicReview", envelope: parsed };
 
-  // A Content Planning result is persisted by a later ticket (#176); until then the Run fails visibly.
-  if (ctx.contentPlanning === true) {
-    return { type: "markFailed", code: "not_supported", message: "Content Plan persistence is not available yet" };
-  }
+  // A Content Planning result is the envelope itself; Convex validates it where it persists it.
+  if (ctx.contentPlanning === true) return { type: "persistContentPlan", envelope: parsed };
 
   // A Source ingestion Job's result has its own type.
   if (ctx.sourceIngestion === true) {

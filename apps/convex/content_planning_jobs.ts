@@ -6,6 +6,9 @@ import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { allChannels, projectPublishers } from "./project_publishers.js";
 import { CONTEXT_PROVIDER_RENDERERS } from "./mission_dispatcher/context_providers.js";
+import { persistContentPlan } from "./content_plans.js";
+import { parseContentPlanEnvelope } from "./content_plan_rules.js";
+import type { RunResult } from "./run_result.js";
 import { planningPeriodOf, remainingOf } from "@opengroow/protocol/content-planning-pins";
 import {
   planningDaysOf,
@@ -195,6 +198,39 @@ export async function failContentPlanningRun(ctx: MutationCtx, run: Doc<"runs">,
   if (!job || job.type !== CONTENT_PLANNING_JOB_TYPE || runtimeOf(job).inFlightRunId !== run._id) return;
   const { inFlightRunId: _run, ...rest } = runtimeOf(job);
   await ctx.db.patch(job._id, { runtime: rest, lastOutcome: "failed", lastError: error, updatedAt: Date.now() });
+}
+
+/** Ends the Job's current execution: the in-flight marker is cleared and the outcome recorded (a newer manual claim is kept). */
+async function finishContentPlanningJob(ctx: MutationCtx, job: Doc<"jobs">, outcome: "succeeded" | "failed", summary?: string, error?: string): Promise<void> {
+  const { inFlightRunId: _run, ...rest } = runtimeOf(job);
+  await ctx.db.patch(job._id, { runtime: rest, lastOutcome: outcome, lastSummary: summary, lastError: outcome === "failed" ? error : undefined, updatedAt: Date.now() });
+}
+
+/**
+ * A content_planning Run ended with its result file (#176): validated as a whole and persisted as a draft Content Plan
+ * (the Agent's `items: []` completes the Run with its rationale and no plan). A result that cannot be persisted fails
+ * the Run with the reasons and creates nothing. A Run already settled is left as it is.
+ */
+export async function settleContentPlanningRun(ctx: MutationCtx, run: Doc<"runs">, jobId: Id<"jobs">, result: RunResult, envelope: unknown): Promise<void> {
+  if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") return;
+  const now = Date.now();
+  const outcome = envelope === undefined
+    ? ({ ok: false, reason: "invalid_result", message: "The Run returned no Content Plan result." } as const)
+    : await persistContentPlan(ctx, run, envelope);
+  if (!outcome.ok) {
+    const errorMessage = `${outcome.reason}: ${outcome.message}`;
+    await ctx.db.patch(run._id, { status: "failed", errorMessage, completedAt: now, updatedAt: now });
+    await failContentPlanningRun(ctx, run, jobId, errorMessage);
+    return;
+  }
+  await ctx.db.patch(run._id, { status: "completed", result, completedAt: now, updatedAt: now });
+  const job = await ctx.db.get(jobId);
+  if (!job || runtimeOf(job).inFlightRunId !== run._id) return;
+  const parsed = run.contentPlanning ? parseContentPlanEnvelope(envelope, run.contentPlanning) : undefined;
+  const summary = outcome.planId === null
+    ? (parsed?.ok ? parsed.value.rationale : "No content planned")
+    : `Content Plan drafted with ${outcome.count} content${outcome.count === 1 ? "" : "s"}, waiting for review`;
+  await finishContentPlanningJob(ctx, job, "succeeded", summary);
 }
 
 export const isContentPlanningRun = internalQuery({
