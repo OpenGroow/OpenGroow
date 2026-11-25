@@ -20,6 +20,7 @@ export type InstanceView =
   | "schedules"
   | "publishers"
   | "analytics"
+  | "content-plans"
   | "memory"
   | "developer"
   | "settings";

@@ -1,0 +1,126 @@
+/** @vitest-environment jsdom */
+
+import * as React from "react";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ContentPlansContent } from "../src/components/content-plans-page";
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const useQueryMock = vi.fn();
+
+vi.mock("convex/react", () => ({ useQuery: (...args: unknown[]) => useQueryMock(...args) }));
+vi.mock("@convex/_generated/api", () => ({
+  api: { content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" } },
+}));
+
+function makeContent(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    _id: "pc-1", kind: "video", missionType: "make_video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.",
+    plannedAt: "2030-03-06", intent: "exploit", rationale: "Reactions led last month.", status: "proposed",
+    publishTargets: [{ target: "social:example", uncertain: false }],
+    recipe: { id: "rec-1", name: "Reel recipe" }, creativeFamily: { id: "fam-1", name: "Reaction" }, source: { id: "src-1", label: "Article 1" },
+    ...overrides,
+  };
+}
+
+function makeDraft(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    _id: "plan-1", periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "## Strategy\n\nDouble down on reactions.", status: "draft", createdAt: Date.UTC(2030, 2, 4),
+    contents: [makeContent(), makeContent({ _id: "pc-2", title: "Carousel test", kind: "carousel", intent: "explore", source: null })],
+    quantities: [{ kind: "video", count: 1 }, { kind: "carousel", count: 1 }],
+    distribution: { explore: 1, exploit: 1 },
+    ...overrides,
+  };
+}
+
+describe("ContentPlansContent", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2030, 2, 8, 12));
+    useQueryMock.mockReset();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    vi.useRealTimers();
+  });
+
+  async function render({ draft, history = [] }: { draft?: unknown; history?: unknown[] }) {
+    useQueryMock.mockImplementation((key: string) => (key === "content_plan_review.current" ? draft : key === "content_plan_review.history" ? history : undefined));
+    await act(async () => {
+      root.render(<ContentPlansContent instanceId="instance-1" />);
+    });
+  }
+  const text = () => document.body.textContent ?? "";
+
+  it("shows an empty state pointing to the Jobs page when there is no draft", async () => {
+    await render({ draft: null });
+    expect(text()).toContain("No draft Content Plan");
+    expect(Array.from(document.querySelectorAll("a")).find((a) => a.textContent?.includes("Jobs"))?.getAttribute("href")).toBe("/projects/instance-1/jobs");
+  });
+
+  it("shows the draft period, rationale, quantities by format and exploration distribution", async () => {
+    await render({ draft: makeDraft() });
+    expect(text()).toContain("Mar 5, 2030 to Mar 11, 2030");
+    expect(document.querySelector("section[aria-label='Rationale'] h2")?.textContent).toBe("Strategy");
+    expect(Array.from(document.querySelectorAll("ul[aria-label='Quantities by format'] li")).map((li) => li.textContent)).toEqual(["1 video", "1 carousel"]);
+    expect(document.querySelector("[aria-label='Exploration and exploitation']")?.textContent).toBe("1 exploring · 1 exploiting");
+  });
+
+  it("lists every proposal with its title, Recipe, Creative Family, date, targets, intent, brief, rationale and Source", async () => {
+    await render({ draft: makeDraft() });
+    const first = document.querySelector("li[data-content='pc-1']")!;
+    for (const expected of ["Reaction to article 1", "Mar 6, 2030", "Exploit", "Film a silent close-up reaction.", "Reactions led last month.", "Reel recipe", "Reaction", "Article 1", "social:example"]) {
+      expect(first.textContent).toContain(expected);
+    }
+    expect(document.querySelector("li[data-content='pc-2']")?.textContent).toContain("Explore");
+    expect(document.querySelector("li[data-content='pc-2']")?.textContent).not.toContain("Source");
+  });
+
+  it("flags a publish target whose compatibility is uncertain, and only that one", async () => {
+    const contents = [makeContent({ publishTargets: [{ target: "social:example", uncertain: true, reason: "Not confirmed for video" }, { target: "blog:example", uncertain: false }] })];
+    await render({ draft: makeDraft({ contents }) });
+    expect(document.querySelector("li[data-target='social:example']")?.textContent).toContain("Compatibility uncertain");
+    expect(document.querySelector("li[data-target='social:example']")?.textContent).toContain("Not confirmed for video");
+    expect(document.querySelector("li[data-target='blog:example']")?.textContent).not.toContain("uncertain");
+  });
+
+  it("warns when the period has passed, and keeps the draft", async () => {
+    await render({ draft: makeDraft({ periodEnd: "2030-03-07" }) });
+    expect(document.querySelector("[role='alert']")?.textContent).toContain("period has passed");
+    expect(text()).toContain("Reaction to article 1");
+  });
+
+  it("does not warn on the last day of the period", async () => {
+    await render({ draft: makeDraft({ periodEnd: "2030-03-08" }) });
+    expect(document.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("lists previous plans with their statuses, and says so when there are none", async () => {
+    await render({
+      draft: null,
+      history: [
+        { _id: "p-2", periodStart: "2030-02-26", periodEnd: "2030-03-04", rationale: "r", status: "rejected", createdAt: Date.UTC(2030, 1, 25), counts: { total: 3, approved: 0, rejected: 3 } },
+        { _id: "p-1", periodStart: "2030-02-19", periodEnd: "2030-02-25", rationale: "r", status: "approved", createdAt: Date.UTC(2030, 1, 18), counts: { total: 4, approved: 3, rejected: 1 } },
+      ],
+    });
+    const entries = Array.from(document.querySelectorAll("li[data-plan]"));
+    expect(entries.map((e) => e.getAttribute("data-plan"))).toEqual(["p-2", "p-1"]);
+    expect(entries[0]!.textContent).toContain("Rejected");
+    expect(entries[1]!.textContent).toContain("Approved");
+    expect(entries[1]!.textContent).toContain("3 approved");
+    await render({ draft: null, history: [] });
+    expect(text()).toContain("No approved or rejected plan yet.");
+  });
+});

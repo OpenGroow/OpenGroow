@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import {
   BarChart3,
   Brain,
+  CalendarDays,
   Bot,
   CalendarClock,
   LayoutDashboard,
@@ -60,6 +61,7 @@ const PROJECT_VIEWS: ProjectView[] = [
   { id: "brand", label: "Brand", icon: Palette },
   { id: "publishers", label: "Publish", icon: Send },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
+  { id: "content-plans", label: "Content Plans", icon: CalendarDays },
   { id: "memory", label: "Strategic Memory", icon: Brain },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "developer", label: "Developer", icon: ScrollText },
