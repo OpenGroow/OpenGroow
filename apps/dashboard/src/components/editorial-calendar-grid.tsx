@@ -44,8 +44,8 @@ export function MonthGrid({ cursor, byDay, selectedId, onSelect }: { cursor: Mon
         const key = dayKey(cursor.year, cursor.month, day);
         const dayItems = byDay.get(key) ?? [];
         return (
-          <div key={key} data-day={key} className="grid min-h-24 min-w-0 content-start gap-1.5 rounded-xl border bg-card/40 p-1.5">
-            <span className={cn("text-xs text-muted-foreground", dayItems.length > 0 && "font-bold text-foreground")}>{day}</span>
+          <div key={key} data-day={key} className="grid min-h-24 min-w-0 content-start gap-2 rounded-xl border bg-card/40 p-2.5">
+            <span className={cn("px-0.5 text-sm leading-none text-muted-foreground", dayItems.length > 0 && "font-bold text-foreground")}>{day}</span>
             {dayItems.map((item) => (
               <DayChip key={item._id} item={item} selected={selectedId === item._id} onSelect={onSelect} />
             ))}
