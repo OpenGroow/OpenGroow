@@ -109,6 +109,49 @@ One periodic analysis of the Project's content performance by the Strategy Agent
 - A Run that fails, is invalid or is based on an outdated memory persists nothing and never replaces the current memory.
 - _Avoid_: "Review" alone (it means the human review of a Mission, see **Mission**), "Memory Agent" (the Strategy Agent does both the analysis and the consolidation).
 
+### Job
+
+Recurring work of an Agent that nobody triggers as work to review and nobody approves: it runs on its own recurrence or on demand (Run Now), and its Runs belong to the Job, not to a Mission. A Job never creates a Mission. Examples: **SourceJob**, **Strategic Review**, **Content Planning**.
+
+- _Avoid_: "Cron" (a Job's recurrence is a setting, not the Job), "Schedule" (a Schedule generates Missions, a Job does not).
+
+### Content Planning
+
+The Job of the Strategy Agent that proposes what content to produce next, as a **Content Plan**. It reads what the Project has learned (Brand Core, Strategic Memory, performance, Production Recipes, Sources, approved Planned Contents) and decides, within the quantities and destinations the user configured, which Production Recipes to use, on what topic, and when. It applies the **Exploration & Exploitation Policy**. It is the only way a Content Plan is born; it creates no Mission, no Publication and changes neither a Production Recipe nor the Strategic Memory.
+
+- **Exploration & Exploitation Policy**: the qualitative rule, carried by the Strategy Agent's instructions, for balancing **exploitation** (producing again what evidence suggests is worth it) with **exploration** (producing what is not yet understood: unused or insufficiently measured Recipes, underexplored Creative Families, hypotheses from the Strategic Memory). It has no fixed ratio, no score and no collection. A Recipe with too few measurements is unexplored, never underperforming.
+- _Avoid_: "Planner Agent" (there is no such Agent), "Strategic Review" (that one learns; Content Planning decides what to propose).
+
+### Production target
+
+How many distinct contents of one format the user wants within a **Planning period**, and to which **Publish targets** they are meant to go. A format is the kind of Publishable a Mission type produces (video, image, carousel, article). A Production target counts contents, not Publications: one video for two Publish targets counts once.
+
+- _Avoid_: "quota" in the UI, "goal" (that means a business objective).
+
+### Planning period
+
+The span of days a Content Planning Run plans for, resolved by OpenGroow when the Run starts and never chosen or changed by the Agent. Its length is independent of the Job's recurrence: a weekly Job may plan 7, 14 or 30 days. Successive Planning periods overlap, which is how the same Production target is counted against what is already approved.
+
+### Content Plan
+
+A proposal produced by one Content Planning Run: a Planning period, a Markdown strategic rationale, its **Planned Contents**, a status (`draft`, `approved`, `rejected`) and the Run it came from. It is a temporary decision space, not a calendar: a Project has at most one draft at a time, and the human approves or rejects it as a whole after editing it.
+
+- _Avoid_: "content plan" for the deliverable of a Mission (see **Artifact**), "Editorial Plan", "Calendar" (a plan is not the calendar).
+
+### Planned Content
+
+One distinct content a Content Plan proposes: a Production Recipe, optionally a Source, a title, a creative brief, a planned date, the Publish targets it is meant for, an exploration or exploitation intent and a rationale. It is the same record while proposed, edited and approved; approval only changes its status. Its Creative Family is that of its Production Recipe. A Planned Content is not a Mission and not a Publication, and its date is a day, never a Publication time.
+
+- _Avoid_: "Planned Mission", "post", "Calendar entry" (the calendar is a view of Planned Contents).
+
+### Editorial Calendar
+
+The Project's single, continuous, read-only, date-based view of its approved Planned Contents, whichever Content Plan they come from. It is not stored and never implies that a Publication is scheduled.
+
+- _Avoid_: "Schedule" (that generates Missions), "Publishing calendar".
+
+See ADR-086.
+
 ### Source group
 
 The grouping of Sources that a Template declares in its manifest (the `family` of a Source declaration, stored in the `family` column). It drives the filter chips of the Sources page. It is unrelated to a **Creative Family**: a Source group is declared by the Template, a Creative Family is curated by the user. The stored column name does not change.

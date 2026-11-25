@@ -125,7 +125,7 @@ Business deliverable produced by a Run, viewable by the user. An Artifact is a *
 - A Decision Report produced from an Execution device can remain in the Agent's local Workspace. Viewing it then depends on that Workspace's availability; OpenGroow does not yet guarantee its replication or preservation after reprovisioning.
 - For Plugin Agents (e.g. Android), the deliverable can reside in the Workspace rather than in an external service. In this case, `external.service = "workspace"` and `external.id` is the relative path of the main file within the Workspace (e.g. `missions/<missionId>/artifacts/<runId>/report.json`). The dashboard loads this content via a Convex action dedicated to workspace artifacts, instead of the proxy to an external service. This convention is declared in the Template like any other Artifact.
 - The actual content (Markdown, video, image, JSON…) lives in the **external service** that produced it. OpenGroow does not duplicate it.
-- Examples: _SEO article on "running shoes"_ (content at the SEO service), _short video from a newsletter_ (content at the video service), _TikTok content plan week 21_.
+- Examples: _SEO article on "running shoes"_ (content at the SEO service), _short video from a newsletter_ (content at the video service), _TikTok content plan week 21_ (a deliverable of a Mission, not a **Content Plan**, which is a proposal of what to produce, see `marketing-engine.md`).
 - An Artifact is attached to a RunResult of type `success` or `needs_human_review`.
 
 ### Marketing Mock
