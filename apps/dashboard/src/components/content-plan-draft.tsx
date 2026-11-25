@@ -29,10 +29,7 @@ function PlanRationale({ rationale }: { rationale: string }) {
       {expanded ? (
         <WorkspaceMarkdown content={rationale} />
       ) : (
-        <div
-          data-clamped="true"
-          className="max-h-11 min-w-0 overflow-hidden break-words text-sm text-muted-foreground [mask-image:linear-gradient(to_bottom,black_55%,transparent)] [&_*]:m-0"
-        >
+        <div data-clamped="true" className="line-clamp-2 min-w-0 break-words text-sm text-muted-foreground [&_*]:m-0">
           <WorkspaceMarkdown content={rationale} />
         </div>
       )}

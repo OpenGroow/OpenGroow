@@ -29,12 +29,12 @@ function ProductionBrief({ brief }: { brief: string }) {
   const [open, setOpen] = useState(false);
   const Chevron = open ? ChevronUp : ChevronDown;
   return (
-    <div className="grid gap-2">
-      <Button type="button" variant="outline" aria-expanded={open} className="w-full justify-start gap-2" onClick={() => setOpen(!open)}>
+    <div className="grid min-w-0 gap-2">
+      <Button type="button" variant="outline" aria-expanded={open} className="w-full min-w-0 justify-start gap-2 overflow-hidden" onClick={() => setOpen(!open)}>
         <Chevron aria-hidden="true" />
         <FileText aria-hidden="true" />
         <span>Production brief</span>
-        {open ? null : <span className="ml-auto min-w-0 truncate font-normal text-muted-foreground">{brief}</span>}
+        {open ? null : <span className="ml-auto min-w-0 flex-1 truncate text-right font-normal text-muted-foreground">{brief}</span>}
       </Button>
       {open ? (
         <p aria-label="Full production brief" className="m-0 whitespace-pre-wrap text-sm text-muted-foreground">
@@ -48,14 +48,14 @@ function ProductionBrief({ brief }: { brief: string }) {
 export function PlannedContentCard({ content, period, readOnly = false }: { content: PlannedContentView; period: { periodStart: string; periodEnd: string }; readOnly?: boolean }) {
   const removed = content.status === "rejected";
   return (
-    <li data-content={content._id}>
-      <Card className={`grid gap-4 p-4 sm:p-5${removed ? " opacity-60" : ""}`}>
+    <li data-content={content._id} className="min-w-0">
+      <Card className={`grid min-w-0 gap-4 p-4 sm:p-5${removed ? " opacity-60" : ""}`}>
         <div className="flex items-start gap-3">
           <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Film className="size-5" />
           </div>
-          <div className="grid gap-2">
-            <h3 className="m-0 text-lg font-semibold">{content.title}</h3>
+          <div className="grid min-w-0 gap-2">
+            <h3 className="m-0 break-words text-lg font-semibold">{content.title}</h3>
             <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays aria-hidden="true" className="size-4" />
@@ -70,8 +70,8 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
             </div>
           </div>
         </div>
-        <div className="grid gap-4 border-t border-border pt-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <dl className="m-0 grid content-start gap-2 text-sm">
+        <div className="grid min-w-0 gap-4 border-t border-border pt-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+          <dl className="m-0 grid min-w-0 content-start gap-2 text-sm">
             <Detail icon={<BookOpen aria-hidden="true" />} label="Recipe">
               {content.recipe?.name ?? "Deleted"}
             </Detail>
@@ -105,7 +105,7 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
             </Detail>
           </dl>
           <div aria-hidden="true" className="hidden w-px bg-border md:block" />
-          <div className="grid content-start gap-1 border-t border-border pt-4 md:border-t-0 md:pt-0">
+          <div className="grid min-w-0 content-start gap-1 break-words border-t border-border pt-4 md:border-t-0 md:pt-0">
             <p className="m-0 flex items-center gap-2 text-sm font-semibold">
               <Sparkles aria-hidden="true" className="size-4 text-primary" />
               Why this content?
