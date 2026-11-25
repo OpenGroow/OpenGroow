@@ -41,6 +41,16 @@ describe("Project layout navigation", () => {
   let container: HTMLDivElement;
   let root: Root;
 
+  async function renderLayout() {
+    await act(async () => {
+      root.render(
+        <ProjectLayout params={Promise.resolve({ projectId: "project-1" })}>
+          <div />
+        </ProjectLayout>,
+      );
+    });
+  }
+
   beforeEach(() => {
     useActionMock.mockReturnValue(vi.fn());
     useMutationMock.mockReturnValue(vi.fn());
@@ -113,24 +123,66 @@ describe("Project layout navigation", () => {
     const links = Array.from(nav.querySelectorAll("a"));
     expect(links.map((a) => a.textContent?.trim())).toEqual([
       "Overview",
-      "Missions",
-      "Agents",
-      "Sources",
-      "Creative Library",
-      "Jobs",
-      "Scheduler",
-      "Brand",
-      "Publish",
-      "Analytics",
+      "Strategic Memory",
       "Content Plans",
       "Editorial Calendar",
-      "Strategic Memory",
+      "Sources",
+      "Creative Library",
+      "Missions",
+      "Publish",
+      "Jobs",
+      "Scheduler",
+      "Analytics",
+      "Brand",
+      "Agents",
       "Settings",
       "Developer",
     ]);
     expect(links.find((a) => a.textContent?.trim() === "Settings")?.getAttribute("href")).toBe(
       "/projects/project-1/settings",
     );
+  });
+
+  it("groups the entries under labelled sections, Overview standing alone above them", async () => {
+    await renderLayout();
+    const nav = container.querySelector('nav[aria-label="Project sections"]') as HTMLElement;
+    const overview = nav.querySelector(":scope > a");
+    expect(overview?.textContent?.trim()).toBe("Overview");
+
+    const groups = Array.from(nav.querySelectorAll('[role="group"]'));
+    const sections = groups.map((group) => ({
+      label: group.getAttribute("aria-label"),
+      heading: group.querySelector("[data-nav-heading]")?.textContent?.trim(),
+      items: Array.from(group.querySelectorAll("a")).map((a) => a.textContent?.trim()),
+    }));
+    expect(sections).toEqual([
+      { label: "Strategy", heading: "Strategy", items: ["Strategic Memory", "Content Plans", "Editorial Calendar"] },
+      { label: "Creative", heading: "Creative", items: ["Sources", "Creative Library"] },
+      { label: "Operations", heading: "Operations", items: ["Missions", "Publish", "Jobs", "Scheduler"] },
+      { label: "Performance", heading: "Performance", items: ["Analytics"] },
+      { label: "Configuration", heading: "Configuration", items: ["Brand", "Agents", "Settings", "Developer"] },
+    ]);
+  });
+
+  it("marks only the current page's link as active", async () => {
+    await renderLayout();
+    const nav = container.querySelector('nav[aria-label="Project sections"]') as HTMLElement;
+    const current = Array.from(nav.querySelectorAll('a[aria-current="page"]'));
+    expect(current.map((a) => a.textContent?.trim())).toEqual(["Brand"]);
+  });
+
+  it("collapsed sidebar keeps icon links with titles and hides the section headings", async () => {
+    await renderLayout();
+    const toggle = container.querySelector('[aria-label="Collapse sidebar"]') as HTMLElement;
+    await act(async () => {
+      toggle.click();
+    });
+    const nav = container.querySelector('nav[aria-label="Project sections"]') as HTMLElement;
+    const headings = Array.from(nav.querySelectorAll("[data-nav-heading]"));
+    expect(headings).toHaveLength(5);
+    expect(headings.every((h) => h.className.includes("xl:hidden"))).toBe(true);
+    const missions = Array.from(nav.querySelectorAll("a")).find((a) => a.textContent?.trim() === "Missions");
+    expect(missions?.getAttribute("title")).toBe("Missions");
   });
 
   it("has no rename pencil: the project name is edited on the Settings Overview tab", async () => {
