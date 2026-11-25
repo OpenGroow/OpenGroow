@@ -437,8 +437,9 @@ const MISSION_FILE_RE = /^missions\/[^/]+\/(context\.md|runs\/[^/]+\.md|outputs\
 // A SourceJob's files mirror the Missions' layout under jobs/<job>/: one run
 // file written by OpenGroow, and the result written by the agent itself. They are
 // deleted once the job settles.
-const JOB_RUN_FILE_RE = /^jobs\/[^/]+\/run\.md$/;
-const JOB_RESULT_FILE_RE = /^jobs\/[^/]+\/outputs\/[^/]+\.json$/;
+// A Standalone Run (ADR-087) uses the same layout under standalone/<run>/.
+const JOB_RUN_FILE_RE = /^(?:jobs|standalone)\/[^/]+\/run\.md$/;
+const JOB_RESULT_FILE_RE = /^(?:jobs|standalone)\/[^/]+\/outputs\/[^/]+\.json$/;
 const SKILL_FILE_RE = /^skills\/[^/]+\/[^/]+(?:\/[^/]+)*$/;
 
 function isAllowedWorkspaceFilePath(filePath) {
