@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Film, Sparkles } from "lucide-react";
+import { ArrowUpRight, Film, Sparkles } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -87,14 +87,13 @@ function ProposalContext({ instanceId, generation, proposal }: { instanceId: str
       <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
         <h4 className="m-0 text-sm font-semibold text-foreground">Why this recipe?</h4>
         <p className={cn("m-0 whitespace-pre-wrap break-words text-sm text-muted-foreground", !fullRationale && "line-clamp-5")}>{proposal.rationale}</p>
+        <Button type="button" variant="link" className="h-auto w-fit p-0" onClick={() => setFullRationale((v) => !v)}>
+          {fullRationale ? "View less" : "View more"}
+        </Button>
       </div>
       <div className="border-t border-border pt-4">
         <CitedSources instanceId={instanceId} runId={generation.runId} />
       </div>
-      <Button type="button" variant="ghost" aria-expanded={fullRationale} onClick={() => setFullRationale((v) => !v)} className="h-auto justify-between border-t border-border px-0 pt-4 text-sm font-normal text-muted-foreground">
-        Full rationale
-        <ChevronDown className={cn("size-4 transition-transform", fullRationale && "rotate-180")} />
-      </Button>
     </div>
   );
 }
