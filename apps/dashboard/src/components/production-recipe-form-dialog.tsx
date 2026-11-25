@@ -141,7 +141,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
                 <div className="rounded-lg border border-border">
                   <GuidelineRow icon={ScrollText} label="Prompt" summary={draft.prompt.trim() ? "Set" : "Optional"}>
                     <Textarea id="recipe-prompt" aria-label="Prompt" value={draft.prompt} rows={4} onChange={(e) => set({ prompt: e.target.value })} />
-                    <p className="m-0 text-xs text-muted-foreground">Sent unchanged, with values written in full. Optional.</p>
+                    <p className="m-0 text-xs text-muted-foreground">Optional. The text the Production Agent starts from; explain any {"{PLACEHOLDER}"} in the instructions.</p>
                   </GuidelineRow>
                   <GuidelineRow icon={ListOrdered} label="Instructions" summary={`${steps} ${steps === 1 ? "step" : "steps"}`} defaultOpen={draft.instructions.trim() === ""}>
                     <Textarea id="recipe-instructions" aria-label="Instructions" value={draft.instructions} required rows={8} onChange={(e) => set({ instructions: e.target.value })} />
@@ -215,7 +215,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
           <div className="grid gap-2">
             <Label htmlFor="recipe-prompt">Prompt</Label>
             <Textarea id="recipe-prompt" value={draft.prompt} rows={4} onChange={(e) => set({ prompt: e.target.value })} />
-            <p className="m-0 text-xs text-muted-foreground">Sent unchanged, with values written in full. Optional.</p>
+            <p className="m-0 text-xs text-muted-foreground">Optional. The text the Production Agent starts from; explain any {"{PLACEHOLDER}"} in the instructions.</p>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="recipe-instructions">Instructions</Label>
