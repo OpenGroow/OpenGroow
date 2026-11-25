@@ -103,7 +103,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[92vh] w-[min(94vw,64rem)] overflow-y-auto">
           <form className="grid gap-5" noValidate onSubmit={handleSubmit}>
-            <DialogHeader className="flex-row items-center gap-3">
+            <DialogHeader className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
                 <Sparkles className="size-5" />
               </span>
