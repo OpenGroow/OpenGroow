@@ -264,17 +264,6 @@ describe("the result of a generation", () => {
     expect(((await runs()).find((r) => r._id !== runId) as { recipeProposal?: unknown }).recipeProposal).toBeUndefined();
   });
 
-  it("fails a proposal whose prompt still holds a placeholder, and accepts one written in full", async () => {
-    const { runId, sourceId } = await started();
-    await complete(runId, proposal([sourceId], { prompt: 'Write a {CATEGORY} letter signed "{SENDER_NAME}".' }));
-    expect(await getRun(runId)).toMatchObject({ status: "failed", errorMessage: expect.stringMatching(/placeholder \{CATEGORY\}/) });
-    const retry = (await runs()).find((r) => r.status === "pending")!;
-    expect(retry).toMatchObject({ recipeGeneration: { feedback: expect.stringMatching(/placeholder/) } });
-    await running(retry._id);
-    await complete(retry._id, proposal([sourceId], { prompt: "Write an anniversary letter signed Jamie." }));
-    expect(await getRun(retry._id)).toMatchObject({ status: "completed", recipeProposal: { proposal: expect.anything() } });
-  });
-
   it("fails a proposal citing an id that is no Source", async () => {
     const { runId } = await started();
     await complete(runId, proposal(["not-an-id"]));

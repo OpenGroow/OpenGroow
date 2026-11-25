@@ -35,9 +35,6 @@ async function hasReadableSource(ctx: MutationCtx, instanceId: string, ownerId: 
   return rows.some(isReadable);
 }
 
-/** A `{PLACEHOLDER}` left in a prompt: nothing fills it in, the prompt reaches the Production Agent as written. */
-const PLACEHOLDER_RE = /\{[A-Za-z][A-Za-z0-9_]*\}/;
-
 /** The first active Agent of the Project whose Internal MCP declaration lists every tool a generation needs. */
 async function eligibleAgent(ctx: MutationCtx, instanceId: string): Promise<Doc<"projectAgents"> | null> {
   const agents = await ctx.db
@@ -114,10 +111,8 @@ export async function failRecipeGenerationRun(ctx: MutationCtx, run: Doc<"runs">
 }
 
 /** What makes a proposal unacceptable beyond its shape: its target and the Sources it cites. */
-async function proposalProblems(ctx: MutationCtx, run: Doc<"runs">, familyId: Id<"creativeFamilies">, proposal: { templateId: string; missionType: string; sourceIds: string[]; prompt?: string }): Promise<string[]> {
+async function proposalProblems(ctx: MutationCtx, run: Doc<"runs">, familyId: Id<"creativeFamilies">, proposal: { templateId: string; missionType: string; sourceIds: string[]}): Promise<string[]> {
   const problems: string[] = [];
-  const placeholder = proposal.prompt ? PLACEHOLDER_RE.exec(proposal.prompt)?.[0] : undefined;
-  if (placeholder) problems.push(`prompt: contains the placeholder ${placeholder}; the prompt is sent unchanged, so write every value in full (or leave the prompt out and put the guidance in instructions).`);
   try {
     await requireValidTarget(ctx, run.instanceId, proposal.templateId, proposal.missionType);
   } catch (error) {
