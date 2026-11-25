@@ -80,11 +80,11 @@ describe("EditorialCalendarContent", () => {
     expect(details.querySelector("a")?.getAttribute("href")).toBe("/projects/instance-1/content-plans#plan-plan-1");
   });
 
-  it("marks the selected content and shows the format and intent in its chip", async () => {
+  it("marks the selected content and shows the format, not the intent, in its chip", async () => {
     await render([item()]);
     const chip = document.querySelector("[data-day='2030-03-06'] button")!;
     expect(chip.textContent).toContain("Video");
-    expect(chip.textContent).toContain("Exploit");
+    expect(chip.textContent).not.toContain("Exploit");
     expect(chip.getAttribute("aria-pressed")).toBe("false");
     await click(chip);
     expect(chip.getAttribute("aria-pressed")).toBe("true");

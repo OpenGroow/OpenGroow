@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatIcon } from "@/src/components/editorial-calendar-format";
-import { dayKey, daysIn, formatLabel, intentLabel, type CalendarItem, type MonthKey } from "@/src/components/editorial-calendar-types";
+import { dayKey, daysIn, formatLabel, type CalendarItem, type MonthKey } from "@/src/components/editorial-calendar-types";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -25,7 +25,6 @@ function DayChip({ item, selected, onSelect }: { item: CalendarItem; selected: b
           <Icon aria-hidden="true" />
           {formatLabel(item.kind)}
         </Badge>
-        <Badge variant="tag" size="xs">{intentLabel(item.intent)}</Badge>
       </span>
     </Button>
   );
