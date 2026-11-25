@@ -21,14 +21,14 @@ export type PersistPlanResult =
 
 const invalid = (errors: string[]): PersistPlanResult => ({ ok: false, reason: "invalid_result", message: errors.join(" ") });
 
-type Resolved = { kind: string; publishTargets: string[] };
+export type Resolved = { kind: string; publishTargets: string[] };
 
 /** Checks one item against the Project; returns what the Core fills in, or the reasons it is refused. */
-async function resolveItem(
+export async function resolveItem(
   ctx: MutationCtx,
   run: Doc<"runs">,
   pins: NonNullable<Doc<"runs">["contentPlanning"]>,
-  item: PlannedItem,
+  item: Pick<PlannedItem, "missionType" | "recipeId" | "sourceId">,
   at: string,
   publishers: readonly ProjectPublisher[],
 ): Promise<{ ok: true; value: Resolved; uncertain: Array<{ target: string; reason: string }> } | { ok: false; errors: string[] }> {

@@ -1,10 +1,13 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
@@ -152,6 +155,7 @@ function DraftPlan({ draft }: { draft: DraftPlanView }) {
             <span className="font-semibold">{draft.distribution.explore}</span> exploring · <span className="font-semibold">{draft.distribution.exploit}</span> exploiting
           </p>
         </div>
+        <PlanDecision planId={draft._id} />
       </Card>
       <ul className="m-0 grid list-none gap-3 p-0">
         {draft.contents.map((content) => (
@@ -204,6 +208,45 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="flex gap-2">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="m-0">{value}</dd>
+    </div>
+  );
+}
+
+/** Approve or reject the whole plan; a refusal (past date, archived Recipe, exceeded quantity…) is shown as is. */
+function PlanDecision({ planId }: { planId: string }) {
+  const approve = useMutation(api.content_plan_decision.approve);
+  const reject = useMutation(api.content_plan_decision.reject);
+  const [pending, setPending] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  async function decide(action: typeof approve): Promise<void> {
+    setPending(true);
+    setRefusal(null);
+    try {
+      const result = await action({ planId: planId as Id<"contentPlans"> });
+      if (!result.ok) setRefusal(result.message);
+    } catch (error) {
+      setRefusal(extractConvexErrorMessage(error, "The decision could not be saved."));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="accent" disabled={pending} onClick={() => void decide(approve)}>
+          Approve plan
+        </Button>
+        <Button type="button" variant="outline" disabled={pending} onClick={() => void decide(reject)}>
+          Reject plan
+        </Button>
+      </div>
+      {refusal ? (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {refusal}
+        </p>
+      ) : null}
     </div>
   );
 }

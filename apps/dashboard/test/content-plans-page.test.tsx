@@ -10,9 +10,18 @@ import { ContentPlansContent } from "../src/components/content-plans-page";
 
 const useQueryMock = vi.fn();
 
-vi.mock("convex/react", () => ({ useQuery: (...args: unknown[]) => useQueryMock(...args) }));
+const approveMock = vi.fn();
+const rejectMock = vi.fn();
+
+vi.mock("convex/react", () => ({
+  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useMutation: (key: string) => (key === "content_plan_decision.approve" ? approveMock : rejectMock),
+}));
 vi.mock("@convex/_generated/api", () => ({
-  api: { content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" } },
+  api: {
+    content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" },
+    content_plan_decision: { approve: "content_plan_decision.approve", reject: "content_plan_decision.reject" },
+  },
 }));
 
 function makeContent(overrides: Partial<Record<string, unknown>> = {}) {
@@ -122,5 +131,41 @@ describe("ContentPlansContent", () => {
     expect(entries[1]!.textContent).toContain("3 approved");
     await render({ draft: null, history: [] });
     expect(text()).toContain("No approved or rejected plan yet.");
+  });
+
+  describe("plan decision", () => {
+    const button = (label: string) => Array.from(document.querySelectorAll("button")).find((b) => b.textContent === label) as HTMLButtonElement;
+    const click = async (label: string) => {
+      await act(async () => {
+        button(label).click();
+      });
+    };
+
+    beforeEach(() => {
+      approveMock.mockReset();
+      rejectMock.mockReset();
+    });
+
+    it("approves the plan by its id", async () => {
+      approveMock.mockResolvedValue({ ok: true });
+      await render({ draft: makeDraft() });
+      await click("Approve plan");
+      expect(approveMock).toHaveBeenCalledWith({ planId: "plan-1" });
+      expect(document.querySelector("[role='alert']")).toBeNull();
+    });
+
+    it("shows the reason an approval is refused", async () => {
+      approveMock.mockResolvedValue({ ok: false, reason: "past_date", message: "1 retained content is dated in the past (2030-03-03)." });
+      await render({ draft: makeDraft() });
+      await click("Approve plan");
+      expect(document.querySelector("[role='alert']")?.textContent).toContain("dated in the past");
+    });
+
+    it("rejects the plan by its id", async () => {
+      rejectMock.mockResolvedValue({ ok: true });
+      await render({ draft: makeDraft() });
+      await click("Reject plan");
+      expect(rejectMock).toHaveBeenCalledWith({ planId: "plan-1" });
+    });
   });
 });
