@@ -155,6 +155,20 @@ describe("listGenerations", () => {
     expect((await list()).generations[0]).toMatchObject({ state: "created", recipeId: recipe!._id });
   });
 
+  it("shows the generation as over once the Recipe it created is deleted, with nothing to review", async () => {
+    const { runId, sourceId } = await started();
+    await complete(runId, proposal([sourceId]));
+    await owner().mutation(api.production_recipes.create, {
+      instanceId: INSTANCE, familyId, templateId: TEMPLATE, missionType: "make_post", name: "Example recipe", description: "d",
+      instructions: "Do the thing", constraints: [], proposalRunId: runId,
+    });
+    const [recipe] = await recipes();
+    await owner().mutation(api.production_recipes.remove, { instanceId: INSTANCE, recipeId: recipe!._id });
+    const [generation] = (await list()).generations;
+    expect(generation).toMatchObject({ state: "recipe_deleted" });
+    expect(generation).not.toHaveProperty("proposal");
+  });
+
   it("shows a failure with its reason", async () => {
     const { runId } = await started();
     await fail(runId, "The Agent crashed");

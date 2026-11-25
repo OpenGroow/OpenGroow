@@ -199,8 +199,8 @@ export const setTarget = mutation({
 const idArgs = { instanceId: v.string(), recipeId: v.id("productionRecipes") };
 
 /**
- * Deletes a recipe and its versions. Missions made with it keep their Recipe Snapshot. A Recipe Proposal that had
- * created it can be reviewed again. Refused while a proposed or approved planned content still uses it.
+ * Deletes a recipe and its versions. Missions made with it keep their Recipe Snapshot. The Recipe Proposal that
+ * created it stays marked as created (it cannot create a second one). Refused while a proposed or approved planned content still uses it.
  */
 export const remove = mutation({
   args: idArgs,
@@ -217,10 +217,6 @@ export const remove = mutation({
     }
     const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", a.recipeId)).collect();
     for (const version of versions) await ctx.db.delete(version._id);
-    const generations = ctx.db.query("runs").withIndex("by_instance_family", (q) => q.eq("instanceId", a.instanceId).eq("recipeGeneration.familyId", recipe.creativeFamilyId));
-    for await (const run of generations) {
-      if ("recipeId" in run && run.recipeId === a.recipeId) await ctx.db.patch(run._id, { recipeId: undefined });
-    }
     await ctx.db.delete(a.recipeId);
     return null;
   },

@@ -12,7 +12,7 @@ export const GENERATIONS_SHOWN = 5;
 /** Runs of the family read before keeping the first tries (up to MAX tries per generation). */
 const FAMILY_RUN_SCAN = 100;
 
-export type GenerationState = "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created";
+export type GenerationState = "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created" | "recipe_deleted";
 
 const IN_FLIGHT = new Set<string>(IN_FLIGHT_STATUSES);
 
@@ -61,6 +61,9 @@ export const listGenerations = query({
     for (const first of firstTries) {
       const last = (await lastRunOf(ctx, first._id)) ?? first;
       const proposal = outcomeOf(last)?.proposal;
+      const derived = deriveGeneration(last);
+      // The Recipe it created was deleted since: the generation is over and cannot be reviewed again.
+      const recipeDeleted = derived.state === "created" && "recipeId" in last && last.recipeId !== undefined && (await ctx.db.get(last.recipeId)) === null;
       generations.push({
         generationId: first._id,
         // The Run to review and create from (ticket #195: `productionRecipes.create` takes it as `proposalRunId`).
@@ -68,9 +71,9 @@ export const listGenerations = query({
         createdAt: first.createdAt,
         tryCount: last.recipeGeneration.tryCount,
         ...(first.recipeGeneration.instructions ? { instructions: first.recipeGeneration.instructions } : {}),
-        ...deriveGeneration(last),
-        ...(proposal !== undefined ? { proposal } : {}),
-        ...("recipeId" in last && last.recipeId ? { recipeId: last.recipeId } : {}),
+        ...(recipeDeleted ? { state: "recipe_deleted" as const } : derived),
+        ...(proposal !== undefined && !recipeDeleted ? { proposal } : {}),
+        ...("recipeId" in last && last.recipeId && !recipeDeleted ? { recipeId: last.recipeId } : {}),
       });
     }
     return { generations, inFlight: generations.some((g) => g.state === "in_progress") };

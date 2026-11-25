@@ -102,7 +102,7 @@ describe("production_recipes", () => {
     await expect(owner.mutation(api.production_recipes.saveVersion, { instanceId: INSTANCE_ID, recipeId, ...content })).rejects.toThrow("archived");
   });
 
-  it("lets the proposal that created a deleted recipe be reviewed again", async () => {
+  it("keeps the proposal that created a deleted recipe marked as created, so it cannot create another", async () => {
     const { t, owner, familyId, recipeId } = await setup();
     const runId = await t.run((ctx) =>
       ctx.db.insert("runs", {
@@ -111,7 +111,8 @@ describe("production_recipes", () => {
       } as never),
     );
     await owner.mutation(api.production_recipes.remove, { instanceId: INSTANCE_ID, recipeId });
-    expect(((await t.run((ctx) => ctx.db.get(runId))) as { recipeId?: unknown }).recipeId).toBeUndefined();
+    expect(((await t.run((ctx) => ctx.db.get(runId))) as { recipeId?: unknown }).recipeId).toBe(recipeId);
+    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "Again", description: "d", ...TARGET, ...content, proposalRunId: runId })).rejects.toThrow(/already/i);
   });
 
   it("refuses to delete a recipe a proposed or approved planned content uses", async () => {

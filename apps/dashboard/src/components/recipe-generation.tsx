@@ -29,7 +29,7 @@ export type Generation = {
   createdAt: number;
   tryCount: number;
   instructions?: string;
-  state: "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created";
+  state: "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created" | "recipe_deleted";
   reason?: string;
   details?: string;
   /** The validated Recipe Proposal, for the review form. */
@@ -51,6 +51,7 @@ const STATES: Record<Generation["state"], { label: string; tone: "progress" | "i
   no_opportunity: { label: "No opportunity", tone: "neutral" },
   failed: { label: "Failed", tone: "error" },
   created: { label: "Created", tone: "active" },
+  recipe_deleted: { label: "Recipe deleted", tone: "neutral" },
 };
 
 const dateTime = (value: number): string => new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(value);
