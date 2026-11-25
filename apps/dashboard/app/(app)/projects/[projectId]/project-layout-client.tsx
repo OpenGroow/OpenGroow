@@ -149,10 +149,10 @@ function ProjectNavLinks({
       <ProjectNavLink view={OVERVIEW_VIEW} {...linkProps} />
       {sections.map((section) => (
         <div key={section.label} role="group" aria-label={section.label} className="grid gap-0.5">
-          {/* Collapsed (xl): the heading gives way to a thin divider. */}
+          {/* Collapsed (xl): the heading gives way to a small gap. */}
           <div
             aria-hidden={collapsed ? true : undefined}
-            className={cn("mt-1 border-t border-sidebar-border pt-2", collapsed && "xl:mt-0.5 xl:pt-0.5")}
+            className={cn("mt-3 pt-1", collapsed && "xl:mt-2 xl:pt-0")}
           >
             <p
               data-nav-heading
