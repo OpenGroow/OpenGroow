@@ -2,7 +2,7 @@
 
 import { renderPublishableSection } from "./publishable.js";
 import { composeAgentsMd } from "./mission_dispatcher/compose_agents_md.js";
-import { flattenRequirementFields, openClawAgentSlug, publishDeclarationFor, renderRunContext } from "@opengroow/agent-templates";
+import { flattenRequirementFields, openClawAgentSlug, publishDeclarationFor, renderRunContext, SOURCE_PROVIDER } from "@opengroow/agent-templates";
 import { internalAction } from "./_generated/server.js";
 import type { ActionCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
@@ -32,6 +32,7 @@ import { pollSourceEnrichmentRun } from "./source_jobs/enrichment_poll_node.js";
 import { buildSourceScoringRunFile } from "./source_scoring.js";
 import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { buildStrategicReviewRunFile } from "./strategic_review_jobs.js";
+import { buildContentPlanningRunFile } from "./content_planning_dispatch.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
@@ -125,7 +126,8 @@ export const pollExternalJobs = internalAction({
       else if (r.parent.kind === "job"
         && (await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: r._id })
           || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id })
-          || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id }))) continue;
+          || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id })
+          || await ctx.runQuery(internal.content_planning_dispatch.isContentPlanningRun, { runId: r._id }))) continue;
       else await pollExternalJobRun(ctx, r, opts, registry);
     }
   },
@@ -154,6 +156,7 @@ function loggedDecision(decision: ReconcileDecision) {
     return { type: "ingestSources" as const, result: decision.result, sourceCount: decision.sources.length };
   }
   if (decision.type === "persistStrategicReview") return { type: "persistStrategicReview" as const };
+  if (decision.type === "persistContentPlan") return { type: "persistContentPlan" as const };
   if (decision.type === "markAwaitingJob") return { type: "markAwaitingJob" as const, job: decision.job };
   return decision;
 }
@@ -209,6 +212,7 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       sourceScoring: state.sourceScoring === true,
       sourceRouting: state.sourceRouting === true,
       strategicReview: state.strategicReview === true,
+      contentPlanning: state.contentPlanning === true,
       runId: state.runId,
       missionType: state.missionType,
       blockerCodes: await resolveMissionTypeBlockerCodes(
@@ -250,6 +254,13 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
         runId: state.runId,
         result: { status: "success", summary: "Strategic Review result received" },
         strategicReviewEnvelope: decision.envelope,
+      });
+      return;
+    case "persistContentPlan":
+      await ctx.runMutation(internal.runs.markCompleted, {
+        runId: state.runId,
+        result: { status: "success", summary: "Content Plan result received" },
+        contentPlanEnvelope: decision.envelope,
       });
       return;
     case "markFailed": {
@@ -341,6 +352,11 @@ export const dispatchPendingRuns = internalAction({
       if (claimed.parent.kind === "job"
         && await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: claimed.runId })) {
         if (await dispatchStrategicReviewRun(ctx, claimed.runId, claimed.parent)) continue;
+      }
+
+      if (claimed.parent.kind === "job"
+        && await ctx.runQuery(internal.content_planning_dispatch.isContentPlanningRun, { runId: claimed.runId })) {
+        if (await dispatchContentPlanningRun(ctx, claimed.runId, claimed.parent)) continue;
       }
 
       const inputs = await ctx.runQuery(
@@ -469,7 +485,7 @@ export const dispatchPendingRuns = internalAction({
             if (name === RECIPE_PROVIDER) {
               providerData[name] = mission.recipeSnapshot ?? null;
             }
-            if (name === "observation-production-source") {
+            if (name === SOURCE_PROVIDER) {
               const observationId = sourceIdFromPayload(mission.payload);
               providerData[name] = observationId
                 ? await ctx.runQuery(internal.observations_carousel_delegation.getCarouselPlanningContext, {
@@ -738,20 +754,29 @@ async function dispatchSourceRoutingRun(
   return true;
 }
 
-/** Dispatch a Strategic Review Run: its period and base were pinned on the Run when it started. */
-async function dispatchStrategicReviewRun(
+type JobRunInputs = { instanceId: string; templateId: string; workspaceKey: string; run: { agentName: string; sessionKey: string } };
+
+/**
+ * Dispatch the Run of a Job whose inputs were pinned on the Run when it started (Strategic Review, Content Planning):
+ * the run file, the Agent's AGENTS.md and the Job's own instructions are written, then the exec command is enqueued.
+ * Returns false when there are no inputs, so the caller falls through to the other kinds of Run.
+ */
+async function dispatchJobRun<I extends JobRunInputs>(
   ctx: ActionCtx,
   runId: Id<"runs">,
   parent: Extract<RunParent, { kind: "job" }>,
+  inputs: I | null,
+  buildRunFile: (inputs: I) => string,
+  instructions: { type: "strategic_review" | "content_planning"; filePath: string },
 ): Promise<boolean> {
-  const inputs = await ctx.runQuery(internal.strategic_review_jobs.loadDispatchInputs, { runId });
   if (!inputs) return false;
   try {
     const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
-    const runMd = buildStrategicReviewRunFile(inputs.pins);
+    const runMd = buildRunFile(inputs);
     const runPath = jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    const jobInstructions = template?.jobInstructions?.[instructions.type];
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,
@@ -768,9 +793,7 @@ async function dispatchStrategicReviewRun(
         filesToWrite: [
           { filePath: runPath, content: runMd },
           ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
-          ...(template?.jobInstructions?.strategic_review
-            ? [{ filePath: "jobs/strategic-review.md", content: template.jobInstructions.strategic_review }]
-            : []),
+          ...(jobInstructions ? [{ filePath: instructions.filePath, content: jobInstructions }] : []),
         ],
         runFilePath: runPath,
         outputsFilePath: outputsPath,
@@ -787,4 +810,16 @@ async function dispatchStrategicReviewRun(
     await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_failed", message: errorMessage(err) });
   }
   return true;
+}
+
+/** Dispatch a Strategic Review Run: its period and base were pinned on the Run when it started. */
+async function dispatchStrategicReviewRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "job" }>): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.strategic_review_jobs.loadDispatchInputs, { runId });
+  return dispatchJobRun(ctx, runId, parent, inputs, (loaded) => buildStrategicReviewRunFile(loaded.pins), { type: "strategic_review", filePath: "jobs/strategic-review.md" });
+}
+
+/** Dispatch a Content Planning Run: its period and targets were pinned on the Run when it started. */
+async function dispatchContentPlanningRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "job" }>): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.content_planning_dispatch.loadDispatchInputs, { runId });
+  return dispatchJobRun(ctx, runId, parent, inputs, (loaded) => buildContentPlanningRunFile(loaded.pins, loaded.feedback), { type: "content_planning", filePath: "jobs/content-planning.md" });
 }

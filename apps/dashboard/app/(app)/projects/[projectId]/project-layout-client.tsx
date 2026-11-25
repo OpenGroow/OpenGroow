@@ -8,6 +8,8 @@ import type { ReactNode } from "react";
 import {
   BarChart3,
   Brain,
+  CalendarDays,
+  ClipboardList,
   Bot,
   CalendarClock,
   LayoutDashboard,
@@ -35,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { WaitingLogsPanel } from "./waiting-logs-panel";
 
 const NAV_LINK_BASE_CLASSES =
-  "relative flex h-10 items-center gap-3 rounded-lg px-3 text-left text-base font-medium transition-colors [&_svg]:size-5 [&_svg]:shrink-0";
+  "relative flex h-9 items-center gap-3 rounded-lg px-3 text-left text-base font-medium transition-colors [&_svg]:size-5 [&_svg]:shrink-0";
 
 function navLinkActiveClasses(isActive: boolean) {
   return isActive
@@ -49,56 +51,124 @@ type ProjectView = {
   icon: ComponentType;
 };
 
-const PROJECT_VIEWS: ProjectView[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "missions", label: "Missions", icon: Rocket },
-  { id: "agents", label: "Agents", icon: Bot },
-  { id: "sources", label: "Sources", icon: Library },
-  { id: "library", label: "Creative Library", icon: LibraryBig },
-  { id: "jobs", label: "Jobs", icon: ListChecks },
-  { id: "schedules", label: "Scheduler", icon: CalendarClock },
-  { id: "brand", label: "Brand", icon: Palette },
-  { id: "publishers", label: "Publish", icon: Send },
-  { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "memory", label: "Strategic Memory", icon: Brain },
-  { id: "settings", label: "Settings", icon: Settings },
-  { id: "developer", label: "Developer", icon: ScrollText },
+const OVERVIEW_VIEW: ProjectView = { id: "overview", label: "Overview", icon: LayoutDashboard };
+
+type NavSection = { label: string; items: ProjectView[] };
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Strategy",
+    items: [
+      { id: "memory", label: "Strategic Memory", icon: Brain },
+      { id: "content-plans", label: "Content Plans", icon: ClipboardList },
+      { id: "editorial-calendar", label: "Editorial Calendar", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Creative",
+    items: [
+      { id: "sources", label: "Sources", icon: Library },
+      { id: "library", label: "Creative Library", icon: LibraryBig },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { id: "missions", label: "Missions", icon: Rocket },
+      { id: "jobs", label: "Jobs", icon: ListChecks },
+      { id: "schedules", label: "Scheduler", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Distribution",
+    items: [
+      { id: "publishers", label: "Publishing", icon: Send },
+      { id: "analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Configuration",
+    items: [
+      { id: "brand", label: "Brand", icon: Palette },
+      { id: "agents", label: "Agents", icon: Bot },
+      { id: "settings", label: "Settings", icon: Settings },
+      { id: "developer", label: "Developer", icon: ScrollText },
+    ],
+  },
 ];
 
-function ProjectNavLinks({
-  views,
+function ProjectNavLink({
+  view,
   projectPath,
   activeSegment,
   collapsed,
   onNavigate,
 }: {
-  views: ProjectView[];
+  view: ProjectView;
   projectPath: string;
   activeSegment: string;
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const Icon = view.icon;
+  const isActive = activeSegment === view.id;
+  return (
+    <Link
+      href={`${projectPath}/${view.id}`}
+      onClick={onNavigate}
+      title={collapsed ? view.label : undefined}
+      aria-current={isActive ? "page" : undefined}
+      className={cn(
+        NAV_LINK_BASE_CLASSES,
+        navLinkActiveClasses(isActive),
+        collapsed && "xl:justify-center xl:px-0",
+      )}
+    >
+      <Icon />
+      <span className={collapsed ? "xl:hidden" : undefined}>{view.label}</span>
+    </Link>
+  );
+}
+
+function ProjectNavLinks({
+  sections,
+  projectPath,
+  activeSegment,
+  collapsed,
+  onNavigate,
+}: {
+  sections: NavSection[];
+  projectPath: string;
+  activeSegment: string;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const linkProps = { projectPath, activeSegment, collapsed, onNavigate };
   return (
     <>
-      {views.map((view) => {
-        const Icon = view.icon;
-        return (
-          <Link
-            key={view.id}
-            href={`${projectPath}/${view.id}`}
-            onClick={onNavigate}
-            title={collapsed ? view.label : undefined}
-            className={cn(
-              NAV_LINK_BASE_CLASSES,
-              navLinkActiveClasses(activeSegment === view.id),
-              collapsed && "xl:justify-center xl:px-0",
-            )}
+      <ProjectNavLink view={OVERVIEW_VIEW} {...linkProps} />
+      {sections.map((section) => (
+        <div key={section.label} role="group" aria-label={section.label} className="grid gap-0.5">
+          {/* Collapsed (xl): the heading gives way to a small gap. */}
+          <div
+            aria-hidden={collapsed ? true : undefined}
+            className={cn("mt-3 pt-1", collapsed && "xl:mt-2 xl:pt-0")}
           >
-            <Icon />
-            <span className={collapsed ? "xl:hidden" : undefined}>{view.label}</span>
-          </Link>
-        );
-      })}
+            <p
+              data-nav-heading
+              className={cn(
+                "m-0 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60",
+                collapsed && "xl:hidden",
+              )}
+            >
+              {section.label}
+            </p>
+          </div>
+          {section.items.map((view) => (
+            <ProjectNavLink key={view.id} view={view} {...linkProps} />
+          ))}
+        </div>
+      ))}
     </>
   );
 }
@@ -140,8 +210,12 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
       .split("/")
       .filter(Boolean)[0] ?? "";
 
-  const visibleViews = useMemo(
-    () => PROJECT_VIEWS.filter((view) => !isSelfHost || !HOSTED_ONLY_VIEWS.has(view.id)),
+  const visibleSections = useMemo(
+    () =>
+      NAV_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter((view) => !isSelfHost || !HOSTED_ONLY_VIEWS.has(view.id)),
+      })).filter((section) => section.items.length > 0),
     [isSelfHost],
   );
 
@@ -273,9 +347,9 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
             </div>
 
             {isMobileNavOpen ? (
-              <nav className="grid gap-1 xl:hidden" aria-label="Project sections">
+              <nav className="grid gap-0.5 xl:hidden" aria-label="Project sections">
                 <ProjectNavLinks
-                  views={visibleViews}
+                  sections={visibleSections}
                   projectPath={`/projects/${encodeURIComponent(decodedId)}`}
                   activeSegment={activeSegment}
                   collapsed={false}
@@ -294,9 +368,9 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
             {/* Desktop: the original full-height vertical nav, collapsible via the
                 toggle above (which only renders at `xl`). */}
-            <nav className="hidden xl:grid xl:gap-1" aria-label="Project sections">
+            <nav className="hidden xl:grid xl:gap-0.5" aria-label="Project sections">
               <ProjectNavLinks
-                views={visibleViews}
+                sections={visibleSections}
                 projectPath={`/projects/${encodeURIComponent(decodedId)}`}
                 activeSegment={activeSegment}
                 collapsed={isSidebarCollapsed}

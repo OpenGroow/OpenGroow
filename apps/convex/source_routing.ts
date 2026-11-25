@@ -1,4 +1,4 @@
-import { openClawAgentSlug } from "@opengroow/agent-templates";
+import { openClawAgentSlug, SOURCE_PROVIDER } from "@opengroow/agent-templates";
 import { z } from "zod";
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "./_generated/server.js";
@@ -104,7 +104,7 @@ async function candidateMissions(ctx: QueryCtx, instanceId: string): Promise<Rou
     if (agent.templateId === SOURCE_TEMPLATE_ID) continue;
     const template = await getTemplateRegistry(ctx).resolve(instanceId, agent.templateId);
     for (const missionType of template?.manifest.missionTypes ?? []) {
-      if (!missionType.contextProviders?.includes("observation-production-source")) continue;
+      if (!missionType.contextProviders?.includes(SOURCE_PROVIDER)) continue;
       candidates.push({
         templateId: agent.templateId,
         agentName: agent.openclawAgentName ?? openClawAgentSlug(agent.templateId),

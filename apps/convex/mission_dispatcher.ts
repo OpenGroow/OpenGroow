@@ -111,6 +111,7 @@ export const listRunsToReconcile = internalQuery({
           sourceRouting: ((r as typeof r & { jobId?: Id<"jobs"> }).jobId !== undefined)
             && (await ctx.db.get((r as typeof r & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_routing",
           strategicReview: r.strategicReview !== undefined,
+          contentPlanning: r.contentPlanning !== undefined,
           ownerId: r.ownerId,
           dispatchedAt: r.dispatchedAt,
           dispatchCommandId: r.dispatchCommandId,
@@ -214,6 +215,7 @@ export const loadReconcileState = internalQuery({
       sourceRouting: ((run as typeof run & { jobId?: Id<"jobs"> }).jobId !== undefined)
         && (await ctx.db.get((run as typeof run & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_routing",
       strategicReview: run.strategicReview !== undefined,
+      contentPlanning: run.contentPlanning !== undefined,
       instanceId: run.instanceId,
       missionType: mission?.type ?? "",
       workspaceKey,

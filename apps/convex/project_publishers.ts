@@ -3,7 +3,9 @@
 // key alone names one channel and the Publisher that carries it.
 
 import type { Doc } from "./_generated/dataModel.js";
+import { capabilityFor } from "@opengroow/publisher-sdk";
 import type { QueryCtx } from "./_generated/server.js";
+import { publisherMetaOf } from "./publisher_packages.js";
 
 /** A Project has a handful of Publishers (one per installed adapter): a bound, not a page. */
 export const MAX_PUBLISHERS_PER_PROJECT = 20;
@@ -47,4 +49,15 @@ export function allChannels(publishers: readonly ProjectPublisher[]): PublisherC
 /** The Publishers carrying `targets` (each once), in the Project's order. Unknown keys are ignored. */
 export function publishersOf(publishers: readonly ProjectPublisher[], targets: readonly string[]): ProjectPublisher[] {
   return publishers.filter((p) => p.targets.some((t) => targets.includes(t.target)));
+}
+
+/** What the Publisher declares for a channel found by `channelOf`, for a format (and the platforms a Mission type declares). */
+export async function capabilityOfTarget(
+  ctx: Pick<QueryCtx, "db">,
+  found: { publisher: ProjectPublisher; channel: PublisherChannelEntry },
+  kind: string,
+  platforms?: readonly string[],
+) {
+  const capabilities = (await publisherMetaOf(ctx, found.publisher.adapter))?.capabilities;
+  return capabilityFor(capabilities, found.channel.channelService, kind, platforms);
 }

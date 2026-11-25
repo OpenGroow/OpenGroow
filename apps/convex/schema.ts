@@ -157,6 +157,28 @@ const runSharedFields = {
       baseReviewId: v.optional(v.id("strategicReviews")),
     }),
   ),
+  // Content Planning Runs only (ADR-086, issue #175): everything the plan depends
+  // on, pinned by Convex when the Run starts and copied by a retried Run. The
+  // Planning period (UTC `YYYY-MM-DD`, inclusive) and per format the target, the
+  // approved Planned Contents already in the period, the remaining quantity and
+  // the Publish targets (only those still existing at dispatch). `ignored` lists
+  // what the stored configuration asked for and was unavailable.
+  contentPlanning: v.optional(
+    v.object({
+      periodStart: v.string(),
+      periodEnd: v.string(),
+      targets: v.array(
+        v.object({
+          kind: v.string(),
+          target: v.number(),
+          existing: v.number(),
+          remaining: v.number(),
+          publishTargets: v.array(v.string()),
+        }),
+      ),
+      ignored: v.array(v.string()),
+    }),
+  ),
   // Set on the execution a SourceJob resumes after an enrichment (issue
   // #533): the awaiting Run whose `intermediateResult` (the external job's
   // output, or its failure) it receives in context.md.
@@ -559,6 +581,50 @@ export default defineSchema({
     .index("by_instance_created", ["instanceId", "createdAt"])
     // Idempotency: the Review already persisted for a Run (no uniqueness constraint in Convex).
     .index("by_instance_run", ["instanceId", "runId"]),
+  // A Content Plan (ADR-086): proposed by a Content Planning Run, reviewed as a whole.
+  // Schema only for now; the writes arrive with persistence (#176).
+  contentPlans: defineTable({
+    ownerId: v.string(),
+    instanceId: v.string(),
+    runId: v.id("runs"),
+    // The Planning period pinned on the Run (UTC `YYYY-MM-DD`, inclusive).
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    // Markdown.
+    rationale: v.string(),
+    status: v.union(v.literal("draft"), v.literal("approved"), v.literal("rejected")),
+    createdAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    rejectedAt: v.optional(v.number()),
+  })
+    // Idempotency: the plan already persisted for a Run (no uniqueness constraint in Convex).
+    .index("by_instance_run", ["instanceId", "runId"])
+    // "Does the Project have a draft?"
+    .index("by_instance_status", ["instanceId", "status"]),
+  // One content of a Content Plan; `approved` ones form the Editorial Calendar.
+  plannedContents: defineTable({
+    ownerId: v.string(),
+    instanceId: v.string(),
+    planId: v.id("contentPlans"),
+    // The format (`publish.kind`), kept so it survives the uninstall of an Agent.
+    kind: v.string(),
+    missionType: v.string(),
+    recipeId: v.id("productionRecipes"),
+    sourceId: v.optional(v.id("sources")),
+    publishTargets: v.array(v.string()),
+    title: v.string(),
+    brief: v.string(),
+    // UTC `YYYY-MM-DD`.
+    plannedAt: v.string(),
+    intent: v.union(v.literal("explore"), v.literal("exploit")),
+    rationale: v.string(),
+    status: v.union(v.literal("proposed"), v.literal("approved"), v.literal("rejected")),
+    createdAt: v.number(),
+  })
+    // The contents of a plan.
+    .index("by_plan", ["planId"])
+    // Existing quantity: `approved` of a format within a date range; and the calendar by date.
+    .index("by_instance_status_plannedAt", ["instanceId", "status", "plannedAt"]),
   jobs: defineTable({
     ownerId: v.string(),
     instanceId: v.string(),

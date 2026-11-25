@@ -10,6 +10,8 @@ import { frequencyV } from "./schedules.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
+import { defaultContentPlanningConfig } from "./content_planning_jobs.js";
+import { CONTENT_PLANNING_JOB_TYPE } from "./content_planning_shared.js";
 
 const DEFAULT_FREQUENCY: Frequency = { unit: "daily", hour: 6, minute: 0 };
 // A Strategic Review learns from accumulated results: every 7 days (Monday), not every day.
@@ -21,6 +23,7 @@ const JOB_DISPLAY_ORDER: Record<string, number> = {
   source_scoring: 1,
   source_routing: 2,
   strategic_review: 3,
+  content_planning: 4,
 };
 
 function ownerSubjectOf(userId: string): string {
@@ -50,6 +53,7 @@ function jobLabel(type: Doc<"jobs">["type"]): string {
     case "source_scoring": return "Source scoring";
     case "source_routing": return "Source routing";
     case "strategic_review": return "Strategic review";
+    case "content_planning": return "Content planning";
     default: return type;
   }
 }
@@ -148,14 +152,17 @@ export async function syncJobsWithAgentStatus(
       continue;
     }
 
-    const frequency = declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? STRATEGIC_REVIEW_DEFAULT_FREQUENCY : DEFAULT_FREQUENCY;
+    // Strategic Review and Content Planning learn from or plan against accumulated results: weekly, not daily.
+    const frequency = declaration.type === STRATEGIC_REVIEW_JOB_TYPE || declaration.type === CONTENT_PLANNING_JOB_TYPE ? STRATEGIC_REVIEW_DEFAULT_FREQUENCY : DEFAULT_FREQUENCY;
     await ctx.db.insert("jobs", {
       ownerId,
       instanceId: agent.instanceId,
       templateId: agent.templateId,
       type: declaration.type,
       state: "active",
-      config: declaration.type === STRATEGIC_REVIEW_JOB_TYPE ? { analysisDays: DEFAULT_ANALYSIS_DAYS } : {},
+      config: declaration.type === STRATEGIC_REVIEW_JOB_TYPE
+        ? { analysisDays: DEFAULT_ANALYSIS_DAYS }
+        : declaration.type === CONTENT_PLANNING_JOB_TYPE ? defaultContentPlanningConfig() : {},
       runtime: declaration.type === "source_ingestion" ? { cursorAt: now } : {},
       unit: frequency.unit,
       ...(frequency.unit === "weekly" ? { dayOfWeek: frequency.dayOfWeek } : {}),
@@ -305,6 +312,8 @@ export const runNow = mutation({
       await ctx.scheduler.runAfter(0, internal.source_routing.tick, {});
     } else if (job.type === STRATEGIC_REVIEW_JOB_TYPE) {
       await ctx.scheduler.runAfter(0, internal.strategic_review_jobs.tick, {});
+    } else if (job.type === CONTENT_PLANNING_JOB_TYPE) {
+      await ctx.scheduler.runAfter(0, internal.content_planning_jobs.tick, {});
     } else {
       throw new Error(`Job type ${job.type} has no executor yet`);
     }

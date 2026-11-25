@@ -2,7 +2,7 @@
 
 ### Internal MCP
 
-The MCP server OpenGroow itself serves from Convex (ADR-080). A Template declares it among its `mcpServers` like any other server and lists the tools it may call. It is read-only in V1: analytics summary, Publications, Missions, Brand Core, the Mission types the Project can activate, and the Strategic Memory (`get_strategic_memory`, ADR-085: the base pinned at dispatch for a Strategic Review Run, the latest one for any other Agent; never the Performance Report). Its readers are Agents that need OpenGroow's own data (the Strategy Agent is the first planned).
+The MCP server OpenGroow itself serves from Convex (ADR-080). A Template declares it among its `mcpServers` like any other server and lists the tools it may call. It is read-only in V1: analytics summary, Publications, Missions, Brand Core, the Mission types the Project can activate, and the Strategic Memory (`get_strategic_memory`, ADR-085: the base pinned at dispatch for a Strategic Review Run, the latest one for any other Agent; never the Performance Report). Content Planning (ADR-086) adds Source and Planned Content reads (`list_sources`, `list_planned_contents`) and extends the Mission type and Recipe lists with the format and Source requirement. Its readers are Agents that need OpenGroow's own data (the Strategy Agent is the first planned).
 
 An Agent reaches it with an **Agent token**, generated at activation and bound to its Project. Convex lets it list the declared tools at any time, and accepts it to call a tool only while that Agent has a Run in `running`.
 

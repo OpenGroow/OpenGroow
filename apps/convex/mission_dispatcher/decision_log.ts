@@ -64,6 +64,8 @@ export const reconcileDecisionLogV = v.union(
   }),
   // Only the fact: the Performance Report is data, not a decision (#168).
   v.object({ type: v.literal("persistStrategicReview") }),
+  // Only the fact: the Content Plan is data, not a decision (#176).
+  v.object({ type: v.literal("persistContentPlan") }),
   v.object({
     type: v.literal("markResumed"),
     intermediateResult: v.record(v.string(), v.any()),

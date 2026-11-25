@@ -47,7 +47,8 @@ describe("strategic_review default recurrence", () => {
     });
 
     const jobs = await t.run(async (ctx) => await ctx.db.query("jobs").collect());
-    expect(jobs).toHaveLength(1);
+    expect(jobs.map((job) => job.type).sort()).toEqual(["content_planning", "strategic_review"]);
+    jobs.splice(0, jobs.length, ...jobs.filter((job) => job.type === "strategic_review"));
     expect(jobs[0]).toMatchObject({ type: "strategic_review", unit: "weekly", dayOfWeek: 1, hour: 6, minute: 0, config: { analysisDays: 30 } });
     expect(jobs[0]!.nextRunAt).toBeGreaterThan(NOW + 6 * 86_400_000);
     expect(jobs[0]!.nextRunAt).toBeLessThanOrEqual(NOW + 7 * 86_400_000);
