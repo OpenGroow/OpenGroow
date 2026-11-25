@@ -11,6 +11,14 @@ import { runLogsHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
 import { Input } from "@/components/ui/input";
 import { analysisDaysOf, isValidAnalysisDays, MAX_ANALYSIS_DAYS, MIN_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
+import {
+  MAX_PLANNING_DAYS,
+  MIN_PLANNING_DAYS,
+  planningDaysOf,
+  productionTargetsOf,
+  validateContentPlanningConfig,
+  type ProductionTarget,
+} from "@opengroow/protocol/content-planning-config";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
@@ -66,6 +74,7 @@ type JobRow = Pick<
   workspaceKey?: string;
   latestRunId?: string;
   config?: unknown;
+  lastSummary?: string;
 };
 
 type Unit = Doc<"jobs">["unit"];
@@ -215,6 +224,10 @@ function Outcome({ job }: { job: JobRow }) {
   if (job.lastOutcome === undefined) {
     return <p className="m-0 text-sm text-muted-foreground">Last outcome: none yet</p>;
   }
+  // Content Planning skips before any Run exists: its summary says why (ADR-086).
+  if (job.lastOutcome === "skipped" && job.type === "content_planning" && job.lastSummary) {
+    return <p className="m-0 text-sm text-muted-foreground">Last outcome: Skipped — {job.lastSummary}</p>;
+  }
   if (job.lastOutcome === "skipped") {
     return (
       <p className="m-0 text-sm text-muted-foreground">
@@ -245,6 +258,8 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   const setReviewMode = useMutation(api.source_routing.setReviewMode);
   const [editing, setEditing] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(false);
+  const [editingTargets, setEditingTargets] = useState(false);
+  const planning = job.type === "content_planning";
   const analysisDays = job.type === "strategic_review" ? analysisDaysOf(job.config) : undefined;
 
   async function toggle(): Promise<void> {
@@ -321,6 +336,7 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   Analyzes the last {analysisDays} {analysisDays === 1 ? "day" : "days"}
                 </p>
               ) : null}
+              {planning ? <PlanningSummary config={job.config} /> : null}
               {reviewRouting ? (
                 <p className="m-0 text-sm text-muted-foreground">
                   Each routing choice waits on the Sources page until you press Produce.
@@ -353,6 +369,12 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                     Edit analysis period
                   </DropdownMenuItem>
                 ) : null}
+                {planning ? (
+                  <DropdownMenuItem onClick={() => setEditingTargets((open) => !open)}>
+                    <Layers />
+                    Edit planning targets
+                  </DropdownMenuItem>
+                ) : null}
                 {job.type === "source_routing" ? (
                   <DropdownMenuItem onClick={() => void toggleReview()}>
                     <Route />
@@ -370,11 +392,157 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
           </div>
         </div>
         {editing ? <RecurrenceForm job={job} onDone={() => setEditing(false)} /> : null}
+        {editingTargets && planning ? (
+          <PlanningTargetsForm job={job} instanceId={instanceId} onDone={() => setEditingTargets(false)} />
+        ) : null}
         {editingPeriod && analysisDays !== undefined ? (
           <AnalysisPeriodForm jobId={job._id} current={analysisDays} onDone={() => setEditingPeriod(false)} />
         ) : null}
       </Card>
     </li>
+  );
+}
+
+function PlanningSummary({ config }: { config: unknown }) {
+  const days = planningDaysOf(config);
+  const targets = productionTargetsOf(config);
+  return (
+    <p className="m-0 text-sm text-muted-foreground">
+      Plans the next {days} {days === 1 ? "day" : "days"}
+      {targets.length === 0 ? " · No production targets" : ` · ${targets.map((t) => `${t.quantity} ${t.kind}`).join(", ")}`}
+    </p>
+  );
+}
+
+type TargetDraft = { enabled: boolean; quantity: string; publishTargets: string[] };
+
+// The planning horizon and the production targets per format (ADR-086). The formats come from the
+// Project's active Agents and the validator is the one the server applies on save.
+function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanceId: string; onDone: () => void }) {
+  const options = useQuery(api.content_planning_jobs.options, { instanceId });
+  const setConfig = useMutation(api.content_planning_jobs.setConfig);
+  const [days, setDays] = useState(String(planningDaysOf(job.config)));
+  const [drafts, setDrafts] = useState<Record<string, TargetDraft>>(() =>
+    Object.fromEntries(
+      productionTargetsOf(job.config).map((t) => [t.kind, { enabled: true, quantity: String(t.quantity), publishTargets: t.publishTargets }]),
+    ),
+  );
+  const [errors, setErrors] = useState<string[]>([]);
+
+  if (options === undefined) return <p className="m-0 text-sm text-muted-foreground">Loading planning options…</p>;
+
+  const draftOf = (kind: string): TargetDraft => drafts[kind] ?? { enabled: false, quantity: "1", publishTargets: [] };
+  const update = (kind: string, patch: Partial<TargetDraft>) => setDrafts((all) => ({ ...all, [kind]: { ...draftOf(kind), ...patch } }));
+
+  async function save(): Promise<void> {
+    if (!options) return;
+    const productionTargets: ProductionTarget[] = options.formats
+      .filter((kind) => draftOf(kind).enabled)
+      .map((kind) => ({
+        kind,
+        quantity: draftOf(kind).quantity.trim() === "" ? NaN : Number(draftOf(kind).quantity),
+        publishTargets: draftOf(kind).publishTargets.filter((key) => options.publishTargets.includes(key)),
+      }));
+    const planningDays = days.trim() === "" ? NaN : Number(days);
+    const checked = validateContentPlanningConfig({ planningDays, productionTargets }, options);
+    if (!checked.ok) {
+      setErrors(checked.errors);
+      return;
+    }
+    setErrors([]);
+    try {
+      await setConfig({ jobId: job._id as Id<"jobs">, ...checked.value });
+      onDone();
+    } catch (err: unknown) {
+      setErrors([extractConvexErrorMessage(err, "Failed to save the planning targets.")]);
+    }
+  }
+
+  return (
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-3">
+      <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+        Planning horizon (days)
+        <Input
+          name="planningDays"
+          type="number"
+          min={MIN_PLANNING_DAYS}
+          max={MAX_PLANNING_DAYS}
+          step={1}
+          value={days}
+          onChange={(e) => setDays(e.target.value)}
+          className="w-28"
+        />
+      </label>
+      {options.formats.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">No active Agent produces content to publish yet.</p>
+      ) : (
+        <ul className="m-0 grid list-none gap-3 p-0">
+          {options.formats.map((kind) => {
+            const draft = draftOf(kind);
+            return (
+              <li key={kind} className="grid gap-2 rounded-lg border border-border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" name={`format-${kind}`} checked={draft.enabled} onChange={(e) => update(kind, { enabled: e.target.checked })} />
+                  {kind}
+                </label>
+                {draft.enabled ? (
+                  <div className="flex flex-wrap items-end gap-4">
+                    <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
+                      Quantity
+                      <Input
+                        name={`quantity-${kind}`}
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={draft.quantity}
+                        onChange={(e) => update(kind, { quantity: e.target.value })}
+                        className="w-24"
+                      />
+                    </label>
+                    <fieldset className="m-0 flex flex-wrap gap-3 border-0 p-0">
+                      <legend className="text-xs font-semibold text-muted-foreground">Publish targets</legend>
+                      {options.publishTargets.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">Add a Publisher channel first.</span>
+                      ) : (
+                        options.publishTargets.map((key) => (
+                          <label key={key} className="flex items-center gap-1.5 text-sm">
+                            <input
+                              type="checkbox"
+                              name={`target-${kind}-${key}`}
+                              checked={draft.publishTargets.includes(key)}
+                              onChange={(e) =>
+                                update(kind, {
+                                  publishTargets: e.target.checked ? [...draft.publishTargets, key] : draft.publishTargets.filter((k) => k !== key),
+                                })
+                              }
+                            />
+                            {key}
+                          </label>
+                        ))
+                      )}
+                    </fieldset>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div>
+        <Button type="button" onClick={() => void save()}>
+          Save
+        </Button>
+      </div>
+      {errors.length > 0 ? (
+        <div role="alert" className="grid gap-1 text-sm text-destructive">
+          {errors.map((message) => (
+            <p key={message} className="m-0">
+              {message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

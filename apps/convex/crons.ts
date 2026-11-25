@@ -41,6 +41,13 @@ crons.interval(
   internal.strategic_review_jobs.tick,
 );
 
+// Content Planning Job (ADR-086): checks the targets, then dispatches the Run for the Strategy Agent.
+crons.interval(
+  "content-planning-job-tick",
+  { minutes: 1 },
+  internal.content_planning_jobs.tick,
+);
+
 // Issue #493: a WhatsApp channel stuck "configured but never linked" made
 // OpenClaw retry every ~30-40s forever, each retry re-running a full LLM
 // agent turn (946.9M tokens burned in a day). Probes such channels and

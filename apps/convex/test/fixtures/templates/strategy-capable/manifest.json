@@ -9,6 +9,10 @@
     {
       "type": "strategic_review",
       "agentsMd": "jobs/strategic-review.md"
+    },
+    {
+      "type": "content_planning",
+      "agentsMd": "jobs/content-planning.md"
     }
   ]
 }

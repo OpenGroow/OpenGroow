@@ -15,6 +15,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "jobs.runNow": vi.fn(),
   "jobs.setFrequency": vi.fn(),
   "strategic_review_jobs.setAnalysisDays": vi.fn(),
+  "content_planning_jobs.setConfig": vi.fn(),
 };
 
 vi.mock("convex/react", () => ({
@@ -32,6 +33,7 @@ vi.mock("@convex/_generated/api", () => ({
       setFrequency: "jobs.setFrequency",
     },
     strategic_review_jobs: { setAnalysisDays: "strategic_review_jobs.setAnalysisDays" },
+    content_planning_jobs: { setConfig: "content_planning_jobs.setConfig", options: "content_planning_jobs.options" },
     source_routing: { setReviewMode: "source_routing.setReviewMode" },
   },
 }));
@@ -73,8 +75,11 @@ describe("InstanceJobsContent", () => {
     container.remove();
   });
 
-async function render(jobs: unknown) {
-    useQueryMock.mockImplementation((ref: string) => ref === "jobs.listByInstance" ? jobs : []);
+const planningOptions = { formats: ["image", "video"], publishTargets: ["social:example", "blog:example"] };
+  async function render(jobs: unknown) {
+    useQueryMock.mockImplementation((ref: string) =>
+      ref === "jobs.listByInstance" ? jobs : ref === "content_planning_jobs.options" ? planningOptions : [],
+    );
     await act(async () => {
       root.render(<InstanceJobsContent instanceId="instance-1" />);
     });
@@ -292,6 +297,99 @@ async function render(jobs: unknown) {
       await openPeriodForm();
       await click(button("Save"));
       expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    });
+  });
+  describe("Content planning configuration", () => {
+    const planning = (config?: unknown, overrides: Record<string, unknown> = {}) =>
+      makeJob({ type: "content_planning", label: "Content planning", agentName: "Strategy", config, ...overrides });
+
+    async function openForm() {
+      await openMenu();
+      await click(Array.from(document.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent === "Edit planning targets"));
+    }
+    async function type(name: string, value: string) {
+      const el = document.querySelector(`[name="${name}"]`) as HTMLInputElement;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    const check = (name: string) => click(document.querySelector(`[name="${name}"]`)!);
+
+    it("shows the horizon and the targets next to the schedule, 7 days and no target by default", async () => {
+      await render([planning({})]);
+      expect(document.body.textContent).toContain("Plans the next 7 days");
+      expect(document.body.textContent).toContain("No production targets");
+    });
+
+    it("summarizes the configured targets", async () => {
+      await render([planning({ planningDays: 14, productionTargets: [{ kind: "video", quantity: 3, publishTargets: ["social:example"] }] })]);
+      expect(document.body.textContent).toContain("Plans the next 14 days");
+      expect(document.body.textContent).toContain("3 video");
+    });
+
+    it("offers the formats of the Project and saves quantities and Publish targets", async () => {
+      await render([planning({})]);
+      await openForm();
+      expect(document.querySelector('[name="format-video"]')).not.toBeNull();
+      expect(document.querySelector('[name="format-image"]')).not.toBeNull();
+      expect(document.querySelector('[name="format-article"]')).toBeNull();
+      await type("planningDays", "14");
+      await check("format-video");
+      await type("quantity-video", "4");
+      await check("target-video-social:example");
+      await click(button("Save"));
+      expect(mutations["content_planning_jobs.setConfig"]).toHaveBeenCalledWith({
+        jobId: "job-1",
+        planningDays: 14,
+        productionTargets: [{ kind: "video", quantity: 4, publishTargets: ["social:example"] }],
+      });
+    });
+
+    it.each(["0", "61", "1.5", ""])("refuses a horizon of %j before calling the server", async (value) => {
+      await render([planning({})]);
+      await openForm();
+      await type("planningDays", value);
+      await click(button("Save"));
+      expect(mutations["content_planning_jobs.setConfig"]).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("The planning horizon must be a whole number of days between 1 and 60.");
+    });
+
+    it("refuses a total above 100 and a format without Publish target", async () => {
+      await render([planning({})]);
+      await openForm();
+      await check("format-video");
+      await type("quantity-video", "101");
+      await check("target-video-social:example");
+      await click(button("Save"));
+      expect(document.body.textContent).toContain("it may not exceed 100");
+      await type("quantity-video", "2");
+      await check("target-video-social:example");
+      await click(button("Save"));
+      expect(document.body.textContent).toContain("Choose at least one Publish target");
+      expect(mutations["content_planning_jobs.setConfig"]).not.toHaveBeenCalled();
+    });
+
+    it("shows a server refusal", async () => {
+      mutations["content_planning_jobs.setConfig"]!.mockRejectedValue(new Error("Forbidden"));
+      await render([planning({})]);
+      await openForm();
+      await click(button("Save"));
+      expect(document.querySelector('[role="alert"]')).not.toBeNull();
+    });
+
+    it("keeps the recurrence controls and offers nothing of the kind to other jobs", async () => {
+      await render([planning({})]);
+      await openMenu();
+      expect(document.body.textContent).toContain("Edit recurrence");
+      await render([makeJob()]);
+      await openMenu();
+      expect(document.body.textContent).not.toContain("Edit planning targets");
+    });
+
+    it("says why a Run Now was skipped", async () => {
+      await render([planning({}, { lastOutcome: "skipped", lastSummary: "no production targets configured" })]);
+      expect(document.body.textContent).toContain("Skipped — no production targets configured");
     });
   });
 });
