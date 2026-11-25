@@ -46,7 +46,6 @@ import type * as connect_tickets_node from "../connect_tickets_node.js";
 import type * as connect_tickets_utils from "../connect_tickets_utils.js";
 import type * as connected_devices from "../connected_devices.js";
 import type * as content_plan_decision from "../content_plan_decision.js";
-import type * as content_plan_decision from "../content_plan_decision.js";
 import type * as content_plan_edit from "../content_plan_edit.js";
 import type * as content_plan_review from "../content_plan_review.js";
 import type * as content_plan_rules from "../content_plan_rules.js";
@@ -255,7 +254,6 @@ declare const fullApi: ApiFromModules<{
   connect_tickets_node: typeof connect_tickets_node;
   connect_tickets_utils: typeof connect_tickets_utils;
   connected_devices: typeof connected_devices;
-  content_plan_decision: typeof content_plan_decision;
   content_plan_decision: typeof content_plan_decision;
   content_plan_edit: typeof content_plan_edit;
   content_plan_review: typeof content_plan_review;

@@ -11,23 +11,21 @@ import { ContentPlansContent } from "../src/components/content-plans-page";
 const useQueryMock = vi.fn();
 const mutations = { update: vi.fn(), remove: vi.fn() };
 
-vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useMutation: (key: string) => (key === "content_plan_edit.update" ? mutations.update : mutations.remove),
-    });
-  });
 const approveMock = vi.fn();
 const rejectMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
-  useMutation: (key: string) => (key === "content_plan_decision.approve" ? approveMock : rejectMock),
+  useMutation: (key: string) => {
+    if (key === "content_plan_decision.approve") return approveMock;
+    if (key === "content_plan_decision.reject") return rejectMock;
+    return key === "content_plan_edit.update" ? mutations.update : mutations.remove;
+  },
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
     content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" },
     content_plan_edit: { update: "content_plan_edit.update", remove: "content_plan_edit.remove", recipeOptions: "content_plan_edit.recipeOptions" },
-=======
     content_plan_decision: { approve: "content_plan_decision.approve", reject: "content_plan_decision.reject" },
   },
 }));
@@ -214,7 +212,9 @@ describe("ContentPlansContent", () => {
       expect(card().textContent).toContain("Removed");
       expect(button(card(), "Edit")).toBeUndefined();
       expect(button(card(), "Remove")).toBeUndefined();
-=======
+    });
+  });
+
 
   describe("plan decision", () => {
     const button = (label: string) => Array.from(document.querySelectorAll("button")).find((b) => b.textContent === label) as HTMLButtonElement;
