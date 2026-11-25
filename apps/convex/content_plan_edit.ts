@@ -1,8 +1,9 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
-import { CONTENT_PLAN_LIMITS, isIsoDate } from "./content_plan_rules.js";
-import { resolveItem } from "./content_plans.js";
+import { isIsoDate, utcDateOf } from "@opengroow/protocol/content-planning-pins";
+import { CONTENT_PLAN_LIMITS } from "./content_plan_rules.js";
+import { NO_PINS_MESSAGE, pinsOf, resolveItem } from "./content_plans.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 
@@ -21,8 +22,6 @@ async function editableContent(ctx: MutationCtx, contentId: Doc<"plannedContents
   if (content.status !== "proposed") throw new Error("This content was removed from the plan.");
   return { content, plan };
 }
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 export const update = mutation({
   args: {
@@ -51,15 +50,15 @@ export const update = mutation({
       if (args.plannedAt < plan.periodStart || args.plannedAt > plan.periodEnd) {
         throw new Error(`The date ${args.plannedAt} is outside the Planning period ${plan.periodStart} to ${plan.periodEnd}.`);
       }
-      if (args.plannedAt < today()) throw new Error("The date is in the past.");
+      if (args.plannedAt < utcDateOf(Date.now())) throw new Error("The date is in the past.");
       patch.plannedAt = args.plannedAt;
     }
     if (args.recipeId !== undefined) {
       // The very rules of persistence and approval: Recipe, Agent, Source requirement, pinned format, Publisher compatibility.
-      const run = await ctx.db.get(plan.runId);
-      if (!run?.contentPlanning) throw new Error("The Run that produced this plan no longer carries its targets: reject the plan and plan again.");
+      const carried = await pinsOf(ctx, plan);
+      if (!carried) throw new Error(NO_PINS_MESSAGE);
       const outcome = await resolveItem(
-        ctx, run, run.contentPlanning,
+        ctx, carried.run, carried.pins,
         { missionType: content.missionType, recipeId: args.recipeId, ...(content.sourceId ? { sourceId: content.sourceId } : {}) },
         "The Recipe", await projectPublishers(ctx, content.instanceId),
       );

@@ -1,10 +1,10 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
-import { capabilityFor } from "@opengroow/publisher-sdk";
+import { countByKind } from "./content_plan_counts.js";
+import { formatOf } from "./planning_reads.js";
 import { parseContentPlanEnvelope, type PlannedItem } from "./content_plan_rules.js";
-import { channelOf, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
-import { publisherMetaOf } from "./publisher_packages.js";
+import { capabilityOfTarget, channelOf, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // Persistence of Content Plans (ADR-086, issue #176). One atomic mutation context: the result of a Content Planning
@@ -12,14 +12,29 @@ import { getTemplateRegistry } from "./template_registry.js";
 // with its `proposed` Planned Contents, or not at all. Nothing else is written (no Mission, Publication, Recipe
 // or Strategic Memory).
 
-/** The provider that makes a Mission type need a Source. */
-const SOURCE_PROVIDER = "observation-production-source";
-
 export type PersistPlanResult =
-  | { ok: true; planId: Id<"contentPlans"> | null; created: boolean; count: number; uncertain: Array<{ index: number; target: string; reason: string }> }
-  | { ok: false; reason: "invalid_result" | "draft_exists"; message: string; errors?: string[] };
+  | {
+      ok: true;
+      planId: Id<"contentPlans"> | null;
+      created: boolean;
+      count: number;
+      uncertain: Array<{ index: number; target: string; reason: string }>;
+      /** The Agent's rationale, given when the result plans nothing (no plan is stored to carry it). */
+      rationale?: string;
+    }
+  | { ok: false; reason: "invalid_result"; message: string; errors: string[] }
+  | { ok: false; reason: "draft_exists"; message: string };
 
 const invalid = (errors: string[]): PersistPlanResult => ({ ok: false, reason: "invalid_result", message: errors.join(" "), errors });
+
+/** Why a plan cannot be revalidated: its Run no longer carries the pins taken at dispatch. */
+export const NO_PINS_MESSAGE = "The Run that produced this plan no longer carries its targets: reject the plan and plan again.";
+
+/** The Run that produced a plan and the pins it carries, or null when the Run is gone or no longer carries them. */
+export async function pinsOf(ctx: MutationCtx, plan: Doc<"contentPlans">): Promise<{ run: Doc<"runs">; pins: NonNullable<Doc<"runs">["contentPlanning"]> } | null> {
+  const run = await ctx.db.get(plan.runId);
+  return run?.contentPlanning ? { run, pins: run.contentPlanning } : null;
+}
 
 export type Resolved = { kind: string; publishTargets: string[] };
 
@@ -54,8 +69,7 @@ export async function resolveItem(
   if (!pinned) return { ok: false, errors: [`${at}: format "${declaration.kind}" has no production target.`] };
 
   const errors: string[] = [];
-  const needsSource = (manifestType.contextProviders ?? template?.manifest.contextProviders ?? []).includes(SOURCE_PROVIDER);
-  if (needsSource && item.sourceId === undefined) errors.push(`${at}: Mission type "${item.missionType}" needs a Source (sourceId).`);
+  if (formatOf(manifestType, template?.manifest.contextProviders).sourceRequired && item.sourceId === undefined) errors.push(`${at}: Mission type "${item.missionType}" needs a Source (sourceId).`);
   if (item.sourceId !== undefined) {
     const sourceId = ctx.db.normalizeId("sources", item.sourceId);
     const source = sourceId ? await ctx.db.get(sourceId) : null;
@@ -69,8 +83,7 @@ export async function resolveItem(
     const found = channelOf(publishers, target);
     if (!found) continue;
     publishTargets.push(target);
-    const capabilities = (await publisherMetaOf(ctx, found.publisher.adapter))?.capabilities;
-    const capability = capabilityFor(capabilities, found.channel.channelService, declaration.kind, declaration.platforms);
+    const capability = await capabilityOfTarget(ctx, found, declaration.kind, declaration.platforms);
     if (capability.level === "unsupported") errors.push(`${at}: ${capability.reason} (channel "${target}").`);
     else if (capability.level === "uncertain") uncertain.push({ target, reason: capability.reason ?? "" });
   }
@@ -94,7 +107,7 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
   const parsed = parseContentPlanEnvelope(envelope, pins);
   if (!parsed.ok) return invalid(parsed.errors);
   const { rationale, items } = parsed.value;
-  if (items.length === 0) return { ok: true, planId: null, created: false, count: 0, uncertain: [] };
+  if (items.length === 0) return { ok: true, planId: null, created: false, count: 0, uncertain: [], rationale };
 
   const draft = await ctx.db.query("contentPlans").withIndex("by_instance_status", (q) => q.eq("instanceId", run.instanceId).eq("status", "draft")).first();
   if (draft) return { ok: false, reason: "draft_exists", message: "A draft Content Plan is waiting for review: approve or reject it before a new one is planned." };
@@ -111,9 +124,7 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
     } else errors.push(...outcome.errors);
   }
   if (errors.length === 0) {
-    const counts = new Map<string, number>();
-    for (const { kind } of resolved) counts.set(kind, (counts.get(kind) ?? 0) + 1);
-    for (const [kind, count] of counts) {
+    for (const [kind, count] of countByKind(resolved)) {
       const remaining = pins.targets.find((entry) => entry.kind === kind)?.remaining ?? 0;
       if (count > remaining) errors.push(`Format "${kind}": ${count} contents proposed but only ${remaining} remain to plan.`);
     }

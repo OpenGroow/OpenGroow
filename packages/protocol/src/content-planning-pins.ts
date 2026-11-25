@@ -9,6 +9,12 @@ export function utcDateOf(at: number): string {
   return new Date(at).toISOString().slice(0, 10);
 }
 
+/** True for a real calendar date written `YYYY-MM-DD`. */
+export function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  return utcDateOf(Date.parse(`${value}T00:00:00Z`)) === value;
+}
+
 /** The Planning period of a Run started at `now`: from the day after, `planningDays` inclusive days, UTC. */
 export function planningPeriodOf(now: number, planningDays: number): { periodStart: string; periodEnd: string } {
   return { periodStart: utcDateOf(now + DAY_MS), periodEnd: utcDateOf(now + planningDays * DAY_MS) };

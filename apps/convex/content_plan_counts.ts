@@ -7,6 +7,13 @@ import type { MutationCtx } from "./_generated/server.js";
 /** The most approved contents counted in one transaction; more than this and the count is refused, never truncated. */
 export const MAX_COUNTED_CONTENTS = 4_000;
 
+/** How many of `items` there are per format (`kind`). */
+export function countByKind(items: Iterable<{ kind: string }>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const { kind } of items) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  return counts;
+}
+
 export async function approvedCountsByKind(ctx: MutationCtx, instanceId: string, periodStart: string, periodEnd: string): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   let total = 0;

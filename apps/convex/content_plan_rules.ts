@@ -1,3 +1,5 @@
+import { isIsoDate } from "@opengroow/protocol/content-planning-pins";
+
 // Pure rules of a Content Planning result (ADR-086, issue #176): the envelope shape, the size limits and the
 // dates. No database access; what depends on the Project is checked where the plan is persisted.
 
@@ -24,12 +26,6 @@ export type PlannedItem = {
 export type ContentPlanEnvelope = { rationale: string; items: PlannedItem[] };
 
 const isRecord = (raw: unknown): raw is Record<string, unknown> => !!raw && typeof raw === "object" && !Array.isArray(raw);
-
-/** True for a real calendar date written `YYYY-MM-DD`. */
-export function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  return new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
-}
 
 /**
  * Validates the Agent's envelope against the pinned Planning period. The whole result is rejected, never filtered:

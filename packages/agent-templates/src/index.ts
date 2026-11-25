@@ -140,6 +140,8 @@ const VALID_BLOCKER_RESOLUTION_KINDS = new Set(["link", "execution_device"]);
  * context_providers.ts), whose registry is typed against this list.
  */
 export const CONTEXT_PROVIDER_NAMES = ["active-agents", "observation-production-source", "platform-account", "production-recipe", "strategic-review-period", "content-planning-targets"] as const;
+/** The context provider that makes a Mission type need a Source. */
+export const SOURCE_PROVIDER = "observation-production-source" satisfies ContextProviderName;
 export type ContextProviderName = (typeof CONTEXT_PROVIDER_NAMES)[number];
 
 function unknownContextProvider(raw: unknown): string | undefined {

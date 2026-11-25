@@ -46,14 +46,18 @@ export async function planningOptionsOf(ctx: QueryCtx, instanceId: string): Prom
     .take(100);
   const registry = getTemplateRegistry(ctx);
   const formats = new Set<string>();
-  for (const agent of agents) {
-    const template = await registry.resolve(instanceId, agent.templateId);
+  const [templates, publishers] = await Promise.all([
+    Promise.all(agents.map((agent) => registry.resolve(instanceId, agent.templateId))),
+    projectPublishers(ctx, instanceId),
+  ]);
+  for (const [index, agent] of agents.entries()) {
+    const template = templates[index];
     const hidden = new Set(agent.hiddenMissionTypes ?? []);
     for (const missionType of template?.manifest.missionTypes ?? []) {
       if (!hidden.has(missionType.type) && missionType.publish?.kind) formats.add(missionType.publish.kind);
     }
   }
-  const publishTargets = allChannels(await projectPublishers(ctx, instanceId)).map((channel) => channel.target);
+  const publishTargets = allChannels(publishers).map((channel) => channel.target);
   return { formats: [...formats].sort(), publishTargets };
 }
 

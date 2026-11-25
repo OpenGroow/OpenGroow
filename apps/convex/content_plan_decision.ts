@@ -1,10 +1,10 @@
 import { v } from "convex/values";
 import { remainingOf, utcDateOf } from "@opengroow/protocol/content-planning-pins";
-import type { Id } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
-import { approvedCountsByKind } from "./content_plan_counts.js";
+import { approvedCountsByKind, countByKind } from "./content_plan_counts.js";
 import { contentsOf } from "./content_plan_review.js";
-import { resolveItem } from "./content_plans.js";
+import { NO_PINS_MESSAGE, pinsOf, resolveItem } from "./content_plans.js";
 import { ownerIdFor } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 
@@ -18,16 +18,16 @@ export type DecisionResult =
 
 const refuse = (reason: Extract<DecisionResult, { ok: false }>["reason"], message: string): DecisionResult => ({ ok: false, reason, message });
 
-/** The draft plan and its contents, after the owner check; refuses a plan that was already decided. */
-async function loadDraft(ctx: MutationCtx, planId: Id<"contentPlans">) {
+const notDraft = (status: string) => refuse("not_draft", `This Content Plan is already ${status}; only a draft can be decided.`);
+
+/** The plan and its `proposed` contents, after the owner check; a plan that was already decided is refused before any content is read. */
+async function loadDraft(ctx: MutationCtx, planId: Id<"contentPlans">): Promise<{ plan: Doc<"contentPlans">; retained: Doc<"plannedContents">[] } | DecisionResult> {
   const plan = await ctx.db.get(planId);
   if (!plan) throw new Error("Content Plan not found");
   await ownerIdFor(ctx, plan.instanceId);
-  const contents = await contentsOf(ctx, planId);
-  return { plan, contents };
+  if (plan.status !== "draft") return notDraft(plan.status);
+  return { plan, retained: (await contentsOf(ctx, planId)).filter((content) => content.status === "proposed") };
 }
-
-const notDraft = (status: string) => refuse("not_draft", `This Content Plan is already ${status}; only a draft can be decided.`);
 
 /**
  * Approves the plan: revalidates every retained (`proposed`) content against the Project as it is now, using the
@@ -36,9 +36,9 @@ const notDraft = (status: string) => refuse("not_draft", `This Content Plan is a
 export const approve = mutation({
   args: { planId: v.id("contentPlans") },
   handler: async (ctx, args): Promise<DecisionResult> => {
-    const { plan, contents } = await loadDraft(ctx, args.planId);
-    if (plan.status !== "draft") return notDraft(plan.status);
-    const retained = contents.filter((content) => content.status === "proposed");
+    const loaded = await loadDraft(ctx, args.planId);
+    if ("ok" in loaded) return loaded;
+    const { plan, retained } = loaded;
     if (retained.length === 0) return refuse("no_content", "No content is retained: keep at least one content or reject the plan.");
     const today = utcDateOf(Date.now());
     const past = retained.filter((content) => content.plannedAt < today);
@@ -46,9 +46,9 @@ export const approve = mutation({
       return refuse("past_date", `${past.length} retained ${past.length === 1 ? "content is" : "contents are"} dated in the past (${[...new Set(past.map((c) => c.plannedAt))].sort().join(", ")}): change the date or remove it.`);
     }
 
-    const run = await ctx.db.get(plan.runId);
-    const pins = run?.contentPlanning;
-    if (!run || !pins) return refuse("invalid", "The Run that produced this plan no longer carries its targets: reject the plan and plan again.");
+    const carried = await pinsOf(ctx, plan);
+    if (!carried) return refuse("invalid", NO_PINS_MESSAGE);
+    const { run, pins } = carried;
 
     const publishers = await projectPublishers(ctx, plan.instanceId);
     const errors: string[] = [];
@@ -65,8 +65,9 @@ export const approve = mutation({
     // Existing quantity now: approved contents of the period, from any plan (this one is still a draft).
     const approved = await approvedCountsByKind(ctx, plan.instanceId, plan.periodStart, plan.periodEnd);
     const overs: string[] = [];
+    const retainedByKind = countByKind(retained);
     for (const target of pins.targets) {
-      const count = retained.filter((content) => content.kind === target.kind).length;
+      const count = retainedByKind.get(target.kind) ?? 0;
       const remaining = remainingOf(target.target, approved.get(target.kind) ?? 0);
       if (count > remaining) overs.push(`Format "${target.kind}": ${count} contents retained but only ${remaining} remain to plan.`);
     }
@@ -83,9 +84,10 @@ export const approve = mutation({
 export const reject = mutation({
   args: { planId: v.id("contentPlans") },
   handler: async (ctx, args): Promise<DecisionResult> => {
-    const { plan, contents } = await loadDraft(ctx, args.planId);
-    if (plan.status !== "draft") return notDraft(plan.status);
-    for (const content of contents) if (content.status === "proposed") await ctx.db.patch(content._id, { status: "rejected" });
+    const loaded = await loadDraft(ctx, args.planId);
+    if ("ok" in loaded) return loaded;
+    const { plan, retained } = loaded;
+    for (const content of retained) await ctx.db.patch(content._id, { status: "rejected" });
     await ctx.db.patch(plan._id, { status: "rejected", rejectedAt: Date.now() });
     return { ok: true };
   },

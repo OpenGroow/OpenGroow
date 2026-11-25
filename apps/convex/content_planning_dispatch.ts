@@ -42,6 +42,7 @@ export const loadDispatchInputs = internalQuery({
       .withIndex("by_instance_template", (q) => q.eq("instanceId", run.instanceId).eq("templateId", job.templateId))
       .unique();
     if (!agent?.workspaceKey) return null;
+    const runtime = runtimeOf(job);
     return {
       run: { _id: run._id, agentName: run.agentName, sessionKey: run.sessionKey },
       workspaceKey: agent.workspaceKey,
@@ -50,8 +51,8 @@ export const loadDispatchInputs = internalQuery({
       jobId: job._id,
       pins: run.contentPlanning,
       // The reasons of the refused result, for a retry only.
-      feedback: run.resumedFromRunId && Array.isArray(runtimeOf(job).inFlightErrors) && runtimeOf(job).inFlightRunId === run._id
-        ? (runtimeOf(job).inFlightErrors as string[])
+      feedback: run.resumedFromRunId && Array.isArray(runtime.inFlightErrors) && runtime.inFlightRunId === run._id
+        ? (runtime.inFlightErrors as string[])
         : undefined,
     };
   },

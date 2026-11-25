@@ -1,11 +1,11 @@
+import { SOURCE_PROVIDER } from "@opengroow/agent-templates";
+import { isIsoDate, utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // The Internal MCP's read tools for Content Planning (ADR-086, issue #178). Read-only,
 // scoped to one Project, bounded in page size and date range.
-
-const SOURCE_PROVIDER = "observation-production-source";
 
 export type MissionTypeFormat = {
   /** The format (`publish.kind`); null when the Mission type publishes nothing (it cannot be planned). */
@@ -17,11 +17,12 @@ export type MissionTypeFormat = {
 
 type ManifestMissionType = { type: string; publish?: { kind?: string; platforms?: string[] }; contextProviders?: string[] };
 
-export function formatOf(missionType: ManifestMissionType | undefined): MissionTypeFormat {
+/** `inheritedProviders`: the Template-level context providers, which apply to a Mission type that declares none of its own. */
+export function formatOf(missionType: ManifestMissionType | undefined, inheritedProviders?: readonly string[]): MissionTypeFormat {
   return {
     kind: missionType?.publish?.kind ?? null,
     platforms: missionType?.publish?.platforms ?? [],
-    sourceRequired: missionType?.contextProviders?.includes(SOURCE_PROVIDER) ?? false,
+    sourceRequired: (missionType?.contextProviders ?? inheritedProviders)?.includes(SOURCE_PROVIDER) ?? false,
   };
 }
 
@@ -108,9 +109,8 @@ const PLANNED_STATUSES = ["proposed", "approved", "rejected"] as const;
 const DAY_MS = 24 * 3_600_000;
 
 function parseDate(value: unknown, name: string): number {
-  const ms = typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
-  if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== value) throw new Error(`${name} must be a date as YYYY-MM-DD.`);
-  return ms;
+  if (typeof value !== "string" || !isIsoDate(value)) throw new Error(`${name} must be a date as YYYY-MM-DD.`);
+  return Date.parse(`${value}T00:00:00Z`);
 }
 
 export async function listPlannedContents(ctx: Pick<QueryCtx, "db">, instanceId: string, args: { from?: unknown; to?: unknown; status?: unknown; limit?: unknown }) {
@@ -121,8 +121,8 @@ export async function listPlannedContents(ctx: Pick<QueryCtx, "db">, instanceId:
   if ((toMs - fromMs) / DAY_MS + 1 > MAX_RANGE_DAYS) throw new Error(`The date range spans at most ${MAX_RANGE_DAYS} days.`);
   if (args.status !== undefined && !PLANNED_STATUSES.includes(args.status as never)) throw new Error(`status must be one of ${PLANNED_STATUSES.join(", ")}.`);
   const limit = boundedLimit(args.limit, PLANNED_DEFAULT_LIMIT, PLANNED_MAX_LIMIT);
-  const from = new Date(fromMs).toISOString().slice(0, 10);
-  const to = new Date(toMs).toISOString().slice(0, 10);
+  const from = utcDateOf(fromMs);
+  const to = utcDateOf(toMs);
 
   const statuses = args.status ? [args.status as (typeof PLANNED_STATUSES)[number]] : PLANNED_STATUSES;
   const perStatus = await Promise.all(

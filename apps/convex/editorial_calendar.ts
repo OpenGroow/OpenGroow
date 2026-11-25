@@ -19,20 +19,24 @@ export const range = query({
       .take(MAX_CONTENTS + 1);
     const truncated = found.length > MAX_CONTENTS;
     const rows = found.slice(0, MAX_CONTENTS);
-    const plans = new Map<string, { periodStart: string; periodEnd: string } | null>();
-    for (const row of rows) {
-      if (plans.has(row.planId)) continue;
-      const plan = await ctx.db.get(row.planId);
-      plans.set(row.planId, plan && plan.instanceId === args.instanceId ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd } : null);
-    }
-    const publishers = await projectPublishers(ctx, args.instanceId);
-    const families = new Map<string, { name: string } | null>();
-    for (const row of rows) {
-      if (families.has(row.recipeId)) continue;
-      const recipe = await ctx.db.get(row.recipeId);
-      const family = recipe && recipe.instanceId === args.instanceId ? await ctx.db.get(recipe.creativeFamilyId) : null;
-      families.set(row.recipeId, family && family.instanceId === args.instanceId ? { name: family.name } : null);
-    }
+    const planIds = [...new Set(rows.map((row) => row.planId))];
+    const recipeIds = [...new Set(rows.map((row) => row.recipeId))];
+    const [planDocs, recipeDocs, publishers] = await Promise.all([
+      Promise.all(planIds.map((id) => ctx.db.get(id))),
+      Promise.all(recipeIds.map((id) => ctx.db.get(id))),
+      projectPublishers(ctx, args.instanceId),
+    ]);
+    const plans = new Map(planIds.map((id, i) => {
+      const plan = planDocs[i];
+      return [id, plan && plan.instanceId === args.instanceId ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd } : null] as const;
+    }));
+    const familyIds = [...new Set(recipeDocs.flatMap((recipe) => (recipe && recipe.instanceId === args.instanceId ? [recipe.creativeFamilyId] : [])))];
+    const familyDocs = await Promise.all(familyIds.map((id) => ctx.db.get(id)));
+    const familyById = new Map(familyIds.map((id, i) => [id, familyDocs[i] && familyDocs[i]!.instanceId === args.instanceId ? { name: familyDocs[i]!.name } : null] as const));
+    const families = new Map(recipeIds.map((id, i) => {
+      const recipe = recipeDocs[i];
+      return [id, recipe && recipe.instanceId === args.instanceId ? (familyById.get(recipe.creativeFamilyId) ?? null) : null] as const;
+    }));
     const items = rows.map((row) => {
       const { _id, planId, kind, title, brief, plannedAt, intent, rationale, publishTargets } = row;
       // `targets`: each publish target resolved for display (same label rule as the Content Plans page).

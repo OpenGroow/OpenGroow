@@ -2,7 +2,7 @@
 
 import { renderPublishableSection } from "./publishable.js";
 import { composeAgentsMd } from "./mission_dispatcher/compose_agents_md.js";
-import { flattenRequirementFields, openClawAgentSlug, publishDeclarationFor, renderRunContext } from "@opengroow/agent-templates";
+import { flattenRequirementFields, openClawAgentSlug, publishDeclarationFor, renderRunContext, SOURCE_PROVIDER } from "@opengroow/agent-templates";
 import { internalAction } from "./_generated/server.js";
 import type { ActionCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
@@ -485,7 +485,7 @@ export const dispatchPendingRuns = internalAction({
             if (name === RECIPE_PROVIDER) {
               providerData[name] = mission.recipeSnapshot ?? null;
             }
-            if (name === "observation-production-source") {
+            if (name === SOURCE_PROVIDER) {
               const observationId = sourceIdFromPayload(mission.payload);
               providerData[name] = observationId
                 ? await ctx.runQuery(internal.observations_carousel_delegation.getCarouselPlanningContext, {

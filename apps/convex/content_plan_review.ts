@@ -1,11 +1,11 @@
 import { v } from "convex/values";
-import { capabilityFor } from "@opengroow/publisher-sdk";
+import type { capabilityFor } from "@opengroow/publisher-sdk";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
-import { channelOf, projectPublishers, type PublisherChannelEntry } from "./project_publishers.js";
-import { publisherMetaOf } from "./publisher_packages.js";
+import { countByKind } from "./content_plan_counts.js";
+import { capabilityOfTarget, channelOf, projectPublishers, type ProjectPublisher, type PublisherChannelEntry } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // Dashboard reads of Content Plans (ADR-086, issue #179): the current draft with its Planned Contents, then the
@@ -30,13 +30,58 @@ export function channelLabel(channel: PublisherChannelEntry): string {
   return handle.includes("/") ? handle : `@${handle}`;
 }
 
+/** Memoizes an async lookup by key for the lifetime of one read, so a plan of many items reads each document once. */
+function memoized<K, V>(load: (key: K) => Promise<V>): (key: K) => Promise<V> {
+  const cache = new Map<K, Promise<V>>();
+  return (key) => {
+    let found = cache.get(key);
+    if (!found) {
+      found = load(key);
+      cache.set(key, found);
+    }
+    return found;
+  };
+}
+
+const byPlannedDate = (a: Doc<"plannedContents">, b: Doc<"plannedContents">) => a.plannedAt.localeCompare(b.plannedAt) || a.createdAt - b.createdAt;
+
+/** The Planned Contents of a plan as the dashboard shows them (by date): what they reference is read once per distinct document. */
+async function contentViews(ctx: QueryCtx, rows: readonly Doc<"plannedContents">[], publishers: readonly ProjectPublisher[]) {
+  const instanceOf = <T extends { instanceId: string }>(instanceId: string, doc: T | null) => (doc && doc.instanceId === instanceId ? doc : null);
+  const recipeOf = memoized((recipeId: Id<"productionRecipes">) => ctx.db.get(recipeId));
+  const familyOf = memoized((familyId: Id<"creativeFamilies">) => ctx.db.get(familyId));
+  const sourceOf = memoized((sourceId: Id<"sources">) => ctx.db.get(sourceId));
+  const registry = getTemplateRegistry(ctx);
+  const templateOf = memoized((key: string) => {
+    const [instanceId, templateId] = JSON.parse(key) as [string, string];
+    return registry.resolve(instanceId, templateId);
+  });
+  const capabilityOf = memoized((key: string) => {
+    const [target, kind, platforms] = JSON.parse(key) as [string, string, string[] | null];
+    const found = channelOf(publishers, target)!;
+    return capabilityOfTarget(ctx, found, kind, platforms ?? undefined);
+  });
+  return await Promise.all(rows.map((content) => contentView(content, publishers, { instanceOf, recipeOf, familyOf, sourceOf, templateOf, capabilityOf })));
+}
+
+type ViewLookups = {
+  instanceOf: <T extends { instanceId: string }>(instanceId: string, doc: T | null) => T | null;
+  recipeOf: (id: Id<"productionRecipes">) => Promise<Doc<"productionRecipes"> | null>;
+  familyOf: (id: Id<"creativeFamilies">) => Promise<Doc<"creativeFamilies"> | null>;
+  sourceOf: (id: Id<"sources">) => Promise<Doc<"sources"> | null>;
+  templateOf: (key: string) => Promise<Awaited<ReturnType<ReturnType<typeof getTemplateRegistry>["resolve"]>>>;
+  capabilityOf: (key: string) => Promise<ReturnType<typeof capabilityFor>>;
+};
+
 /** What a Planned Content shows: its references resolved by name, and its destinations re-checked against the Publishers. */
-async function contentView(ctx: QueryCtx, content: Doc<"plannedContents">, publishers: Awaited<ReturnType<typeof projectPublishers>>) {
-  const own = <T extends { instanceId: string }>(doc: T | null) => (doc && doc.instanceId === content.instanceId ? doc : null);
-  const recipe = own(await ctx.db.get(content.recipeId));
-  const family = recipe ? own(await ctx.db.get(recipe.creativeFamilyId)) : null;
-  const source = content.sourceId ? own(await ctx.db.get(content.sourceId)) : null;
-  const template = recipe ? await getTemplateRegistry(ctx).resolve(content.instanceId, recipe.templateId) : null;
+async function contentView(content: Doc<"plannedContents">, publishers: readonly ProjectPublisher[], lookups: ViewLookups) {
+  const { instanceOf, recipeOf, familyOf, sourceOf, templateOf, capabilityOf } = lookups;
+  const recipe = instanceOf(content.instanceId, await recipeOf(content.recipeId));
+  const [family, source, template] = await Promise.all([
+    recipe ? familyOf(recipe.creativeFamilyId).then((doc) => instanceOf(content.instanceId, doc)) : null,
+    content.sourceId ? sourceOf(content.sourceId).then((doc) => instanceOf(content.instanceId, doc)) : null,
+    recipe ? templateOf(JSON.stringify([content.instanceId, recipe.templateId])) : null,
+  ]);
   const declaration = publishDeclarationFor(template?.manifest, content.missionType);
 
   const publishTargets = [];
@@ -48,8 +93,7 @@ async function contentView(ctx: QueryCtx, content: Doc<"plannedContents">, publi
     }
     const { channel, publisher } = found;
     const identity = { service: channel.channelService, adapter: publisher.adapter, label: channelLabel(channel) };
-    const capabilities = (await publisherMetaOf(ctx, found.publisher.adapter))?.capabilities;
-    const capability = capabilityFor(capabilities, found.channel.channelService, content.kind, declaration?.platforms);
+    const capability = await capabilityOf(JSON.stringify([target, content.kind, declaration?.platforms ?? null]));
     publishTargets.push(
       capability.level === "uncertain" ? { target, uncertain: true, reason: capability.reason ?? "", ...identity }
       : capability.level === "unsupported" ? { target, uncertain: false, unsupported: true, reason: capability.reason ?? "", ...identity }
@@ -73,12 +117,11 @@ export const current = query({
     const draft = await ctx.db.query("contentPlans").withIndex("by_instance_status", (q) => q.eq("instanceId", args.instanceId).eq("status", "draft")).first();
     if (!draft) return null;
     const publishers = await projectPublishers(ctx, args.instanceId);
-    const rows = (await contentsOf(ctx, draft._id)).sort((a, b) => a.plannedAt.localeCompare(b.plannedAt) || a.createdAt - b.createdAt);
-    const contents = await Promise.all(rows.map((row) => contentView(ctx, row, publishers)));
-    const byKind = new Map<string, number>();
+    const rows = (await contentsOf(ctx, draft._id)).sort(byPlannedDate);
+    const contents = await contentViews(ctx, rows, publishers);
     // A removed proposal is kept (shown struck) but counts toward nothing.
     const live = rows.filter((row) => row.status !== "rejected");
-    for (const { kind } of live) byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+    const byKind = countByKind(live);
     return {
       ...planView(draft),
       contents,
@@ -115,7 +158,7 @@ export const planDetail = query({
     const plan = await ctx.db.get(args.planId);
     if (!plan || (await readOwnerId(ctx, plan.instanceId)) === null) return null;
     const publishers = await projectPublishers(ctx, plan.instanceId);
-    const rows = (await contentsOf(ctx, plan._id)).sort((a, b) => a.plannedAt.localeCompare(b.plannedAt) || a.createdAt - b.createdAt);
-    return await Promise.all(rows.map((row) => contentView(ctx, row, publishers)));
+    const rows = (await contentsOf(ctx, plan._id)).sort(byPlannedDate);
+    return await contentViews(ctx, rows, publishers);
   },
 });
