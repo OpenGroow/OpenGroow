@@ -61,7 +61,7 @@ export function ContentPlansContent({ instanceId }: { instanceId: string }) {
           <ul className="m-0 grid list-none gap-3 p-0">
             {history.map((plan) => (
               <li key={plan._id} id={`plan-${plan._id}`} data-plan={plan._id}>
-                <Card className="flex flex-wrap items-center gap-x-4 gap-y-2 p-4">
+                <Card className="flex-row flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
                   <CalendarDays aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
                   <span className="text-base font-semibold">{periodLabel(plan)}</span>
                   <Badge variant="tag">
