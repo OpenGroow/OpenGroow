@@ -17,9 +17,9 @@ const SOURCE_PROVIDER = "observation-production-source";
 
 export type PersistPlanResult =
   | { ok: true; planId: Id<"contentPlans"> | null; created: boolean; count: number; uncertain: Array<{ index: number; target: string; reason: string }> }
-  | { ok: false; reason: "invalid_result" | "draft_exists"; message: string };
+  | { ok: false; reason: "invalid_result" | "draft_exists"; message: string; errors?: string[] };
 
-const invalid = (errors: string[]): PersistPlanResult => ({ ok: false, reason: "invalid_result", message: errors.join(" ") });
+const invalid = (errors: string[]): PersistPlanResult => ({ ok: false, reason: "invalid_result", message: errors.join(" "), errors });
 
 export type Resolved = { kind: string; publishTargets: string[] };
 
