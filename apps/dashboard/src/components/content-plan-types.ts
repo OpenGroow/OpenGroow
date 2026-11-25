@@ -1,6 +1,6 @@
 // Views of the Content Plan review queries (ADR-086), shared by the Content Plans page components.
 
-export type PublishTargetView = { target: string; uncertain: boolean; unavailable?: boolean; unsupported?: boolean; reason?: string };
+export type PublishTargetView = { target: string; uncertain: boolean; unavailable?: boolean; unsupported?: boolean; reason?: string; service?: string; adapter?: string; label?: string };
 
 export type PlannedContentView = {
   _id: string;

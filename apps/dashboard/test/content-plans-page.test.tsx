@@ -29,6 +29,7 @@ vi.mock("@convex/_generated/api", () => ({
   api: {
     content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history", planDetail: "content_plan_review.planDetail" },
     content_plan_edit: { update: "content_plan_edit.update", remove: "content_plan_edit.remove", recipeOptions: "content_plan_edit.recipeOptions" },
+    publisher_packages: { list: "publisher_packages.list" },
     content_plan_decision: { approve: "content_plan_decision.approve", reject: "content_plan_decision.reject" },
   },
 }));
@@ -159,6 +160,17 @@ describe("ContentPlansContent", () => {
     expect(document.querySelector("li[data-target='social:example']")?.textContent).toContain("Compatibility uncertain");
     expect(document.querySelector("li[data-target='social:example']")?.textContent).toContain("Not confirmed for video");
     expect(document.querySelector("li[data-target='blog:example']")?.textContent).not.toContain("uncertain");
+  });
+
+  it("shows a publish target as its account handle, and falls back to the raw key when unavailable", async () => {
+    const contents = [makeContent({ publishTargets: [
+      { target: "instagram:account_1", uncertain: false, service: "instagram", adapter: "example", label: "@account_1" },
+      { target: "gone:example", uncertain: false, unavailable: true },
+    ] })];
+    await render({ draft: makeDraft({ contents }) });
+    expect(document.querySelector("li[data-target='instagram:account_1']")?.textContent).toContain("@account_1");
+    expect(document.querySelector("li[data-target='instagram:account_1']")?.textContent).not.toContain("instagram:");
+    expect(document.querySelector("li[data-target='gone:example']")?.textContent).toContain("gone:example");
   });
 
   it("warns when the period has passed, and keeps the draft", async () => {
