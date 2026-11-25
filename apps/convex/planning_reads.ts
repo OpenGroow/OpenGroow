@@ -55,7 +55,7 @@ export function boundedLimit(value: unknown, fallback: number, max: number) {
 const isProduced = (s: Doc<"sources">) => s.producedAt !== undefined || s.productionMissionId !== undefined;
 const isSelected = (s: Doc<"sources">) => s.selectedAt !== undefined;
 
-export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string, args: { status?: unknown; produced?: unknown; limit?: unknown }) {
+export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string, args: { status?: unknown; produced?: unknown; limit?: unknown; familyId?: Id<"creativeFamilies"> }) {
   const status = args.status === undefined ? "ready" : args.status;
   if (!SOURCE_STATUSES.includes(status as never)) throw new Error(`status must be one of ${SOURCE_STATUSES.join(", ")}.`);
   if (args.produced !== undefined && typeof args.produced !== "boolean") throw new Error("produced must be true or false.");
@@ -67,7 +67,7 @@ export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string,
     .order("desc")
     .take(SOURCES_SCAN_LIMIT);
   const scanLimited = rows.length >= SOURCES_SCAN_LIMIT;
-  const kept = rows.filter((s) => s.excluded !== true && (args.produced === undefined || isProduced(s) === args.produced));
+  const kept = rows.filter((s) => s.excluded !== true && (args.familyId === undefined || s.creativeFamilyId === args.familyId) && (args.produced === undefined || isProduced(s) === args.produced));
   const score = (s: Doc<"sources">) => s.scoring?.replicationScore ?? -1;
   // Neither selected nor produced first, then the best Replication Score, then the newest.
   kept.sort((a, b) => Number(isSelected(a) || isProduced(a)) - Number(isSelected(b) || isProduced(b)) || score(b) - score(a) || b.capturedAt - a.capturedAt);
