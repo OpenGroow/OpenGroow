@@ -512,7 +512,8 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"]),
   runs: defineTable(
-    // A Run is attached to exactly one parent, a Mission or a generic Job.
+    // A Run is attached to exactly one parent, a Mission or a generic Job, or is
+    // Standalone (ADR-087: neither, with a `recipeGeneration` pin).
     // Each shape requires its own id and only admits `null` (never an id) for
     // the other one, so `run.missionId` / `run.jobId` stay indexable (an absent
     // field is undefined in the index). Convex has no "never" validator;
@@ -526,6 +527,24 @@ export default defineSchema({
       v.object({
         // Generic Job execution parent (issue #595).
         jobId: v.id("jobs"),
+        missionId: v.optional(v.null()),
+        sourceJobId: v.optional(v.null()),
+        ...runSharedFields,
+      }),
+      v.object({
+        // Standalone Run (ADR-087): no Mission, no Job; the pin is the parent.
+        recipeGeneration: v.object({
+          familyId: v.id("creativeFamilies"),
+          instructions: v.optional(v.string()),
+          // 1 for the first try, +1 per retry after a refused result.
+          tryCount: v.number(),
+          // What made the previous result invalid, handed to the next try.
+          feedback: v.optional(v.string()),
+        }),
+        // The validated result, shown for review; its shape belongs to Recipe Generation.
+        recipeProposal: v.optional(v.any()),
+        // The Recipe created from the proposal (one proposal creates at most one Recipe).
+        recipeId: v.optional(v.id("productionRecipes")),
         missionId: v.optional(v.null()),
         sourceJobId: v.optional(v.null()),
         ...runSharedFields,
@@ -555,7 +574,9 @@ export default defineSchema({
     // (completed/resumed/failed/cancelled): one bounded range scan per status.
     // Callers keep only Runs with a `missionId` (Runs of Missions).
     .index("by_instance_template_status_completed", ["instanceId", "templateId", "status", "completedAt"])
-    .index("by_dispatch_command", ["dispatchCommandId"]),
+    .index("by_dispatch_command", ["dispatchCommandId"])
+    // Standalone Runs of a Project for a Creative Family (Recipe Generation).
+    .index("by_instance_family", ["instanceId", "recipeGeneration.familyId"]),
   // A Strategic Review (ADR-085): immutable, attached to the Project. No update,
   // delete or purge function exists. Each row holds its own whole memory.
   strategicReviews: defineTable({

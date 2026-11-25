@@ -9,7 +9,7 @@ import {
 } from "../run_result.js";
 import { MAX_RETRYABLE_JOB_FAILURES } from "./external_job_polling.js";
 import type { RunParent } from "../run_parent.js";
-import { jobResultFilePath } from "../source_jobs/job_files.js";
+import { jobResultFilePath, standaloneResultFilePath } from "../source_jobs/job_files.js";
 import { sourceRunResultSchema } from "../source_jobs/source_run_result.js";
 
 /**
@@ -220,6 +220,7 @@ export function validatePublishableKind(
  */
 export function runOutputsFilePath(parent: RunParent, runId: Id<"runs">): string {
   if (parent.kind === "mission") return `missions/${parent.missionId}/outputs/${runId}.json`;
+  if (parent.kind === "standalone") return standaloneResultFilePath(parent.runId);
   return jobResultFilePath(parent.jobId, runId);
 }
 

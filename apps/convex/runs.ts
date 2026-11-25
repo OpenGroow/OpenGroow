@@ -339,6 +339,8 @@ export const markCompleted = internalMutation({
       completedAt: now,
       updatedAt: now,
     });
+    // A Standalone Run has no Mission or Job to settle (its result hook comes with Recipe Generation).
+    if (parent.kind === "standalone") return { applied: true };
     const mission = await ctx.db.get(parent.missionId);
 
     // Exhaustive over every stored (terminal) RunResult status — the compiler
