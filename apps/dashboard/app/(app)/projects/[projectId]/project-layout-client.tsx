@@ -75,7 +75,6 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Operations",
     items: [
       { id: "missions", label: "Missions", icon: Rocket },
-      { id: "publishers", label: "Publish", icon: Send },
       { id: "jobs", label: "Jobs", icon: ListChecks },
       { id: "schedules", label: "Scheduler", icon: CalendarClock },
     ],
@@ -86,6 +85,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "brand", label: "Brand", icon: Palette },
       { id: "agents", label: "Agents", icon: Bot },
+      { id: "publishers", label: "Publish", icon: Send },
       { id: "settings", label: "Settings", icon: Settings },
       { id: "developer", label: "Developer", icon: ScrollText },
     ],

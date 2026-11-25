@@ -129,12 +129,12 @@ describe("Project layout navigation", () => {
       "Sources",
       "Creative Library",
       "Missions",
-      "Publish",
       "Jobs",
       "Scheduler",
       "Analytics",
       "Brand",
       "Agents",
+      "Publish",
       "Settings",
       "Developer",
     ]);
@@ -158,9 +158,9 @@ describe("Project layout navigation", () => {
     expect(sections).toEqual([
       { label: "Strategy", heading: "Strategy", items: ["Strategic Memory", "Content Plans", "Editorial Calendar"] },
       { label: "Creative", heading: "Creative", items: ["Sources", "Creative Library"] },
-      { label: "Operations", heading: "Operations", items: ["Missions", "Publish", "Jobs", "Scheduler"] },
+      { label: "Operations", heading: "Operations", items: ["Missions", "Jobs", "Scheduler"] },
       { label: "Performance", heading: "Performance", items: ["Analytics"] },
-      { label: "Configuration", heading: "Configuration", items: ["Brand", "Agents", "Settings", "Developer"] },
+      { label: "Configuration", heading: "Configuration", items: ["Brand", "Agents", "Publish", "Settings", "Developer"] },
     ]);
   });
 
