@@ -90,7 +90,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
   }
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
       <div className="grid gap-4">
         <BackLink instanceId={instanceId} />
         <PageHeader

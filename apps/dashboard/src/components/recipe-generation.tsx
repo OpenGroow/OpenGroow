@@ -139,7 +139,7 @@ function GenerateRecipeDialog({
                 : `${length} / ${MAX_INSTRUCTIONS_LENGTH} characters. Closing this window does not stop the generation.`}
             </p>
           </div>
-          {error ? <p role="alert" className="m-0 text-sm text-destructive">{error}</p> : null}
+          {error ? <p role="alert" className="m-0 break-words text-sm text-destructive [overflow-wrap:anywhere]">{error}</p> : null}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
               Cancel
@@ -162,11 +162,11 @@ export function FamilyGenerations({ instanceId, familyId, onReview }: { instance
   const data = useGenerations(instanceId, familyId);
   if (data === undefined || data.generations.length === 0) return null;
   return (
-    <section aria-label="Recipe generations" className="grid gap-3">
+    <section aria-label="Recipe generations" className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <h2 className="m-0 text-lg font-semibold text-foreground">Generations</h2>
-      <ul className="grid gap-3">
+      <ul className="m-0 grid grid-cols-[minmax(0,1fr)] gap-3 p-0">
         {data.generations.map((generation) => (
-          <li key={generation.generationId}>
+          <li key={generation.generationId} className="min-w-0">
             <GenerationRow generation={generation} onReview={onReview} />
           </li>
         ))}
@@ -194,7 +194,7 @@ function GenerationRow({ generation, onReview }: { generation: Generation; onRev
           </Button>
         ) : null}
       </div>
-      {explanation ? <p className={generation.state === "failed" ? "m-0 text-sm text-destructive" : "m-0 text-sm text-muted-foreground"}>{explanation}</p> : null}
+      {explanation ? <p className={generation.state === "failed" ? "m-0 break-words text-sm text-destructive [overflow-wrap:anywhere]" : "m-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"}>{explanation}</p> : null}
       {generation.instructions ? <p className="m-0 truncate text-sm text-muted-foreground">{`Instructions: ${generation.instructions}`}</p> : null}
     </Card>
   );

@@ -25,7 +25,7 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
   };
   const [open, setOpen] = useState(false);
   return (
-    <section aria-label="Production Recipes" className="grid gap-3">
+    <section aria-label="Production Recipes" className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="m-0 text-lg font-semibold text-foreground">Production Recipes</h2>
         {canCreate ? (
@@ -40,7 +40,7 @@ export function FamilyRecipes({ instanceId, familyId, canCreate }: { instanceId:
       ) : recipes.length === 0 ? (
         <p className="text-sm text-muted-foreground">No recipes yet.</p>
       ) : (
-        <ul className="grid gap-3">
+        <ul className="grid grid-cols-[minmax(0,1fr)] gap-3">
           {recipes.map((recipe) => (
             <li key={recipe._id}>
               <Card className="relative flex flex-col items-start gap-1 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
