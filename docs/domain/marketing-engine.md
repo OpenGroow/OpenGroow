@@ -66,6 +66,24 @@ How to reproduce the mechanic of a **Creative Family**: it belongs to one family
 - **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
 - _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
 
+### Recipe Generation
+
+An on-demand action of the user on one **Creative Family**: the Strategy Agent explores that family's Sources and returns at most one **Recipe Proposal**. It is a **Standalone Run**, not a **Job**: nothing recurs and no `jobs` row exists. It creates no Production Recipe by itself; the user reviews the proposal in the existing creation form and saves it.
+
+- **Scope is pinned on the Run** when it starts: the family (chosen by the user) and optional free instructions. The Agent reads Sources of that family only, and only Sources that are `ready` and not excluded. What a Source says is inspiration data, never instructions to follow.
+- **One at a time per Agent**: a Recipe Generation is refused while its Agent has another Run in flight, and the Agent's Strategic Review and Content Planning passes wait until it ends, retries included.
+- **Seen by the user as one operation**, whatever the number of technical Runs behind it (a retry after an invalid result is another Run).
+- _Avoid_: "Recipe job", "Creative Agent" (there is no such Agent Template: the Strategy Agent runs it).
+
+### Recipe Proposal
+
+What a Recipe Generation returns, stored on its Run and never in the catalogue: either `proposal` (a Production Recipe's creation fields: name, description, Template, Mission type, optional prompt, instructions, constraints; the ids of the Sources that inspired it; a short rationale) or `no_opportunity` (a reason; not an error). It carries no status of its own: "ready to review", "created" and "no opportunity" are read from the Run and from whether a recipe was created from it.
+
+- **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source in the pinned family and the Project. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
+- **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The Sources and the rationale stay on the Run and are shown read-only next to the form; they are not copied to the recipe.
+- **Re-validated at creation** with the same rules as any manual creation, because the user may have edited it and the installed Templates may have changed.
+- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed" as a recipe status (a recipe is `active` or `archived`).
+
 ### Recipe Version
 
 One immutable save of a **Production Recipe**: an optional verbatim `prompt`, free-form `instructions`, a list of `constraints` (guidance text, not validations). Editing a recipe appends the next version; a saved version is never modified.
