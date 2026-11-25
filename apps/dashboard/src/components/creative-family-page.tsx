@@ -19,6 +19,7 @@ import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/cre
 import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
 import { FamilyRecipes } from "@/src/components/family-recipes";
+import { FamilyGenerations, GenerateRecipeButton } from "@/src/components/recipe-generation";
 import { AddSourceButton, useRemoveSources } from "@/src/components/creative-family-source-actions";
 
 // One Creative Family (ADR-082): its mechanic, its statistics over external
@@ -105,7 +106,10 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
                   </Button>
                 </>
               ) : isActiveFamily(family) ? (
-                <AddSourceButton instanceId={instanceId} familyId={familyId} />
+                <>
+                  <GenerateRecipeButton instanceId={instanceId} familyId={familyId} familyName={family.name} />
+                  <AddSourceButton instanceId={instanceId} familyId={familyId} />
+                </>
               ) : null}
               <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={() => { setTab("sources"); startSelecting(); }} />
             </div>
@@ -135,7 +139,12 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
         ))}
       </div>
 
-      {tab === "recipes" ? <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} /> : null}
+      {tab === "recipes" ? (
+        <>
+          <FamilyGenerations instanceId={instanceId} familyId={familyId} />
+          <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} />
+        </>
+      ) : null}
 
       <section aria-label="Family Sources" hidden={tab !== "sources"} className="grid gap-3">
         {status === "LoadingFirstPage" ? (

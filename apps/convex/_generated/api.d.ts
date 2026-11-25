@@ -163,6 +163,7 @@ import type * as publishers_node from "../publishers_node.js";
 import type * as recipe_generation from "../recipe_generation.js";
 import type * as recipe_generation_reads from "../recipe_generation_reads.js";
 import type * as recipe_generation_shared from "../recipe_generation_shared.js";
+import type * as recipe_generation_views from "../recipe_generation_views.js";
 import type * as recipe_proposal from "../recipe_proposal.js";
 import type * as recipe_usage from "../recipe_usage.js";
 import type * as run_parent from "../run_parent.js";
@@ -381,6 +382,7 @@ declare const fullApi: ApiFromModules<{
   recipe_generation: typeof recipe_generation;
   recipe_generation_reads: typeof recipe_generation_reads;
   recipe_generation_shared: typeof recipe_generation_shared;
+  recipe_generation_views: typeof recipe_generation_views;
   recipe_proposal: typeof recipe_proposal;
   recipe_usage: typeof recipe_usage;
   run_parent: typeof run_parent;
