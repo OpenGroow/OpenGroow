@@ -65,12 +65,14 @@ export const current = query({
     const rows = (await contentsOf(ctx, draft._id)).sort((a, b) => a.plannedAt.localeCompare(b.plannedAt) || a.createdAt - b.createdAt);
     const contents = await Promise.all(rows.map((row) => contentView(ctx, row, publishers)));
     const byKind = new Map<string, number>();
-    for (const { kind } of rows) byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
+    // A removed proposal is kept (shown struck) but counts toward nothing.
+    const live = rows.filter((row) => row.status !== "rejected");
+    for (const { kind } of live) byKind.set(kind, (byKind.get(kind) ?? 0) + 1);
     return {
       ...planView(draft),
       contents,
       quantities: [...byKind].map(([kind, count]) => ({ kind, count })),
-      distribution: { explore: rows.filter((row) => row.intent === "explore").length, exploit: rows.filter((row) => row.intent === "exploit").length },
+      distribution: { explore: live.filter((row) => row.intent === "explore").length, exploit: live.filter((row) => row.intent === "exploit").length },
     };
   },
 });

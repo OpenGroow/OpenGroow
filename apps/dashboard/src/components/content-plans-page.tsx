@@ -7,6 +7,7 @@ import { api } from "@convex/_generated/api";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { StatusBadge } from "@/components/opengroow/status-badge";
+import { ContentEditor } from "@/src/components/content-plan-edit";
 import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 
 // The Content Plans page (ADR-086): the current draft Content Plan to review, then the history of approved and
@@ -155,22 +156,24 @@ function DraftPlan({ draft }: { draft: DraftPlanView }) {
       </Card>
       <ul className="m-0 grid list-none gap-3 p-0">
         {draft.contents.map((content) => (
-          <PlannedContentCard key={content._id} content={content} />
+          <PlannedContentCard key={content._id} content={content} period={draft} />
         ))}
       </ul>
     </div>
   );
 }
 
-function PlannedContentCard({ content }: { content: PlannedContentView }) {
+function PlannedContentCard({ content, period }: { content: PlannedContentView; period: { periodStart: string; periodEnd: string } }) {
+  const removed = content.status === "rejected";
   return (
     <li data-content={content._id}>
-      <Card className="grid gap-3 p-4">
+      <Card className={`grid gap-3 p-4${removed ? " opacity-60" : ""}`}>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-base font-semibold">{content.title}</span>
           <span className="text-sm text-muted-foreground">{formatDay(content.plannedAt)}</span>
           <StatusBadge tone={content.intent === "explore" ? "info" : "neutral"} label={content.intent === "explore" ? "Explore" : "Exploit"} />
           <StatusBadge tone="neutral" label={content.kind} />
+          {removed ? <StatusBadge tone="neutral" label="Removed" /> : null}
         </div>
         <p className="m-0 text-sm">{content.brief}</p>
         <p className="m-0 text-sm text-muted-foreground">{content.rationale}</p>
@@ -194,6 +197,7 @@ function PlannedContentCard({ content }: { content: PlannedContentView }) {
             </li>
           ))}
         </ul>
+        {removed ? null : <ContentEditor content={content} period={period} />}
       </Card>
     </li>
   );

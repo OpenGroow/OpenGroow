@@ -26,7 +26,7 @@ export type ContentPlanEnvelope = { rationale: string; items: PlannedItem[] };
 const isRecord = (raw: unknown): raw is Record<string, unknown> => !!raw && typeof raw === "object" && !Array.isArray(raw);
 
 /** True for a real calendar date written `YYYY-MM-DD`. */
-function isIsoDate(value: string): boolean {
+export function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   return new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 }

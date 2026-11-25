@@ -9,10 +9,17 @@ import { ContentPlansContent } from "../src/components/content-plans-page";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
+const mutations = { update: vi.fn(), remove: vi.fn() };
 
-vi.mock("convex/react", () => ({ useQuery: (...args: unknown[]) => useQueryMock(...args) }));
+vi.mock("convex/react", () => ({
+  useQuery: (...args: unknown[]) => useQueryMock(...args),
+  useMutation: (key: string) => (key === "content_plan_edit.update" ? mutations.update : mutations.remove),
+}));
 vi.mock("@convex/_generated/api", () => ({
-  api: { content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" } },
+  api: {
+    content_plan_review: { current: "content_plan_review.current", history: "content_plan_review.history" },
+    content_plan_edit: { update: "content_plan_edit.update", remove: "content_plan_edit.remove", recipeOptions: "content_plan_edit.recipeOptions" },
+  },
 }));
 
 function makeContent(overrides: Partial<Record<string, unknown>> = {}) {
@@ -43,6 +50,8 @@ describe("ContentPlansContent", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.UTC(2030, 2, 8, 12));
     useQueryMock.mockReset();
+    mutations.update.mockReset().mockResolvedValue(undefined);
+    mutations.remove.mockReset().mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -57,7 +66,7 @@ describe("ContentPlansContent", () => {
   });
 
   async function render({ draft, history = [] }: { draft?: unknown; history?: unknown[] }) {
-    useQueryMock.mockImplementation((key: string) => (key === "content_plan_review.current" ? draft : key === "content_plan_review.history" ? history : undefined));
+    useQueryMock.mockImplementation((key: string) => (key === "content_plan_review.current" ? draft : key === "content_plan_review.history" ? history : key === "content_plan_edit.recipeOptions" ? [{ id: "rec-1", name: "Reel recipe" }, { id: "rec-2", name: "Other recipe" }] : undefined));
     await act(async () => {
       root.render(<ContentPlansContent instanceId="instance-1" />);
     });
@@ -122,5 +131,79 @@ describe("ContentPlansContent", () => {
     expect(entries[1]!.textContent).toContain("3 approved");
     await render({ draft: null, history: [] });
     expect(text()).toContain("No approved or rejected plan yet.");
+  });
+  describe("editing a draft", () => {
+    const card = (id = "pc-1") => document.querySelector(`li[data-content='${id}']`)!;
+    const button = (root: Element, name: string) => Array.from(root.querySelectorAll("button")).find((b) => b.textContent?.trim() === name) as HTMLButtonElement;
+    async function type(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+      const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(el, value);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    async function click(el: Element) {
+      await act(async () => {
+        el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+    }
+    const field = <T extends Element>(name: string) => card().querySelector<T>(`[aria-label='${name}']`)!;
+    const withTargets = () => makeDraft({ contents: [makeContent({ publishTargets: [{ target: "social:example", uncertain: false }, { target: "blog:example", uncertain: false }] })] });
+
+    it("opens a form prefilled with the current values and sends only what changed", async () => {
+      await render({ draft: withTargets() });
+      await click(button(card(), "Edit"));
+      expect(field<HTMLInputElement>("Title").value).toBe("Reaction to article 1");
+      expect(field<HTMLTextAreaElement>("Brief").value).toBe("Film a silent close-up reaction.");
+      expect(field<HTMLInputElement>("Date")).toMatchObject({ value: "2030-03-06", min: "2030-03-08", max: "2030-03-11" });
+      await type(field<HTMLInputElement>("Title"), "New title");
+      await type(field<HTMLInputElement>("Date"), "2030-03-09");
+      await click(button(card(), "Save"));
+      expect(mutations.update).toHaveBeenCalledWith({ contentId: "pc-1", title: "New title", plannedAt: "2030-03-09" });
+      expect(card().querySelector("[aria-label='Title']")).toBeNull();
+    });
+
+    it("changes the Recipe to another of the same Mission type", async () => {
+      await render({ draft: withTargets() });
+      await click(button(card(), "Edit"));
+      const select = card().querySelector("select") as HTMLSelectElement;
+      expect(Array.from(select.options).map((o) => o.textContent)).toEqual(["Reel recipe", "Other recipe"]);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, "rec-2");
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await click(button(card(), "Save"));
+      expect(mutations.update).toHaveBeenCalledWith({ contentId: "pc-1", recipeId: "rec-2" });
+    });
+
+    it("lets Publish targets be unchecked but offers no way to add one", async () => {
+      await render({ draft: withTargets() });
+      await click(button(card(), "Edit"));
+      const boxes = Array.from(card().querySelectorAll("input[type='checkbox']")) as HTMLInputElement[];
+      expect(boxes).toHaveLength(2);
+      await click(boxes[0]!);
+      await click(button(card(), "Save"));
+      expect(mutations.update).toHaveBeenCalledWith({ contentId: "pc-1", publishTargets: ["blog:example"] });
+    });
+
+    it("shows the refusal of the server and keeps the form open", async () => {
+      mutations.update.mockRejectedValueOnce(new Error("The date is in the past."));
+      await render({ draft: withTargets() });
+      await click(button(card(), "Edit"));
+      await type(field<HTMLInputElement>("Title"), "x");
+      await click(button(card(), "Save"));
+      expect(card().querySelector("[role='alert']")?.textContent).toContain("The date is in the past.");
+      expect(card().querySelector("[aria-label='Title']")).not.toBeNull();
+    });
+
+    it("removes a proposal, and shows a removed one without edit controls", async () => {
+      await render({ draft: withTargets() });
+      await click(button(card(), "Remove"));
+      expect(mutations.remove).toHaveBeenCalledWith({ contentId: "pc-1" });
+      await render({ draft: makeDraft({ contents: [makeContent({ status: "rejected" })] }) });
+      expect(card().textContent).toContain("Removed");
+      expect(button(card(), "Edit")).toBeUndefined();
+      expect(button(card(), "Remove")).toBeUndefined();
+    });
   });
 });
