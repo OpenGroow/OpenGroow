@@ -83,16 +83,16 @@ function ToggleButton({ expanded, onClick, children }: { expanded: boolean; onCl
   );
 }
 
-/** The plan's Markdown rationale: a short preview when it is long, with a toggle for the whole text. */
+/** The plan's Markdown rationale: a short preview when it is long, with a button to show the whole text. */
 function PlanRationale({ rationale }: { rationale: string }) {
   const [expanded, setExpanded] = useState(false);
   const preview = previewOf(rationale);
   return (
     <section aria-label="Rationale" className="grid gap-2">
       <WorkspaceMarkdown content={preview === null || expanded ? rationale : preview} />
-      {preview === null ? null : (
-        <ToggleButton expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          {expanded ? "Show less" : "Show full rationale"}
+      {preview === null || expanded ? null : (
+        <ToggleButton expanded={false} onClick={() => setExpanded(true)}>
+          Show full rationale
         </ToggleButton>
       )}
     </section>

@@ -126,7 +126,7 @@ describe("ContentPlansContent", () => {
     expect(first.textContent).not.toContain("Film a silent close-up reaction.");
   });
 
-  it("shows a long plan rationale as a preview with a Show full rationale toggle", async () => {
+  it("shows a long plan rationale as a preview with a Show full rationale button", async () => {
     const tail = "FINAL-SENTENCE-MARKER";
     await render({ draft: makeDraft({ rationale: `## Strategy\n\n${"Reactions keep performing well. ".repeat(60)}\n\n${tail}` }) });
     const section = () => document.querySelector("section[aria-label='Rationale']")!;
@@ -136,9 +136,7 @@ describe("ContentPlansContent", () => {
     expect(toggle().textContent).toBe("Show full rationale");
     await click(toggle());
     expect(section().textContent).toContain(tail);
-    expect(toggle().textContent).toBe("Show less");
-    await click(toggle());
-    expect(section().textContent).not.toContain(tail);
+    expect(section().querySelector("button")).toBeNull();
   });
 
   it("offers no rationale toggle when the rationale is short", async () => {
