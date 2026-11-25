@@ -27,6 +27,4 @@ export const shift = ({ year, month }: MonthKey, by: number): MonthKey => {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
 };
 export const monthLabel = ({ year, month }: MonthKey) => new Date(Date.UTC(year, month, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-export const formatDay = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
 export const formatLabel = (kind: string) => kind.charAt(0).toUpperCase() + kind.slice(1);
-export const intentLabel = (intent: CalendarItem["intent"]) => (intent === "explore" ? "Explore" : "Exploit");

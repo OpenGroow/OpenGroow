@@ -7,12 +7,11 @@ import { CalendarDays, ChevronLeft, ChevronRight, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MonthGrid } from "@/src/components/editorial-calendar-grid";
 import { Details } from "@/src/components/editorial-calendar-details";
-import { dayKey, daysIn, formatDay, monthLabel, shift, type CalendarItem, type MonthKey } from "@/src/components/editorial-calendar-types";
+import { formatDay } from "@/src/components/content-plan-types";
+import { dayKey, daysIn, monthLabel, shift, type CalendarItem, type MonthKey } from "@/src/components/editorial-calendar-types";
 
 // The Editorial Calendar page (ADR-086): the approved Planned Contents of every Content Plan of the Project, by planned
 // day. Strictly read-only. A planned day is an intention: nothing here is a scheduled Publication.
-
-export type { CalendarItem } from "@/src/components/editorial-calendar-types";
 
 type Props = { params: Promise<{ instanceId: string }> };
 
@@ -35,10 +34,16 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
   const items = result?.items;
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
-    for (const item of items ?? []) map.set(item.plannedAt, [...(map.get(item.plannedAt) ?? []), item]);
+    for (const item of items ?? []) {
+      const day = map.get(item.plannedAt);
+      if (day) day.push(item);
+      else map.set(item.plannedAt, [item]);
+    }
     return map;
   }, [items]);
-  const selected = items?.find((item) => item._id === selectedId) ?? null;
+  const sorted = useMemo(() => [...(items ?? [])].sort((a, b) => a.plannedAt.localeCompare(b.plannedAt)), [items]);
+  const itemsById = useMemo(() => new Map((items ?? []).map((item) => [item._id, item])), [items]);
+  const selected = (selectedId !== null ? itemsById.get(selectedId) : undefined) ?? null;
   const go = (by: number) => {
     setCursor((c) => shift(c, by));
     setSelectedId(null);
@@ -91,7 +96,7 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
             <MonthGrid cursor={cursor} byDay={byDay} selectedId={selectedId} onSelect={setSelectedId} />
           ) : (
             <ul className="m-0 grid list-none gap-2 p-0">
-              {[...items].sort((a, b) => a.plannedAt.localeCompare(b.plannedAt)).map((item) => (
+              {sorted.map((item) => (
                 <li key={item._id} data-content={item._id}>
                   <Button type="button" variant="outline" aria-pressed={selectedId === item._id} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={() => setSelectedId(item._id)}>
                     <span className="text-sm text-muted-foreground">{formatDay(item.plannedAt)}</span>

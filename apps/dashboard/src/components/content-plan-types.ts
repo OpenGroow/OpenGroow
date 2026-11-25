@@ -40,5 +40,6 @@ export type PlanHistoryView = {
   counts: { total: number; approved: number; rejected: number };
 };
 
+export const intentLabel = (intent: "explore" | "exploit") => (intent === "explore" ? "Explore" : "Exploit");
 export const formatDay = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
 export const periodLabel = (plan: { periodStart: string; periodEnd: string }) => `${formatDay(plan.periodStart)} to ${formatDay(plan.periodEnd)}`;

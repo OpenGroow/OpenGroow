@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import { useState } from "react";
 import { CalendarDays, Check, ChevronDown, Compass, FileText, Film, Target, X } from "lucide-react";
 import { useMutation } from "convex/react";
@@ -15,7 +16,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 
 /** The period is inclusive and in UTC: a draft is stale from the day after its last day. Nothing expires. */
-const isStale = (plan: { periodEnd: string }, now: Date) => now.toISOString().slice(0, 10) > plan.periodEnd;
+const isStale = (plan: { periodEnd: string }, now: Date) => utcDateOf(now.getTime()) > plan.periodEnd;
 
 /** The plan's Markdown rationale: a two-line preview, expanded for good by "Show more". */
 function PlanRationale({ rationale }: { rationale: string }) {

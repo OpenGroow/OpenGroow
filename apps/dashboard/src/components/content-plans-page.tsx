@@ -13,8 +13,6 @@ import { type DraftPlanView, type PlanHistoryView } from "@/src/components/conte
 // The Content Plans page (ADR-086): the current draft Content Plan to review, then the history of approved and
 // rejected plans.
 
-export type { DraftPlanView, PlanHistoryView, PlannedContentView, PublishTargetView } from "@/src/components/content-plan-types";
-
 type Props = { params: Promise<{ instanceId: string }> };
 
 export function ContentPlansPage({ params }: Props) {

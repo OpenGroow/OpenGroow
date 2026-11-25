@@ -6,6 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InstanceJobsContent } from "../src/components/instance-jobs-page";
 
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
@@ -314,7 +317,7 @@ const planningOptions = { formats: ["image", "video"], publishTargets: ["social:
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
     }
-    const check = (name: string) => click(document.querySelector(`[name="${name}"]`)!);
+    const check = (id: string) => click(document.querySelector(`[data-testid="${id}"]`)!);
 
     it("shows the horizon and the targets next to the schedule, 7 days and no target by default", async () => {
       await render([planning({})]);
@@ -331,9 +334,9 @@ const planningOptions = { formats: ["image", "video"], publishTargets: ["social:
     it("offers the formats of the Project and saves quantities and Publish targets", async () => {
       await render([planning({})]);
       await openForm();
-      expect(document.querySelector('[name="format-video"]')).not.toBeNull();
-      expect(document.querySelector('[name="format-image"]')).not.toBeNull();
-      expect(document.querySelector('[name="format-article"]')).toBeNull();
+      expect(document.querySelector('[data-testid="format-video"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="format-image"]')).not.toBeNull();
+      expect(document.querySelector('[data-testid="format-article"]')).toBeNull();
       await type("planningDays", "14");
       await check("format-video");
       await type("quantity-video", "4");

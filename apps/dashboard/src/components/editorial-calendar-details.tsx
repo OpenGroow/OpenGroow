@@ -9,7 +9,8 @@ import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { PlatformLogo } from "@/src/components/platform-logo";
 import { formatIcon } from "@/src/components/editorial-calendar-format";
-import { formatDay, formatLabel, intentLabel, type CalendarItem, type CalendarTarget } from "@/src/components/editorial-calendar-types";
+import { formatDay, intentLabel } from "@/src/components/content-plan-types";
+import { formatLabel, type CalendarItem, type CalendarTarget } from "@/src/components/editorial-calendar-types";
 
 const LONG_BRIEF = 280;
 

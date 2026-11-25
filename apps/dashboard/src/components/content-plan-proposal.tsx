@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { ContentEditor } from "@/src/components/content-plan-edit";
-import { formatDay, type PlannedContentView } from "@/src/components/content-plan-types";
+import { formatDay, intentLabel, type PlannedContentView } from "@/src/components/content-plan-types";
 
 // One proposed content of the draft Content Plan, as a nested card (ADR-086).
 
@@ -61,7 +61,7 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
                 <CalendarDays aria-hidden="true" className="size-4" />
                 {formatDay(content.plannedAt)}
               </span>
-              <StatusBadge tone={content.intent === "explore" ? "info" : "neutral"} label={content.intent === "explore" ? "Explore" : "Exploit"} />
+              <StatusBadge tone={content.intent === "explore" ? "info" : "neutral"} label={intentLabel(content.intent)} />
               <Badge variant="tag" size="xs">
                 <Film aria-hidden="true" />
                 {content.kind}

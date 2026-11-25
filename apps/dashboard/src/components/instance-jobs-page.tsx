@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { runLogsHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { analysisDaysOf, isValidAnalysisDays, MAX_ANALYSIS_DAYS, MIN_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import {
@@ -482,7 +483,7 @@ function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanc
             return (
               <li key={kind} className="grid gap-2 rounded-lg border border-border p-3">
                 <label className="flex items-center gap-2 text-sm font-medium">
-                  <input type="checkbox" name={`format-${kind}`} checked={draft.enabled} onChange={(e) => update(kind, { enabled: e.target.checked })} />
+                  <Checkbox data-testid={`format-${kind}`} checked={draft.enabled} onCheckedChange={(checked) => update(kind, { enabled: checked })} />
                   {kind}
                 </label>
                 {draft.enabled ? (
@@ -506,13 +507,12 @@ function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanc
                       ) : (
                         options.publishTargets.map((key) => (
                           <label key={key} className="flex items-center gap-1.5 text-sm">
-                            <input
-                              type="checkbox"
-                              name={`target-${kind}-${key}`}
+                            <Checkbox
+                              data-testid={`target-${kind}-${key}`}
                               checked={draft.publishTargets.includes(key)}
-                              onChange={(e) =>
+                              onCheckedChange={(checked) =>
                                 update(kind, {
-                                  publishTargets: e.target.checked ? [...draft.publishTargets, key] : draft.publishTargets.filter((k) => k !== key),
+                                  publishTargets: checked ? [...draft.publishTargets, key] : draft.publishTargets.filter((k) => k !== key),
                                 })
                               }
                             />

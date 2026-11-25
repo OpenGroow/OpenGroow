@@ -1,5 +1,6 @@
 "use client";
 
+import { utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "convex/react";
@@ -86,7 +87,7 @@ function EditForm({ content, period, alert, onCancel, onSave }: {
   const [plannedAt, setPlannedAt] = useState(content.plannedAt);
   const [recipeId, setRecipeId] = useState(content.recipe?.id ?? "");
   const [kept, setKept] = useState(() => content.publishTargets.map((entry) => entry.target));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = utcDateOf(Date.now());
 
   const save = () => {
     const changes: Changes = {};
