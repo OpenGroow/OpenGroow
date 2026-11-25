@@ -32,6 +32,7 @@ import { pollSourceEnrichmentRun } from "./source_jobs/enrichment_poll_node.js";
 import { buildSourceScoringRunFile } from "./source_scoring.js";
 import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { buildStrategicReviewRunFile } from "./strategic_review_jobs.js";
+import { buildContentPlanningRunFile } from "./content_planning_jobs.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
@@ -125,7 +126,8 @@ export const pollExternalJobs = internalAction({
       else if (r.parent.kind === "job"
         && (await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: r._id })
           || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id })
-          || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id }))) continue;
+          || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id })
+          || await ctx.runQuery(internal.content_planning_jobs.isContentPlanningRun, { runId: r._id }))) continue;
       else await pollExternalJobRun(ctx, r, opts, registry);
     }
   },
@@ -209,6 +211,7 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       sourceScoring: state.sourceScoring === true,
       sourceRouting: state.sourceRouting === true,
       strategicReview: state.strategicReview === true,
+      contentPlanning: state.contentPlanning === true,
       runId: state.runId,
       missionType: state.missionType,
       blockerCodes: await resolveMissionTypeBlockerCodes(
@@ -341,6 +344,11 @@ export const dispatchPendingRuns = internalAction({
       if (claimed.parent.kind === "job"
         && await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: claimed.runId })) {
         if (await dispatchStrategicReviewRun(ctx, claimed.runId, claimed.parent)) continue;
+      }
+
+      if (claimed.parent.kind === "job"
+        && await ctx.runQuery(internal.content_planning_jobs.isContentPlanningRun, { runId: claimed.runId })) {
+        if (await dispatchContentPlanningRun(ctx, claimed.runId, claimed.parent)) continue;
       }
 
       const inputs = await ctx.runQuery(
@@ -770,6 +778,57 @@ async function dispatchStrategicReviewRun(
           ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
           ...(template?.jobInstructions?.strategic_review
             ? [{ filePath: "jobs/strategic-review.md", content: template.jobInstructions.strategic_review }]
+            : []),
+        ],
+        runFilePath: runPath,
+        outputsFilePath: outputsPath,
+        requiredMcpServers: requiredMcpServers(template),
+      },
+    });
+    await ctx.runMutation(internal.runs.markRunning, {
+      runId,
+      dispatchCommandId: execResult.commandId,
+      agentsMdSnapshot: template?.agentsMd,
+      contextMdSnapshot: runMd,
+    });
+  } catch (err) {
+    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_failed", message: errorMessage(err) });
+  }
+  return true;
+}
+
+/** Dispatch a Content Planning Run: its period and targets were pinned on the Run when it started. */
+async function dispatchContentPlanningRun(
+  ctx: ActionCtx,
+  runId: Id<"runs">,
+  parent: Extract<RunParent, { kind: "job" }>,
+): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.content_planning_jobs.loadDispatchInputs, { runId });
+  if (!inputs) return false;
+  try {
+    const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
+    const runMd = buildContentPlanningRunFile(inputs.pins);
+    const runPath = jobRunFilePath(parent.jobId);
+    const outputsPath = runOutputsFilePath(parent, runId);
+    const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    const execResult = await ctx.runMutation(enqueueCommandMutation, {
+      instanceId: inputs.instanceId,
+      type: RUNTIME_OPENCLAW_EXEC,
+      payload: {
+        commandText: buildOpenClawExecCommandText({
+          agentName: inputs.run.agentName,
+          sessionKey: inputs.run.sessionKey,
+          runFilePath: runPath,
+          outputsFilePath: outputsPath,
+          timeoutMs: execTimeoutMs,
+        }),
+        timeoutMs: execTimeoutMs,
+        workspaceKey: inputs.workspaceKey,
+        filesToWrite: [
+          { filePath: runPath, content: runMd },
+          ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
+          ...(template?.jobInstructions?.content_planning
+            ? [{ filePath: "jobs/content-planning.md", content: template.jobInstructions.content_planning }]
             : []),
         ],
         runFilePath: runPath,

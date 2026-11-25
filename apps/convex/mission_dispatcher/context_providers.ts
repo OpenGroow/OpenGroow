@@ -303,6 +303,51 @@ function renderStrategicReviewPeriodFromUnknown(data: unknown): string | null {
   return renderStrategicReviewPeriodSection({ periodStart, periodEnd });
 }
 
+// ─── Content Planning targets provider (ADR-086, issue #175) ────────────────
+
+/** What OpenGroow pinned on a Content Planning Run (`run.contentPlanning`). */
+export type ContentPlanningTargetsInfo = {
+  periodStart: string;
+  periodEnd: string;
+  targets: { kind: string; target: number; existing: number; remaining: number; publishTargets: string[] }[];
+  ignored: string[];
+} | null;
+
+/**
+ * Pure renderer for the content-planning-targets provider: the Planning period and, per format, the
+ * target, the approved contents already planned in the period, the quantity still to plan and the
+ * destinations. The Agent plans at most the remaining quantity and never names destinations itself.
+ */
+export function renderContentPlanningTargetsSection(info: ContentPlanningTargetsInfo): string | null {
+  if (!info) return null;
+  const lines = [
+    "# Planning period and targets",
+    "",
+    `Planning period: ${info.periodStart} to ${info.periodEnd} (UTC dates, both included)`,
+    "",
+    "OpenGroow fixed the period and the quantities below when the Run started. Every `plannedAt` must be a date inside the period. Plan at most the remaining quantity of each format and none for a format whose remaining quantity is 0. Do not state Publish targets: OpenGroow takes them from this list, so choose Recipes compatible with every destination of the format.",
+    "",
+    "| Format | Target | Already planned | Remaining | Publish targets |",
+    "| --- | --- | --- | --- | --- |",
+    ...info.targets.map((t) => `| ${singleLine(t.kind)} | ${t.target} | ${t.existing} | ${t.remaining} | ${t.publishTargets.map(singleLine).join(", ")} |`),
+    "",
+  ];
+  if (info.ignored.length > 0) {
+    lines.push("Ignored (no longer available):", "", ...info.ignored.map((reason) => `- ${singleLine(reason)}`), "");
+  }
+  return lines.join("\n");
+}
+
+function renderContentPlanningTargetsFromUnknown(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const { periodStart, periodEnd, targets, ignored } = data as Record<string, unknown>;
+  if (typeof periodStart !== "string" || typeof periodEnd !== "string" || !Array.isArray(targets)) return null;
+  return renderContentPlanningTargetsSection({
+    periodStart, periodEnd, targets: targets as NonNullable<ContentPlanningTargetsInfo>["targets"],
+    ignored: Array.isArray(ignored) ? (ignored as string[]) : [],
+  });
+}
+
 // ─── Provider registry ──────────────────────────────────────────────────────
 
 type ContextProviderRenderer = (data: unknown) => string | null;
@@ -329,6 +374,7 @@ export const CONTEXT_PROVIDER_RENDERERS: Record<ContextProviderName, ContextProv
   "platform-account": renderPlatformAccountFromUnknown,
   [RECIPE_PROVIDER]: renderProductionRecipeFromUnknown,
   "strategic-review-period": renderStrategicReviewPeriodFromUnknown,
+  "content-planning-targets": renderContentPlanningTargetsFromUnknown,
 };
 
 /** Providers that render the Agent's config: a Run cannot dispatch for them on an absent config. */

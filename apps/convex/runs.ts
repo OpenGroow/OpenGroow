@@ -7,6 +7,7 @@ import { settleSourceJobRun } from "./source_jobs.js";
 import { ingestAndDecideOutcome, ingestHandoff } from "./source_jobs/ingest_sources.js";
 import { failScoringRun, settleScoringRun } from "./score_jobs.js";
 import { failRoutingRun, settleRoutingRun } from "./source_routing.js";
+import { CONTENT_PLANNING_JOB_TYPE, failContentPlanningRun } from "./content_planning_jobs.js";
 import { failStrategicReviewRun, settleStrategicReviewRun, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
 import { runParent, type RunParentRecord } from "./run_parent.js";
 import { exclusiveResourcesOf } from "@opengroow/agent-templates";
@@ -458,6 +459,10 @@ export const markFailed = internalMutation({
       await failStrategicReviewRun(ctx, run, parent.jobId, errorMessage, args.retryWithFeedback === true);
       return { applied: true };
     }
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === CONTENT_PLANNING_JOB_TYPE) {
+      await failContentPlanningRun(ctx, run, parent.jobId, errorMessage);
+      return { applied: true };
+    }
     await settleSourceJobRun(ctx, run, {
       ok: false,
       error: errorMessage,
@@ -532,6 +537,10 @@ export const markCancelled = internalMutation({
     }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
       await failStrategicReviewRun(ctx, run, parent.jobId, "cancelled", false);
+      return;
+    }
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === CONTENT_PLANNING_JOB_TYPE) {
+      await failContentPlanningRun(ctx, run, parent.jobId, "cancelled");
       return;
     }
     await settleSourceJobRun(ctx, run, { ok: false, error: "cancelled" });
