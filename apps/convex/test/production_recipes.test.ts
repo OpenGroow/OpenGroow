@@ -238,3 +238,90 @@ describe("a Production Recipe never changes Creative Family", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
+  const proposal = { proposal: { recipe: { name: "Generated" }, sourceIds: [], rationale: "r" } };
+
+  async function withProposal(extra: { instanceId?: string; familyId?: unknown; proposal?: unknown } = {}) {
+    const t = convexTest(schema, modules);
+    await seed(t);
+    const familyId = await family(t);
+    const otherFamilyId = await family(t);
+    const owner = t.withIdentity(OWNER);
+    const insertRun = (fields: Record<string, unknown>) =>
+      t.run((ctx) => {
+        const now = Date.now();
+        return ctx.db.insert("runs", {
+          ownerId: OWNER.subject,
+          instanceId: INSTANCE_ID,
+          templateId: "@example/strategist",
+          agentName: "a",
+          sessionKey: "s",
+          status: "completed",
+          createdAt: now,
+          updatedAt: now,
+          recipeGeneration: { familyId, tryCount: 1 },
+          recipeProposal: proposal,
+          ...fields,
+        } as never);
+      });
+    const runId = await insertRun({});
+    const args = (proposalRunId: unknown = runId): Record<string, unknown> =>
+      ({ instanceId: INSTANCE_ID, familyId, name: "Edited name", description: "d", ...TARGET, ...content, proposalRunId });
+    return { t, owner, familyId, otherFamilyId, runId, insertRun, args };
+  }
+
+  it("creates one active Recipe at version 1 and marks the Run", async () => {
+    const { t, owner, runId, args } = await withProposal();
+    const created = await owner.mutation(api.production_recipes.create, args() as never);
+    expect(created.version).toBe(1);
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run && "recipeId" in run ? run.recipeId : undefined).toBe(created.recipeId);
+    const recipe = await t.run((ctx) => ctx.db.get(created.recipeId));
+    expect(recipe?.status).toBe("active");
+  });
+
+  it("refuses a second creation from the same proposal and creates nothing", async () => {
+    const { t, owner, args } = await withProposal();
+    await owner.mutation(api.production_recipes.create, args() as never);
+    await expect(owner.mutation(api.production_recipes.create, args() as never)).rejects.toThrow(/already/);
+    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(1);
+  });
+
+  it("refuses a proposal Run of another Project", async () => {
+    const { t, owner, insertRun, args } = await withProposal();
+    const other = await insertRun({ instanceId: OTHER_INSTANCE_ID });
+    await expect(owner.mutation(api.production_recipes.create, args(other) as never)).rejects.toThrow(/proposal/i);
+    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
+  });
+
+  it("refuses a proposal Run of another family", async () => {
+    const { t, owner, otherFamilyId, insertRun, args } = await withProposal();
+    const other = await insertRun({ recipeGeneration: { familyId: otherFamilyId, tryCount: 1 } });
+    await expect(owner.mutation(api.production_recipes.create, args(other) as never)).rejects.toThrow(/proposal/i);
+    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
+  });
+
+  it("refuses a Run that holds no proposal", async () => {
+    const { owner, insertRun, args } = await withProposal();
+    const none = await insertRun({ recipeProposal: { no_opportunity: { reason: "x" } } });
+    const unset = await insertRun({ recipeProposal: undefined });
+    await expect(owner.mutation(api.production_recipes.create, args(none) as never)).rejects.toThrow(/proposal/i);
+    await expect(owner.mutation(api.production_recipes.create, args(unset) as never)).rejects.toThrow(/proposal/i);
+  });
+
+  it("re-validates a changed Template and creates nothing on error", async () => {
+    const { t, owner, runId, args } = await withProposal();
+    const bad = { ...args(runId), templateId: "@example/no-provider" };
+    await expect(owner.mutation(api.production_recipes.create, bad as never)).rejects.toThrow();
+    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
+    const run = await t.run((ctx) => ctx.db.get(runId));
+    expect(run && "recipeId" in run ? run.recipeId : undefined).toBeUndefined();
+  });
+
+  it("still creates manually without a proposal", async () => {
+    const { owner, familyId } = await withProposal();
+    const created = await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "M", description: "d", ...TARGET, ...content });
+    expect(created.version).toBe(1);
+  });
+});
