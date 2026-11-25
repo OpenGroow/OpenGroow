@@ -131,10 +131,10 @@ describe("Project layout navigation", () => {
       "Missions",
       "Jobs",
       "Scheduler",
+      "Publishing",
       "Analytics",
       "Brand",
       "Agents",
-      "Publish",
       "Settings",
       "Developer",
     ]);
@@ -159,8 +159,8 @@ describe("Project layout navigation", () => {
       { label: "Strategy", heading: "Strategy", items: ["Strategic Memory", "Content Plans", "Editorial Calendar"] },
       { label: "Creative", heading: "Creative", items: ["Sources", "Creative Library"] },
       { label: "Operations", heading: "Operations", items: ["Missions", "Jobs", "Scheduler"] },
-      { label: "Performance", heading: "Performance", items: ["Analytics"] },
-      { label: "Configuration", heading: "Configuration", items: ["Brand", "Agents", "Publish", "Settings", "Developer"] },
+      { label: "Distribution", heading: "Distribution", items: ["Publishing", "Analytics"] },
+      { label: "Configuration", heading: "Configuration", items: ["Brand", "Agents", "Settings", "Developer"] },
     ]);
   });
 

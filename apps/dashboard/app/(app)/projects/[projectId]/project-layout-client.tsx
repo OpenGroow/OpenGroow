@@ -79,13 +79,18 @@ const NAV_SECTIONS: NavSection[] = [
       { id: "schedules", label: "Scheduler", icon: CalendarClock },
     ],
   },
-  { label: "Performance", items: [{ id: "analytics", label: "Analytics", icon: BarChart3 }] },
+  {
+    label: "Distribution",
+    items: [
+      { id: "publishers", label: "Publishing", icon: Send },
+      { id: "analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
   {
     label: "Configuration",
     items: [
       { id: "brand", label: "Brand", icon: Palette },
       { id: "agents", label: "Agents", icon: Bot },
-      { id: "publishers", label: "Publish", icon: Send },
       { id: "settings", label: "Settings", icon: Settings },
       { id: "developer", label: "Developer", icon: ScrollText },
     ],
