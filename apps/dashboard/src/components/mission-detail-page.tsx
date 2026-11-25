@@ -154,20 +154,20 @@ function RunRow({
               size="sm"
               className="rounded-full"
               nativeButton={false}
-              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "logs")} />}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "prompt")} />}
             >
-              <FileText />
-              View logs
+              <Code />
+              View prompt
             </Button>
             <Button
               variant="outline"
               size="sm"
               className="rounded-full"
               nativeButton={false}
-              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "prompt")} />}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "logs")} />}
             >
-              <Code />
-              View prompt
+              <FileText />
+              View logs
             </Button>
           </>
         )}
