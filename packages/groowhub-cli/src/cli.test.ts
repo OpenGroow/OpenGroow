@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -63,6 +63,31 @@ describe("run", () => {
     const { code, err } = runCli(["validate", "index", "index.json"], dir);
     expect(code).toBe(1);
     expect(err[0]).toMatch(/^ERROR index.json: /);
+  });
+
+  describe("Internal MCP tool names", () => {
+    const templateWithTools = (tools: string[]) => {
+      const fixture = join(__dirname, "../../agent-templates/src/__fixtures__/claw/seo");
+      const dir = join(mkdtempSync(join(tmpdir(), "validator-")), "template");
+      cpSync(fixture, dir, { recursive: true });
+      const profile = ["schemaVersion: 1", "category: marketing", "mcpServers:", "  - name: opengroow", "    transport: streamable-http", "    internal:", "      tools:", ...tools.map((t) => `        - ${t}`)];
+      writeFileSync(join(dir, "profiles/opengroow.yml"), `${profile.join("\n")}\n`);
+      return dir;
+    };
+
+    it("accepts the Recipe Generation tools", () => {
+      const dir = templateWithTools(["get_creative_family", "list_family_sources", "get_source", "get_production_recipe"]);
+      const { code, err } = runCli(["validate", "template", dir]);
+      expect(err).toEqual([]);
+      expect(code).toBe(0);
+    });
+
+    it("still refuses an unknown tool", () => {
+      const dir = templateWithTools(["get_creative_family", "get_nothing"]);
+      const { code, err } = runCli(["validate", "template", dir]);
+      expect(code).toBe(1);
+      expect(err.join("\n")).toMatch(/unknown tool "get_nothing"/);
+    });
   });
 
   it("accepts an empty-but-valid index", () => {
