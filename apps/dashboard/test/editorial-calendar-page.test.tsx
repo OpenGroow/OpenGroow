@@ -89,7 +89,7 @@ describe("EditorialCalendarContent", () => {
     await render([item()], true);
     expect(document.querySelector("[role='status']")?.textContent).toContain("more contents than can be shown");
     await render([item()], false);
-    expect(document.querySelector("[role='status']")).toBeNull();
+    expect(document.querySelector("[role='status']")?.textContent).not.toContain("more contents than can be shown");
   });
 
   it("shows empty and loading states", async () => {

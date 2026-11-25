@@ -67,7 +67,7 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
   };
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader title="Editorial Calendar" description="The contents you approved, on the day they are planned for. This calendar is read-only." />
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="outline" size="sm" aria-label="Previous month" onClick={() => go(-1)}>‹</Button>
@@ -79,14 +79,17 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
           <Button type="button" size="sm" variant={view === "list" ? "default" : "outline"} onClick={() => setView("list")}>List</Button>
         </div>
       </div>
-      {items === undefined ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : (
+      <div role="status" className="min-h-5 text-sm text-muted-foreground">
+        {items === undefined
+          ? "Loading…"
+          : result?.truncated
+            ? <span className="text-foreground">This month holds more contents than can be shown here: only the first {items.length} are listed.</span>
+            : items.length === 0
+              ? "No approved content this month."
+              : null}
+      </div>
+      {items === undefined ? null : (
         <>
-          {result?.truncated ? (
-            <p role="status" className="m-0 text-sm text-foreground">This month holds more contents than can be shown here: only the first {items.length} are listed.</p>
-          ) : null}
-          {items.length === 0 ? <p className="m-0 text-sm text-muted-foreground">No approved content this month.</p> : null}
           {view === "month" ? (
             <MonthGrid cursor={cursor} byDay={byDay} selectedId={selectedId} onSelect={setSelectedId} />
           ) : (
@@ -113,7 +116,7 @@ function MonthGrid({ cursor, byDay, selectedId, onSelect }: { cursor: MonthKey; 
   const lead = (new Date(Date.UTC(cursor.year, cursor.month, 1)).getUTCDay() + 6) % 7; // Monday first
   const cells: Array<number | null> = [...Array<null>(lead).fill(null), ...Array.from({ length: daysIn(cursor) }, (_, i) => i + 1)];
   return (
-    <div className="grid grid-cols-7 gap-1" role="grid" aria-label="Month">
+    <div className="grid min-w-0 grid-cols-[repeat(7,minmax(0,1fr))] gap-1" role="grid" aria-label="Month">
       {WEEKDAYS.map((name) => (
         <div key={name} className="px-1 text-xs font-medium text-muted-foreground">{name}</div>
       ))}
@@ -121,7 +124,7 @@ function MonthGrid({ cursor, byDay, selectedId, onSelect }: { cursor: MonthKey; 
         if (day === null) return <div key={`pad-${index}`} />;
         const key = dayKey(cursor.year, cursor.month, day);
         return (
-          <div key={key} data-day={key} className="grid min-h-24 content-start gap-1 rounded-md border p-1">
+          <div key={key} data-day={key} className="grid min-h-24 min-w-0 content-start gap-1 rounded-md border p-1">
             <span className="text-xs text-muted-foreground">{day}</span>
             {(byDay.get(key) ?? []).map((item) => (
               <Button
