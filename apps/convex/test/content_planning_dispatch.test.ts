@@ -5,7 +5,7 @@ import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
-import { buildContentPlanningRunFile } from "../content_planning_jobs";
+import { buildContentPlanningRunFile } from "../content_planning_dispatch";
 import { appendContextProviders } from "../mission_dispatcher/context_providers";
 
 // Issue #175: Planning period, remaining quantities and pinned dispatch (ADR-086).
@@ -17,6 +17,7 @@ const modules = {
   "../project_agents.ts": () => import("../project_agents.js"),
   "../runs.ts": () => import("../runs.js"),
   "../content_planning_jobs.ts": () => import("../content_planning_jobs.js"),
+  "../content_planning_dispatch.ts": () => import("../content_planning_dispatch.js"),
   "../source_jobs.ts": () => import("../source_jobs.js"),
   "../score_jobs.ts": () => import("../score_jobs.js"),
 };
@@ -205,9 +206,9 @@ describe("Run with pins", () => {
     const jobId = await configure([target("video", 3)]);
     await tickNow(jobId);
     const run = (await runs()).find((r) => r.contentPlanning !== undefined)!;
-    const inputs = await t.query(internal.content_planning_jobs.loadDispatchInputs, { runId: run._id });
+    const inputs = await t.query(internal.content_planning_dispatch.loadDispatchInputs, { runId: run._id });
     expect(inputs).toMatchObject({ workspaceKey: `ws-${TEMPLATE}`, jobId, pins: run.contentPlanning });
-    expect(await t.query(internal.content_planning_jobs.isContentPlanningRun, { runId: run._id })).toBe(true);
+    expect(await t.query(internal.content_planning_dispatch.isContentPlanningRun, { runId: run._id })).toBe(true);
     await t.run((ctx) => ctx.db.patch(run._id, { status: "running" }));
     await t.mutation(internal.runs.markFailed, { runId: run._id, code: "dispatch_failed", message: "boom" });
     expect(await reload(jobId)).toMatchObject({ lastOutcome: "failed", lastError: expect.stringContaining("boom") });

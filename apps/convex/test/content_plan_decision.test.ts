@@ -122,6 +122,31 @@ describe("content_plan_decision.approve", () => {
     expect((await statuses(planId)).plan).toBe("draft");
   });
 
+  it("is refused when every Publish target of a retained content was removed since dispatch", async () => {
+    const planId = await plan();
+    await content(planId, { publishTargets: ["gone:example"] });
+    const result = await owner().mutation(api.content_plan_decision.approve, { planId });
+    expect(result).toMatchObject({ ok: false, reason: "invalid" });
+    expect((result as { message: string }).message).toMatch(/Publish target/);
+    expect((await statuses(planId)).plan).toBe("draft");
+  });
+
+  it("counts every approved content of the period, however many", async () => {
+    const earlier = await plan({ target: 1_002 });
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 1_001; i++) {
+        await ctx.db.insert("plannedContents", {
+          ownerId: OWNER.subject, instanceId: INSTANCE, planId: earlier, kind: "video", missionType: "make_video", recipeId,
+          publishTargets: ["social:example"], title: "T", brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "approved", createdAt: 1,
+        } as never);
+      }
+    });
+    const planId = await plan({ target: 1_002 });
+    await content(planId);
+    await content(planId);
+    expect(await owner().mutation(api.content_plan_decision.approve, { planId })).toMatchObject({ ok: false, reason: "over_quota" });
+  });
+
   it("is refused when the Recipe was archived", async () => {
     const planId = await plan();
     await content(planId);

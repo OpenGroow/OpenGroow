@@ -27,7 +27,7 @@ const producer = () => {
     ...base,
     manifest: {
       ...base.manifest, id: "producer-cpe", jobTypes: [],
-      missionTypes: [mission("make_video", { publish: { kind: "video" } }), mission("make_tiktok", { publish: { kind: "video", platforms: ["tiktok"] } })],
+      missionTypes: [mission("make_video", { publish: { kind: "video" } }), mission("make_post", { publish: { kind: "image" } }), mission("make_sourced", { publish: { kind: "video" }, contextProviders: ["observation-production-source"] }), mission("make_tiktok", { publish: { kind: "video", platforms: ["tiktok"] } })],
     },
   } as unknown as ReturnType<typeof loadFixtureTemplate>;
 };
@@ -71,7 +71,11 @@ async function plan(fields: { status?: "draft" | "approved" | "rejected"; period
     const runId = await ctx.db.insert("runs", {
       jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: "tpl", agentName: "planner", sessionKey: `s-${Math.random()}`,
       status: "running", createdAt: now, updatedAt: now,
-    });
+      contentPlanning: {
+        periodStart: "2030-03-05", periodEnd: "2030-03-11",
+        targets: [{ kind: "video", target: 5, existing: 0, remaining: 5, publishTargets: ["social:example"] }], ignored: [],
+      },
+    } as never);
     return await ctx.db.insert("contentPlans", {
       ownerId: OWNER.subject, instanceId: INSTANCE, runId, periodStart: fields.periodStart ?? "2030-03-05", periodEnd: "2030-03-11",
       rationale: "Because.", status: fields.status ?? "draft", createdAt: now,
@@ -131,6 +135,27 @@ describe("content_plan_edit.update", () => {
     const options = await owner().query(api.content_plan_edit.recipeOptions, { contentId: id });
     expect(options.map((o) => o.name).sort()).toEqual(["Other", "Reel recipe"]);
     expect(await stranger().query(api.content_plan_edit.recipeOptions, { contentId: id })).toEqual([]);
+  });
+
+  it("applies the persistence rules to a new Recipe: a Mission type that needs a Source keeps requiring one", async () => {
+    const id = await content(await plan(), { missionType: "make_sourced", sourceId: undefined });
+    const sourced = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_sourced", name: "Sourced", description: "d", status: "active" } as never));
+    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: sourced })).rejects.toThrow(/needs a Source/);
+    const withSource = await content(await plan(), { missionType: "make_sourced", sourceId });
+    await owner().mutation(api.content_plan_edit.update, { contentId: withSource, recipeId: sourced });
+    expect((await row(withSource))!.recipeId).toBe(sourced);
+  });
+
+  it("refuses a Recipe whose format has no production target in the plan", async () => {
+    const id = await content(await plan(), { missionType: "make_post", kind: "image" });
+    const post = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_post", name: "Post", description: "d", status: "active" } as never));
+    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: post })).rejects.toThrow(/no production target/);
+  });
+
+  it("refuses to remove the Publish targets that are still available, leaving only gone channels", async () => {
+    const id = await content(await plan(), { publishTargets: ["social:example", "gone:example"] });
+    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, publishTargets: ["gone:example"] })).rejects.toThrow(/still available/);
+    expect((await row(id))!.publishTargets).toEqual(["social:example", "gone:example"]);
   });
 
   it("lets Publish targets shrink, never grow, and never be emptied", async () => {

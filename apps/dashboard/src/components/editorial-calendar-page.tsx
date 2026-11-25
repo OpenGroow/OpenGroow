@@ -53,7 +53,8 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
 
   const from = dayKey(cursor.year, cursor.month, 1);
   const to = dayKey(cursor.year, cursor.month, daysIn(cursor));
-  const items = useQuery(api.editorial_calendar.range, { instanceId, from, to }) as CalendarItem[] | undefined;
+  const result = useQuery(api.editorial_calendar.range, { instanceId, from, to }) as { items: CalendarItem[]; truncated: boolean } | undefined;
+  const items = result?.items;
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
     for (const item of items ?? []) map.set(item.plannedAt, [...(map.get(item.plannedAt) ?? []), item]);
@@ -82,6 +83,9 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
+          {result?.truncated ? (
+            <p role="status" className="m-0 text-sm text-foreground">This month holds more contents than can be shown here: only the first {items.length} are listed.</p>
+          ) : null}
           {items.length === 0 ? <p className="m-0 text-sm text-muted-foreground">No approved content this month.</p> : null}
           {view === "month" ? (
             <MonthGrid cursor={cursor} byDay={byDay} selectedId={selectedId} onSelect={setSelectedId} />
@@ -89,13 +93,11 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
             <ul className="m-0 grid list-none gap-2 p-0">
               {[...items].sort((a, b) => a.plannedAt.localeCompare(b.plannedAt)).map((item) => (
                 <li key={item._id} data-content={item._id}>
-                  <button type="button" className="w-full text-left" onClick={() => setSelectedId(item._id)}>
-                    <Card className="flex flex-wrap items-center gap-3 p-3">
-                      <span className="text-sm text-muted-foreground">{formatDay(item.plannedAt)}</span>
-                      <span className="font-semibold">{item.title}</span>
-                      <span className="text-sm text-muted-foreground">{item.kind} · {item.publishTargets.join(", ")}</span>
-                    </Card>
-                  </button>
+                  <Button type="button" variant="outline" aria-pressed={selectedId === item._id} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={() => setSelectedId(item._id)}>
+                    <span className="text-sm text-muted-foreground">{formatDay(item.plannedAt)}</span>
+                    <span className="font-semibold">{item.title}</span>
+                    <span className="text-sm font-normal text-muted-foreground">{item.kind} · {item.publishTargets.join(", ")}</span>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -122,15 +124,17 @@ function MonthGrid({ cursor, byDay, selectedId, onSelect }: { cursor: MonthKey; 
           <div key={key} data-day={key} className="grid min-h-24 content-start gap-1 rounded-md border p-1">
             <span className="text-xs text-muted-foreground">{day}</span>
             {(byDay.get(key) ?? []).map((item) => (
-              <button
+              <Button
                 key={item._id}
                 type="button"
+                size="xs"
+                variant="outline"
                 aria-pressed={selectedId === item._id}
-                className="truncate rounded bg-primary/10 px-1 py-0.5 text-left text-xs"
+                className="w-full justify-start overflow-hidden"
                 onClick={() => onSelect(item._id)}
               >
-                {item.title}
-              </button>
+                <span className="truncate">{item.title}</span>
+              </Button>
             ))}
           </div>
         );

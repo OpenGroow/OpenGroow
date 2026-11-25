@@ -10,7 +10,8 @@ import { frequencyV } from "./schedules.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
-import { CONTENT_PLANNING_JOB_TYPE, defaultContentPlanningConfig } from "./content_planning_jobs.js";
+import { defaultContentPlanningConfig } from "./content_planning_jobs.js";
+import { CONTENT_PLANNING_JOB_TYPE } from "./content_planning_shared.js";
 
 const DEFAULT_FREQUENCY: Frequency = { unit: "daily", hour: 6, minute: 0 };
 // A Strategic Review learns from accumulated results: every 7 days (Monday), not every day.

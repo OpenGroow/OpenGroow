@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,9 +113,9 @@ function EditForm({ content, period, alert, onCancel, onSave }: {
         <legend className="text-sm text-muted-foreground">Publish targets (uncheck to remove)</legend>
         {content.publishTargets.map(({ target }) => (
           <label key={target} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox" checked={kept.includes(target)}
-              onChange={(event) => setKept((current) => (event.target.checked ? content.publishTargets.map((entry) => entry.target).filter((name) => name === target || current.includes(name)) : current.filter((name) => name !== target)))}
+            <Checkbox
+              aria-label={`Keep ${target}`} checked={kept.includes(target)}
+              onCheckedChange={(checked) => setKept((current) => (checked ? content.publishTargets.map((entry) => entry.target).filter((name) => name === target || current.includes(name)) : current.filter((name) => name !== target)))}
             />
             {target}
           </label>

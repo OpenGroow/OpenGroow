@@ -70,9 +70,10 @@ describe("editorial_calendar.range", () => {
     await content(a, { title: "Proposed", status: "proposed" });
     await content(a, { title: "Rejected", status: "rejected" });
     const days = await owner().query(api.editorial_calendar.range, range);
-    expect(days.map((c) => c.title)).toEqual(["Sooner", "Later"]);
-    expect(days[0]).toMatchObject({ planId: b, plan: { periodStart: "2030-03-11", periodEnd: "2030-03-17" }, kind: "video", publishTargets: ["social:example"], brief: "A brief" });
-    expect(days[0]).not.toHaveProperty("ownerId");
+    expect(days.truncated).toBe(false);
+    expect(days.items.map((c) => c.title)).toEqual(["Sooner", "Later"]);
+    expect(days.items[0]).toMatchObject({ planId: b, plan: { periodStart: "2030-03-11", periodEnd: "2030-03-17" }, kind: "video", publishTargets: ["social:example"], brief: "A brief" });
+    expect(days.items[0]).not.toHaveProperty("ownerId");
   });
 
   it("bounds the range inclusively", async () => {
@@ -81,13 +82,28 @@ describe("editorial_calendar.range", () => {
     await content(a, { title: "First", plannedAt: "2030-03-01" });
     await content(a, { title: "Last", plannedAt: "2030-03-31" });
     await content(a, { title: "After", plannedAt: "2030-04-01" });
-    expect((await owner().query(api.editorial_calendar.range, range)).map((c) => c.title)).toEqual(["First", "Last"]);
+    expect((await owner().query(api.editorial_calendar.range, range)).items.map((c) => c.title)).toEqual(["First", "Last"]);
   });
 
   it("is empty for a stranger and does not leak other Projects", async () => {
     const a = await plan("2030-03-04", "2030-03-10");
     await content(a);
-    expect(await t.withIdentity(STRANGER).query(api.editorial_calendar.range, range)).toEqual([]);
-    expect(await owner().query(api.editorial_calendar.range, { ...range, instanceId: OTHER })).toEqual([]);
+    expect(await t.withIdentity(STRANGER).query(api.editorial_calendar.range, range)).toEqual({ items: [], truncated: false });
+    expect(await owner().query(api.editorial_calendar.range, { ...range, instanceId: OTHER })).toEqual({ items: [], truncated: false });
+  });
+
+  it("says when the range holds more contents than it returns", async () => {
+    const a = await plan("2030-03-04", "2030-03-10");
+    await t.run(async (ctx) => {
+      for (let i = 0; i < 501; i++) {
+        await ctx.db.insert("plannedContents", {
+          ownerId: OWNER.subject, instanceId: INSTANCE, planId: a, kind: "video", missionType: "make_video", recipeId,
+          publishTargets: ["social:example"], title: `T${i}`, brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "approved", createdAt: 1,
+        } as never);
+      }
+    });
+    const result = await owner().query(api.editorial_calendar.range, range);
+    expect(result.truncated).toBe(true);
+    expect(result.items).toHaveLength(500);
   });
 });

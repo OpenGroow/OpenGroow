@@ -74,6 +74,8 @@ export async function resolveItem(
     if (capability.level === "unsupported") errors.push(`${at}: ${capability.reason} (channel "${target}").`);
     else if (capability.level === "uncertain") uncertain.push({ target, reason: capability.reason ?? "" });
   }
+  // A content is never kept without a destination: every pinned channel may have been removed since dispatch.
+  if (publishTargets.length === 0) errors.push(`${at}: no Publish target of format "${declaration.kind}" is available any more.`);
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { kind: declaration.kind, publishTargets }, uncertain };
 }
 

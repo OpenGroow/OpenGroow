@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { capabilityFor } from "@opengroow/publisher-sdk";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { Doc, Id } from "./_generated/dataModel.js";
-import { query, type QueryCtx } from "./_generated/server.js";
+import { query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 import { publisherMetaOf } from "./publisher_packages.js";
@@ -19,7 +19,8 @@ const planView = (plan: Doc<"contentPlans">) => {
   return { _id, periodStart, periodEnd, rationale, status, createdAt, approvedAt, rejectedAt };
 };
 
-const contentsOf = (ctx: QueryCtx, planId: Id<"contentPlans">) => ctx.db.query("plannedContents").withIndex("by_plan", (q) => q.eq("planId", planId)).collect();
+/** Every Planned Content of a plan, whatever its status. */
+export const contentsOf = (ctx: QueryCtx | MutationCtx, planId: Id<"contentPlans">) => ctx.db.query("plannedContents").withIndex("by_plan", (q) => q.eq("planId", planId)).collect();
 
 /** What a Planned Content shows: its references resolved by name, and its destinations re-checked against the Publishers. */
 async function contentView(ctx: QueryCtx, content: Doc<"plannedContents">, publishers: Awaited<ReturnType<typeof projectPublishers>>) {

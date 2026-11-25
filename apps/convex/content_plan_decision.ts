@@ -2,15 +2,15 @@ import { v } from "convex/values";
 import { remainingOf, utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import type { Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
+import { approvedCountsByKind } from "./content_plan_counts.js";
+import { contentsOf } from "./content_plan_review.js";
 import { resolveItem } from "./content_plans.js";
 import { ownerIdFor } from "./instance_ownership.js";
-import { projectPublishers } from "./project_publishers.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
 
 // Decision on a whole Content Plan (ADR-086, issue #181). Each decision is one atomic mutation: the plan is read
 // as `draft` and written in the same transaction, so two concurrent decisions cannot both succeed. Approval creates
 // no Mission, production or Publication; it only marks the plan and its retained contents `approved`.
-
-const MAX_EXISTING_READ = 1_000;
 
 export type DecisionResult =
   | { ok: true }
@@ -23,7 +23,7 @@ async function loadDraft(ctx: MutationCtx, planId: Id<"contentPlans">) {
   const plan = await ctx.db.get(planId);
   if (!plan) throw new Error("Content Plan not found");
   await ownerIdFor(ctx, plan.instanceId);
-  const contents = await ctx.db.query("plannedContents").withIndex("by_plan", (q) => q.eq("planId", planId)).collect();
+  const contents = await contentsOf(ctx, planId);
   return { plan, contents };
 }
 
@@ -55,18 +55,19 @@ export const approve = mutation({
     for (const [index, content] of retained.entries()) {
       const outcome = await resolveItem(ctx, run, pins, { missionType: content.missionType, recipeId: content.recipeId, ...(content.sourceId ? { sourceId: content.sourceId } : {}) }, `"${content.title}" (#${index + 1})`, publishers);
       if (!outcome.ok) errors.push(...outcome.errors);
+      // The destinations of the content itself (possibly narrowed by an edit): none may be left without an available channel.
+      if (!content.publishTargets.some((target) => channelOf(publishers, target))) {
+        errors.push(`"${content.title}" (#${index + 1}): none of its Publish targets is available any more.`);
+      }
     }
     if (errors.length > 0) return refuse("invalid", errors.join(" "));
 
     // Existing quantity now: approved contents of the period, from any plan (this one is still a draft).
-    const approved = await ctx.db
-      .query("plannedContents")
-      .withIndex("by_instance_status_plannedAt", (q) => q.eq("instanceId", plan.instanceId).eq("status", "approved").gte("plannedAt", plan.periodStart).lte("plannedAt", plan.periodEnd))
-      .take(MAX_EXISTING_READ);
+    const approved = await approvedCountsByKind(ctx, plan.instanceId, plan.periodStart, plan.periodEnd);
     const overs: string[] = [];
     for (const target of pins.targets) {
       const count = retained.filter((content) => content.kind === target.kind).length;
-      const remaining = remainingOf(target.target, approved.filter((content) => content.kind === target.kind).length);
+      const remaining = remainingOf(target.target, approved.get(target.kind) ?? 0);
       if (count > remaining) overs.push(`Format "${target.kind}": ${count} contents retained but only ${remaining} remain to plan.`);
     }
     if (overs.length > 0) return refuse("over_quota", overs.join(" "));

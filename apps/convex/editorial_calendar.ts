@@ -10,20 +10,24 @@ const MAX_CONTENTS = 500;
 export const range = query({
   args: { instanceId: v.string(), from: v.string(), to: v.string() },
   handler: async (ctx, args) => {
-    if ((await readOwnerId(ctx, args.instanceId)) === null) return [];
-    const rows = await ctx.db
+    if ((await readOwnerId(ctx, args.instanceId)) === null) return { items: [], truncated: false };
+    const found = await ctx.db
       .query("plannedContents")
       .withIndex("by_instance_status_plannedAt", (q) => q.eq("instanceId", args.instanceId).eq("status", "approved").gte("plannedAt", args.from).lte("plannedAt", args.to))
-      .take(MAX_CONTENTS);
+      .take(MAX_CONTENTS + 1);
+    const truncated = found.length > MAX_CONTENTS;
+    const rows = found.slice(0, MAX_CONTENTS);
     const plans = new Map<string, { periodStart: string; periodEnd: string } | null>();
     for (const row of rows) {
       if (plans.has(row.planId)) continue;
       const plan = await ctx.db.get(row.planId);
       plans.set(row.planId, plan && plan.instanceId === args.instanceId ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd } : null);
     }
-    return rows.map((row) => {
+    const items = rows.map((row) => {
       const { _id, planId, kind, title, brief, plannedAt, intent, rationale, publishTargets } = row;
       return { _id, planId, kind, title, brief, plannedAt, intent, rationale, publishTargets, plan: plans.get(planId) ?? null };
     });
+    // `truncated`: the range holds more contents than are returned, so the calendar must say it shows only part of it.
+    return { items, truncated };
   },
 });

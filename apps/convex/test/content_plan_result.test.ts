@@ -5,7 +5,7 @@ import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
-import { buildContentPlanningRunFile } from "../content_planning_jobs";
+import { buildContentPlanningRunFile } from "../content_planning_dispatch";
 import { decideReconciliation, type ReconcileSnapshot } from "../mission_dispatcher/reconciliation";
 
 // Issue #176: what a content_planning Run returns becomes one draft Content Plan with its proposed Planned
@@ -18,6 +18,7 @@ const modules = {
   "../project_agents.ts": () => import("../project_agents.js"),
   "../runs.ts": () => import("../runs.js"),
   "../content_planning_jobs.ts": () => import("../content_planning_jobs.js"),
+  "../content_planning_dispatch.ts": () => import("../content_planning_dispatch.js"),
   "../source_jobs.ts": () => import("../source_jobs.js"),
   "../score_jobs.ts": () => import("../score_jobs.js"),
 };
@@ -114,6 +115,20 @@ const tableCounts = () => t.run(async (ctx) => ({
   recipes: (await ctx.db.query("productionRecipes").collect()).length,
   reviews: (await ctx.db.query("strategicReviews").collect()).length,
 }));
+
+describe("destinations", () => {
+  it("refuses an item whose pinned channels were all removed since dispatch, and persists nothing", async () => {
+    const runId = await startRun();
+    await t.run(async (ctx) => {
+      const publisher = (await ctx.db.query("publishers").collect())[0]!;
+      await ctx.db.patch(publisher._id, { targets: [{ target: "blog:example" }] } as never);
+    });
+    await complete(runId, { rationale: "r", items: [await item()] });
+    expect(await plans()).toHaveLength(0);
+    expect(await contents()).toHaveLength(0);
+    expect((await getRun(runId))!.errorMessage).toMatch(/no Publish target/);
+  });
+});
 
 describe("a valid result", () => {
   it("creates one draft plan with proposed contents, fills publish targets and format, and settles the Job", async () => {
@@ -282,7 +297,7 @@ describe("retries", () => {
     expect(await getRun(first)).toMatchObject({ status: "failed" });
     expect(await getRun(retryId)).toMatchObject({ status: "pending", resumedFromRunId: first, contentPlanning: pins });
     expect(await getJob()).not.toMatchObject({ lastOutcome: "failed" });
-    const inputs = await t.query(internal.content_planning_jobs.loadDispatchInputs, { runId: retryId });
+    const inputs = await t.query(internal.content_planning_dispatch.loadDispatchInputs, { runId: retryId });
     expect(inputs!.pins).toEqual(pins);
     expect(inputs!.feedback).toEqual([expect.stringMatching(/items\[1\]/)]);
     expect(inputs!.feedback![0]).not.toMatch(/items\[0\]/);
@@ -321,7 +336,7 @@ describe("retries", () => {
     await t.mutation(internal.runs.markFailed, { runId: first, code: "file_invalid", message: "bad json", retryWithFeedback: true });
     const retryId = (await runtime()).inFlightRunId!;
     expect(retryId).not.toBe(first);
-    expect((await t.query(internal.content_planning_jobs.loadDispatchInputs, { runId: retryId }))!.feedback).toEqual([expect.stringContaining("bad json")]);
+    expect((await t.query(internal.content_planning_dispatch.loadDispatchInputs, { runId: retryId }))!.feedback).toEqual([expect.stringContaining("bad json")]);
   });
 
   it("never retries draft_exists", async () => {

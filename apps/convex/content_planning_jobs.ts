@@ -1,14 +1,13 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { allChannels, projectPublishers } from "./project_publishers.js";
-import { CONTEXT_PROVIDER_RENDERERS } from "./mission_dispatcher/context_providers.js";
-import { persistContentPlan } from "./content_plans.js";
-import { parseContentPlanEnvelope } from "./content_plan_rules.js";
-import type { RunResult } from "./run_result.js";
+import { startRun } from "./content_planning_runs.js";
+import { approvedCountsByKind } from "./content_plan_counts.js";
+import { CONTENT_PLANNING_JOB_TYPE, runtimeOf, type ContentPlanningPins, type Runtime } from "./content_planning_shared.js";
 import { planningPeriodOf, remainingOf } from "@opengroow/protocol/content-planning-pins";
 import {
   planningDaysOf,
@@ -24,33 +23,11 @@ import {
 // the options the Project offers for it, and the pass that decides whether a
 // Run can start at all. Skips happen before dispatch and create no Run.
 
-export const CONTENT_PLANNING_JOB_TYPE = "content_planning" as const;
 export const NO_TARGETS_SUMMARY = "no production targets configured";
 export const DRAFT_EXISTS_SUMMARY = "a draft Content Plan is waiting for review";
 export const TARGETS_MET_SUMMARY = "targets already met";
 
 const IN_FLIGHT = new Set(["pending", "dispatching", "running", "awaiting_job"]);
-/** Bounds the count of approved contents read for one period. */
-const MAX_EXISTING_READ = 500;
-
-/** Everything a Content Planning Run depends on, pinned on the Run when it starts (`run.contentPlanning`). */
-export type ContentPlanningPins = NonNullable<Doc<"runs">["contentPlanning"]>;
-
-/** The text a Content Planning Run reads: the pinned period and targets (context provider) and what to do with them. */
-export function buildContentPlanningRunFile(pins: ContentPlanningPins, feedback?: readonly string[]): string {
-  const section = CONTEXT_PROVIDER_RENDERERS["content-planning-targets"](pins);
-  const lines = [
-    "# Content Planning",
-    "",
-    "This session is a Content Planning Job, not a Mission: propose a Content Plan for the period below and return the result described in your Job instructions (jobs/content-planning.md). Nothing here creates a Mission.",
-    "",
-    section ?? "",
-  ];
-  if (feedback && feedback.length > 0) {
-    lines.push("", "## Previous attempt feedback", "", "Your previous result was refused. Fix each of these reasons and return the whole Content Plan again, for the same period and targets:", "", ...feedback.map((reason) => `- ${reason}`));
-  }
-  return lines.join("\n");
-}
 
 /** What a new Job holds: a week horizon and no target. */
 export function defaultContentPlanningConfig() {
@@ -114,15 +91,6 @@ export const setConfig = mutation({
   },
 });
 
-/** Tries of one Content Planning execution: the first Run and its retries. */
-export const MAX_CONTENT_PLANNING_TRIES = 3;
-
-type Runtime = Record<string, unknown>;
-
-function runtimeOf(job: Doc<"jobs">): Runtime {
-  return job.runtime && typeof job.runtime === "object" && !Array.isArray(job.runtime) ? (job.runtime as Runtime) : {};
-}
-
 function frequencyOf(job: Doc<"jobs">): Frequency {
   return {
     unit: job.unit,
@@ -152,6 +120,21 @@ function skipSummary(base: string, ignored: readonly string[]): string {
   return ignored.length > 0 ? `${base} (ignored: ${ignored.join("; ")})` : base;
 }
 
+/**
+ * The reason a stored configuration may not start a Run (horizon outside its bounds, total quantity over the limit,
+ * a format listed twice...), or null. The shared validator is applied to its structure only: a format or Publish target
+ * the Project no longer offers is not an error here, `usableTargets` ignores it and reports it.
+ */
+function invalidStoredConfig(config: unknown): string | null {
+  const stored = config === undefined || config === null ? defaultContentPlanningConfig() : config;
+  const targets = productionTargetsOf(stored);
+  const checked = validateContentPlanningConfig(stored, {
+    formats: targets.map((target) => target.kind),
+    publishTargets: targets.flatMap((target) => target.publishTargets),
+  });
+  return checked.ok ? null : `The stored configuration is invalid: ${checked.errors.join(" ")}`;
+}
+
 async function hasRunInFlight(ctx: MutationCtx, job: Doc<"jobs">): Promise<boolean> {
   const runId = runtimeOf(job).inFlightRunId;
   const run = typeof runId === "string" ? await ctx.db.get(runId as Id<"runs">) : null;
@@ -168,138 +151,17 @@ async function pinsFor(
 ): Promise<ContentPlanningPins> {
   const { periodStart, periodEnd } = planningPeriodOf(now, planningDaysOf(job.config));
   // Approved Planned Contents of the period, from any plan; Missions and Publications outside plans never count.
-  const approved = await ctx.db
-    .query("plannedContents")
-    .withIndex("by_instance_status_plannedAt", (q) => q.eq("instanceId", job.instanceId).eq("status", "approved").gte("plannedAt", periodStart).lte("plannedAt", periodEnd))
-    .take(MAX_EXISTING_READ);
+  const approved = await approvedCountsByKind(ctx, job.instanceId, periodStart, periodEnd);
   return {
     periodStart,
     periodEnd,
     targets: usable.map((entry) => {
-      const existing = approved.filter((content) => content.kind === entry.kind).length;
+      const existing = approved.get(entry.kind) ?? 0;
       return { kind: entry.kind, target: entry.quantity, existing, remaining: remainingOf(entry.quantity, existing), publishTargets: entry.publishTargets };
     }),
     ignored: [...ignored],
   };
 }
-
-/** Creates the Run holding its pins; the Job's manual claim is consumed and its next run advanced. */
-async function startRun(ctx: MutationCtx, job: Doc<"jobs">, pins: ContentPlanningPins, settled: Record<string, unknown>, now: number): Promise<void> {
-  const agent = await ctx.db
-    .query("projectAgents")
-    .withIndex("by_instance_template", (q) => q.eq("instanceId", job.instanceId).eq("templateId", job.templateId))
-    .unique();
-  const runId = await ctx.db.insert("runs", {
-    jobId: job._id, ownerId: job.ownerId, instanceId: job.instanceId, templateId: job.templateId,
-    agentName: agent?.openclawAgentName ?? job.templateId, sessionKey: "", status: "pending", contentPlanning: pins, createdAt: now, updatedAt: now,
-  });
-  await ctx.db.patch(runId, { sessionKey: `mega-run-${runId}` });
-  await ctx.db.patch(job._id, {
-    ...settled, latestRunId: runId, lastRunAt: now, runtime: { ...(settled.runtime as Runtime), inFlightRunId: runId, inFlightTries: 0 }, lastError: undefined,
-  });
-}
-
-/** A retry of a Run whose result was refused: a new Run holding the very same pins, with the reasons to feed back. */
-async function retryRun(ctx: MutationCtx, job: Doc<"jobs">, run: Doc<"runs">, tries: number, reasons: string[]): Promise<void> {
-  const now = Date.now();
-  const retryId = await ctx.db.insert("runs", {
-    jobId: job._id, ownerId: job.ownerId, instanceId: job.instanceId, templateId: job.templateId,
-    agentName: run.agentName, sessionKey: "", status: "pending", resumedFromRunId: run._id,
-    ...(run.contentPlanning ? { contentPlanning: run.contentPlanning } : {}),
-    createdAt: now, updatedAt: now,
-  });
-  await ctx.db.patch(retryId, { sessionKey: `mega-run-${retryId}` });
-  await ctx.db.patch(job._id, {
-    latestRunId: retryId, lastRunAt: now,
-    runtime: { ...runtimeOf(job), inFlightRunId: retryId, inFlightTries: tries, inFlightErrors: reasons },
-    updatedAt: now,
-  });
-}
-
-/**
- * A Content Planning Run failed or was cancelled before a plan was persisted. When `reasons` are given (a refused or
- * unreadable result) and the budget allows, a new Run with the same pins is started; otherwise the Job's execution
- * ends as failed with `error`.
- */
-export async function failContentPlanningRun(ctx: MutationCtx, run: Doc<"runs">, jobId: Id<"jobs">, error: string, reasons?: string[]): Promise<void> {
-  const job = await ctx.db.get(jobId);
-  if (!job || job.type !== CONTENT_PLANNING_JOB_TYPE || runtimeOf(job).inFlightRunId !== run._id) return;
-  const runtime = runtimeOf(job);
-  const tries = (typeof runtime.inFlightTries === "number" ? runtime.inFlightTries : 0) + 1;
-  if (reasons && run.contentPlanning && tries < MAX_CONTENT_PLANNING_TRIES) {
-    await retryRun(ctx, job, run, tries, reasons);
-    return;
-  }
-  const { inFlightRunId: _run, inFlightTries: _tries, inFlightErrors: _errors, ...rest } = runtime;
-  await ctx.db.patch(job._id, { runtime: rest, lastOutcome: "failed", lastError: error, updatedAt: Date.now() });
-}
-
-/** Ends the Job's current execution: the in-flight marker is cleared and the outcome recorded (a newer manual claim is kept). */
-async function finishContentPlanningJob(ctx: MutationCtx, job: Doc<"jobs">, outcome: "succeeded" | "failed", summary?: string, error?: string): Promise<void> {
-  const { inFlightRunId: _run, inFlightTries: _tries, inFlightErrors: _errors, ...rest } = runtimeOf(job);
-  await ctx.db.patch(job._id, { runtime: rest, lastOutcome: outcome, lastSummary: summary, lastError: outcome === "failed" ? error : undefined, updatedAt: Date.now() });
-}
-
-/**
- * A content_planning Run ended with its result file (#176): validated as a whole and persisted as a draft Content Plan
- * (the Agent's `items: []` completes the Run with its rationale and no plan). A result that cannot be persisted fails
- * the Run with the reasons and creates nothing. A Run already settled is left as it is.
- */
-export async function settleContentPlanningRun(ctx: MutationCtx, run: Doc<"runs">, jobId: Id<"jobs">, result: RunResult, envelope: unknown): Promise<void> {
-  if (run.status === "completed" || run.status === "failed" || run.status === "cancelled") return;
-  const now = Date.now();
-  const outcome = envelope === undefined
-    ? ({ ok: false, reason: "invalid_result", message: "The Run returned no Content Plan result." } as const)
-    : await persistContentPlan(ctx, run, envelope);
-  if (!outcome.ok) {
-    const errorMessage = `${outcome.reason}: ${outcome.message}`;
-    await ctx.db.patch(run._id, { status: "failed", errorMessage, completedAt: now, updatedAt: now });
-    await failContentPlanningRun(ctx, run, jobId, errorMessage, outcome.reason === "invalid_result" ? ("errors" in outcome && outcome.errors ? outcome.errors : [outcome.message]) : undefined);
-    return;
-  }
-  await ctx.db.patch(run._id, { status: "completed", result, completedAt: now, updatedAt: now });
-  const job = await ctx.db.get(jobId);
-  if (!job || runtimeOf(job).inFlightRunId !== run._id) return;
-  const parsed = run.contentPlanning ? parseContentPlanEnvelope(envelope, run.contentPlanning) : undefined;
-  const summary = outcome.planId === null
-    ? (parsed?.ok ? parsed.value.rationale : "No content planned")
-    : `Content Plan drafted with ${outcome.count} content${outcome.count === 1 ? "" : "s"}, waiting for review`;
-  await finishContentPlanningJob(ctx, job, "succeeded", summary);
-}
-
-export const isContentPlanningRun = internalQuery({
-  args: { runId: v.id("runs") },
-  handler: async (ctx, args) => (await ctx.db.get(args.runId))?.contentPlanning !== undefined,
-});
-
-/** What dispatching a Run needs; the pins come from the Run itself, never recomputed from the Job. */
-export const loadDispatchInputs = internalQuery({
-  args: { runId: v.id("runs") },
-  handler: async (ctx, args) => {
-    const run = await ctx.db.get(args.runId);
-    const jobId = (run as (typeof run & { jobId?: Id<"jobs"> }) | null)?.jobId;
-    if (!run || !jobId || !run.contentPlanning) return null;
-    const job = await ctx.db.get(jobId);
-    if (!job || job.type !== CONTENT_PLANNING_JOB_TYPE) return null;
-    const agent = await ctx.db
-      .query("projectAgents")
-      .withIndex("by_instance_template", (q) => q.eq("instanceId", run.instanceId).eq("templateId", job.templateId))
-      .unique();
-    if (!agent?.workspaceKey) return null;
-    return {
-      run: { _id: run._id, agentName: run.agentName, sessionKey: run.sessionKey },
-      workspaceKey: agent.workspaceKey,
-      instanceId: run.instanceId,
-      templateId: job.templateId,
-      jobId: job._id,
-      pins: run.contentPlanning,
-      // The reasons of the refused result, for a retry only.
-      feedback: run.resumedFromRunId && Array.isArray(runtimeOf(job).inFlightErrors) && runtimeOf(job).inFlightRunId === run._id
-        ? (runtimeOf(job).inFlightErrors as string[])
-        : undefined,
-    };
-  },
-});
 
 /** Starts the due passes: scheduled ones of active Jobs and queued Run Now requests. */
 export const tick = internalMutation({
@@ -323,6 +185,11 @@ export const tick = internalMutation({
       };
       if (!(await agentIsActive(ctx, job))) {
         await ctx.db.patch(job._id, { ...settled, lastRunAt: now, lastOutcome: "failed", lastError: "Strategy Agent is not active" });
+        continue;
+      }
+      const invalid = invalidStoredConfig(job.config);
+      if (invalid) {
+        await ctx.db.patch(job._id, { ...settled, lastRunAt: now, lastOutcome: "failed", lastError: invalid });
         continue;
       }
       const { usable, ignored } = usableTargets(productionTargetsOf(job.config), await planningOptionsOf(ctx, job.instanceId));

@@ -35,8 +35,8 @@ describe("EditorialCalendarContent", () => {
     vi.useRealTimers();
   });
 
-  async function render(items: unknown[] | undefined) {
-    useQueryMock.mockImplementation((_key: string, args: { from: string; to: string }) => (items === undefined ? undefined : items.filter((i) => (i as { plannedAt: string }).plannedAt >= args.from && (i as { plannedAt: string }).plannedAt <= args.to)));
+  async function render(items: unknown[] | undefined, truncated = false) {
+    useQueryMock.mockImplementation((_key: string, args: { from: string; to: string }) => (items === undefined ? undefined : { items: items.filter((i) => (i as { plannedAt: string }).plannedAt >= args.from && (i as { plannedAt: string }).plannedAt <= args.to), truncated }));
     await act(async () => root.render(<EditorialCalendarContent instanceId="instance-1" />));
   }
   const text = () => document.body.textContent ?? "";
@@ -83,6 +83,13 @@ describe("EditorialCalendarContent", () => {
     const labels = Array.from(document.querySelectorAll("button")).map((b) => b.getAttribute("aria-label") || b.textContent?.trim());
     expect(labels.every((l) => ["List", "Month", "Previous month", "Next month", "Today", undefined, null].includes(l) || /^Reaction/.test(l ?? ""))).toBe(true);
     expect(text()).not.toMatch(/scheduled|publication|publishes on|will be published|\bedit\b|delete|produce/i);
+  });
+
+  it("says when the month holds more contents than are shown", async () => {
+    await render([item()], true);
+    expect(document.querySelector("[role='status']")?.textContent).toContain("more contents than can be shown");
+    await render([item()], false);
+    expect(document.querySelector("[role='status']")).toBeNull();
   });
 
   it("shows empty and loading states", async () => {

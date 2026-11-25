@@ -32,7 +32,7 @@ import { pollSourceEnrichmentRun } from "./source_jobs/enrichment_poll_node.js";
 import { buildSourceScoringRunFile } from "./source_scoring.js";
 import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { buildStrategicReviewRunFile } from "./strategic_review_jobs.js";
-import { buildContentPlanningRunFile } from "./content_planning_jobs.js";
+import { buildContentPlanningRunFile } from "./content_planning_dispatch.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
@@ -127,7 +127,7 @@ export const pollExternalJobs = internalAction({
         && (await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: r._id })
           || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id })
           || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id })
-          || await ctx.runQuery(internal.content_planning_jobs.isContentPlanningRun, { runId: r._id }))) continue;
+          || await ctx.runQuery(internal.content_planning_dispatch.isContentPlanningRun, { runId: r._id }))) continue;
       else await pollExternalJobRun(ctx, r, opts, registry);
     }
   },
@@ -355,7 +355,7 @@ export const dispatchPendingRuns = internalAction({
       }
 
       if (claimed.parent.kind === "job"
-        && await ctx.runQuery(internal.content_planning_jobs.isContentPlanningRun, { runId: claimed.runId })) {
+        && await ctx.runQuery(internal.content_planning_dispatch.isContentPlanningRun, { runId: claimed.runId })) {
         if (await dispatchContentPlanningRun(ctx, claimed.runId, claimed.parent)) continue;
       }
 
@@ -754,20 +754,29 @@ async function dispatchSourceRoutingRun(
   return true;
 }
 
-/** Dispatch a Strategic Review Run: its period and base were pinned on the Run when it started. */
-async function dispatchStrategicReviewRun(
+type JobRunInputs = { instanceId: string; templateId: string; workspaceKey: string; run: { agentName: string; sessionKey: string } };
+
+/**
+ * Dispatch the Run of a Job whose inputs were pinned on the Run when it started (Strategic Review, Content Planning):
+ * the run file, the Agent's AGENTS.md and the Job's own instructions are written, then the exec command is enqueued.
+ * Returns false when there are no inputs, so the caller falls through to the other kinds of Run.
+ */
+async function dispatchJobRun<I extends JobRunInputs>(
   ctx: ActionCtx,
   runId: Id<"runs">,
   parent: Extract<RunParent, { kind: "job" }>,
+  inputs: I | null,
+  buildRunFile: (inputs: I) => string,
+  instructions: { type: "strategic_review" | "content_planning"; filePath: string },
 ): Promise<boolean> {
-  const inputs = await ctx.runQuery(internal.strategic_review_jobs.loadDispatchInputs, { runId });
   if (!inputs) return false;
   try {
     const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
-    const runMd = buildStrategicReviewRunFile(inputs.pins);
+    const runMd = buildRunFile(inputs);
     const runPath = jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
+    const jobInstructions = template?.jobInstructions?.[instructions.type];
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,
@@ -784,9 +793,7 @@ async function dispatchStrategicReviewRun(
         filesToWrite: [
           { filePath: runPath, content: runMd },
           ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
-          ...(template?.jobInstructions?.strategic_review
-            ? [{ filePath: "jobs/strategic-review.md", content: template.jobInstructions.strategic_review }]
-            : []),
+          ...(jobInstructions ? [{ filePath: instructions.filePath, content: jobInstructions }] : []),
         ],
         runFilePath: runPath,
         outputsFilePath: outputsPath,
@@ -805,53 +812,14 @@ async function dispatchStrategicReviewRun(
   return true;
 }
 
+/** Dispatch a Strategic Review Run: its period and base were pinned on the Run when it started. */
+async function dispatchStrategicReviewRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "job" }>): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.strategic_review_jobs.loadDispatchInputs, { runId });
+  return dispatchJobRun(ctx, runId, parent, inputs, (loaded) => buildStrategicReviewRunFile(loaded.pins), { type: "strategic_review", filePath: "jobs/strategic-review.md" });
+}
+
 /** Dispatch a Content Planning Run: its period and targets were pinned on the Run when it started. */
-async function dispatchContentPlanningRun(
-  ctx: ActionCtx,
-  runId: Id<"runs">,
-  parent: Extract<RunParent, { kind: "job" }>,
-): Promise<boolean> {
-  const inputs = await ctx.runQuery(internal.content_planning_jobs.loadDispatchInputs, { runId });
-  if (!inputs) return false;
-  try {
-    const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
-    const runMd = buildContentPlanningRunFile(inputs.pins, inputs.feedback);
-    const runPath = jobRunFilePath(parent.jobId);
-    const outputsPath = runOutputsFilePath(parent, runId);
-    const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
-    const execResult = await ctx.runMutation(enqueueCommandMutation, {
-      instanceId: inputs.instanceId,
-      type: RUNTIME_OPENCLAW_EXEC,
-      payload: {
-        commandText: buildOpenClawExecCommandText({
-          agentName: inputs.run.agentName,
-          sessionKey: inputs.run.sessionKey,
-          runFilePath: runPath,
-          outputsFilePath: outputsPath,
-          timeoutMs: execTimeoutMs,
-        }),
-        timeoutMs: execTimeoutMs,
-        workspaceKey: inputs.workspaceKey,
-        filesToWrite: [
-          { filePath: runPath, content: runMd },
-          ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
-          ...(template?.jobInstructions?.content_planning
-            ? [{ filePath: "jobs/content-planning.md", content: template.jobInstructions.content_planning }]
-            : []),
-        ],
-        runFilePath: runPath,
-        outputsFilePath: outputsPath,
-        requiredMcpServers: requiredMcpServers(template),
-      },
-    });
-    await ctx.runMutation(internal.runs.markRunning, {
-      runId,
-      dispatchCommandId: execResult.commandId,
-      agentsMdSnapshot: template?.agentsMd,
-      contextMdSnapshot: runMd,
-    });
-  } catch (err) {
-    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_failed", message: errorMessage(err) });
-  }
-  return true;
+async function dispatchContentPlanningRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "job" }>): Promise<boolean> {
+  const inputs = await ctx.runQuery(internal.content_planning_dispatch.loadDispatchInputs, { runId });
+  return dispatchJobRun(ctx, runId, parent, inputs, (loaded) => buildContentPlanningRunFile(loaded.pins, loaded.feedback), { type: "content_planning", filePath: "jobs/content-planning.md" });
 }

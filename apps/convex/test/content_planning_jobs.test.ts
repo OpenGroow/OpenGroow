@@ -192,6 +192,23 @@ describe("Run Now", () => {
     expect(await runCount()).toBe(0);
   });
 
+  it.each([
+    ["a horizon outside 1 to 60", { planningDays: 90, productionTargets: [video()] }, /planning horizon/],
+    ["a total quantity above 100", { planningDays: 7, productionTargets: [video({ quantity: 80 }), video({ kind: "image", quantity: 21, publishTargets: ["social:example"] })] }, /100/],
+    ["a format listed twice", { planningDays: 7, productionTargets: [video(), video({ quantity: 1 })] }, /listed twice/],
+  ])("ends failed with a clear message for a stored configuration with %s, and creates no Run", async (_name, config, message) => {
+    await activate(PRODUCER);
+    await addPublisher(["social:example"]);
+    const before = await planningJob();
+    await t.run((ctx) => ctx.db.patch(before._id, { config }));
+    const job = await runNowAndTick();
+    expect(job.lastOutcome).toBe("failed");
+    expect(job.lastError).toMatch(/stored configuration is invalid/);
+    expect(job.lastError).toMatch(message);
+    expect(job.runNowAt).toBeUndefined();
+    expect(await runCount()).toBe(0);
+  });
+
   it("a paused Job runs on request and goes back to paused", async () => {
     const before = await planningJob();
     await owner().mutation(api.jobs.pause, { jobId: before._id });

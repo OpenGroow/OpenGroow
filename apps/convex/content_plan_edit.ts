@@ -2,7 +2,9 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 import { CONTENT_PLAN_LIMITS, isIsoDate } from "./content_plan_rules.js";
+import { resolveItem } from "./content_plans.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
+import { channelOf, projectPublishers } from "./project_publishers.js";
 
 // Editing a draft Content Plan (ADR-086, issue #180). The user may change a title, a brief, a date, the Recipe (another
 // one of the same Mission type, so format and quota never change) and the Publish targets (only by removing), or remove
@@ -53,25 +55,26 @@ export const update = mutation({
       patch.plannedAt = args.plannedAt;
     }
     if (args.recipeId !== undefined) {
-      const recipe = await ctx.db.get(args.recipeId);
-      if (!recipe || recipe.instanceId !== content.instanceId) throw new Error("The Recipe is not a Recipe of this Project.");
-      if (recipe.status !== "active") throw new Error("The Recipe is archived.");
-      if (recipe.missionType !== content.missionType) {
-        throw new Error(`The Recipe is written for Mission type "${recipe.missionType}", not "${content.missionType}".`);
-      }
-      const agent = await ctx.db
-        .query("projectAgents")
-        .withIndex("by_instance_template", (q) => q.eq("instanceId", content.instanceId).eq("templateId", recipe.templateId))
-        .unique();
-      if (!agent || agent.status !== "active" || (agent.hiddenMissionTypes ?? []).includes(content.missionType)) {
-        throw new Error(`No active Agent offers Mission type "${content.missionType}".`);
-      }
-      patch.recipeId = recipe._id;
+      // The very rules of persistence and approval: Recipe, Agent, Source requirement, pinned format, Publisher compatibility.
+      const run = await ctx.db.get(plan.runId);
+      if (!run?.contentPlanning) throw new Error("The Run that produced this plan no longer carries its targets: reject the plan and plan again.");
+      const outcome = await resolveItem(
+        ctx, run, run.contentPlanning,
+        { missionType: content.missionType, recipeId: args.recipeId, ...(content.sourceId ? { sourceId: content.sourceId } : {}) },
+        "The Recipe", await projectPublishers(ctx, content.instanceId),
+      );
+      if (!outcome.ok) throw new Error(outcome.errors.join(" "));
+      if (outcome.value.kind !== content.kind) throw new Error(`The Recipe produces format "${outcome.value.kind}", not "${content.kind}".`);
+      patch.recipeId = args.recipeId;
     }
     if (args.publishTargets !== undefined) {
       if (args.publishTargets.length === 0) throw new Error("Keep at least one Publish target, or remove the content.");
       if (!args.publishTargets.every((target) => content.publishTargets.includes(target))) throw new Error("Publish targets can only be removed, never added.");
       patch.publishTargets = content.publishTargets.filter((target) => args.publishTargets!.includes(target));
+      const publishers = await projectPublishers(ctx, content.instanceId);
+      if (!patch.publishTargets.some((target) => channelOf(publishers, target))) {
+        throw new Error("Keep at least one Publish target that is still available, or remove the content.");
+      }
     }
     if (Object.keys(patch).length > 0) await ctx.db.patch(content._id, patch);
   },

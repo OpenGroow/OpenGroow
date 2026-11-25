@@ -6,6 +6,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ContentPlansContent } from "../src/components/content-plans-page";
 
+// jsdom has no PointerEvent, which the Checkbox primitive dispatches on click.
+globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const useQueryMock = vi.fn();
@@ -187,7 +190,7 @@ describe("ContentPlansContent", () => {
     it("lets Publish targets be unchecked but offers no way to add one", async () => {
       await render({ draft: withTargets() });
       await click(button(card(), "Edit"));
-      const boxes = Array.from(card().querySelectorAll("input[type='checkbox']")) as HTMLInputElement[];
+      const boxes = Array.from(card().querySelectorAll("[role='checkbox']")) as HTMLElement[];
       expect(boxes).toHaveLength(2);
       await click(boxes[0]!);
       await click(button(card(), "Save"));
