@@ -9,7 +9,7 @@ import {
   BarChart3,
   Brain,
   CalendarDays,
-  CalendarRange,
+  ClipboardList,
   Bot,
   CalendarClock,
   LayoutDashboard,
@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { WaitingLogsPanel } from "./waiting-logs-panel";
 
 const NAV_LINK_BASE_CLASSES =
-  "relative flex h-10 items-center gap-3 rounded-lg px-3 text-left text-base font-medium transition-colors [&_svg]:size-5 [&_svg]:shrink-0";
+  "relative flex h-9 items-center gap-3 rounded-lg px-3 text-left text-base font-medium transition-colors [&_svg]:size-5 [&_svg]:shrink-0";
 
 function navLinkActiveClasses(isActive: boolean) {
   return isActive
@@ -60,8 +60,8 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Strategy",
     items: [
       { id: "memory", label: "Strategic Memory", icon: Brain },
-      { id: "content-plans", label: "Content Plans", icon: CalendarDays },
-      { id: "editorial-calendar", label: "Editorial Calendar", icon: CalendarRange },
+      { id: "content-plans", label: "Content Plans", icon: ClipboardList },
+      { id: "editorial-calendar", label: "Editorial Calendar", icon: CalendarDays },
     ],
   },
   {
@@ -148,11 +148,11 @@ function ProjectNavLinks({
     <>
       <ProjectNavLink view={OVERVIEW_VIEW} {...linkProps} />
       {sections.map((section) => (
-        <div key={section.label} role="group" aria-label={section.label} className="grid gap-1">
+        <div key={section.label} role="group" aria-label={section.label} className="grid gap-0.5">
           {/* Collapsed (xl): the heading gives way to a thin divider. */}
           <div
             aria-hidden={collapsed ? true : undefined}
-            className={cn("mt-2 border-t border-sidebar-border pt-3", collapsed && "xl:mt-1 xl:pt-1")}
+            className={cn("mt-1 border-t border-sidebar-border pt-2", collapsed && "xl:mt-0.5 xl:pt-0.5")}
           >
             <p
               data-nav-heading
@@ -347,7 +347,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
             </div>
 
             {isMobileNavOpen ? (
-              <nav className="grid gap-1 xl:hidden" aria-label="Project sections">
+              <nav className="grid gap-0.5 xl:hidden" aria-label="Project sections">
                 <ProjectNavLinks
                   sections={visibleSections}
                   projectPath={`/projects/${encodeURIComponent(decodedId)}`}
@@ -368,7 +368,7 @@ export default function ProjectLayoutClient({ children, params, isSelfHost }: La
 
             {/* Desktop: the original full-height vertical nav, collapsible via the
                 toggle above (which only renders at `xl`). */}
-            <nav className="hidden xl:grid xl:gap-1" aria-label="Project sections">
+            <nav className="hidden xl:grid xl:gap-0.5" aria-label="Project sections">
               <ProjectNavLinks
                 sections={visibleSections}
                 projectPath={`/projects/${encodeURIComponent(decodedId)}`}
