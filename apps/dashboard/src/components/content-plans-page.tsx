@@ -27,9 +27,9 @@ export function ContentPlansContent({ instanceId }: { instanceId: string }) {
   const history = useQuery(api.content_plan_review.history, { instanceId }) as PlanHistoryView[] | undefined;
 
   return (
-    <div className="grid gap-8">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8">
       <PageHeader title="Content Plans" description="The contents your Planning Agent proposes for the coming period, and the plans you have already decided on." />
-      <section aria-label="Current draft" className="grid gap-3">
+      <section aria-label="Current draft" className="grid min-w-0 gap-3">
         <h2 className="m-0 text-xl font-semibold">Current draft</h2>
         {draft === undefined ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -48,16 +48,16 @@ export function ContentPlansContent({ instanceId }: { instanceId: string }) {
           <DraftPlan draft={draft} />
         )}
       </section>
-      <section aria-label="History" className="grid gap-3">
+      <section aria-label="History" className="grid min-w-0 gap-3">
         <h2 className="m-0 text-xl font-semibold">History</h2>
         {history === undefined ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : history.length === 0 ? (
           <p className="m-0 text-sm text-muted-foreground">No approved or rejected plan yet.</p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0">
+          <ul className="m-0 grid min-w-0 list-none gap-3 p-0">
             {history.map((plan) => (
-              <li key={plan._id} id={`plan-${plan._id}`} data-plan={plan._id}>
+              <li key={plan._id} id={`plan-${plan._id}`} data-plan={plan._id} className="min-w-0">
                 <HistoryPlan plan={plan} />
               </li>
             ))}

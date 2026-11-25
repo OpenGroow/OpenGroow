@@ -20,7 +20,7 @@ export function HistoryPlan({ plan }: { plan: PlanHistoryView }) {
   const [open, setOpen] = useState(false);
   const contents = useQuery(api.content_plan_review.planDetail, open ? { planId: plan._id as Id<"contentPlans"> } : "skip") as PlannedContentView[] | null | undefined;
   return (
-    <Card className="gap-0 p-0">
+    <Card className="min-w-0 gap-0 p-0">
       <button
         type="button"
         aria-expanded={open}
@@ -40,8 +40,8 @@ export function HistoryPlan({ plan }: { plan: PlanHistoryView }) {
         <ChevronRight aria-hidden="true" className={`ml-auto size-4 text-muted-foreground transition-transform${open ? " rotate-90" : ""}`} />
       </button>
       {open ? (
-        <div className="grid gap-4 border-t border-border p-5">
-          <section aria-label="Rationale" className="grid gap-2">
+        <div className="grid min-w-0 gap-4 border-t border-border p-5">
+          <section aria-label="Rationale" className="grid min-w-0 gap-2 break-words">
             <h3 className="m-0 flex items-center gap-2 text-sm font-semibold">
               <FileText aria-hidden="true" className="size-4 text-primary" />
               Strategic rationale
@@ -51,7 +51,7 @@ export function HistoryPlan({ plan }: { plan: PlanHistoryView }) {
           {contents === undefined ? (
             <p className="m-0 text-sm text-muted-foreground">Loading…</p>
           ) : contents === null ? null : (
-            <ul className="m-0 grid list-none gap-3 p-0">
+            <ul className="m-0 grid min-w-0 list-none gap-3 p-0 [&>li]:min-w-0">
               {contents.map((content) => (
                 <PlannedContentCard key={content._id} content={content} period={plan} readOnly />
               ))}

@@ -47,7 +47,7 @@ export function DraftPlan({ draft }: { draft: DraftPlanView }) {
   const stale = isStale(draft, new Date());
   const kept = draft.contents.filter((content) => content.status !== "rejected").length;
   return (
-    <div className="grid gap-4">
+    <div className="grid min-w-0 gap-4">
       {stale ? (
         <Card role="alert" className="grid gap-1 border-status-warning/40 p-4">
           <p className="m-0 text-base font-semibold">This draft's period has passed</p>
@@ -56,7 +56,7 @@ export function DraftPlan({ draft }: { draft: DraftPlanView }) {
           </p>
         </Card>
       ) : null}
-      <Card className="grid gap-5 p-4 sm:p-6">
+      <Card className="grid min-w-0 gap-5 p-4 sm:p-6">
         <div aria-label="Plan summary" className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <CalendarDays className="size-5" />
