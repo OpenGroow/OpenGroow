@@ -23,7 +23,7 @@ const planView = (plan: Doc<"contentPlans">) => {
 export const contentsOf = (ctx: QueryCtx | MutationCtx, planId: Id<"contentPlans">) => ctx.db.query("plannedContents").withIndex("by_plan", (q) => q.eq("planId", planId)).collect();
 
 /** A channel's display label: `@handle` (stored profile, else the key's part after the service), the bare name when it is not a handle (e.g. a repository). */
-function channelLabel(channel: PublisherChannelEntry): string {
+export function channelLabel(channel: PublisherChannelEntry): string {
   const colon = channel.target.indexOf(":");
   const handle = channel.channelProfile ?? (colon >= 0 ? channel.target.slice(colon + 1) : undefined);
   if (!handle) return channel.channelName ?? channel.target;

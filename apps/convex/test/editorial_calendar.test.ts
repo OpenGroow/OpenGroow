@@ -76,6 +76,18 @@ describe("editorial_calendar.range", () => {
     expect(days.items[0]).not.toHaveProperty("ownerId");
   });
 
+  it("resolves each publish target to its label, service and adapter, and the Creative Family", async () => {
+    await t.run((ctx) => ctx.db.insert("publishers", { instanceId: INSTANCE, adapter: "example", url: "https://publisher.example.com", targets: [{ target: "social:example", channelService: "social", channelProfile: "handle1" }], updatedAt: 1 } as never));
+    const a = await plan("2030-03-04", "2030-03-10");
+    await content(a, { publishTargets: ["social:example", "gone:x"] });
+    const [item] = (await owner().query(api.editorial_calendar.range, range)).items;
+    expect(item.targets).toEqual([
+      { target: "social:example", label: "@handle1", service: "social", adapter: "example" },
+      { target: "gone:x", label: "gone:x" },
+    ]);
+    expect(item.creativeFamily).toEqual({ name: "Reaction" });
+  });
+
   it("bounds the range inclusively", async () => {
     const a = await plan("2030-03-04", "2030-03-10");
     await content(a, { title: "Before", plannedAt: "2030-02-28" });

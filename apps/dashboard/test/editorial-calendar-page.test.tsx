@@ -12,9 +12,11 @@ const useQueryMock = vi.fn();
 vi.mock("convex/react", () => ({ useQuery: (...args: unknown[]) => useQueryMock(...args) }));
 vi.mock("@convex/_generated/api", () => ({ api: { editorial_calendar: { range: "editorial_calendar.range" } } }));
 
+vi.mock("../src/components/platform-logo", () => ({ PlatformLogo: ({ service }: { service: string }) => <span data-logo={service} /> }));
+
 const item = (over: Record<string, unknown> = {}) => ({
   _id: "pc-1", planId: "plan-1", kind: "video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.", plannedAt: "2030-03-06",
-  intent: "exploit", rationale: "Reactions led last month.", publishTargets: ["social:example"], plan: { periodStart: "2030-03-04", periodEnd: "2030-03-10" }, ...over,
+  intent: "exploit", rationale: "Reactions led last month.", publishTargets: ["social:example"], targets: [{ target: "social:example", label: "@handle1", service: "social", adapter: "example" }], creativeFamily: { name: "Reaction" }, plan: { periodStart: "2030-03-04", periodEnd: "2030-03-10" }, ...over,
 });
 
 describe("EditorialCalendarContent", () => {
@@ -72,8 +74,26 @@ describe("EditorialCalendarContent", () => {
     await render([item()]);
     await click(document.querySelector("[data-day='2030-03-06'] button"));
     const details = document.querySelector("[aria-label='Content details']")!;
-    for (const expected of ["Reaction to article 1", "Film a silent close-up reaction.", "Reactions led last month.", "social:example", "Exploit", "video"]) expect(details.textContent).toContain(expected);
+    for (const expected of ["Reaction to article 1", "Film a silent close-up reaction.", "Reactions led last month.", "@handle1", "Exploit", "Video", "Production Brief", "Why This Content", "Publish targets", "Reaction"]) expect(details.textContent).toContain(expected);
+    expect(details.querySelector("[data-logo='social']")).not.toBeNull();
+    expect(details.querySelector("[data-slot='content-thumbnail']")).not.toBeNull();
     expect(details.querySelector("a")?.getAttribute("href")).toBe("/projects/instance-1/content-plans#plan-plan-1");
+  });
+
+  it("marks the selected content and shows the format and intent in its chip", async () => {
+    await render([item()]);
+    const chip = document.querySelector("[data-day='2030-03-06'] button")!;
+    expect(chip.textContent).toContain("Video");
+    expect(chip.textContent).toContain("Exploit");
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+    await click(chip);
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("falls back to the raw target key when the query carries no resolved targets", async () => {
+    await render([item({ targets: undefined })]);
+    await click(document.querySelector("[data-day='2030-03-06'] button"));
+    expect(document.querySelector("[aria-label='Content details']")?.textContent).toContain("social:example");
   });
 
   it("is read-only and never speaks of scheduled Publication", async () => {
