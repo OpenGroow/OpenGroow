@@ -101,7 +101,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
     const rules = draft.constraints.split("\n").filter((l) => l.trim() !== "").length;
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[92vh] w-[min(94vw,64rem)] overflow-y-auto">
+        <DialogContent className="max-h-[92vh] w-[min(94vw,64rem)] overflow-x-hidden overflow-y-auto">
           <form className="grid gap-5" noValidate onSubmit={handleSubmit}>
             <DialogHeader className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -116,7 +116,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
               </Button>
             </DialogHeader>
             <div className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-              <div className="grid content-start gap-5">
+              <div className="grid min-w-0 content-start gap-5">
                 <h3 className="m-0 text-base font-semibold text-foreground">Recipe details</h3>
                 <div className="grid gap-2">
                   <Label htmlFor="recipe-name">Name</Label>
@@ -152,7 +152,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
                   </GuidelineRow>
                 </div>
               </div>
-              <aside className="content-start rounded-xl bg-background/60 p-4">{review.aside}</aside>
+              <aside className="min-w-0 content-start rounded-xl bg-background/60 p-4">{review.aside}</aside>
             </div>
             {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             <div className="flex items-center gap-3 border-t border-border pt-4">

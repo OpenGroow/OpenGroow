@@ -43,7 +43,7 @@ function CitedSources({ instanceId, runId }: { instanceId: string; runId: string
   const [all, setAll] = React.useState(false);
   const shown = sources && !all ? sources.slice(0, VISIBLE_SOURCES) : sources;
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
       <div className="flex items-center justify-between">
         <h4 className="m-0 text-sm font-semibold text-foreground">Inspiration sources</h4>
         {sources ? <span className="text-sm text-muted-foreground">{sources.length}</span> : null}
@@ -53,7 +53,7 @@ function CitedSources({ instanceId, runId }: { instanceId: string; runId: string
       ) : sources.length === 0 ? (
         <p className="m-0 text-sm text-muted-foreground">The cited Sources are no longer available.</p>
       ) : (
-        <ul className="m-0 grid list-none gap-1 p-0">
+        <ul className="m-0 grid grid-cols-[minmax(0,1fr)] list-none gap-1 p-0">
           {shown?.map((source) => (
             <li key={source.sourceId}>
               <Link href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source.sourceId)}`} target="_blank" className="flex items-center gap-3 rounded-lg p-2 text-sm text-foreground hover:bg-card">
@@ -80,13 +80,13 @@ function CitedSources({ instanceId, runId }: { instanceId: string; runId: string
 function ProposalContext({ instanceId, generation, proposal }: { instanceId: string; generation: Generation; proposal: RecipeProposal }) {
   const [fullRationale, setFullRationale] = React.useState(false);
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <h3 className="m-0 flex items-center gap-2 text-base font-semibold text-foreground">
         <Sparkles className="size-4 text-primary" /> Creative insights
       </h3>
-      <div className="grid gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
         <h4 className="m-0 text-sm font-semibold text-foreground">Why this recipe?</h4>
-        <p className={cn("m-0 whitespace-pre-wrap text-sm text-muted-foreground", !fullRationale && "line-clamp-5")}>{proposal.rationale}</p>
+        <p className={cn("m-0 whitespace-pre-wrap break-words text-sm text-muted-foreground", !fullRationale && "line-clamp-5")}>{proposal.rationale}</p>
       </div>
       <div className="border-t border-border pt-4">
         <CitedSources instanceId={instanceId} runId={generation.runId} />
