@@ -17,16 +17,6 @@ import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
 /** The period is inclusive and in UTC: a draft is stale from the day after its last day. Nothing expires. */
 const isStale = (plan: { periodEnd: string }, now: Date) => now.toISOString().slice(0, 10) > plan.periodEnd;
 
-/** The rationale as one line of plain text, without the Markdown marks, for the collapsed preview. */
-const plainPreview = (markdown: string) =>
-  markdown
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`>~]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
 /** The plan's Markdown rationale: a two-line preview, expanded for good by "Show more". */
 function PlanRationale({ rationale }: { rationale: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -39,9 +29,12 @@ function PlanRationale({ rationale }: { rationale: string }) {
       {expanded ? (
         <WorkspaceMarkdown content={rationale} />
       ) : (
-        <p data-clamped="true" className="m-0 min-w-0 line-clamp-2 break-words text-sm text-muted-foreground">
-          {plainPreview(rationale)}
-        </p>
+        <div
+          data-clamped="true"
+          className="max-h-11 min-w-0 overflow-hidden break-words text-sm text-muted-foreground [mask-image:linear-gradient(to_bottom,black_55%,transparent)] [&_*]:m-0"
+        >
+          <WorkspaceMarkdown content={rationale} />
+        </div>
       )}
       {expanded ? null : (
         <Button type="button" variant="link" size="sm" aria-expanded={false} className="w-fit" onClick={() => setExpanded(true)}>
