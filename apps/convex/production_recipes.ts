@@ -55,8 +55,11 @@ async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: 
   return templates;
 }
 
-/** Throws unless an installed version of the Template has this Mission type and it declares the provider. */
-async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
+/**
+ * Throws unless an installed version of the Template has this Mission type and it declares the provider.
+ * The one target rule, shared by Recipe creation and Recipe Generation.
+ */
+export async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
   const versions = await installedVersions(ctx, instanceId, templateId);
   if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
   // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
@@ -120,6 +123,17 @@ function versionView(version: Doc<"productionRecipeVersions">) {
   };
 }
 
+/** The Run holding a Recipe Proposal of this Project and family that has created no Recipe yet, or throws. */
+async function requireOpenProposal(ctx: QueryCtx, instanceId: string, familyId: Id<"creativeFamilies">, runId: Id<"runs">) {
+  const run = await ctx.db.get(runId);
+  if (!run || run.instanceId !== instanceId || !("recipeGeneration" in run) || run.recipeGeneration.familyId !== familyId) {
+    throw new Error("Recipe Proposal not found for this Creative Family");
+  }
+  if (!run.recipeProposal || typeof run.recipeProposal !== "object" || !("proposal" in run.recipeProposal)) throw new Error("This generation holds no Recipe Proposal");
+  if (run.recipeId) throw new Error("A Production Recipe was already created from this Recipe Proposal");
+  return run;
+}
+
 /** Creates a recipe under an active family with its version 1. */
 export const create = mutation({
   args: {
@@ -130,6 +144,8 @@ export const create = mutation({
     name: v.string(),
     description: v.string(),
     ...contentArgs,
+    // Set when saving a Recipe Proposal (ADR-087): ties the creation to its Run, at most once.
+    proposalRunId: v.optional(v.id("runs")),
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
@@ -139,6 +155,7 @@ export const create = mutation({
     if (name === "") throw new Error("A Production Recipe needs a name");
     const content = cleanContent(args);
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
+    const proposalRun = args.proposalRunId ? await requireOpenProposal(ctx, args.instanceId, args.familyId, args.proposalRunId) : null;
     const recipeId = await ctx.db.insert("productionRecipes", {
       instanceId: args.instanceId,
       creativeFamilyId: args.familyId,
@@ -150,6 +167,7 @@ export const create = mutation({
     });
     const recipe = (await ctx.db.get(recipeId))!;
     const version = await appendVersion(ctx, recipe, content);
+    if (proposalRun) await ctx.db.patch(proposalRun._id, { recipeId });
     return { recipeId, version };
   },
 });
