@@ -14,15 +14,15 @@ globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
 const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.create": vi.fn(),
   "recipes.saveVersion": vi.fn(),
-  "recipes.archive": vi.fn(),
+  "recipes.remove": vi.fn(),
   "recipes.setTarget": vi.fn(),
-  "recipes.unarchive": vi.fn(),
 };
 let targets: unknown;
 let recipes: unknown;
 let recipe: unknown;
 let versions: unknown;
 
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : undefined),
   useMutation: (key: string) => mutations[key],
@@ -32,8 +32,7 @@ vi.mock("@convex/_generated/api", () => ({
     production_recipes: {
       create: "recipes.create",
       saveVersion: "recipes.saveVersion",
-      archive: "recipes.archive",
-      unarchive: "recipes.unarchive",
+      remove: "recipes.remove",
       list: "recipes.list",
       get: "recipes.get",
       listVersions: "recipes.listVersions",
@@ -191,15 +190,15 @@ describe("Production Recipes UI", () => {
     expect(writeText.mock.calls[0]![0].length).toBeGreaterThan(0);
   });
 
-  it("archives and unarchives", async () => {
+  it("deletes after a confirmation, then returns to the family's Recipes", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-    await press("Archive");
-    expect(mutations["recipes.archive"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
-    recipe = { ...RECIPE, status: "archived" };
-    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
-    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent === "Edit")).toBe(false);
-    await press("Unarchive");
-    expect(mutations["recipes.unarchive"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
+    await press("Delete");
+    expect(mutations["recipes.remove"]).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    await press("Delete");
+    expect(mutations["recipes.remove"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
+    confirm.mockRestore();
   });
 
   it("shows the Mission type of the recipe and changes it", async () => {

@@ -2,10 +2,11 @@
 
 import { use, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Play, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Play, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, Trash2, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -16,7 +17,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
 // One Production Recipe (issue #143): its content, version history, edit
-// (saves a new version), archive, and the Mission type it is written for.
+// (saves a new version), delete, and the Mission type it is written for.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
 type RecipeDetail = { _id: string; creativeFamilyId: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
@@ -35,8 +36,8 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as RecipeTarget[] | undefined;
   const saveVersion = useMutation(api.production_recipes.saveVersion);
   const setTarget = useMutation(api.production_recipes.setTarget);
-  const archive = useMutation(api.production_recipes.archive);
-  const unarchive = useMutation(api.production_recipes.unarchive);
+  const removeRecipe = useMutation(api.production_recipes.remove);
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,12 +59,14 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     : [...offered, { templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }];
   const viewingOld = shown !== null && recipe.latest !== null && shown.version !== recipe.latest.version;
 
-  async function toggleArchive() {
+  async function handleDelete(familyId: string) {
+    if (!window.confirm("Permanently delete this Production Recipe and its versions? Missions already created with it are not affected.")) return;
     setError(null);
     try {
-      await (archived ? unarchive : archive)({ instanceId, recipeId: id });
+      await removeRecipe({ instanceId, recipeId: id });
+      router.replace(`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(familyId)}?tab=recipes`);
     } catch (e) {
-      setError(extractConvexErrorMessage(e, "Could not update the recipe."));
+      setError(extractConvexErrorMessage(e, "Could not delete the recipe."));
     }
   }
 
@@ -88,8 +91,9 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
                   Edit
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={toggleArchive}>
-                {archived ? "Unarchive" : "Archive"}
+              <Button type="button" variant="outline" onClick={() => handleDelete(recipe.creativeFamilyId)}>
+                <Trash2 className="size-4" />
+                Delete
               </Button>
             </div>
           }

@@ -196,24 +196,34 @@ export const setTarget = mutation({
   },
 });
 
-async function setStatus(ctx: MutationCtx, instanceId: string, recipeId: Id<"productionRecipes">, status: Infer<typeof recipeStatusV>) {
-  await ownerIdFor(ctx, instanceId);
-  const recipe = await requireOwnedRecipe(ctx, instanceId, recipeId);
-  if (recipe.status !== status) await ctx.db.patch(recipeId, { status });
-  return null;
-}
-
 const idArgs = { instanceId: v.string(), recipeId: v.id("productionRecipes") };
 
-/** Archives a recipe; its versions stay readable. */
-export const archive = mutation({
+/**
+ * Deletes a recipe and its versions. Missions made with it keep their Recipe Snapshot. A Recipe Proposal that had
+ * created it can be reviewed again. Refused while a proposed or approved planned content still uses it.
+ */
+export const remove = mutation({
   args: idArgs,
-  handler: async (ctx, a) => await setStatus(ctx, a.instanceId, a.recipeId, "archived"),
-});
-
-export const unarchive = mutation({
-  args: idArgs,
-  handler: async (ctx, a) => await setStatus(ctx, a.instanceId, a.recipeId, "active"),
+  handler: async (ctx, a) => {
+    await ownerIdFor(ctx, a.instanceId);
+    const recipe = await requireOwnedRecipe(ctx, a.instanceId, a.recipeId);
+    for (const status of ["proposed", "approved"] as const) {
+      const planned = ctx.db
+        .query("plannedContents")
+        .withIndex("by_instance_status_plannedAt", (q) => q.eq("instanceId", a.instanceId).eq("status", status));
+      for await (const item of planned) {
+        if (item.recipeId === a.recipeId) throw new Error("This Production Recipe is used by a planned content of a Content Plan: remove it from the plan first.");
+      }
+    }
+    const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", a.recipeId)).collect();
+    for (const version of versions) await ctx.db.delete(version._id);
+    const generations = ctx.db.query("runs").withIndex("by_instance_family", (q) => q.eq("instanceId", a.instanceId).eq("recipeGeneration.familyId", recipe.creativeFamilyId));
+    for await (const run of generations) {
+      if ("recipeId" in run && run.recipeId === a.recipeId) await ctx.db.patch(run._id, { recipeId: undefined });
+    }
+    await ctx.db.delete(a.recipeId);
+    return null;
+  },
 });
 
 /** A family's recipes (archived included) with their latest version number. */

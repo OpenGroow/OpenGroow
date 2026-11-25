@@ -59,7 +59,7 @@ See ADR-051, ADR-082.
 
 ### Production Recipe
 
-How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is `active` or `archived`; archiving keeps every version readable and stops further edits.
+How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is deleted for good (with its versions); Missions already created with it keep their Recipe Snapshot, and it cannot be deleted while a proposed or approved planned content uses it. A recipe archived before archiving was removed stays `archived` (read-only until deleted).
 
 - **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
 - **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
@@ -82,7 +82,7 @@ What a Recipe Generation returns, stored on its Run and never in the catalogue: 
 - **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source in the pinned family and the Project. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
 - **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The Sources and the rationale stay on the Run and are shown read-only next to the form; they are not copied to the recipe.
 - **Re-validated at creation** with the same rules as any manual creation, because the user may have edited it and the installed Templates may have changed.
-- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed" as a recipe status (a recipe is `active` or `archived`).
+- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed" as a recipe status (a recipe is `active`, or `archived` for older data).
 
 ### Recipe Version
 

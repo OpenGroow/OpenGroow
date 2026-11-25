@@ -165,9 +165,9 @@ describe("missions.create with a recipe", () => {
   });
 
   it("refuses an archived recipe", async () => {
-    const { owner, recipe, create } = await setup();
+    const { t, recipe, create } = await setup();
     const recipeId = await recipe();
-    await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
+    await t.run((ctx) => ctx.db.patch(recipeId, { status: "archived" }));
     await expect(create({ templateVersion: "2.0.0", recipe: { recipeId } })).rejects.toThrow(/archived/);
   });
 
@@ -233,7 +233,7 @@ describe("Recipe Snapshot in context.md", () => {
     await owner.mutation(api.production_recipes.saveVersion, {
       instanceId: INSTANCE, recipeId, prompt: "Changed", instructions: "Changed", constraints: [],
     });
-    await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
+    await t.run((ctx) => ctx.db.patch(recipeId, { status: "archived" }));
     await t.run((ctx) => ctx.db.patch(runId, { status: "failed" }));
     const retry = await t.run((ctx) => ctx.db.insert("runs", {
       missionId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE_ID, agentName: "video",
