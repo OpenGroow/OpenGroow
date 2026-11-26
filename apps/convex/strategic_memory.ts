@@ -52,7 +52,7 @@ export const references = query({
     const recipes = await Promise.all(
       review.references.recipeIds.map(async (id) => {
         const recipe = own(await ctx.db.get(id));
-        return { id, name: recipe?.name ?? null, archived: recipe?.status === "archived"};
+        return { id, name: recipe?.name ?? null, archived: recipe?.status === "archived" };
       }),
     );
     const publications = await Promise.all(

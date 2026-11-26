@@ -6,8 +6,8 @@ import { creativeFeaturesOf, deepAnalysisOf, stringOf } from "./sources_social.j
 
 /**
  * Agent-facing Source context for production Missions. The retired routing
- * Mission and delegate mutations were removed in #601; production Missions
- * are now created directly by the generic source_routing Job.
+ * Mission and delegate mutations were removed in #601, and no Mission is
+ * created from a Source any more (ADR-089).
  */
 export const getCarouselPlanningContext = internalQuery({
   args: { observationId: v.id("sources"), instanceId: v.string() },

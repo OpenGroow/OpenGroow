@@ -10,6 +10,7 @@ import { parseRecipeResult } from "./recipe_proposal.js";
 import type { RunResult } from "./run_result.js";
 import {
   MAX_GENERATION_SOURCES,
+  isReadableSource,
   MAX_INSTRUCTIONS_LENGTH,
   buildGenerationPin,
   MAX_RECIPE_GENERATION_TRIES,
@@ -24,9 +25,6 @@ import {
 const SOURCE_SCAN_LIMIT = 500;
 const AGENT_SCAN_LIMIT = 50;
 
-/** True for a Source an Agent may read and cite: analysed (`ready`) and not excluded. */
-export const isReadable = (source: Doc<"sources">) => source.status === "ready" && source.excluded !== true;
-
 /** A family's readable Sources, most recent first (bounded scan). */
 async function readableFamilySources(ctx: MutationCtx, instanceId: string, ownerId: string, familyId: Id<"creativeFamilies">): Promise<Doc<"sources">[]> {
   const rows = await ctx.db
@@ -34,7 +32,7 @@ async function readableFamilySources(ctx: MutationCtx, instanceId: string, owner
     .withIndex("by_instance_owner_creativeFamily_createdAt", (q) => q.eq("instanceId", instanceId).eq("ownerId", ownerId).eq("creativeFamilyId", familyId))
     .order("desc")
     .take(SOURCE_SCAN_LIMIT);
-  return rows.filter(isReadable);
+  return rows.filter(isReadableSource);
 }
 
 /**
@@ -46,17 +44,22 @@ async function resolveSources(ctx: MutationCtx, instanceId: string, ownerId: str
   if (explicit.length > MAX_GENERATION_SOURCES) {
     throw new Error(`${explicit.length} Sources are selected, a generation reads at most ${MAX_GENERATION_SOURCES}: unselect some.`);
   }
-  for (const id of explicit) {
-    const source = await ctx.db.get(id);
+  const [documents, familySources] = await Promise.all([
+    Promise.all(explicit.map((id) => ctx.db.get(id))),
+    Promise.all(
+      [...new Set(familyIds)].map(async (familyId) => {
+        const family = await requireOwnedFamily(ctx, instanceId, familyId);
+        if (!isActiveFamily(family)) throw new Error("This Creative Family is archived: its Sources cannot be selected.");
+        return await readableFamilySources(ctx, instanceId, ownerId, familyId);
+      }),
+    ),
+  ]);
+  explicit.forEach((id, i) => {
+    const source = documents[i];
     if (!source || source.instanceId !== instanceId || source.ownerId !== ownerId) throw new Error(`Source ${id} is not a Source of this Project`);
-    if (!isReadable(source)) throw new Error(`Source ${id} is not ready or is excluded: an Agent cannot read it.`);
-  }
-  const fromFamilies = new Map<Id<"sources">, number>();
-  for (const familyId of new Set(familyIds)) {
-    const family = await requireOwnedFamily(ctx, instanceId, familyId);
-    if (!isActiveFamily(family)) throw new Error("This Creative Family is archived: its Sources cannot be selected.");
-    for (const source of await readableFamilySources(ctx, instanceId, ownerId, familyId)) fromFamilies.set(source._id, source.capturedAt);
-  }
+    if (!isReadableSource(source)) throw new Error(`Source ${id} is not ready or is excluded: an Agent cannot read it.`);
+  });
+  const fromFamilies = new Map<Id<"sources">, number>(familySources.flat().map((source) => [source._id, source.capturedAt]));
   const taken = new Set(explicit);
   const room = [...fromFamilies].filter(([id]) => !taken.has(id)).sort((a, b) => b[1] - a[1]).slice(0, MAX_GENERATION_SOURCES - explicit.length);
   return [...explicit, ...room.map(([id]) => id)];
@@ -153,13 +156,20 @@ async function proposalProblems(ctx: MutationCtx, run: Doc<"runs">, given: reado
   } catch (error) {
     problems.push(`target: ${error instanceof Error ? error.message : String(error)}`);
   }
-  for (const raw of new Set(proposal.sourceIds)) {
-    const id = ctx.db.normalizeId("sources", raw);
-    const source = id ? await ctx.db.get(id) : null;
+  const cited = [...new Set(proposal.sourceIds)];
+  const documents = await Promise.all(
+    cited.map((raw) => {
+      const id = ctx.db.normalizeId("sources", raw);
+      return id ? ctx.db.get(id) : null;
+    }),
+  );
+  const givenIds = new Set<string>(given);
+  cited.forEach((raw, i) => {
+    const source = documents[i];
     if (!source || source.instanceId !== run.instanceId || source.ownerId !== run.ownerId) problems.push(`sourceIds: ${raw} is not a Source of this Project`);
-    else if (!given.includes(source._id)) problems.push(`sourceIds: ${raw} is not among the Sources of this generation`);
-    else if (!isReadable(source)) problems.push(`sourceIds: ${raw} is not a ready, non-excluded Source`);
-  }
+    else if (!givenIds.has(source._id)) problems.push(`sourceIds: ${raw} is not among the Sources of this generation`);
+    else if (!isReadableSource(source)) problems.push(`sourceIds: ${raw} is not a ready, non-excluded Source`);
+  });
   return problems;
 }
 

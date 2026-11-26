@@ -111,10 +111,11 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
   const [sort, setSort] = React.useState<Sort>("recent");
   const [error, setError] = React.useState<string | null>(null);
 
-  const targetOf = (recipe: RecipeRow) => targets?.find((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType);
-  const postsOf = (recipe: RecipeRow): number | undefined =>
-    summary === undefined ? undefined : (summary?.recipes?.find((r) => r.recipeId === recipe._id)?.publications ?? 0);
+  const targetByKey = React.useMemo(() => new Map((targets ?? []).map((t) => [`${t.templateId}::${t.missionType}`, t])), [targets]);
+  const postsById = React.useMemo(() => new Map((summary?.recipes ?? []).map((r) => [r.recipeId, r.publications])), [summary]);
   const typeKey = (recipe: RecipeRow) => `${recipe.templateId}::${recipe.missionType}`;
+  const targetOf = (recipe: RecipeRow) => targetByKey.get(typeKey(recipe));
+  const postsOf = (recipe: RecipeRow): number | undefined => (summary === undefined ? undefined : (postsById.get(recipe._id) ?? 0));
   const types = [...new Map((recipes ?? []).map((recipe) => [typeKey(recipe), targetOf(recipe)?.label ?? recipe.missionType])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
   const needle = search.trim().toLowerCase();
   const visible = (recipes ?? [])

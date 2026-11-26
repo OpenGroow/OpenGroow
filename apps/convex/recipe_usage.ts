@@ -58,9 +58,9 @@ export async function recipeCatalog(
   const inPeriod = (at: number) => at >= window.from && at <= window.to;
 
   // One more than the limit: it tells whether the Project has more recipes than are listed.
-  const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", instanceId)).take(MAX_RECIPES + 1);
-  const recipesCut = recipes.length > MAX_RECIPES;
-  recipes.length = Math.min(recipes.length, MAX_RECIPES);
+  const rows = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", instanceId)).take(MAX_RECIPES + 1);
+  const recipesCut = rows.length > MAX_RECIPES;
+  const recipes = rows.slice(0, MAX_RECIPES);
   const usage = new Map<Id<"productionRecipes">, Usage>(recipes.map((r) => [r._id, { lifetime: empty(), period: empty() }]));
   const bump = (recipeId: Id<"productionRecipes">, step: keyof Counts, at: number, last?: "lastMissionAt" | "lastAttemptAt" | "lastPublicationAt") => {
     const u = usage.get(recipeId);

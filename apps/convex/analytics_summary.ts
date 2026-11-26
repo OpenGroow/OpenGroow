@@ -238,11 +238,7 @@ export async function listPublicationReadings(
   const now = options.now ?? Date.now();
   const unattributed = inWindow.filter(({ mission }) => !mission.recipeSnapshot).length;
   const matching = inWindow
-    .filter(({ mission }) => {
-      const recipeId = mission.recipeSnapshot?.recipeId;
-      if (options.recipeId !== undefined && recipeId !== options.recipeId) return false;
-      return true;
-    })
+    .filter(({ mission }) => options.recipeId === undefined || mission.recipeSnapshot?.recipeId === options.recipeId)
     .sort((a, b) => b.publishedAt - a.publishedAt);
   const rows: PublicationReading[] = [];
   for (const { publication, mission, series, publishedAt, found, platform } of matching.slice(0, limit)) {

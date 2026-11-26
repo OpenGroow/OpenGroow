@@ -12,6 +12,9 @@ export const MAX_INSTRUCTIONS_LENGTH = 2000;
 /** The most Sources one generation reads: what an Agent can read in a run, and the page limit of the Source list. */
 export const MAX_GENERATION_SOURCES = 25;
 
+/** True for a Source an Agent may read and cite: analysed (`ready`) and not excluded. */
+export const isReadableSource = (source: Doc<"sources">) => source.status === "ready" && source.excluded !== true;
+
 /** The Internal MCP tools the Agent needs; an Agent declaring all of them is eligible. */
 export const RECIPE_GENERATION_TOOLS = [
   "get_brand_core",

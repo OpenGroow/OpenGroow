@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
+import { sourceCountValue } from "@/src/lib/creative-library";
 
 // Recipe Generation (ADR-087, ADR-088): asks the Strategy Agent for a proposal from a free idea and/or optional
 // inspiration (Sources, or Creative Families as a shortcut that selects several), and lists the latest generations
@@ -173,7 +174,7 @@ function InspirationPicker({
               <PickRow
                 key={family._id}
                 label={family.name}
-                count={family.sourceCountCapped ? `${family.sourceCount}+` : family.sourceCount}
+                count={sourceCountValue(family)}
                 checked={familyIds.includes(family._id)}
                 onToggle={() => toggle(familyIds, family._id, onFamilies)}
                 ariaLabel={`Family ${family.name}`}

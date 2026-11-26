@@ -370,8 +370,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const recipeSummary = useQuery(api.analytics_summary.summaryForProject, summaryArgs === "skip" ? "skip" : { ...summaryArgs, groupBy: "recipe" as const });
   const recipeGroups = (recipeSummary && "recipes" in recipeSummary ? recipeSummary.recipes : []) as RecipeGroup[];
   const shownRecipes = recipeGroups.filter((r) => recipeId === "all" || r.recipeId === recipeId);
-  function showPublications(next: { recipeId?: string }) {
-    setRecipeId(next.recipeId ?? "all");
+  function showPublications(id: string) {
+    setRecipeId(id);
     setView("publications");
   }
   // Why the list is empty is only worked out when it is.
@@ -477,7 +477,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
               {shownRecipes.length === 0 || !current ? (
                 <p className="text-sm text-muted-foreground">No Publication matches these filters.</p>
               ) : (
-                <RecipeGroups groups={shownRecipes} adapterId={current.adapter} metrics={declaration.metrics} onShowPublications={(id) => showPublications({ recipeId: id })} />
+                <RecipeGroups groups={shownRecipes} adapterId={current.adapter} metrics={declaration.metrics} onShowPublications={showPublications} />
               )}
               {recipeSummary?.unattributed ? (
                 <p className="text-sm text-muted-foreground">{recipeSummary.unattributed} Unattributed Publications are in no recipe.</p>

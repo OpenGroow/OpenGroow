@@ -263,7 +263,7 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   get_strategic_memory: {
     description:
-      "The Project's current Strategic Memory: the consolidated Markdown knowledge kept by its latest Strategic Review. Returns exists (false, with a message, when no Review has been persisted yet), then the Review's id, the period it analyzed (periodStart, periodEnd), the memory, the entities it references (familyIds, recipeIds, publicationIds) and its creation date. Never returns the Performance Report.",
+      "The Project's current Strategic Memory: the consolidated Markdown knowledge kept by its latest Strategic Review. Returns exists (false, with a message, when no Review has been persisted yet), then the Review's id, the period it analyzed (periodStart, periodEnd), the memory, the entities it references (recipeIds, publicationIds) and its creation date. Never returns the Performance Report.",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => readStrategicMemory(ctx, scope),
   },

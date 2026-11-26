@@ -94,7 +94,7 @@ export const recipeOptions = query({
   handler: async (ctx, args) => {
     const content = await ctx.db.get(args.contentId);
     if (!content || (await readOwnerId(ctx, content.instanceId)) === null) return [];
-    const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", content.instanceId)).collect();
+    const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", content.instanceId)).collect();
     return recipes.filter((recipe) => recipe.status === "active" && recipe.missionType === content.missionType).map((recipe) => ({ id: recipe._id, name: recipe.name }));
   },
 });

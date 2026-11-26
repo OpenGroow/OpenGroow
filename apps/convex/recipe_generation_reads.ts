@@ -1,7 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { boundedLimit } from "./planning_reads.js";
-import { MAX_GENERATION_SOURCES, runningGenerationRun } from "./recipe_generation_shared.js";
+import { MAX_GENERATION_SOURCES, isReadableSource, runningGenerationRun } from "./recipe_generation_shared.js";
 import { latestVersion } from "./production_recipes.js";
 
 // The Internal MCP's reads for a Recipe Generation (ADR-087, ticket #190). Read-only. The
@@ -10,7 +10,6 @@ import { latestVersion } from "./production_recipes.js";
 type Scope = { instanceId: string; templateId: string };
 
 const GENERATION_SOURCES_DEFAULT_LIMIT = 10;
-const GENERATION_SOURCES_MAX_LIMIT = MAX_GENERATION_SOURCES;
 
 const NOT_RUNNING = "This tool is only available while a Recipe Generation is running for this Agent.";
 const OUTSIDE_PIN = "That Source is not readable: it is not a ready, non-excluded Source given to this generation.";
@@ -27,20 +26,19 @@ export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, 
   return undefined;
 }
 
-const isReadable = (s: Doc<"sources">) => s.status === "ready" && s.excluded !== true;
 const scoreOf = (s: Doc<"sources">) => s.scoring?.replicationScore ?? -1;
 
 /** The Sources given to the generation that are still readable (a Source may have been excluded since). */
 async function readableGivenSources(ctx: Pick<QueryCtx, "db">, scope: Scope, pin: Pin) {
   const rows = await Promise.all(pin.sourceIds.map((id) => ctx.db.get(id)));
-  return rows.filter((s): s is Doc<"sources"> => s !== null && s.instanceId === scope.instanceId && isReadable(s));
+  return rows.filter((s): s is Doc<"sources"> => s !== null && s.instanceId === scope.instanceId && isReadableSource(s));
 }
 
 export async function listGenerationSources(ctx: Pick<QueryCtx, "db">, scope: Scope, args: Record<string, unknown>) {
   const pin = await pinnedGeneration(ctx, scope, { required: true });
   if (args.minReplicationScore !== undefined && (typeof args.minReplicationScore !== "number" || !Number.isFinite(args.minReplicationScore))) throw new Error("minReplicationScore must be a number.");
   if (args.sort !== undefined && args.sort !== "recent" && args.sort !== "score") throw new Error('sort must be "recent" or "score".');
-  const limit = boundedLimit(args.limit, GENERATION_SOURCES_DEFAULT_LIMIT, GENERATION_SOURCES_MAX_LIMIT);
+  const limit = boundedLimit(args.limit, GENERATION_SOURCES_DEFAULT_LIMIT, MAX_GENERATION_SOURCES);
   const offset = args.cursor === undefined ? 0 : Number(args.cursor);
   if (!Number.isInteger(offset) || offset < 0) throw new Error("cursor is not valid: pass the nextCursor of a previous page.");
 
@@ -75,7 +73,7 @@ export async function getSource(ctx: Pick<QueryCtx, "db">, scope: Scope, args: R
   const pin = await pinnedGeneration(ctx, scope, { required: true });
   const id = typeof args.sourceId === "string" ? ctx.db.normalizeId("sources", args.sourceId) : null;
   const source = id ? await ctx.db.get(id) : null;
-  if (!source || !id || source.instanceId !== scope.instanceId || !pin.sourceIds.includes(id) || !isReadable(source)) throw new Error(OUTSIDE_PIN);
+  if (!source || !id || source.instanceId !== scope.instanceId || !pin.sourceIds.includes(id) || !isReadableSource(source)) throw new Error(OUTSIDE_PIN);
   return {
     sourceId: source._id as string,
     label: source.label,

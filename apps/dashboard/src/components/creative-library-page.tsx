@@ -16,7 +16,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 import { NewFamilyDialog } from "@/src/components/creative-family-actions";
 import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
-import { isActiveFamily, sourceCountLabel } from "@/src/lib/creative-library";
+import { isActiveFamily, sourceCountLabel, sourceCountValue } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
 // the mechanic its Sources share. Read-only here; built from the Sources page blocks.
@@ -148,7 +148,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
 /** The three most recent Sources as a mosaic: one large tile on the left, two stacked on the right. */
 function FamilyMosaic({ family }: { family: FamilyRow }) {
   const [main, top, bottom] = family.recentSources;
-  const tile = (source: VisualSource | undefined, className: string) =>
+  const tile = (source: VisualSource | undefined, className = "") =>
     source ? (
       <div className={`overflow-hidden ${className}`}>
         <SourceThumbnail source={source} className="size-full rounded-none" />
@@ -159,11 +159,11 @@ function FamilyMosaic({ family }: { family: FamilyRow }) {
   return (
     <div className="relative grid aspect-[16/10] grid-cols-[2fr_1fr] grid-rows-2 gap-0.5 overflow-hidden rounded-2xl bg-border">
       {tile(main, "row-span-2")}
-      {tile(top, "")}
-      {tile(bottom, "")}
+      {tile(top)}
+      {tile(bottom)}
       <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
         <Images aria-hidden="true" className="size-3.5" />
-        {family.sourceCountCapped ? `${family.sourceCount}+` : family.sourceCount}
+        {sourceCountValue(family)}
       </span>
     </div>
   );

@@ -32,13 +32,12 @@ export async function summarizeByRecipe(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number; claimKeyOf?: (mission: Doc<"missions">) => string | undefined } = {},
+  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number } = {},
 ): Promise<RecipeSummary> {
   const read = await readAttributed(ctx, instanceId, window, {
     keyOf: (mission) => mission.recipeSnapshot?.recipeId,
     // A recipe id of another Project (or no id at all) matches no snapshot of this one.
     keep: options.recipeId === undefined ? undefined : (key) => key === options.recipeId,
-    claimKeyOf: options.claimKeyOf,
     scanLimit: options.scanLimit,
     platform: options.platform,
     now: options.now,

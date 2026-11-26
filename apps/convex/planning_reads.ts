@@ -52,7 +52,7 @@ export function boundedLimit(value: unknown, fallback: number, max: number) {
   return typeof value === "number" && Number.isFinite(value) && value >= 1 ? Math.min(Math.floor(value), max) : fallback;
 }
 
-export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string, args: { status?: unknown; limit?: unknown; familyId?: Id<"creativeFamilies"> }) {
+export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string, args: { status?: unknown; limit?: unknown }) {
   const status = args.status === undefined ? "ready" : args.status;
   if (!SOURCE_STATUSES.includes(status as never)) throw new Error(`status must be one of ${SOURCE_STATUSES.join(", ")}.`);
   const limit = boundedLimit(args.limit, SOURCES_DEFAULT_LIMIT, SOURCES_MAX_LIMIT);
@@ -63,7 +63,7 @@ export async function listSources(ctx: Pick<QueryCtx, "db">, instanceId: string,
     .order("desc")
     .take(SOURCES_SCAN_LIMIT);
   const scanLimited = rows.length >= SOURCES_SCAN_LIMIT;
-  const kept = rows.filter((s) => s.excluded !== true && (args.familyId === undefined || s.creativeFamilyId === args.familyId));
+  const kept = rows.filter((s) => s.excluded !== true);
   const score = (s: Doc<"sources">) => s.scoring?.replicationScore ?? -1;
   // The best Replication Score first, then the newest.
   kept.sort((a, b) => score(b) - score(a) || b.capturedAt - a.capturedAt);

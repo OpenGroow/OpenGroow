@@ -5,10 +5,12 @@ import {
 } from "@convex-dev/migrations";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { enqueueCommand } from "./commands";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import schema from "./schema";
+import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
 
 export const migrations = new Migrations(components.migrations, { schema });
@@ -63,6 +65,22 @@ export const cleanEnrichObservationsSchedules = migrations.define({
   },
 });
 
+/** Deletes Runs, `take` at a time as `nextRuns` hands them over, with their reconcile events. */
+async function deleteRunsWithEvents(ctx: MutationCtx, nextRuns: (take: number) => Promise<Doc<"runs">[]>): Promise<void> {
+  for (;;) {
+    const runs = await nextRuns(100);
+    if (runs.length === 0) return;
+    for (const run of runs) {
+      for (;;) {
+        const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
+        if (events.length === 0) break;
+        for (const event of events) await ctx.db.delete(event._id);
+      }
+      await ctx.db.delete(run._id);
+    }
+  }
+}
+
 const RETIRED_SOURCE_MISSION_TYPES = new Set([
   "score",
   "routing",
@@ -96,18 +114,7 @@ export const deleteLegacySourceMissions = migrations.define({
   table: "missions",
   migrateOne: async (ctx, mission) => {
     if (!RETIRED_SOURCE_MISSION_TYPES.has(mission.type)) return;
-    for (;;) {
-      const runs = await ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(100);
-      if (runs.length === 0) break;
-      for (const run of runs) {
-        for (;;) {
-          const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
-          if (events.length === 0) break;
-          for (const event of events) await ctx.db.delete(event._id);
-        }
-        await ctx.db.delete(run._id);
-      }
-    }
+    await deleteRunsWithEvents(ctx, (take) => ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(take));
     await ctx.db.delete(mission._id);
   },
 });
@@ -332,8 +339,6 @@ export const dropRecipeFamily = migrations.define({
   },
 });
 
-/** The most Sources a Recipe Generation reads (the limit of the Internal MCP's Source list). */
-const MAX_PINNED_SOURCES = 25;
 const RUN_SETTLED = new Set(["completed", "failed", "cancelled"]);
 
 /**
@@ -355,7 +360,7 @@ export const stripRecipeGenerationFamily = migrations.define({
         .withIndex("by_instance_owner_creativeFamily_createdAt", (q) => q.eq("instanceId", run.instanceId).eq("ownerId", run.ownerId).eq("creativeFamilyId", familyId))
         .order("desc")
         .take(500);
-      pinned = rows.filter((source) => source.status === "ready" && source.excluded !== true).slice(0, MAX_PINNED_SOURCES).map((source) => source._id);
+      pinned = rows.filter(isReadableSource).slice(0, MAX_GENERATION_SOURCES).map((source) => source._id);
     }
     await ctx.db.patch(run._id, { recipeGeneration: { ...rest, sourceIds: pinned } });
   },
@@ -387,18 +392,7 @@ export const deleteSourceRoutingJobs = migrations.define({
   table: "jobs",
   migrateOne: async (ctx, job) => {
     if (job.type !== "source_routing") return;
-    for (;;) {
-      const runs = await ctx.db.query("runs").withIndex("by_job", (q) => q.eq("jobId", job._id)).take(100);
-      if (runs.length === 0) break;
-      for (const run of runs) {
-        for (;;) {
-          const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
-          if (events.length === 0) break;
-          for (const event of events) await ctx.db.delete(event._id);
-        }
-        await ctx.db.delete(run._id);
-      }
-    }
+    await deleteRunsWithEvents(ctx, (take) => ctx.db.query("runs").withIndex("by_job", (q) => q.eq("jobId", job._id)).take(take));
     await ctx.db.delete(job._id);
   },
 });
