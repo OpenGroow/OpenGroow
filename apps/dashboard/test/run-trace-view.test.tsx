@@ -79,6 +79,31 @@ describe("RunTraceView", () => {
     expect(tool.textContent).toContain("2.0 s");
   });
 
+  it("renders a waterfall: axis, two-line labels, bars only for timestamped events", async () => {
+    useQueryMock.mockReturnValue({ _id: "run-1", status: "completed", createdAt: 0, completedAt: 12_000 });
+    transcriptMock.mockResolvedValue({
+      found: true,
+      turns: [
+        { kind: "message", role: "user", text: "Write the article", timestamp: ts(0) },
+        { kind: "tool_call", toolName: "read", toolCallId: "c1", arguments: { path: "docs/run.md" }, timestamp: ts(2) },
+        { kind: "tool_result", toolName: "read", toolCallId: "c1", success: true, result: "ok", timestamp: ts(4) },
+        { kind: "tool_call", toolName: "seo-mcp__list_keywords", toolCallId: "c2", arguments: {}, timestamp: ts(6) },
+        { kind: "tool_result", toolName: "seo-mcp__list_keywords", toolCallId: "c2", success: true, result: "ok", timestamp: ts(8) },
+        { kind: "message", role: "assistant", text: "No timestamp" },
+      ],
+    });
+    await render();
+    const text = container.textContent!;
+    expect(text).toContain("Execution");
+    expect(text).toContain("8.0 s");
+    const [file, mcp] = container.querySelectorAll('[data-testid="trace-event-tool"]');
+    expect(file.textContent).toContain("run.md");
+    expect(mcp.textContent).toContain("list_keywords");
+    expect(mcp.textContent).toContain("seo-mcp");
+    expect(container.querySelectorAll('[data-testid="trace-bar"]')).toHaveLength(4);
+    expect(container.querySelector('[data-testid="trace-event-agent"] [data-testid="trace-bar"]')).toBeNull();
+  });
+
   it("shows the elapsed Run duration of an active Run", async () => {
     useQueryMock.mockReturnValue({ _id: "run-1", status: "running", createdAt: Date.now() - 125_000 });
     transcriptMock.mockResolvedValue({ found: true, turns: [] });

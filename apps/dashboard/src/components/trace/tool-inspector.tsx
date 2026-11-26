@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { formatDurationMs } from "@/src/lib/trace/format-trace";
@@ -25,29 +26,23 @@ function PayloadPanel({ label, text }: { label: string; text?: string }) {
   if (text === undefined) return <p className="m-0 text-sm text-muted-foreground">No {label.toLowerCase()} recorded.</p>;
   return (
     <div className="grid min-w-0 gap-2">
-      <div className="flex items-center justify-end gap-2">
-        {copied ? (
-          <span className="text-xs text-muted-foreground" role="status">
-            Copied
-          </span>
-        ) : null}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void navigator.clipboard?.writeText(text).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            });
-          }}
-        >
-          Copy
-        </Button>
-      </div>
-      <pre className="m-0 max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-xs text-foreground">
+      <pre className="m-0 max-h-96 min-h-40 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background p-3 font-mono text-xs text-foreground ring-1 ring-inset ring-border">
         {text}
       </pre>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          void navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          });
+        }}
+      >
+        <Copy />
+        {copied ? "Copied" : "Copy"}
+      </Button>
     </div>
   );
 }
@@ -80,11 +75,15 @@ export function ToolInspector({ event }: { event: TraceToolEvent }) {
   const [tab, setTab] = React.useState<Tab>("Input");
   return (
     <aside
-      className="grid min-w-0 content-start gap-3 rounded-xl p-4 ring-1 ring-inset ring-border"
+      className="grid min-w-0 content-start gap-3 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
       data-testid="tool-inspector"
-      aria-label="Tool call inspector"
+      aria-label="Inspector"
     >
-      <h2 className="m-0 truncate text-sm font-semibold">{event.name}</h2>
+      <h2 className="m-0 text-sm text-muted-foreground">Inspector</h2>
+      <div className="grid min-w-0 gap-1">
+        <p className="m-0 truncate text-sm font-semibold text-foreground">{event.name}</p>
+        {event.server ? <p className="m-0 truncate text-sm text-muted-foreground">{event.server}</p> : null}
+      </div>
       {event.status === "failed" && event.error ? (
         <p className="m-0 break-words rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{event.error}</p>
       ) : null}
@@ -96,6 +95,7 @@ export function ToolInspector({ event }: { event: TraceToolEvent }) {
             role="tab"
             variant={tab === t ? "secondary" : "ghost"}
             size="sm"
+            className="rounded-full"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
           >
