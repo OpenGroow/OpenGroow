@@ -80,6 +80,36 @@ describe("Tool inspector", () => {
     expect(inspector().textContent).toContain("boom detail");
   });
 
+  it("shows parallel calls of the same tool as one row, and each call in its inspector", async () => {
+    useQueryMock.mockReturnValue({ _id: "run-1", status: "completed", createdAt: 0, completedAt: 9000 });
+    transcriptMock.mockResolvedValue({
+      found: true,
+      turns: [
+        { kind: "tool_call", toolName: "demo__schema", toolCallId: "c1", arguments: { n: 1 }, timestamp: ts(1) },
+        { kind: "tool_call", toolName: "demo__schema", toolCallId: "c2", arguments: { n: 2 }, timestamp: ts(1) },
+        { kind: "tool_result", toolName: "demo__schema", toolCallId: "c1", success: true, result: "first result", timestamp: ts(2) },
+        { kind: "tool_result", toolName: "demo__schema", toolCallId: "c2", success: true, result: "second result", timestamp: ts(2) },
+      ],
+    });
+    await act(async () => {
+      root.render(
+        <React.Suspense fallback={null}>
+          <RunTraceView params={params} runId={"run-1" as never} />
+        </React.Suspense>,
+      );
+    });
+    await act(async () => {});
+    const rows = container.querySelectorAll('[data-testid="trace-event-tool"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.querySelector('[data-testid="parallel-calls"]')!.textContent).toBe("×2");
+    await act(async () => rows[0]!.querySelector("button")!.click());
+    const inspector = container.querySelector('[data-testid="tool-inspector"]')!;
+    expect(inspector.querySelectorAll('[aria-label^="Call "]')).toHaveLength(2);
+    expect(inspector.textContent).toContain("first result");
+    expect(inspector.textContent).toContain("second result");
+    expect(inspector.textContent).toContain("×2");
+  });
+
   it("copies the payload", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });

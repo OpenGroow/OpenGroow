@@ -36,6 +36,8 @@ export type TraceToolEvent = BaseEvent & {
    * `isExternalJobHandoff`). Never changes the Tool Call's status.
    */
   externalJobHandoff: boolean;
+  /** Set on a group of parallel calls of the same tool (see `groupParallelCalls`): the calls it stands for. */
+  calls?: TraceToolEvent[];
 };
 
 export type TraceEvent = TraceMessageEvent | TraceToolEvent;
@@ -164,6 +166,50 @@ export function normalizeTrace(turns: readonly SessionTranscriptTurn[], run: Tra
     if (event.type === "tool") event.externalJobHandoff = isExternalJobHandoff(event, run.mcpJob);
   }
   return events;
+}
+
+/** Failed if any call failed, else running if any still runs, else unknown if any is, else completed. */
+function groupStatus(calls: readonly TraceToolEvent[]): ToolCallStatus {
+  for (const status of ["failed", "running", "unknown"] as const) {
+    if (calls.some((call) => call.status === status)) return status;
+  }
+  return "completed";
+}
+
+/**
+ * Parallel calls of the same tool, sent by the Agent in the same message (same server, same name, same start), become
+ * one event whose `calls` are the individual calls, so the timeline shows them as one row. A repeated call made later
+ * (polling, a retry) is another event: only calls started together are grouped. Pure; the input is left as it is.
+ */
+export function groupParallelCalls(events: readonly TraceEvent[]): TraceEvent[] {
+  const out: TraceEvent[] = [];
+  for (const event of events) {
+    const last = out[out.length - 1];
+    const sameBatch =
+      event.type === "tool" && last?.type === "tool" && event.startedAt !== undefined &&
+      last.startedAt === event.startedAt && last.server === event.server && last.name === event.name;
+    if (!sameBatch || event.type !== "tool" || last?.type !== "tool") {
+      out.push(event);
+      continue;
+    }
+    const calls = [...(last.calls ?? [last]), event];
+    const ends = calls.map((call) => call.endedAt);
+    const endedAt = ends.every((end) => end !== undefined) ? ends.reduce((a, b) => (Date.parse(a!) >= Date.parse(b!) ? a : b)) : undefined;
+    out[out.length - 1] = {
+      id: calls[0]!.id,
+      runId: last.runId,
+      type: "tool",
+      name: last.name,
+      ...(last.server ? { server: last.server } : {}),
+      status: groupStatus(calls),
+      startedAt: last.startedAt,
+      ...(endedAt ? { endedAt, observedDurationMs: durationMs(last.startedAt, endedAt) } : {}),
+      ...(calls.find((call) => call.error)?.error ? { error: calls.find((call) => call.error)!.error } : {}),
+      externalJobHandoff: calls.some((call) => call.externalJobHandoff),
+      calls,
+    };
+  }
+  return out;
 }
 
 export function summarizeTrace(events: readonly TraceEvent[]): { toolCallCount: number; failedToolCallCount: number } {

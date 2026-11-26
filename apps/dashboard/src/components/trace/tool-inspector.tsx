@@ -75,21 +75,10 @@ function StatusIcon({ status }: { status: TraceToolEvent["status"] }) {
   return <CircleHelp aria-label={label} className="size-5 shrink-0 text-muted-foreground" />;
 }
 
-/** Inspector of one Tool Call: the call and its result together, Input then Output, with the metadata below. */
-export function ToolInspector({ event }: { event: TraceToolEvent }) {
+/** One call: its Input, then its Output, with the metadata below. */
+function CallDetail({ event }: { event: TraceToolEvent }) {
   return (
-    <aside
-      className="grid min-w-0 content-start gap-4 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
-      data-testid="tool-inspector"
-      aria-label="Inspector"
-    >
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <div className="grid min-w-0 gap-0.5">
-          <p className="m-0 truncate text-base font-semibold text-foreground">{event.name}</p>
-          {event.server ? <p className="m-0 truncate text-sm text-muted-foreground">{event.server}</p> : null}
-        </div>
-        <StatusIcon status={event.status} />
-      </div>
+    <div className="grid min-w-0 gap-4">
       {event.status === "failed" && event.error ? (
         <p className="m-0 break-words rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{event.error}</p>
       ) : null}
@@ -107,6 +96,42 @@ export function ToolInspector({ event }: { event: TraceToolEvent }) {
           <MetadataPanel event={event} />
         </div>
       </details>
+    </div>
+  );
+}
+
+/**
+ * Inspector of one Tool Call, or of a group of parallel calls of the same tool: each call with its Input then its
+ * Output, so a call and its result are read together.
+ */
+export function ToolInspector({ event }: { event: TraceToolEvent }) {
+  const calls = event.calls;
+  return (
+    <aside
+      className="grid min-w-0 content-start gap-4 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
+      data-testid="tool-inspector"
+      aria-label="Inspector"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="grid min-w-0 gap-0.5">
+          <p className="m-0 truncate text-base font-semibold text-foreground">{calls ? `${event.name} ×${calls.length}` : event.name}</p>
+          {event.server ? <p className="m-0 truncate text-sm text-muted-foreground">{event.server}</p> : null}
+        </div>
+        <StatusIcon status={event.status} />
+      </div>
+      {calls ? (
+        calls.map((call, index) => (
+          <section key={call.id} aria-label={`Call ${index + 1}`} className="grid min-w-0 gap-3 border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="m-0 text-sm font-semibold text-foreground">{`Call ${index + 1}`}</h3>
+              <StatusIcon status={call.status} />
+            </div>
+            <CallDetail event={call} />
+          </section>
+        ))
+      ) : (
+        <CallDetail event={event} />
+      )}
     </aside>
   );
 }
