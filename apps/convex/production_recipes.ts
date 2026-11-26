@@ -103,6 +103,7 @@ async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">,
 function recipeView(recipe: Doc<"productionRecipes">) {
   return {
     _id: recipe._id,
+    createdAt: recipe._creationTime,
     templateId: recipe.templateId,
     missionType: recipe.missionType,
     name: recipe.name,

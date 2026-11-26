@@ -113,14 +113,45 @@ describe("Generation History", () => {
     await act(async () => root.unmount());
     container.remove();
   });
-
-  it("shows the idea of each generation and offers to review a proposal", async () => {
-    generations = { generations: [{ generationId: "run-1", runId: "run-1", createdAt: 0, tryCount: 1, state: "ready_to_review", idea: "A calm reaction", proposal: { name: "x" } }], inFlight: false };
-    const onReview = vi.fn();
+  const render = async (list: unknown[], onReview = vi.fn()) => {
+    generations = { generations: list, inFlight: false };
     await act(async () => root.render(<GenerationHistory instanceId="p1" onReview={onReview} />));
+    return onReview;
+  };
+  const button = (name: string) => Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === name) as HTMLElement | undefined;
+  const row = (over: Record<string, unknown>) => ({ generationId: "g", runId: "g", createdAt: 0, tryCount: 1, state: "ready_to_review", ...over });
+
+  it("names a generation by its proposal, offers to review a ready one and to view a created one", async () => {
+    const onReview = await render([
+      row({ generationId: "g1", state: "ready_to_review", idea: "A calm reaction", proposal: { name: "Calm reaction clip" } }),
+      row({ generationId: "g2", state: "created", proposal: { name: "Letter reveal" } }),
+    ]);
     expect(container.querySelector('[aria-label="Generation History"]')).not.toBeNull();
-    expect(container.textContent).toContain("Idea: A calm reaction");
-    await act(async () => (Array.from(container.querySelectorAll("button")).find((b) => b.textContent === "Review") as HTMLElement).click());
-    expect(onReview).toHaveBeenCalled();
+    expect(container.textContent).toContain("Calm reaction clip");
+    expect(container.textContent).toContain("Ready");
+    await act(async () => button("Review")!.click());
+    expect(onReview).toHaveBeenCalledWith(expect.objectContaining({ generationId: "g1" }));
+    await act(async () => button("View")!.click());
+    expect(onReview).toHaveBeenCalledWith(expect.objectContaining({ generationId: "g2" }));
+  });
+
+  it("falls back to the idea, and reads why a generation failed under Details", async () => {
+    await render([row({ state: "failed", idea: "A letter idea", reason: "Could not read the result file" })]);
+    expect(container.textContent).toContain("A letter idea");
+    expect(container.textContent).not.toContain("Could not read the result file");
+    await act(async () => button("Details")!.click());
+    expect(container.textContent).toContain("Could not read the result file");
+  });
+
+  it("shows the three latest generations and the rest under View all", async () => {
+    await render(Array.from({ length: 5 }, (_, i) => row({ generationId: `g${i}`, state: "created", proposal: { name: `Recipe ${i}` } })));
+    expect(container.querySelectorAll("li")).toHaveLength(3);
+    await act(async () => button("View all")!.click());
+    expect(container.querySelectorAll("li")).toHaveLength(5);
+  });
+
+  it("says when there is no generation yet", async () => {
+    await render([]);
+    expect(container.textContent).toContain("No generation yet");
   });
 });

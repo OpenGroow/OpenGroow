@@ -21,11 +21,12 @@ let targets: unknown;
 let recipes: unknown;
 let recipe: unknown;
 let versions: unknown;
+let summary: unknown;
 
 vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   usePaginatedQuery: () => ({ results: [], status: "Exhausted", loadMore: () => undefined }),
-  useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : undefined),
+  useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : key === "analytics.summary" ? summary : undefined),
   useMutation: (key: string) => mutations[key],
 }));
 vi.mock("@convex/_generated/api", () => ({
@@ -44,6 +45,7 @@ vi.mock("@convex/_generated/api", () => ({
     recipe_generation_views: { listGenerations: "generation.list" },
     creative_families: { list: "families.list" },
     sources: { listByInstance: "sources.list" },
+    analytics_summary: { summaryForProject: "analytics.summary" },
   },
 }));
 
@@ -73,6 +75,7 @@ describe("Production Recipes UI", () => {
   beforeEach(() => {
     for (const m of Object.values(mutations)) m.mockReset().mockResolvedValue(null);
     recipes = [];
+    summary = { groupBy: "recipe", recipes: [] };
     targets = TARGETS;
     recipe = RECIPE;
     versions = [V2, V1];
@@ -114,8 +117,62 @@ describe("Production Recipes UI", () => {
     await act(async () => root.render(<RecipesContent instanceId="p1" />));
     expect(container.textContent).toContain("Reaction clip");
     expect(container.textContent).toContain("v2");
-    expect(container.textContent).toContain("Video Demo · Letter video");
+    expect(container.textContent).toContain("Video Demo");
+    expect(container.textContent).toContain("Letter video");
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/recipes/rec-1");
+  });
+
+  const REC = (over: Record<string, unknown>) => ({ _id: "rec-1", createdAt: 1, templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 1, ...over });
+  const names = () => Array.from(container.querySelectorAll('[aria-label="Production Recipes"] li a')).map((a) => a.textContent);
+  const change = async (label: string, value: string) => {
+    const select = container.querySelector(`[aria-label="${label}"]`)!.closest('[data-slot="native-select-wrapper"]')!.querySelector("select") as HTMLSelectElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(select, value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  };
+
+  it("shows each recipe on a card with a default cover, its Mission type and its published posts", async () => {
+    recipes = [REC({}), REC({ _id: "rec-2", name: "Other", templateId: "@example/video-demo", missionType: "other_video" })];
+    summary = { groupBy: "recipe", recipes: [{ recipeId: "rec-1", publications: 19 }] };
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    expect(container.querySelectorAll('[data-testid="recipe-cover"]')).toHaveLength(2);
+    const text = container.textContent!;
+    expect(text).toContain("19 posts");
+    expect(text).toContain("0 posts");
+    expect(text).toContain("Letter video");
+    expect(text).toContain("Build a new Recipe");
+    expect(container.querySelector('[aria-label="Production Recipes"] h2')?.textContent).toContain("2");
+  });
+
+  it("searches, filters by type and sorts the recipes", async () => {
+    recipes = [
+      REC({ _id: "rec-a", name: "Alpha", createdAt: 1 }),
+      REC({ _id: "rec-b", name: "Bravo", createdAt: 3, missionType: "other_video" }),
+      REC({ _id: "rec-c", name: "Charlie", createdAt: 2 }),
+    ];
+    summary = { groupBy: "recipe", recipes: [{ recipeId: "rec-a", publications: 5 }, { recipeId: "rec-c", publications: 9 }] };
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    expect(names()).toEqual(["Bravo", "Charlie", "Alpha"]);
+    await change("Sort recipes", "name");
+    expect(names()).toEqual(["Alpha", "Bravo", "Charlie"]);
+    await change("Sort recipes", "posts");
+    expect(names()).toEqual(["Charlie", "Alpha", "Bravo"]);
+    await change("Filter by type", "@example/video-demo::other_video");
+    expect(names()).toEqual(["Bravo"]);
+    await change("Filter by type", "all");
+    const search = container.querySelector('input[aria-label="Search recipes"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "char");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(names()).toEqual(["Charlie"]);
+  });
+
+  it("opens the creation form from the Build a new Recipe panel", async () => {
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    await press("Create manually");
+    expect(document.body.querySelector("#recipe-name")).not.toBeNull();
   });
 
   it("creates a recipe with prompt and constraints", async () => {

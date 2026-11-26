@@ -8,7 +8,6 @@ import { ArrowRight, Check, Info, Layers, Sparkles, SquarePlay } from "lucide-re
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,7 +50,7 @@ const NO_OPPORTUNITY_REASONS: Record<string, string> = {
 
 const STATES: Record<Generation["state"], { label: string; tone: "progress" | "info" | "neutral" | "error" | "active" }> = {
   in_progress: { label: "In progress", tone: "progress" },
-  ready_to_review: { label: "Ready to review", tone: "info" },
+  ready_to_review: { label: "Ready", tone: "info" },
   no_opportunity: { label: "No opportunity", tone: "neutral" },
   failed: { label: "Failed", tone: "error" },
   created: { label: "Created", tone: "active" },
@@ -65,15 +64,15 @@ export function useGenerations(instanceId: string): Generations | undefined {
   return useQuery(api.recipe_generation_views.listGenerations, { instanceId }) as Generations | undefined;
 }
 
-export function GenerateRecipeButton({ instanceId }: { instanceId: string }) {
+export function GenerateRecipeButton({ instanceId, label = "Generate Recipe", variant = "default" }: { instanceId: string; label?: string; variant?: "default" | "outline" }) {
   const generations = useGenerations(instanceId);
   const [open, setOpen] = React.useState(false);
   const inFlight = generations?.inFlight === true;
   return (
     <>
-      <Button type="button" disabled={inFlight} onClick={() => setOpen(true)}>
+      <Button type="button" variant={variant} disabled={inFlight} onClick={() => setOpen(true)}>
         <Sparkles className="size-4" />
-        {inFlight ? "Generation in progress" : "Generate Recipe"}
+        {inFlight ? "Generation in progress" : label}
       </Button>
       <GenerateRecipeDialog instanceId={instanceId} open={open} onOpenChange={setOpen} />
     </>
@@ -330,28 +329,52 @@ function GenerateRecipeDialog({ instanceId, open, onOpenChange }: { instanceId: 
   );
 }
 
+/** What a generation is called in the history: the name of its proposal, else its idea. */
+const titleOfGeneration = (generation: Generation): string => {
+  const name = (generation.proposal as { name?: unknown } | undefined)?.name;
+  return typeof name === "string" && name !== "" ? name : (generation.idea ?? "Recipe generation");
+};
+
+const HISTORY_SHOWN = 3;
+
 /**
- * The latest generations of the Project, one row each (retries are hidden). `onReview` receives the generation
- * (Run id and proposal) of a row to review.
+ * The latest generations of the Project as a compact panel, one row each (retries are hidden): its state, what it
+ * was about, its date and the action that fits (review a proposal, view a created one, read why it failed).
+ * `onReview` receives the generation (Run id and proposal) of a row to review.
  */
 export function GenerationHistory({ instanceId, onReview }: { instanceId: string; onReview: (generation: Generation) => void }) {
   const data = useGenerations(instanceId);
-  if (data === undefined || data.generations.length === 0) return null;
+  const [all, setAll] = React.useState(false);
+  const generations = data?.generations ?? [];
+  const shown = all ? generations : generations.slice(0, HISTORY_SHOWN);
   return (
-    <section aria-label="Generation History" className="grid grid-cols-[minmax(0,1fr)] gap-3">
-      <h2 className="m-0 text-lg font-semibold text-foreground">Generation History</h2>
-      <ul className="m-0 grid grid-cols-[minmax(0,1fr)] gap-3 p-0">
-        {data.generations.map((generation) => (
-          <li key={generation.generationId} className="min-w-0">
-            <GenerationRow generation={generation} onReview={onReview} />
-          </li>
-        ))}
-      </ul>
+    <section aria-label="Generation History" className="grid min-w-0 content-start gap-3 rounded-2xl border border-border bg-card p-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="m-0 text-xl font-semibold text-foreground">Generation History</h2>
+        {generations.length > HISTORY_SHOWN ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setAll((value) => !value)}>
+            {all ? "Show fewer" : "View all"}
+            {all ? null : <ArrowRight aria-hidden="true" className="size-4" />}
+          </Button>
+        ) : null}
+      </div>
+      {data === undefined ? (
+        <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+      ) : generations.length === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">No generation yet. Your proposals appear here to review.</p>
+      ) : (
+        <ul className="m-0 grid min-w-0 list-none p-0">
+          {shown.map((generation) => (
+            <GenerationRow key={generation.generationId} generation={generation} onReview={onReview} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
 
 function GenerationRow({ generation, onReview }: { generation: Generation; onReview: (generation: Generation) => void }) {
+  const [details, setDetails] = React.useState(false);
   const { label, tone } = STATES[generation.state];
   const explanation =
     generation.state === "no_opportunity"
@@ -359,20 +382,33 @@ function GenerationRow({ generation, onReview }: { generation: Generation; onRev
       : generation.state === "failed"
         ? generation.reason
         : undefined;
+  const hasProposal = generation.proposal !== undefined;
   return (
-    <Card className="flex flex-col gap-1 px-5 py-3">
-      <div className="flex flex-wrap items-center gap-3">
+    <li className="min-w-0 border-b border-border py-3 last:border-b-0">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <StatusBadge tone={tone} label={label} />
+        <span className="min-w-0 flex-1 basis-40 truncate text-sm font-medium text-foreground" title={titleOfGeneration(generation)}>
+          {titleOfGeneration(generation)}
+        </span>
         <span className="text-sm text-muted-foreground tabular-nums">{dateTime(generation.createdAt)}</span>
-        {(generation.state === "ready_to_review" || (generation.state === "created" && generation.proposal !== undefined)) ? (
-          <Button type="button" size="sm" variant={generation.state === "created" ? "outline" : "default"} className="ml-auto" onClick={() => onReview(generation)}>
-            {generation.state === "created" ? "View proposal" : "Review"}
+        {generation.state === "ready_to_review" ? (
+          <Button type="button" size="sm" onClick={() => onReview(generation)}>
+            Review
+          </Button>
+        ) : generation.state === "created" && hasProposal ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => onReview(generation)}>
+            View
+          </Button>
+        ) : explanation ? (
+          <Button type="button" size="sm" variant="outline" aria-expanded={details} onClick={() => setDetails((open) => !open)}>
+            Details
           </Button>
         ) : null}
       </div>
-      {explanation ? <p className={generation.state === "failed" ? "m-0 break-words text-sm text-destructive [overflow-wrap:anywhere]" : "m-0 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"}>{explanation}</p> : null}
-      {generation.idea ? <p className="m-0 truncate text-sm text-muted-foreground">{`Idea: ${generation.idea}`}</p> : null}
-      {generation.instructions ? <p className="m-0 truncate text-sm text-muted-foreground">{`Instructions: ${generation.instructions}`}</p> : null}
-    </Card>
+      {details && explanation ? (
+        <p className={generation.state === "failed" ? "m-0 mt-2 break-words text-sm text-destructive [overflow-wrap:anywhere]" : "m-0 mt-2 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"}>{explanation}</p>
+      ) : null}
+      {generation.idea && hasProposal ? <p className="m-0 mt-1 truncate text-xs text-muted-foreground">{`Idea: ${generation.idea}`}</p> : null}
+    </li>
   );
 }
