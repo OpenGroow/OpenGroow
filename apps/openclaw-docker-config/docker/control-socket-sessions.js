@@ -149,6 +149,7 @@ function parseTranscriptEventRow(eventJson) {
         turns.push({
           kind: "tool_call",
           toolName: block.name,
+          ...(typeof block.id === "string" && block.id ? { toolCallId: block.id } : {}),
           arguments: deepParseJsonStrings(block.arguments ?? block.input ?? null),
           timestamp,
         });
@@ -163,6 +164,9 @@ function parseTranscriptEventRow(eventJson) {
       {
         kind: "tool_result",
         toolName: message.toolName,
+        ...(typeof message.toolCallId === "string" && message.toolCallId
+          ? { toolCallId: message.toolCallId }
+          : {}),
         success: message.isError !== true,
         result: deepParseJsonStrings(extractToolResultPayload(message.content)),
         timestamp,
