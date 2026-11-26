@@ -386,7 +386,8 @@ const DELETE_CHUNK = 100;
 const GALLERY = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 /**
- * A Source in the gallery: its image, with the format and the score over it, and its title below. `showStatus`
+ * A Source in the gallery: its image, then its title with the format and the score below (never over the image, which
+ * often carries text of its own). `showStatus`
  * (the Other tab) adds the pipeline status, the Agent and the date, since those Sources are not scored yet.
  */
 function SourceCard({
@@ -424,10 +425,6 @@ function SourceCard({
               <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
             </div>
           ) : null}
-          <div className="absolute bottom-2 left-2 right-2 flex items-end justify-between gap-2">
-            <FormatBadge source={source} platform={platform} />
-            {score !== undefined ? <Badge variant="outline" className="bg-background/90 tabular-nums">Score {score}</Badge> : null}
-          </div>
           {isWebUrl(source.origin) ? (
             <Button
               variant="outline"
@@ -454,6 +451,10 @@ function SourceCard({
           >
             {title}
           </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <FormatBadge source={source} platform={platform} />
+            {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
+          </div>
           {showStatus ? (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <SourcePipelinePill source={source} />
