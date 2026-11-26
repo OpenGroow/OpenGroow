@@ -124,3 +124,39 @@ describe("summarizeTrace", () => {
     expect(summarizeTrace(events)).toEqual({ toolCallCount: 2, failedToolCallCount: 1 });
   });
 });
+
+describe("External Job handoff", () => {
+  const mcpJob = { serverName: "media-mcp", jobId: "job-42", jobType: "create_video" };
+  const started = JSON.stringify({ status: "started", jobId: "job-42" });
+  const turns = (out: unknown) => [call("media-mcp__create_video", "c1", 1), result("media-mcp__create_video", "c1", 2, true, out)];
+
+  it("labels the matching Tool Call and keeps it completed", () => {
+    const [e] = tools(normalizeTrace(turns(started), { ...run("awaiting_job"), mcpJob }));
+    expect(e).toMatchObject({ status: "completed", externalJobHandoff: true });
+  });
+
+  it("matches an object output carrying the job id", () => {
+    const [e] = tools(normalizeTrace(turns({ status: "started", jobId: "job-42" }), { ...run("awaiting_job"), mcpJob }));
+    expect(e).toMatchObject({ externalJobHandoff: true });
+  });
+
+  it("leaves a started reply that does not match the Run's mcpJob as a plain Tool Call", () => {
+    const other = JSON.stringify({ status: "started", jobId: "job-7" });
+    expect(tools(normalizeTrace(turns(other), { ...run("awaiting_job"), mcpJob }))[0]).toMatchObject({ externalJobHandoff: false });
+    const wrongTool = [call("media-mcp__other", "c1", 1), result("media-mcp__other", "c1", 2, true, started)];
+    expect(tools(normalizeTrace(wrongTool, { ...run("awaiting_job"), mcpJob }))[0]).toMatchObject({ externalJobHandoff: false });
+    const wrongServer = [call("x__create_video", "c1", 1), result("x__create_video", "c1", 2, true, started)];
+    expect(tools(normalizeTrace(wrongServer, { ...run("awaiting_job"), mcpJob }))[0]).toMatchObject({ externalJobHandoff: false });
+  });
+
+  it("still shows the handoff once the Run is completed", () => {
+    expect(tools(normalizeTrace(turns(started), { ...run("completed"), mcpJob }))[0]).toMatchObject({ externalJobHandoff: true });
+  });
+
+  it("flags nothing for a legacy mcpJob without a usable tool name", () => {
+    for (const jobType of [undefined, "legacy", ""]) {
+      const legacy = { ...mcpJob, jobType };
+      expect(tools(normalizeTrace(turns(started), { ...run("awaiting_job"), mcpJob: legacy }))[0]).toMatchObject({ externalJobHandoff: false });
+    }
+  });
+});

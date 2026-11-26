@@ -8,7 +8,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
 import { runDurationMs } from "@/src/lib/trace/format-trace";
-import { isTerminalRunStatus, normalizeTrace, summarizeTrace } from "@/src/lib/trace/normalize-trace";
+import { isTerminalRunStatus, normalizeTrace, summarizeTrace, type TraceToolEvent } from "@/src/lib/trace/normalize-trace";
+import { ToolInspector } from "./tool-inspector";
 import { TraceSummary } from "./trace-summary";
 import { TraceTimeline } from "./trace-timeline";
 import { useRunTranscript } from "./use-run-transcript";
@@ -32,6 +33,7 @@ export function RunTraceView({
   runId: Id<"runs">;
 }) {
   const { projectId, workspaceKey } = use(params);
+  const [selectedEventId, setSelectedEventId] = React.useState<string>();
   const instanceId = useRuntimeInstanceId(decodeURIComponent(projectId));
   const run = useQuery(api.runs.get, { runId });
   const hasSession = run ? !NO_SESSION_STATUSES.includes(run.status) : false;
@@ -40,6 +42,7 @@ export function RunTraceView({
     workspaceKey: decodeURIComponent(workspaceKey),
     runId,
     enabled: hasSession,
+    runStatus: run?.status,
   });
 
   if (run === undefined) return <LogsStatePanel title="Loading trace" description="Reading the Run." />;
@@ -63,18 +66,45 @@ export function RunTraceView({
   }
 
   const turns = transcript.found ? transcript.turns : [];
-  const events = normalizeTrace(turns, { id: run._id, status: run.status });
+  const events = normalizeTrace(turns, { id: run._id, status: run.status, mcpJob: run.mcpJob });
+  const selectedTool = events.find((e): e is TraceToolEvent => e.type === "tool" && e.id === selectedEventId);
   return (
     <div className="grid min-w-0 gap-4">
+      {transcript.pollError ? (
+        <p role="status" className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
+          Updating is interrupted. Showing the last loaded trace; retrying.
+        </p>
+      ) : null}
       <TraceSummary
         runStatus={run.status}
         runDurationMs={isTerminalRunStatus(run.status) ? runDurationMs(run) : undefined}
         {...summarizeTrace(events)}
+        footer={
+          run.status === "awaiting_job" ? (
+            <p className="m-0 text-sm text-muted-foreground" data-testid="trace-awaiting-job">
+              Waiting for its External Job to finish.
+            </p>
+          ) : undefined
+        }
       />
       {events.length === 0 ? (
         <LogsStatePanel title="No activity recorded" description="This Run did not produce any recorded events." />
       ) : (
-        <TraceTimeline events={events} />
+        <div className={selectedTool ? "grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]" : "grid min-w-0"}>
+          <TraceTimeline
+            events={events}
+            selectedEventId={selectedEventId}
+            onSelectTool={(e) => setSelectedEventId(e.id)}
+            renderToolBadge={(event) =>
+              event.externalJobHandoff ? (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary" data-testid="external-job-badge">
+                  External Job started
+                </span>
+              ) : null
+            }
+          />
+          {selectedTool ? <ToolInspector key={selectedTool.id} event={selectedTool} /> : null}
+        </div>
       )}
     </div>
   );
