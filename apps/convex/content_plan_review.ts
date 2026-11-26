@@ -10,7 +10,7 @@ import { getTemplateRegistry } from "./template_registry.js";
 
 // Dashboard reads of Content Plans (ADR-086, issue #179): the current draft with its Planned Contents, then the
 // history. Owner-scoped and read-only; the mutations of review (edit, approve, reject) are added next to these.
-// Nothing derived is stored: Publisher compatibility, Creative Family and the intent distribution are computed here.
+// Nothing derived is stored: Publisher compatibility and the intent distribution are computed here.
 
 const HISTORY_LIMIT = 50;
 
@@ -49,7 +49,6 @@ const byPlannedDate = (a: Doc<"plannedContents">, b: Doc<"plannedContents">) => 
 async function contentViews(ctx: QueryCtx, rows: readonly Doc<"plannedContents">[], publishers: readonly ProjectPublisher[]) {
   const instanceOf = <T extends { instanceId: string }>(instanceId: string, doc: T | null) => (doc && doc.instanceId === instanceId ? doc : null);
   const recipeOf = memoized((recipeId: Id<"productionRecipes">) => ctx.db.get(recipeId));
-  const familyOf = memoized((familyId: Id<"creativeFamilies">) => ctx.db.get(familyId));
   const sourceOf = memoized((sourceId: Id<"sources">) => ctx.db.get(sourceId));
   const registry = getTemplateRegistry(ctx);
   const templateOf = memoized((key: string) => {
@@ -61,13 +60,12 @@ async function contentViews(ctx: QueryCtx, rows: readonly Doc<"plannedContents">
     const found = channelOf(publishers, target)!;
     return capabilityOfTarget(ctx, found, kind, platforms ?? undefined);
   });
-  return await Promise.all(rows.map((content) => contentView(content, publishers, { instanceOf, recipeOf, familyOf, sourceOf, templateOf, capabilityOf })));
+  return await Promise.all(rows.map((content) => contentView(content, publishers, { instanceOf, recipeOf, sourceOf, templateOf, capabilityOf })));
 }
 
 type ViewLookups = {
   instanceOf: <T extends { instanceId: string }>(instanceId: string, doc: T | null) => T | null;
   recipeOf: (id: Id<"productionRecipes">) => Promise<Doc<"productionRecipes"> | null>;
-  familyOf: (id: Id<"creativeFamilies">) => Promise<Doc<"creativeFamilies"> | null>;
   sourceOf: (id: Id<"sources">) => Promise<Doc<"sources"> | null>;
   templateOf: (key: string) => Promise<Awaited<ReturnType<ReturnType<typeof getTemplateRegistry>["resolve"]>>>;
   capabilityOf: (key: string) => Promise<ReturnType<typeof capabilityFor>>;
@@ -75,10 +73,9 @@ type ViewLookups = {
 
 /** What a Planned Content shows: its references resolved by name, and its destinations re-checked against the Publishers. */
 async function contentView(content: Doc<"plannedContents">, publishers: readonly ProjectPublisher[], lookups: ViewLookups) {
-  const { instanceOf, recipeOf, familyOf, sourceOf, templateOf, capabilityOf } = lookups;
+  const { instanceOf, recipeOf, sourceOf, templateOf, capabilityOf } = lookups;
   const recipe = instanceOf(content.instanceId, await recipeOf(content.recipeId));
-  const [family, source, template] = await Promise.all([
-    recipe ? familyOf(recipe.creativeFamilyId).then((doc) => instanceOf(content.instanceId, doc)) : null,
+  const [source, template] = await Promise.all([
     content.sourceId ? sourceOf(content.sourceId).then((doc) => instanceOf(content.instanceId, doc)) : null,
     recipe ? templateOf(JSON.stringify([content.instanceId, recipe.templateId])) : null,
   ]);
@@ -104,7 +101,6 @@ async function contentView(content: Doc<"plannedContents">, publishers: readonly
   return {
     _id, kind, missionType, title, brief, plannedAt, intent, rationale, status, publishTargets,
     recipe: recipe ? { id: recipe._id, name: recipe.name } : null,
-    creativeFamily: family ? { id: family._id, name: family.name } : null,
     source: source ? { id: source._id, label: source.label } : null,
   };
 }

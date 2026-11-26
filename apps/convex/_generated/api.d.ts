@@ -17,7 +17,6 @@ import type * as analytics_attributed from "../analytics_attributed.js";
 import type * as analytics_claims from "../analytics_claims.js";
 import type * as analytics_connections from "../analytics_connections.js";
 import type * as analytics_face from "../analytics_face.js";
-import type * as analytics_family from "../analytics_family.js";
 import type * as analytics_metric_stats from "../analytics_metric_stats.js";
 import type * as analytics_node from "../analytics_node.js";
 import type * as analytics_recipe from "../analytics_recipe.js";
@@ -238,7 +237,6 @@ declare const fullApi: ApiFromModules<{
   analytics_claims: typeof analytics_claims;
   analytics_connections: typeof analytics_connections;
   analytics_face: typeof analytics_face;
-  analytics_family: typeof analytics_family;
   analytics_metric_stats: typeof analytics_metric_stats;
   analytics_node: typeof analytics_node;
   analytics_recipe: typeof analytics_recipe;

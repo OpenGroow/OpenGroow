@@ -1,4 +1,4 @@
-import type { Doc } from "./_generated/dataModel.js";
+import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 
 // What the modules of a Recipe Generation (ADR-087) share: its limits, the Internal MCP tools it needs
@@ -9,11 +9,13 @@ export const MAX_RECIPE_GENERATION_TRIES = 3;
 
 export const MAX_INSTRUCTIONS_LENGTH = 2000;
 
+/** The most Sources one generation reads: what an Agent can read in a run, and the page limit of the Source list. */
+export const MAX_GENERATION_SOURCES = 25;
+
 /** The Internal MCP tools the Agent needs; an Agent declaring all of them is eligible. */
 export const RECIPE_GENERATION_TOOLS = [
   "get_brand_core",
-  "get_creative_family",
-  "list_family_sources",
+  "list_generation_sources",
   "get_source",
   "list_production_recipes",
   "get_production_recipe",
@@ -27,9 +29,19 @@ type RunStatus = (typeof IN_FLIGHT_STATUSES)[number];
 type Ctx = Pick<QueryCtx, "db">;
 export type GenerationPin = NonNullable<Extract<Doc<"runs">, { recipeGeneration?: unknown }>["recipeGeneration"]>;
 
-/** The `recipeGeneration` pin of a Run: the family and the instructions carry over, the rest is set per try. */
-export function buildGenerationPin(base: { familyId: GenerationPin["familyId"]; instructions?: string }, extra: { tryCount: number; generationId?: GenerationPin["generationId"]; feedback?: string }): GenerationPin {
-  return { familyId: base.familyId, ...(base.instructions ? { instructions: base.instructions } : {}), tryCount: extra.tryCount, ...(extra.generationId ? { generationId: extra.generationId } : {}), ...(extra.feedback ? { feedback: extra.feedback } : {}) };
+/** The `recipeGeneration` pin of a Run: the idea, the Sources and the instructions carry over, the rest is set per try. */
+export function buildGenerationPin(
+  base: { idea?: string; sourceIds: Id<"sources">[]; instructions?: string },
+  extra: { tryCount: number; generationId?: GenerationPin["generationId"]; feedback?: string },
+): GenerationPin {
+  return {
+    ...(base.idea ? { idea: base.idea } : {}),
+    sourceIds: base.sourceIds,
+    ...(base.instructions ? { instructions: base.instructions } : {}),
+    tryCount: extra.tryCount,
+    ...(extra.generationId ? { generationId: extra.generationId } : {}),
+    ...(extra.feedback ? { feedback: extra.feedback } : {}),
+  };
 }
 
 /** An Agent's Run in flight (any kind), or null. One bounded read per status, through the shared index. */

@@ -69,14 +69,11 @@ async function call(token: string, name: string, args: unknown = {}) {
 async function recipes(token: string, args: unknown = {}) {
   return JSON.parse((await call(token, "list_production_recipes", args)).result.content[0].text);
 }
-type Entry = { name: string; neverUsedEver?: boolean; neverPublishedEver?: boolean; archived: boolean; creativeFamily: { name: string }; usage: { lifetime: Record<string, number>; period: Record<string, number>; lastMissionAt?: number; lastAttemptAt?: number; lastPublicationAt?: number } };
+type Entry = { name: string; neverUsedEver?: boolean; neverPublishedEver?: boolean; archived: boolean; usage: { lifetime: Record<string, number>; period: Record<string, number>; lastMissionAt?: number; lastAttemptAt?: number; lastPublicationAt?: number } };
 const entry = (answer: { recipes: Entry[] }, name: string) => answer.recipes.find((r) => r.name === name)!;
 
-async function family(projectId: string, name: string) {
-  return t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: projectId, slug: name.toLowerCase(), name, description: "d" }));
-}
-async function recipe(projectId: string, creativeFamilyId: Id<"creativeFamilies">, name: string, status: "active" | "archived" = "active") {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId: STRATEGIST, missionType: "make_image", name, description: "d", status }));
+async function recipe(projectId: string, name: string, status: "active" | "archived" = "active") {
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, templateId: STRATEGIST, missionType: "make_image", name, description: "d", status }));
 }
 async function mission(projectId: string, recipeId: Id<"productionRecipes"> | undefined, o: { status?: string; ageDays?: number } = {}) {
   return t.run((ctx) => {
@@ -117,7 +114,7 @@ async function setupPublishing(projectId: string) {
 describe("list_production_recipes period", () => {
   async function seedPeriod() {
     const token = await seedProject(PROJECT_A);
-    const r = await recipe(PROJECT_A, await family(PROJECT_A, "F"), "R");
+    const r = await recipe(PROJECT_A, "R");
     await mission(PROJECT_A, r, { ageDays: 40 });
     await mission(PROJECT_A, r, { ageDays: 10 });
     await mission(PROJECT_A, r, { ageDays: 2 });
@@ -153,18 +150,18 @@ describe("list_production_recipes period", () => {
 describe("list_production_recipes", () => {
   it("counts a recipe selected only by a cancelled Mission as a Mission, not as a Production Attempt", async () => {
     const token = await seedProject(PROJECT_A);
-    const r = await recipe(PROJECT_A, await family(PROJECT_A, "Reaction"), "Cancelled one");
+    const r = await recipe(PROJECT_A, "Cancelled one");
     const cancelled = await mission(PROJECT_A, r, { status: "cancelled" });
     await run(PROJECT_A, cancelled, { dispatched: false, status: "cancelled" });
     const e = entry(await recipes(token), "Cancelled one");
-    expect(e.creativeFamily.name).toBe("Reaction");
+    expect(e).not.toHaveProperty("creativeFamily");
     expect(e.usage.lifetime).toMatchObject({ missions: 1, productionAttempts: 0, successfulAttempts: 0, publications: 0 });
     expect(e.neverUsedEver).toBe(false);
   });
 
   it("counts dispatched Runs as attempts, and only completed ones with a result as successful", async () => {
     const token = await seedProject(PROJECT_A);
-    const r = await recipe(PROJECT_A, await family(PROJECT_A, "F"), "R");
+    const r = await recipe(PROJECT_A, "R");
     const m = await mission(PROJECT_A, r);
     await run(PROJECT_A, m, { dispatched: true, result: "success" });
     await run(PROJECT_A, m, { dispatched: true, result: "needs_human_review" });
@@ -178,7 +175,7 @@ describe("list_production_recipes", () => {
 
   it("lists a recipe executed but never published with neverPublishedEver true", async () => {
     const token = await seedProject(PROJECT_A);
-    const r = await recipe(PROJECT_A, await family(PROJECT_A, "F"), "Unpublished");
+    const r = await recipe(PROJECT_A, "Unpublished");
     await run(PROJECT_A, await mission(PROJECT_A, r), { dispatched: true, result: "success" });
     const e = entry(await recipes(token), "Unpublished");
     expect(e.neverUsedEver).toBe(false);
@@ -188,7 +185,7 @@ describe("list_production_recipes", () => {
   it("counts Publications and measured ones, over the lifetime and over the period, by their own dates", async () => {
     const token = await seedProject(PROJECT_A);
     await setupPublishing(PROJECT_A);
-    const r = await recipe(PROJECT_A, await family(PROJECT_A, "F"), "Published");
+    const r = await recipe(PROJECT_A, "Published");
     const old = await mission(PROJECT_A, r, { ageDays: 100 });
     const recent = await mission(PROJECT_A, r, { ageDays: 2 });
     await publish(PROJECT_A, old, { ageDays: 90, metrics: { views: 5 } });
@@ -206,9 +203,8 @@ describe("list_production_recipes", () => {
     await setupPublishing(PROJECT_A);
     await installAnalyticsAdapter(t, WEB_ANALYTICS);
     await t.withIdentity(OWNER).mutation(api.publishers.setAnalyticsLink, { instanceId: PROJECT_A, adapter: "postiz", target: "instagram:me", analyticsAdapter: "web-analytics" });
-    const f = await family(PROJECT_A, "F");
-    const a = await recipe(PROJECT_A, f, "A");
-    const b = await recipe(PROJECT_A, f, "B");
+    const a = await recipe(PROJECT_A, "A");
+    const b = await recipe(PROJECT_A, "B");
     const shared = { externalUrl: "https://example.com/article-1", adapter: "web-analytics", metrics: { views: 10 } };
     await publish(PROJECT_A, await mission(PROJECT_A, a), shared);
     await publish(PROJECT_A, await mission(PROJECT_A, a), { ...shared, externalUrl: "https://example.com/article-1/?utm_source=x" });
@@ -222,9 +218,8 @@ describe("list_production_recipes", () => {
 
   it("is partial, and asserts no never flag, when a Mission has more Runs than were read", async () => {
     const token = await seedProject(PROJECT_A);
-    const f = await family(PROJECT_A, "F");
-    const r = await recipe(PROJECT_A, f, "Busy");
-    await recipe(PROJECT_A, f, "Idle");
+    const r = await recipe(PROJECT_A, "Busy");
+    await recipe(PROJECT_A, "Idle");
     const m = await mission(PROJECT_A, r);
     for (let i = 0; i < 100; i += 1) await run(PROJECT_A, m, { dispatched: true, result: "success" });
     const answer = await recipes(token);
@@ -234,7 +229,7 @@ describe("list_production_recipes", () => {
 
   it("flags archived recipes, and lists a never-used one", async () => {
     const token = await seedProject(PROJECT_A);
-    await recipe(PROJECT_A, await family(PROJECT_A, "F"), "Old", "archived");
+    await recipe(PROJECT_A, "Old", "archived");
     const answer = await recipes(token);
     expect(entry(answer, "Old")).toMatchObject({ archived: true, neverUsedEver: true, neverPublishedEver: true });
     expect(answer.partial).toBe(false);
@@ -243,9 +238,8 @@ describe("list_production_recipes", () => {
   it("never asserts a never flag when the read was incomplete", async () => {
     await seedProject(PROJECT_A);
     await setupPublishing(PROJECT_A);
-    const f = await family(PROJECT_A, "F");
-    const used = await recipe(PROJECT_A, f, "Used");
-    await recipe(PROJECT_A, f, "Other");
+    const used = await recipe(PROJECT_A, "Used");
+    await recipe(PROJECT_A, "Other");
     await publish(PROJECT_A, await mission(PROJECT_A, used));
     await publish(PROJECT_A, await mission(PROJECT_A, undefined));
     const answer = await t.run((ctx) => recipeCatalog(ctx, PROJECT_A, { from: 0, to: Date.now() }, { scanLimit: 1 }));
@@ -260,8 +254,8 @@ describe("list_production_recipes", () => {
   it("is confined to the calling Project, needs an active Run, and discovery exposes no data", async () => {
     const tokenA = await seedProject(PROJECT_A);
     await seedProject(PROJECT_B);
-    await recipe(PROJECT_B, await family(PROJECT_B, "Secret"), "Not mine");
-    await recipe(PROJECT_A, await family(PROJECT_A, "F"), "Mine");
+    await recipe(PROJECT_B, "Not mine");
+    await recipe(PROJECT_A, "Mine");
     expect(JSON.stringify(await recipes(tokenA))).not.toContain("Not mine");
     const idle = await seedProject("project-idle", false);
     // No Run in progress: the call is refused.

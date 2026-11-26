@@ -54,7 +54,7 @@ async function addReview(t: ReturnType<typeof convexTest>, projectId: string, ru
     ctx.db.insert("strategicReviews", {
       ownerId: "owner", instanceId: projectId, runId,
       periodStart: 1_000, periodEnd: 2_000, report: "SECRET REPORT BODY", consolidatedMemory: o.memory,
-      references: { familyIds: [], recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt: o.createdAt,
+      references: { recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt: o.createdAt,
     }),
   );
 }
@@ -100,7 +100,7 @@ describe("get_strategic_memory", () => {
       periodStart: 1_000,
       periodEnd: 2_000,
       memory: "# Current memory",
-      references: { familyIds: [], recipeIds: [], publicationIds: [] },
+      references: { recipeIds: [], publicationIds: [] },
       createdAt: 200,
     });
     expect(JSON.stringify(out)).not.toContain("SECRET REPORT BODY");

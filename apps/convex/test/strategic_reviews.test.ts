@@ -37,14 +37,8 @@ const newRun = (instanceId = INSTANCE_ID) =>
     });
   });
 
-const newFamily = (instanceId = INSTANCE_ID, status?: "active" | "archived") =>
-  t.run(async (ctx) => await ctx.db.insert("creativeFamilies", { instanceId, slug: `f-${Math.random()}`, name: "Family", description: "d", ...(status ? { status } : {}) }));
-
-const newRecipe = (instanceId = INSTANCE_ID) =>
-  t.run(async (ctx) => {
-    const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId, slug: `f-${Math.random()}`, name: "Family", description: "d" });
-    return await ctx.db.insert("productionRecipes", { instanceId, creativeFamilyId, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d", status: "active" } as never);
-  });
+const newRecipe = (instanceId = INSTANCE_ID, status: "active" | "archived" = "active") =>
+  t.run(async (ctx) => await ctx.db.insert("productionRecipes", { instanceId, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d", status }));
 
 const newPublication = (instanceId = INSTANCE_ID) =>
   t.run(async (ctx) => {
@@ -55,7 +49,7 @@ const newPublication = (instanceId = INSTANCE_ID) =>
 
 type Envelope = unknown;
 const ok = (extra: Partial<{ report: string; consolidatedMemory: string; references: unknown }> = {}): Envelope => ({
-  report: "Report", consolidatedMemory: "Memory", references: { familyIds: [], recipeIds: [], publicationIds: [] }, ...extra,
+  report: "Report", consolidatedMemory: "Memory", references: { recipeIds: [], publicationIds: [] }, ...extra,
 });
 
 async function persist(runId: Id<"runs">, envelope: Envelope, baseReviewId?: Id<"strategicReviews">, instanceId = INSTANCE_ID) {
@@ -78,7 +72,7 @@ describe("strategic_reviews.persist", () => {
     expect(review).toMatchObject({
       _id: result.reviewId, instanceId: INSTANCE_ID, ownerId: OWNER_ID, runId: run, ...PERIOD,
       report: "Report", consolidatedMemory: "Memory", memoryChanged: true,
-      references: { familyIds: [], recipeIds: [], publicationIds: [] },
+      references: { recipeIds: [], publicationIds: [] },
     });
     expect(review?.baseReviewId).toBeUndefined();
   });
@@ -91,7 +85,7 @@ describe("strategic_reviews.persist", () => {
 
   it("rejects an empty or blank report, a non-string report and a malformed envelope, writing nothing", async () => {
     const run = await newRun();
-    for (const bad of [ok({ report: "" }), ok({ report: "  \n " }), ok({ report: 3 as never }), ok({ consolidatedMemory: null as never }), null, "text", [], {}, ok({ references: "x" }), ok({ references: { familyIds: "x" } })]) {
+    for (const bad of [ok({ report: "" }), ok({ report: "  \n " }), ok({ report: 3 as never }), ok({ consolidatedMemory: null as never }), null, "text", [], {}, ok({ references: "x" }), ok({ references: { recipeIds: "x" } })]) {
       const result = await persist(run, bad);
       expect(result).toMatchObject({ ok: false, reason: "invalid_result" });
       if (!result.ok) expect(result.message.length).toBeGreaterThan(0);
@@ -105,7 +99,7 @@ describe("strategic_reviews.persist", () => {
     expect(await persist(run, ok({ report: "a".repeat(reportChars + 1) }))).toMatchObject({ ok: false, reason: "invalid_result" });
     expect(await persist(run, ok({ consolidatedMemory: "a".repeat(memoryChars + 1) }))).toMatchObject({ ok: false, reason: "invalid_result" });
     const tooMany = Array.from({ length: referencesPerType + 1 }, (_, i) => `id-${i}`);
-    for (const key of ["familyIds", "recipeIds", "publicationIds"]) {
+    for (const key of ["recipeIds", "publicationIds"]) {
       expect(await persist(run, ok({ references: { [key]: tooMany } }))).toMatchObject({ ok: false, reason: "invalid_result" });
     }
     expect(await count()).toBe(0);
@@ -114,22 +108,28 @@ describe("strategic_reviews.persist", () => {
 
   it("stores deduplicated references to existing entities of the Project, archived ones included", async () => {
     const run = await newRun();
-    const family = await newFamily();
-    const archived = await newFamily(INSTANCE_ID, "archived");
     const recipe = await newRecipe();
+    const archived = await newRecipe(INSTANCE_ID, "archived");
     const publication = await newPublication();
-    const result = created(await persist(run, ok({ references: { familyIds: [family, archived, family], recipeIds: [recipe], publicationIds: [publication, publication] } })));
+    const result = created(await persist(run, ok({ references: { recipeIds: [recipe, archived, recipe], publicationIds: [publication, publication] } })));
     const review = await latest();
     expect(review?._id).toBe(result.reviewId);
-    expect(review?.references).toEqual({ familyIds: [family, archived], recipeIds: [recipe], publicationIds: [publication] });
+    expect(review?.references).toEqual({ recipeIds: [recipe, archived], publicationIds: [publication] });
+  });
+
+  it("references no Creative Family: a family list in the result is ignored and never stored", async () => {
+    const run = await newRun();
+    const result = created(await persist(run, ok({ references: { familyIds: ["anything"], recipeIds: [], publicationIds: [] } })));
+    expect((await latest())?._id).toBe(result.reviewId);
+    expect((await latest())?.references).toEqual({ recipeIds: [], publicationIds: [] });
   });
 
   it("rejects the whole result naming unknown and cross-Project references", async () => {
     const run = await newRun();
-    const foreign = await newFamily(OTHER_INSTANCE_ID);
+    const foreign = await newRecipe(OTHER_INSTANCE_ID);
     const foreignPublication = await newPublication(OTHER_INSTANCE_ID);
-    const mine = await newFamily();
-    const result = await persist(run, ok({ references: { familyIds: [mine, foreign, "not-an-id"], recipeIds: [], publicationIds: [foreignPublication] } }));
+    const mine = await newRecipe();
+    const result = await persist(run, ok({ references: { recipeIds: [mine, foreign, "not-an-id"], publicationIds: [foreignPublication] } }));
     expect(result).toMatchObject({ ok: false, reason: "invalid_references" });
     if (!result.ok) {
       expect(result.message).toContain(foreign);
@@ -142,15 +142,15 @@ describe("strategic_reviews.persist", () => {
 
   it("accepts a reference the base already held even once its entity is deleted, but not a new missing one", async () => {
     const first = await newRun();
-    const family = await newFamily();
-    const base = created(await persist(first, ok({ references: { familyIds: [family], recipeIds: [], publicationIds: [] } }))).reviewId;
-    await t.run(async (ctx) => await ctx.db.delete(family));
+    const recipe = await newRecipe();
+    const base = created(await persist(first, ok({ references: { recipeIds: [recipe], publicationIds: [] } }))).reviewId;
+    await t.run(async (ctx) => await ctx.db.delete(recipe));
     const second = await newRun();
-    const secondReview = created(await persist(second, ok({ references: { familyIds: [family], recipeIds: [], publicationIds: [] } }), base));
+    const secondReview = created(await persist(second, ok({ references: { recipeIds: [recipe], publicationIds: [] } }), base));
     const third = await newRun();
-    const gone = await newFamily();
+    const gone = await newRecipe();
     await t.run(async (ctx) => await ctx.db.delete(gone));
-    expect(await persist(third, ok({ references: { familyIds: [gone], recipeIds: [], publicationIds: [] } }), secondReview.reviewId)).toMatchObject({ ok: false, reason: "invalid_references" });
+    expect(await persist(third, ok({ references: { recipeIds: [gone], publicationIds: [] } }), secondReview.reviewId)).toMatchObject({ ok: false, reason: "invalid_references" });
   });
 
   it("rejects a result based on an outdated base as a memory conflict and writes nothing", async () => {

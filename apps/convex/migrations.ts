@@ -322,6 +322,46 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
 });
 
 /**
+ * ADR-088: a Production Recipe depends on no Creative Family. Removes the field from every recipe; the rest of the
+ * recipe and its versions are untouched. Idempotent. The field and its index leave the schema once this has run.
+ */
+export const dropRecipeFamily = migrations.define({
+  table: "productionRecipes",
+  migrateOne: async (ctx, recipe) => {
+    if (recipe.creativeFamilyId !== undefined) await ctx.db.patch(recipe._id, { creativeFamilyId: undefined });
+  },
+});
+
+/** The most Sources a Recipe Generation reads (the limit of the Internal MCP's Source list). */
+const MAX_PINNED_SOURCES = 25;
+const RUN_SETTLED = new Set(["completed", "failed", "cancelled"]);
+
+/**
+ * ADR-088: a Recipe Generation Run is pinned to its input (an idea and Sources), not to a Creative Family. A Run
+ * still in flight (or about to be retried from) keeps working: the family it was pinned to is resolved into its
+ * readable Sources, newest first, at most 25. A settled Run keeps its result and gets no Sources: the inspiration of
+ * past generations is not rebuilt. Idempotent: a pin without `familyId` that already has `sourceIds` is left alone.
+ */
+export const stripRecipeGenerationFamily = migrations.define({
+  table: "runs",
+  migrateOne: async (ctx, run) => {
+    if (!("recipeGeneration" in run) || !run.recipeGeneration) return;
+    const { familyId, sourceIds, ...rest } = run.recipeGeneration;
+    if (familyId === undefined && sourceIds !== undefined) return;
+    let pinned = sourceIds ?? [];
+    if (familyId !== undefined && !RUN_SETTLED.has(run.status)) {
+      const rows = await ctx.db
+        .query("sources")
+        .withIndex("by_instance_owner_creativeFamily_createdAt", (q) => q.eq("instanceId", run.instanceId).eq("ownerId", run.ownerId).eq("creativeFamilyId", familyId))
+        .order("desc")
+        .take(500);
+      pinned = rows.filter((source) => source.status === "ready" && source.excluded !== true).slice(0, MAX_PINNED_SOURCES).map((source) => source._id);
+    }
+    await ctx.db.patch(run._id, { recipeGeneration: { ...rest, sourceIds: pinned } });
+  },
+});
+
+/**
  * ADR-072: a Publisher package is looked up by `provides` (its adapter id),
  * from its `meta`. Packages installed before either field existed have
  * neither, and would read as not installed: both are derived again from the
@@ -361,6 +401,8 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInSources,
   internal.migrations.renameCarouselTemplateIdInRuns,
   internal.migrations.describeHubPackages,
+  internal.migrations.dropRecipeFamily,
+  internal.migrations.stripRecipeGenerationFamily,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

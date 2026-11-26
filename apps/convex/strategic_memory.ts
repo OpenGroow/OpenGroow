@@ -49,16 +49,10 @@ export const references = query({
     if (!review || review.instanceId !== args.instanceId) return null;
     const own = <T extends { instanceId: string }>(doc: T | null) => (doc && doc.instanceId === args.instanceId ? doc : null);
 
-    const families = await Promise.all(
-      review.references.familyIds.map(async (id) => {
-        const family = own(await ctx.db.get(id));
-        return { id, name: family?.name ?? null, archived: family?.status === "archived" };
-      }),
-    );
     const recipes = await Promise.all(
       review.references.recipeIds.map(async (id) => {
         const recipe = own(await ctx.db.get(id));
-        return { id, name: recipe?.name ?? null, archived: recipe?.status === "archived", familyId: recipe?.creativeFamilyId ?? null };
+        return { id, name: recipe?.name ?? null, archived: recipe?.status === "archived"};
       }),
     );
     const publications = await Promise.all(
@@ -67,6 +61,6 @@ export const references = query({
         return { id, target: publication?.target ?? null, missionId: publication?.missionId ?? null };
       }),
     );
-    return { families, recipes, publications };
+    return { recipes, publications };
   },
 });

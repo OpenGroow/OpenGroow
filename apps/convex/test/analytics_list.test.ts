@@ -123,12 +123,11 @@ async function seed(options: { adapter?: boolean } = {}) {
       }
       return publicationId;
     });
-  const list = (filters: { recipeId?: string; familyId?: string; from?: number; to?: number } = {}) => owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, ...filters });
-  const recipe = (familyName: string, name: string) =>
+  const list = (filters: { recipeId?: string; from?: number; to?: number } = {}) => owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, ...filters });
+  const recipe = (name: string) =>
     t.run(async (ctx) => {
-      const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: familyName.toLowerCase(), name: familyName, description: "d" });
-      const id = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId, templateId: TEMPLATE_ID, missionType: "make_reel", name, description: "d", status: "active" } as never);
-      return { id, familyId: creativeFamilyId, name, version: 2 };
+      const id = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, missionType: "make_reel", name, description: "d", status: "active" } as never);
+      return { id, name, version: 2 };
     });
   return { t, owner, publish, list, recipe };
 }
@@ -215,27 +214,26 @@ describe("analytics.listForProject", () => {
 });
 
 describe("analytics.listForProject attribution (ADR-084)", () => {
-  it("gives each Publication the recipe, version and family of its Mission's snapshot, and none when unattributed", async () => {
+  it("gives each Publication the recipe and version of its Mission's snapshot, and none when unattributed", async () => {
     const s = await seed();
-    const r = await s.recipe("Reaction", "Close-up");
+    const r = await s.recipe("Close-up");
     await s.publish({ target: "instagram:me", state: "waiting", name: "A", recipe: r });
     await s.publish({ target: "instagram:me", state: "waiting", name: "B" });
     const rows = await s.list();
-    expect(rows.find((x) => x.missionName === "A")?.attribution).toEqual({ recipeId: r.id, recipeName: "Close-up", version: 2, familyId: r.familyId, familyName: "Reaction" });
+    expect(rows.find((x) => x.missionName === "A")?.attribution).toEqual({ recipeId: r.id, recipeName: "Close-up", version: 2 });
     expect(rows.find((x) => x.missionName === "B")?.attribution).toBeUndefined();
   });
 
-  it("narrows to a recipe, a family or a period, leaving out unattributed Publications when a recipe or family is asked", async () => {
+  it("narrows to a recipe or a period, leaving out unattributed Publications when a recipe is asked", async () => {
     const s = await seed();
-    const a = await s.recipe("Reaction", "Close-up");
-    const b = await s.recipe("Tutorial", "Steps");
+    const a = await s.recipe("Close-up");
+    const b = await s.recipe("Steps");
     const now = Date.now();
     await s.publish({ target: "instagram:me", state: "waiting", name: "A", recipe: a });
     await s.publish({ target: "instagram:me", state: "waiting", name: "B", recipe: b, publishedAt: now - 40 * DAY });
     await s.publish({ target: "instagram:me", state: "waiting", name: "C" });
     const names = async (f: Parameters<typeof s.list>[0]) => (await s.list(f)).map((x) => x.missionName).sort();
     expect(await names({ recipeId: a.id })).toEqual(["A"]);
-    expect(await names({ familyId: b.familyId })).toEqual(["B"]);
     expect(await names({ from: now - 7 * DAY, to: now + DAY })).toEqual(["A", "C"]);
   });
 });

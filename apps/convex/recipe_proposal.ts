@@ -14,7 +14,7 @@ const proposalSchema = z.object({
   prompt: z.string().optional(),
   instructions: text("instructions"),
   constraints: z.array(z.string()).default([]),
-  sourceIds: z.array(text("sourceIds[]")).min(1, "cite at least one inspiration Source in sourceIds"),
+  sourceIds: z.array(text("sourceIds[]")).default([]),
   rationale: text("rationale"),
 });
 

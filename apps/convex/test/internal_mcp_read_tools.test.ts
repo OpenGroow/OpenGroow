@@ -150,12 +150,11 @@ describe("get_analytics_summary", () => {
   });
 });
 
-async function seedRecipe(name: string, familyName: string) {
+async function seedRecipe(name: string) {
   return t.run(async (ctx) => {
-    const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: PROJECT_A, slug: familyName.toLowerCase(), name: familyName, description: "d" } as never);
-    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, creativeFamilyId, templateId: "@test/social", missionType: "make_image", name, description: "d", status: "active" } as never);
+    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: "@test/social", missionType: "make_image", name, description: "d", status: "active" } as never);
     const runId = await ctx.db.query("runs").first();
-    return { recipeId: recipeId as string, familyId: creativeFamilyId as string, runId: runId!._id as string };
+    return { recipeId: recipeId as string, runId: runId!._id as string };
   });
 }
 
@@ -163,8 +162,8 @@ describe("get_analytics_summary: attribution", () => {
   it("groups by recipe and by family, narrowed by recipeId/familyId, over the MCP", async () => {
     const token = await seedProject(t, PROJECT_A);
     const post = await seedPublishing();
-    const a = await seedRecipe("Zoom", "Hooks");
-    const b = await seedRecipe("Pan", "Reveals");
+    const a = await seedRecipe("Zoom");
+    const b = await seedRecipe("Pan");
     await post({ target: "instagram:me", type: "make_image", metrics: { views: 10 }, recipe: { id: a.recipeId, version: 2 } });
     await post({ target: "instagram:me", type: "make_image", metrics: { views: 30 }, recipe: { id: b.recipeId } });
     await post({ target: "instagram:me", type: "make_image", metrics: { views: 5 } });
@@ -174,30 +173,27 @@ describe("get_analytics_summary: attribution", () => {
     const one = await result(t, token, "get_analytics_summary", { groupBy: "recipe", recipeId: a.recipeId });
     expect(one.recipes).toHaveLength(1);
     expect(one.recipes[0].versions).toMatchObject([{ version: 2, publications: 1 }]);
-    const byFamily = await result(t, token, "get_analytics_summary", { groupBy: "family", familyId: b.familyId });
-    expect(byFamily.families).toHaveLength(1);
-    expect(byFamily.families[0]).toMatchObject({ familyId: b.familyId, familyName: "Reveals" });
-    expect(byFamily.families[0].recipes[0].recipeId).toBe(b.recipeId);
+    const byFamily = await call(t, token, "get_analytics_summary", { groupBy: "family" });
+    expect(JSON.stringify(await byFamily.json())).toContain("groupBy must be");
   });
 
   it("never reads another Project's recipes, and refuses a mismatched filter", async () => {
     await seedProject(t, PROJECT_A);
     const tokenB = await seedProject(t, PROJECT_B);
     const post = await seedPublishing();
-    const a = await seedRecipe("Zoom", "Hooks");
+    const a = await seedRecipe("Zoom");
     await post({ target: "instagram:me", type: "make_image", metrics: { views: 10 }, recipe: { id: a.recipeId } });
     expect((await result(t, tokenB, "get_analytics_summary", { groupBy: "recipe" })).recipes).toEqual([]);
-    expect((await result(t, tokenB, "get_analytics_summary", { groupBy: "family" })).families).toEqual([]);
-    const error = (await (await call(t, tokenB, "get_analytics_summary", { groupBy: "family", recipeId: a.recipeId })).json());
+    const error = (await (await call(t, tokenB, "get_analytics_summary", { recipeId: a.recipeId })).json());
     expect(JSON.stringify(error)).toContain('recipeId needs groupBy');
   });
 });
 
 describe("list_publications: attribution", () => {
-  it("carries Run, recipe, version, family and age, or marks the Publication unattributed", async () => {
+  it("carries Run, recipe, version and age, or marks the Publication unattributed", async () => {
     const token = await seedProject(t, PROJECT_A);
     const post = await seedPublishing();
-    const a = await seedRecipe("Zoom", "Hooks");
+    const a = await seedRecipe("Zoom");
     await post({ target: "instagram:me", type: "make_image", ageDays: 3, metrics: { views: 10 }, recipe: { id: a.recipeId, name: "Zoom", version: 2 }, runId: a.runId });
     await post({ target: "instagram:me", type: "make_image", ageDays: 1 });
     const out = await result(t, token, "list_publications");
@@ -205,21 +201,19 @@ describe("list_publications: attribution", () => {
     const [newest, older] = out.publications;
     expect(newest.attribution).toEqual({ status: "unattributed" });
     expect(newest).not.toHaveProperty("runId");
-    expect(older).toMatchObject({ runId: a.runId, ageDays: 3, attribution: { status: "attributed", recipeId: a.recipeId, recipeName: "Zoom", version: 2, familyId: a.familyId, familyName: "Hooks" } });
+    expect(older).toMatchObject({ runId: a.runId, ageDays: 3, attribution: { status: "attributed", recipeId: a.recipeId, recipeName: "Zoom", version: 2 } });
   });
 
-  it("filters by recipe and by family", async () => {
+  it("filters by recipe", async () => {
     const token = await seedProject(t, PROJECT_A);
     const post = await seedPublishing();
-    const a = await seedRecipe("Zoom", "Hooks");
-    const b = await seedRecipe("Pan", "Reveals");
+    const a = await seedRecipe("Zoom");
+    const b = await seedRecipe("Pan");
     await post({ target: "instagram:me", type: "make_image", ageDays: 1, recipe: { id: a.recipeId } });
     await post({ target: "instagram:me", type: "make_image", ageDays: 2, recipe: { id: b.recipeId } });
     await post({ target: "instagram:me", type: "make_image", ageDays: 3 });
     const byRecipe = await result(t, token, "list_publications", { recipeId: a.recipeId });
     expect(byRecipe.publications.map((p: { attribution: { recipeId: string } }) => p.attribution.recipeId)).toEqual([a.recipeId]);
-    const byFamily = await result(t, token, "list_publications", { familyId: b.familyId });
-    expect(byFamily.publications.map((p: { attribution: { familyId: string } }) => p.attribution.familyId)).toEqual([b.familyId]);
   });
 
   it("is bounded: says truncated when more match than the limit, and flags a scan-limited read as partial", async () => {
@@ -235,7 +229,7 @@ describe("list_publications: attribution", () => {
     await seedProject(t, PROJECT_A);
     const tokenB = await seedProject(t, PROJECT_B);
     const post = await seedPublishing();
-    const a = await seedRecipe("Zoom", "Hooks");
+    const a = await seedRecipe("Zoom");
     await post({ target: "instagram:me", type: "make_image", recipe: { id: a.recipeId } });
     expect((await result(t, tokenB, "list_publications", { recipeId: a.recipeId })).publications).toEqual([]);
   });

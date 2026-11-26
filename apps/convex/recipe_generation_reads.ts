@@ -1,7 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { boundedLimit } from "./planning_reads.js";
-import { runningGenerationRun } from "./recipe_generation_shared.js";
+import { MAX_GENERATION_SOURCES, runningGenerationRun } from "./recipe_generation_shared.js";
 import { latestVersion } from "./production_recipes.js";
 
 // The Internal MCP's reads for a Recipe Generation (ADR-087, ticket #190). Read-only. The
@@ -9,22 +9,20 @@ import { latestVersion } from "./production_recipes.js";
 
 type Scope = { instanceId: string; templateId: string };
 
-const FAMILY_SOURCES_DEFAULT_LIMIT = 10;
-const FAMILY_SOURCES_MAX_LIMIT = 25;
-/** Sources read before filtering and ordering; newest first. */
-const FAMILY_SCAN_LIMIT = 500;
+const GENERATION_SOURCES_DEFAULT_LIMIT = 10;
+const GENERATION_SOURCES_MAX_LIMIT = MAX_GENERATION_SOURCES;
 
 const NOT_RUNNING = "This tool is only available while a Recipe Generation is running for this Agent.";
-const OUTSIDE_PIN = "That Source is not readable: it is not a ready, non-excluded Source of the pinned Creative Family.";
+const OUTSIDE_PIN = "That Source is not readable: it is not a ready, non-excluded Source given to this generation.";
 
-type Pin = { familyId: Id<"creativeFamilies">; ownerId: string };
+type Pin = { sourceIds: Id<"sources">[]; ownerId: string };
 
 /** The Agent's running Standalone Run (one at a time, ADR-087); throws when `required` and there is none. */
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: true }): Promise<Pin>;
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: false }): Promise<Pin | undefined>;
 export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, options: { required: boolean }): Promise<Pin | undefined> {
   const run = await runningGenerationRun(ctx, scope.instanceId, scope.templateId);
-  if (run && "recipeGeneration" in run && run.recipeGeneration) return { familyId: run.recipeGeneration.familyId, ownerId: run.ownerId };
+  if (run && "recipeGeneration" in run && run.recipeGeneration) return { sourceIds: run.recipeGeneration.sourceIds ?? [], ownerId: run.ownerId };
   if (options.required) throw new Error(NOT_RUNNING);
   return undefined;
 }
@@ -33,34 +31,22 @@ const isProduced = (s: Doc<"sources">) => s.producedAt !== undefined || s.produc
 const isReadable = (s: Doc<"sources">) => s.status === "ready" && s.excluded !== true;
 const scoreOf = (s: Doc<"sources">) => s.scoring?.replicationScore ?? -1;
 
-/** The pinned family's readable Sources, newest first (bounded scan). */
-async function readableFamilySources(ctx: Pick<QueryCtx, "db">, scope: Scope, pin: Pin) {
-  const rows = await ctx.db
-    .query("sources")
-    .withIndex("by_instance_owner_creativeFamily_createdAt", (q) => q.eq("instanceId", scope.instanceId).eq("ownerId", pin.ownerId).eq("creativeFamilyId", pin.familyId))
-    .order("desc")
-    .take(FAMILY_SCAN_LIMIT);
-  return { sources: rows.filter(isReadable), scanLimited: rows.length >= FAMILY_SCAN_LIMIT };
+/** The Sources given to the generation that are still readable (a Source may have been excluded since). */
+async function readableGivenSources(ctx: Pick<QueryCtx, "db">, scope: Scope, pin: Pin) {
+  const rows = await Promise.all(pin.sourceIds.map((id) => ctx.db.get(id)));
+  return rows.filter((s): s is Doc<"sources"> => s !== null && s.instanceId === scope.instanceId && isReadable(s));
 }
 
-export async function getCreativeFamily(ctx: Pick<QueryCtx, "db">, scope: Scope) {
-  const pin = await pinnedGeneration(ctx, scope, { required: true });
-  const family = await ctx.db.get(pin.familyId);
-  if (!family || family.instanceId !== scope.instanceId) throw new Error("The pinned Creative Family no longer exists.");
-  const { sources, scanLimited } = await readableFamilySources(ctx, scope, pin);
-  return { familyId: family._id as string, name: family.name, description: family.description, sourceCount: sources.length, ...(scanLimited ? { sourceCountIsLowerBound: true } : {}) };
-}
-
-export async function listFamilySources(ctx: Pick<QueryCtx, "db">, scope: Scope, args: Record<string, unknown>) {
+export async function listGenerationSources(ctx: Pick<QueryCtx, "db">, scope: Scope, args: Record<string, unknown>) {
   const pin = await pinnedGeneration(ctx, scope, { required: true });
   if (args.produced !== undefined && typeof args.produced !== "boolean") throw new Error("produced must be true or false.");
   if (args.minReplicationScore !== undefined && (typeof args.minReplicationScore !== "number" || !Number.isFinite(args.minReplicationScore))) throw new Error("minReplicationScore must be a number.");
   if (args.sort !== undefined && args.sort !== "recent" && args.sort !== "score") throw new Error('sort must be "recent" or "score".');
-  const limit = boundedLimit(args.limit, FAMILY_SOURCES_DEFAULT_LIMIT, FAMILY_SOURCES_MAX_LIMIT);
+  const limit = boundedLimit(args.limit, GENERATION_SOURCES_DEFAULT_LIMIT, GENERATION_SOURCES_MAX_LIMIT);
   const offset = args.cursor === undefined ? 0 : Number(args.cursor);
   if (!Number.isInteger(offset) || offset < 0) throw new Error("cursor is not valid: pass the nextCursor of a previous page.");
 
-  const { sources, scanLimited } = await readableFamilySources(ctx, scope, pin);
+  const sources = await readableGivenSources(ctx, scope, pin);
   const kept = sources.filter(
     (s) => (args.produced === undefined || isProduced(s) === args.produced) && (args.minReplicationScore === undefined || scoreOf(s) >= (args.minReplicationScore as number)),
   );
@@ -85,7 +71,6 @@ export async function listFamilySources(ctx: Pick<QueryCtx, "db">, scope: Scope,
     }),
     total: kept.length,
     ...(next < kept.length ? { nextCursor: String(next) } : {}),
-    scanLimited,
   };
 }
 
@@ -93,7 +78,7 @@ export async function getSource(ctx: Pick<QueryCtx, "db">, scope: Scope, args: R
   const pin = await pinnedGeneration(ctx, scope, { required: true });
   const id = typeof args.sourceId === "string" ? ctx.db.normalizeId("sources", args.sourceId) : null;
   const source = id ? await ctx.db.get(id) : null;
-  if (!source || source.instanceId !== scope.instanceId || source.creativeFamilyId !== pin.familyId || !isReadable(source)) throw new Error(OUTSIDE_PIN);
+  if (!source || !id || source.instanceId !== scope.instanceId || !pin.sourceIds.includes(id) || !isReadable(source)) throw new Error(OUTSIDE_PIN);
   return {
     sourceId: source._id as string,
     label: source.label,
@@ -111,7 +96,6 @@ export async function getProductionRecipe(ctx: QueryCtx, scope: Scope, args: Rec
   const id = typeof args.recipeId === "string" ? ctx.db.normalizeId("productionRecipes", args.recipeId) : null;
   const recipe = id ? await ctx.db.get(id) : null;
   if (!recipe || recipe.instanceId !== scope.instanceId) throw new Error("Production Recipe not found.");
-  const family = await ctx.db.get(recipe.creativeFamilyId);
   const version = await latestVersion(ctx, recipe._id);
   return {
     recipeId: recipe._id as string,
@@ -120,7 +104,6 @@ export async function getProductionRecipe(ctx: QueryCtx, scope: Scope, args: Rec
     templateId: recipe.templateId,
     missionType: recipe.missionType,
     archived: recipe.status === "archived",
-    creativeFamily: { id: recipe.creativeFamilyId as string, name: family?.name ?? "" },
     latestVersion: version ? { version: version.version, prompt: version.prompt, instructions: version.instructions, constraints: version.constraints, createdAt: version.createdAt } : null,
   };
 }

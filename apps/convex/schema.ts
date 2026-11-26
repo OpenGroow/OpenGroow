@@ -534,7 +534,11 @@ export default defineSchema({
       v.object({
         // Standalone Run (ADR-087): no Mission, no Job; the pin is the parent.
         recipeGeneration: v.object({
-          familyId: v.id("creativeFamilies"),
+          // Transitional (ADR-088): removed once `stripRecipeGenerationFamily` has run everywhere.
+          familyId: v.optional(v.id("creativeFamilies")),
+          // The free idea and the Sources the generation reads, pinned only so the Run and its retries read the same input.
+          idea: v.optional(v.string()),
+          sourceIds: v.optional(v.array(v.id("sources"))),
           instructions: v.optional(v.string()),
           // 1 for the first try, +1 per retry after a refused result.
           tryCount: v.number(),
@@ -599,7 +603,8 @@ export default defineSchema({
     report: v.string(),
     consolidatedMemory: v.string(),
     references: v.object({
-      familyIds: v.array(v.id("creativeFamilies")),
+      // Kept for the Reviews written before ADR-088; a new Review references no family.
+      familyIds: v.optional(v.array(v.id("creativeFamilies"))),
       recipeIds: v.array(v.id("productionRecipes")),
       publicationIds: v.array(v.id("publications")),
     }),
@@ -776,7 +781,8 @@ export default defineSchema({
   // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
-    creativeFamilyId: v.id("creativeFamilies"),
+    // Transitional (ADR-088): a recipe has no Creative Family; removed once `dropRecipeFamily` has run everywhere.
+    creativeFamilyId: v.optional(v.id("creativeFamilies")),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),

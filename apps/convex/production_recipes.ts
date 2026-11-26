@@ -1,18 +1,17 @@
 import { v, type Infer } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
-import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { type recipeStatusV } from "./production_validators.js";
 import { declaresRecipeProvider, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
-// Production Recipes under a Creative Family (issue #137). A recipe is an
-// identity; each save appends an immutable Recipe Version. Every read and
-// write resolves ownership through the Instance.
+// Production Recipes (issue #137, ADR-088): a first-class entity of the Project, independent of any Creative
+// Family. A recipe is an identity; each save appends an immutable Recipe Version. Every read and write resolves
+// ownership through the Instance.
 
-/** The most recipes listed under one family, and versions listed for one recipe. */
+/** The most recipes listed for a Project, and versions listed for one recipe. */
 export const RECIPE_LIST_CAP = 200;
 export const VERSION_LIST_CAP = 200;
 
@@ -104,7 +103,6 @@ async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">,
 function recipeView(recipe: Doc<"productionRecipes">) {
   return {
     _id: recipe._id,
-    creativeFamilyId: recipe.creativeFamilyId,
     templateId: recipe.templateId,
     missionType: recipe.missionType,
     name: recipe.name,
@@ -123,22 +121,19 @@ function versionView(version: Doc<"productionRecipeVersions">) {
   };
 }
 
-/** The Run holding a Recipe Proposal of this Project and family that has created no Recipe yet, or throws. */
-async function requireOpenProposal(ctx: QueryCtx, instanceId: string, familyId: Id<"creativeFamilies">, runId: Id<"runs">) {
+/** The Run holding a Recipe Proposal of this Project that has created no Recipe yet, or throws. */
+async function requireOpenProposal(ctx: QueryCtx, instanceId: string, runId: Id<"runs">) {
   const run = await ctx.db.get(runId);
-  if (!run || run.instanceId !== instanceId || !("recipeGeneration" in run) || run.recipeGeneration.familyId !== familyId) {
-    throw new Error("Recipe Proposal not found for this Creative Family");
-  }
+  if (!run || run.instanceId !== instanceId || !("recipeGeneration" in run)) throw new Error("Recipe Proposal not found");
   if (!run.recipeProposal || typeof run.recipeProposal !== "object" || !("proposal" in run.recipeProposal)) throw new Error("This generation holds no Recipe Proposal");
   if (run.recipeId) throw new Error("A Production Recipe was already created from this Recipe Proposal");
   return run;
 }
 
-/** Creates a recipe under an active family with its version 1. */
+/** Creates a recipe with its version 1. */
 export const create = mutation({
   args: {
     instanceId: v.string(),
-    familyId: v.id("creativeFamilies"),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),
@@ -149,16 +144,13 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    const family = await requireOwnedFamily(ctx, args.instanceId, args.familyId);
-    if (!isActiveFamily(family)) throw new Error("Cannot add a Production Recipe to an archived Creative Family");
     const name = args.name.trim().replace(/\s+/g, " ");
     if (name === "") throw new Error("A Production Recipe needs a name");
     const content = cleanContent(args);
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
-    const proposalRun = args.proposalRunId ? await requireOpenProposal(ctx, args.instanceId, args.familyId, args.proposalRunId) : null;
+    const proposalRun = args.proposalRunId ? await requireOpenProposal(ctx, args.instanceId, args.proposalRunId) : null;
     const recipeId = await ctx.db.insert("productionRecipes", {
       instanceId: args.instanceId,
-      creativeFamilyId: args.familyId,
       templateId: args.templateId,
       missionType: args.missionType,
       name,
@@ -222,14 +214,14 @@ export const remove = mutation({
   },
 });
 
-/** A family's recipes (archived included) with their latest version number. */
+/** The Project's recipes (archived included) with their latest version number. */
 export const list = query({
-  args: { instanceId: v.string(), familyId: v.id("creativeFamilies") },
+  args: { instanceId: v.string() },
   handler: async (ctx, args) => {
     if ((await readOwnerId(ctx, args.instanceId)) === null) return [];
     const recipes = await ctx.db
       .query("productionRecipes")
-      .withIndex("by_instance_family", (q) => q.eq("instanceId", args.instanceId).eq("creativeFamilyId", args.familyId))
+      .withIndex("by_instance_target", (q) => q.eq("instanceId", args.instanceId))
       .take(RECIPE_LIST_CAP);
     return await Promise.all(
       recipes.map(async (recipe) => ({ ...recipeView(recipe), latestVersion: (await latestVersion(ctx, recipe._id))?.version ?? 0 })),

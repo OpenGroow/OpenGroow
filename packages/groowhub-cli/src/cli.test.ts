@@ -76,14 +76,14 @@ describe("run", () => {
     };
 
     it("accepts the Recipe Generation tools", () => {
-      const dir = templateWithTools(["get_creative_family", "list_family_sources", "get_source", "get_production_recipe"]);
+      const dir = templateWithTools(["list_generation_sources", "get_source", "get_production_recipe"]);
       const { code, err } = runCli(["validate", "template", dir]);
       expect(err).toEqual([]);
       expect(code).toBe(0);
     });
 
     it("still refuses an unknown tool", () => {
-      const dir = templateWithTools(["get_creative_family", "get_nothing"]);
+      const dir = templateWithTools(["list_generation_sources", "get_nothing"]);
       const { code, err } = runCli(["validate", "template", dir]);
       expect(code).toBe(1);
       expect(err.join("\n")).toMatch(/unknown tool "get_nothing"/);

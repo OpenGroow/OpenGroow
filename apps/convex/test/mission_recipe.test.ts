@@ -93,21 +93,19 @@ async function setup() {
       });
     }
   });
-  const familyId = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "s", name: "F", description: "d" } as never));
-  const otherFamily = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: OTHER_INSTANCE, slug: "s", name: "F", description: "d" } as never));
   const owner = t.withIdentity(OWNER);
   const stranger = t.withIdentity(STRANGER);
 
-  async function recipe(instanceId = INSTANCE, family: Id<"creativeFamilies"> = familyId, as = owner) {
+  async function recipe(instanceId = INSTANCE, as = owner) {
     const { recipeId } = await as.mutation(api.production_recipes.create, {
-      instanceId, familyId: family, templateId: TEMPLATE_ID, missionType: "create_letter_video", name: "Reaction", description: "",
+      instanceId, templateId: TEMPLATE_ID, missionType: "create_letter_video", name: "Reaction", description: "",
       prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
     return recipeId;
   }
   const create = (extra: Record<string, unknown>, payload: unknown = { format: "hook" }) =>
     owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload, ...extra } as never);
-  return { t, owner, stranger, recipe, create, otherFamily };
+  return { t, owner, stranger, recipe, create };
 }
 
 describe("missions.create with a recipe", () => {

@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import { api } from "../_generated/api";
@@ -49,9 +46,6 @@ async function seed(t: T) {
   });
 }
 
-const family = (t: T, instanceId = INSTANCE_ID, fields: Record<string, unknown> = {}) =>
-  t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId, slug: `s-${Math.random()}`, name: "Family", description: "Mechanic", ...fields } as never));
-
 const content = {
   prompt: "A calm reaction.",
   instructions: "Keep it calm.",
@@ -61,10 +55,9 @@ const content = {
 async function setup() {
   const t = convexTest(schema, modules);
   await seed(t);
-  const familyId = await family(t);
   const owner = t.withIdentity(OWNER);
-  const created = await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "Recipe A", description: "d", ...TARGET, ...content });
-  return { t, owner, familyId, ...created };
+  const created = await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "Recipe A", description: "d", ...TARGET, ...content });
+  return { t, owner, ...created };
 }
 
 describe("production_recipes", () => {
@@ -88,10 +81,10 @@ describe("production_recipes", () => {
   });
 
   it("deletes a recipe with its versions", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
+    const { t, owner, recipeId } = await setup();
     await owner.mutation(api.production_recipes.saveVersion, { instanceId: INSTANCE_ID, recipeId, ...content });
     await owner.mutation(api.production_recipes.remove, { instanceId: INSTANCE_ID, recipeId });
-    expect(await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID, familyId })).toEqual([]);
+    expect(await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID })).toEqual([]);
     expect(await owner.query(api.production_recipes.get, { instanceId: INSTANCE_ID, recipeId })).toBeNull();
     expect(await t.run((ctx) => ctx.db.query("productionRecipeVersions").collect())).toEqual([]);
   });
@@ -103,22 +96,22 @@ describe("production_recipes", () => {
   });
 
   it("keeps the proposal that created a deleted recipe marked as created, so it cannot create another", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
+    const { t, owner, recipeId } = await setup();
     const runId = await t.run((ctx) =>
       ctx.db.insert("runs", {
         ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@example/video", agentName: "strategy", sessionKey: "s", status: "completed",
-        createdAt: 1, updatedAt: 1, recipeGeneration: { familyId, tryCount: 1 }, recipeProposal: { proposal: {} }, recipeId,
+        createdAt: 1, updatedAt: 1, recipeGeneration: { sourceIds: [], tryCount: 1 }, recipeProposal: { proposal: {} }, recipeId,
       } as never),
     );
     await owner.mutation(api.production_recipes.remove, { instanceId: INSTANCE_ID, recipeId });
     expect(((await t.run((ctx) => ctx.db.get(runId))) as { recipeId?: unknown }).recipeId).toBe(recipeId);
-    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "Again", description: "d", ...TARGET, ...content, proposalRunId: runId })).rejects.toThrow(/already/i);
+    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "Again", description: "d", ...TARGET, ...content, proposalRunId: runId })).rejects.toThrow(/already/i);
   });
 
   it("refuses to delete a recipe a proposed or approved planned content uses", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
+    const { t, owner, recipeId } = await setup();
     await t.run(async (ctx) => {
-      const runId = await ctx.db.insert("runs", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@example/strategy", agentName: "strategy", sessionKey: "p", status: "completed", createdAt: 1, updatedAt: 1, recipeGeneration: { familyId, tryCount: 1 } } as never);
+      const runId = await ctx.db.insert("runs", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "@example/strategy", agentName: "strategy", sessionKey: "p", status: "completed", createdAt: 1, updatedAt: 1, recipeGeneration: { sourceIds: [], tryCount: 1 } } as never);
       const planId = await ctx.db.insert("contentPlans", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, runId, periodStart: "2026-12-01", periodEnd: "2026-12-07", rationale: "r", status: "approved", createdAt: 1 });
       await ctx.db.insert("plannedContents", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, planId, kind: "video", missionType: "create_letter_video", recipeId, publishTargets: [], title: "t", brief: "b", plannedAt: "2026-12-01", intent: "explore", rationale: "r", status: "approved", createdAt: 1 } as never);
     });
@@ -126,20 +119,27 @@ describe("production_recipes", () => {
     expect(await owner.query(api.production_recipes.get, { instanceId: INSTANCE_ID, recipeId })).not.toBeNull();
   });
 
-  it("refuses to create under an archived family or another Instance's family", async () => {
-    const { t, owner } = await setup();
-    const archived = await family(t, INSTANCE_ID, { status: "archived" });
-    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId: archived, name: "X", description: "", ...TARGET, ...content })).rejects.toThrow("archived");
-    const foreign = await family(t, OTHER_INSTANCE_ID);
-    await expect(owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId: foreign, name: "X", description: "", ...TARGET, ...content })).rejects.toThrow("not found");
+  it("creates a recipe that belongs to no Creative Family and keeps no inspiration", async () => {
+    const { t, recipeId } = await setup();
+    const row = (await t.run((ctx) => ctx.db.get(recipeId)))!;
+    expect(Object.keys(row).filter((key) => !key.startsWith("_")).sort()).toEqual(["description", "instanceId", "missionType", "name", "status", "templateId"]);
+  });
+
+  it("lists every recipe of the Project, whichever way it was created", async () => {
+    const { owner } = await setup();
+    await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "B", description: "", ...TARGET, ...content });
+    const listed = await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID });
+    expect(listed.map((recipe) => recipe.name).sort()).toEqual(["B", "Recipe A"]);
+    expect(listed[0]).toMatchObject({ latestVersion: 1 });
+    expect(listed[0]).not.toHaveProperty("creativeFamilyId");
   });
 
   it("isolates recipes per Project", async () => {
-    const { t, recipeId, familyId } = await setup();
+    const { t, recipeId } = await setup();
     const stranger = t.withIdentity(STRANGER);
     // Stranger cannot act on the owner's Instance.
     await expect(stranger.mutation(api.production_recipes.saveVersion, { instanceId: INSTANCE_ID, recipeId, ...content })).rejects.toThrow();
-    expect(await stranger.query(api.production_recipes.list, { instanceId: INSTANCE_ID, familyId })).toEqual([]);
+    expect(await stranger.query(api.production_recipes.list, { instanceId: INSTANCE_ID })).toEqual([]);
     // Nor reach it through their own Instance.
     expect(await stranger.query(api.production_recipes.get, { instanceId: OTHER_INSTANCE_ID, recipeId })).toBeNull();
     expect(await stranger.query(api.production_recipes.listVersions, { instanceId: OTHER_INSTANCE_ID, recipeId })).toEqual([]);
@@ -152,19 +152,19 @@ describe("production_recipes", () => {
   });
 
   it("refuses a Mission type without the provider, an unknown one and a Template that is not installed", async () => {
-    const { owner, familyId } = await setup();
-    const base = { instanceId: INSTANCE_ID, familyId, name: "B", description: "", ...content };
+    const { owner } = await setup();
+    const base = { instanceId: INSTANCE_ID, name: "B", description: "", ...content };
     await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/no-provider", missionType: "create_letter_video" })).rejects.toThrow("provider");
     await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/video-a", missionType: "nope" })).rejects.toThrow("does not exist");
     await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/missing", missionType: "create_letter_video" })).rejects.toThrow("not installed");
   });
 
   it("allows several recipes for the same Mission type, and a same-named type on another Template", async () => {
-    const { owner, familyId } = await setup();
-    const base = { instanceId: INSTANCE_ID, familyId, description: "", ...content };
+    const { owner } = await setup();
+    const base = { instanceId: INSTANCE_ID, description: "", ...content };
     await owner.mutation(api.production_recipes.create, { ...base, name: "B", ...TARGET });
     await owner.mutation(api.production_recipes.create, { ...base, name: "C", templateId: "@example/video-b", missionType: "create_letter_video" });
-    expect(await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID, familyId })).toHaveLength(3);
+    expect(await owner.query(api.production_recipes.list, { instanceId: INSTANCE_ID })).toHaveLength(3);
   });
 
   it("changes the target, validated, and refuses it on an archived recipe", async () => {
@@ -179,8 +179,8 @@ describe("production_recipes", () => {
   });
 
   it("offers only the active recipes of that Template and Mission type, to the owner", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
-    const base = { instanceId: INSTANCE_ID, familyId, description: "", ...content };
+    const { t, owner, recipeId } = await setup();
+    const base = { instanceId: INSTANCE_ID, description: "", ...content };
     const archived = await owner.mutation(api.production_recipes.create, { ...base, name: "Old", ...TARGET });
     await t.run((ctx) => ctx.db.patch(archived.recipeId, { status: "archived" }));
     await owner.mutation(api.production_recipes.create, { ...base, name: "Other Template", templateId: "@example/video-b", missionType: "create_letter_video" });
@@ -225,54 +225,31 @@ describe("production_recipes", () => {
     }
 
     it("offers a target only the staged version declares, and accepts a recipe for it", async () => {
-      const { owner, familyId } = await setupStaged();
+      const { owner } = await setupStaged();
       const targets = await owner.query(api.production_recipes.listTargets, { instanceId: INSTANCE_ID });
       expect(targets).toHaveLength(1);
       expect(targets[0]).toMatchObject({ templateId: "@example/video-staged", missionType: "create_letter_video" });
       await expect(
-        owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
+        owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
       ).resolves.toBeTruthy();
     });
 
     it("still refuses when no installed version declares the provider", async () => {
-      const { owner, familyId } = await setupStaged();
+      const { owner } = await setupStaged();
       setTemplateRegistryForTests(inMemoryRegistry([INSTANCE_ID], [template("@example/video-staged", [missionType({ contextProviders: [] })])]));
       await expect(
-        owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
+        owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
       ).rejects.toThrow("provider");
     });
-  });
-});
-
-// Family performance (ADR-084, #156) attributes a Publication to the family of its recipe on read. That is
-// only correct while a Production Recipe never changes Creative Family.
-describe("a Production Recipe never changes Creative Family", () => {
-  it("keeps its family through every recipe operation", async () => {
-    const { t, owner, familyId, recipeId } = await setup();
-    const args = { instanceId: INSTANCE_ID, recipeId };
-    await owner.mutation(api.production_recipes.saveVersion, { ...args, ...content });
-    await owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/video-b", missionType: "create_letter_video" });
-    const row = await t.run((ctx) => ctx.db.get(recipeId));
-    expect(row!.creativeFamilyId).toBe(familyId);
-  });
-
-  it("is written only when the recipe is inserted: no code patches or replaces creativeFamilyId", () => {
-    const dir = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const offenders = readdirSync(dir)
-      .filter((f) => f.endsWith(".ts"))
-      .filter((f) => /ctx\.db\.(patch|replace)\([^)]*\{[^}]*creativeFamilyId/s.test(readFileSync(join(dir, f), "utf8")) && !/creative_family_(merge|sources)/.test(f));
-    expect(offenders).toEqual([]);
   });
 });
 
 describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
   const proposal = { proposal: { recipe: { name: "Generated" }, sourceIds: [], rationale: "r" } };
 
-  async function withProposal(extra: { instanceId?: string; familyId?: unknown; proposal?: unknown } = {}) {
+  async function withProposal() {
     const t = convexTest(schema, modules);
     await seed(t);
-    const familyId = await family(t);
-    const otherFamilyId = await family(t);
     const owner = t.withIdentity(OWNER);
     const insertRun = (fields: Record<string, unknown>) =>
       t.run((ctx) => {
@@ -286,15 +263,15 @@ describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
           status: "completed",
           createdAt: now,
           updatedAt: now,
-          recipeGeneration: { familyId, tryCount: 1 },
+          recipeGeneration: { sourceIds: [], tryCount: 1 },
           recipeProposal: proposal,
           ...fields,
         } as never);
       });
     const runId = await insertRun({});
     const args = (proposalRunId: unknown = runId): Record<string, unknown> =>
-      ({ instanceId: INSTANCE_ID, familyId, name: "Edited name", description: "d", ...TARGET, ...content, proposalRunId });
-    return { t, owner, familyId, otherFamilyId, runId, insertRun, args };
+      ({ instanceId: INSTANCE_ID, name: "Edited name", description: "d", ...TARGET, ...content, proposalRunId });
+    return { t, owner, runId, insertRun, args };
   }
 
   it("creates one active Recipe at version 1 and marks the Run", async () => {
@@ -321,13 +298,6 @@ describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
     expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
   });
 
-  it("refuses a proposal Run of another family", async () => {
-    const { t, owner, otherFamilyId, insertRun, args } = await withProposal();
-    const other = await insertRun({ recipeGeneration: { familyId: otherFamilyId, tryCount: 1 } });
-    await expect(owner.mutation(api.production_recipes.create, args(other) as never)).rejects.toThrow(/proposal/i);
-    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
-  });
-
   it("refuses a Run that holds no proposal", async () => {
     const { owner, insertRun, args } = await withProposal();
     const none = await insertRun({ recipeProposal: { no_opportunity: { reason: "x" } } });
@@ -346,8 +316,8 @@ describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
   });
 
   it("still creates manually without a proposal", async () => {
-    const { owner, familyId } = await withProposal();
-    const created = await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, familyId, name: "M", description: "d", ...TARGET, ...content });
+    const { owner } = await withProposal();
+    const created = await owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "M", description: "d", ...TARGET, ...content });
     expect(created.version).toBe(1);
   });
 });

@@ -6,7 +6,7 @@ import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
 import { installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
 
-// ADR-087 (ticket #194): the generations of a family, as the Creative Library shows them (states derived from the Runs).
+// ADR-087 (ticket #194): the generations of a Project, as the Recipes workspace shows them (states derived from the Runs).
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
@@ -31,7 +31,7 @@ const OWNER = { name: "Owner", email: "owner@example.com", tokenIdentifier: "tes
 const STRANGER = { name: "Other", email: "other@example.com", tokenIdentifier: "test|stranger-rg", subject: "stranger-rg" };
 const SUCCESS = { status: "success" as const, summary: "Recipe Generation result received" };
 
-const NEEDED_TOOLS = ["get_brand_core", "get_creative_family", "list_family_sources", "get_source", "list_production_recipes", "get_production_recipe", "list_mission_types"];
+const NEEDED_TOOLS = ["get_brand_core", "list_generation_sources", "get_source", "list_production_recipes", "get_production_recipe", "list_mission_types"];
 
 /** The Strategy Agent fixture, declaring every tool a generation needs, plus one Mission type that accepts a recipe. */
 function strategist(tools: string[] = NEEDED_TOOLS) {
@@ -90,9 +90,10 @@ const addSource = (o: { family?: Id<"creativeFamilies">; status?: string; exclud
     } as never),
   );
 
-const generate = (args: { instructions?: string; family?: Id<"creativeFamilies">; as?: ReturnType<typeof owner> } = {}) =>
+const generate = (args: { idea?: string; instructions?: string; sources?: Id<"sources">[]; as?: ReturnType<typeof owner> } = {}) =>
   (args.as ?? owner()).mutation(api.recipe_generation.generateRecipe, {
-    instanceId: INSTANCE, familyId: args.family ?? familyId, ...(args.instructions !== undefined ? { instructions: args.instructions } : {}),
+    instanceId: INSTANCE, idea: args.idea ?? "An idea", ...(args.sources ? { sourceIds: args.sources } : {}),
+    ...(args.instructions !== undefined ? { instructions: args.instructions } : {}),
   });
 const runs = () => t.run((ctx) => ctx.db.query("runs").collect());
 const getRun = (id: Id<"runs">) => t.run((ctx) => ctx.db.get(id));
@@ -104,7 +105,7 @@ const fail = (runId: Id<"runs">, message = "boom", retryWithFeedback = false) =>
 /** Starts a generation with a ready Source and marks its Run running, as the dispatcher would. */
 async function started() {
   const sourceId = await addSource();
-  const { runId } = await generate();
+  const { runId } = await generate({ sources: [sourceId] });
   await running(runId);
   return { runId, sourceId };
 }
@@ -114,7 +115,7 @@ const proposal = (sourceIds: string[], overrides: Record<string, unknown> = {}) 
 });
 
 
-const list = (as = owner()) => as.query(api.recipe_generation_views.listGenerations, { instanceId: INSTANCE, familyId });
+const list = (as = owner()) => as.query(api.recipe_generation_views.listGenerations, { instanceId: INSTANCE });
 const NO_OPP = { kind: "no_opportunity", reason: "already_covered", details: "Covered." };
 
 describe("listGenerations", () => {
@@ -122,12 +123,11 @@ describe("listGenerations", () => {
     expect(await list()).toEqual({ generations: [], inFlight: false });
   });
 
-  it("shows a generation in progress and flags the family as in flight", async () => {
-    await addSource();
-    const { runId } = await generate({ instructions: "avoid faces" });
+  it("shows a generation in progress, with its idea, and flags the Project as in flight", async () => {
+    const { runId } = await generate({ idea: "A calm reaction", instructions: "avoid faces" });
     const result = await list();
     expect(result.inFlight).toBe(true);
-    expect(result.generations).toEqual([expect.objectContaining({ generationId: runId, runId, state: "in_progress", tryCount: 1, instructions: "avoid faces" })]);
+    expect(result.generations).toEqual([expect.objectContaining({ generationId: runId, runId, state: "in_progress", tryCount: 1, idea: "A calm reaction", instructions: "avoid faces" })]);
   });
 
   it("shows a proposal ready to review, with the Run and the proposal for the review form", async () => {
@@ -148,7 +148,7 @@ describe("listGenerations", () => {
     const { runId, sourceId } = await started();
     await complete(runId, proposal([sourceId]));
     await owner().mutation(api.production_recipes.create, {
-      instanceId: INSTANCE, familyId, templateId: TEMPLATE, missionType: "make_post", name: "Example recipe", description: "d",
+      instanceId: INSTANCE, templateId: TEMPLATE, missionType: "make_post", name: "Example recipe", description: "d",
       instructions: "Do the thing", constraints: [], proposalRunId: runId,
     });
     const [recipe] = await recipes();
@@ -159,7 +159,7 @@ describe("listGenerations", () => {
     const { runId, sourceId } = await started();
     await complete(runId, proposal([sourceId]));
     await owner().mutation(api.production_recipes.create, {
-      instanceId: INSTANCE, familyId, templateId: TEMPLATE, missionType: "make_post", name: "Example recipe", description: "d",
+      instanceId: INSTANCE, templateId: TEMPLATE, missionType: "make_post", name: "Example recipe", description: "d",
       instructions: "Do the thing", constraints: [], proposalRunId: runId,
     });
     const [recipe] = await recipes();
@@ -177,7 +177,7 @@ describe("listGenerations", () => {
 
   it("is one row for a generation with retries: in progress while a retry is in flight, then failed with the last reason", async () => {
     const sourceId = await addSource();
-    const { runId: first } = await generate();
+    const { runId: first } = await generate({ sources: [sourceId] });
     let current = first;
     for (let attempt = 1; attempt <= 3; attempt++) {
       await running(current);
@@ -198,25 +198,20 @@ describe("listGenerations", () => {
     expect(done.generations[0]!.reason).not.toMatch(/^invalid_result/);
   });
 
-  it("keeps the five latest generations, newest first, and ignores other families", async () => {
-    await addSource();
+  it("keeps the ten latest generations, newest first", async () => {
     const ids: Id<"runs">[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 11; i++) {
       vi.setSystemTime(NOW + i * 1000);
       const { runId } = await generate();
       await running(runId);
       await complete(runId, NO_OPP);
       ids.push(runId);
     }
-    const other = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "article-2", name: "Other", description: "" }));
     const result = await list();
     expect(result.generations.map((g) => g.generationId)).toEqual(ids.slice(1).reverse());
-    const otherResult = await owner().query(api.recipe_generation_views.listGenerations, { instanceId: INSTANCE, familyId: other });
-    expect(otherResult.generations).toEqual([]);
   });
 
   it("shows nothing to a user who does not own the Project", async () => {
-    await addSource();
     await generate();
     expect(await list(t.withIdentity(STRANGER))).toEqual({ generations: [], inFlight: false });
   });
@@ -227,7 +222,7 @@ describe("proposalSources", () => {
 
   it("lists the Sources a proposal cites, with their title", async () => {
     const a = await addSource();
-    const { runId } = await generate();
+    const { runId } = await generate({ sources: [a] });
     await running(runId);
     await complete(runId, proposal([a]));
     expect(await sourcesOf(runId)).toEqual([{ sourceId: a, title: "about" }]);
@@ -235,7 +230,7 @@ describe("proposalSources", () => {
 
   it("skips a cited Source that no longer exists", async () => {
     const a = await addSource();
-    const { runId } = await generate();
+    const { runId } = await generate({ sources: [a] });
     await running(runId);
     await complete(runId, proposal([a]));
     await t.run((ctx) => ctx.db.delete(a));
@@ -244,7 +239,7 @@ describe("proposalSources", () => {
 
   it("is empty for a stranger", async () => {
     const a = await addSource();
-    const { runId } = await generate();
+    const { runId } = await generate({ sources: [a] });
     await running(runId);
     await complete(runId, proposal([a]));
     expect(await sourcesOf(runId, t.withIdentity(STRANGER))).toEqual([]);

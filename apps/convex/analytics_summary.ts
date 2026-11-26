@@ -1,14 +1,12 @@
 import { v } from "convex/values";
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 import { query, type QueryCtx } from "./_generated/server.js";
-import type { Id } from "./_generated/dataModel.js";
 import { linkedAdapters } from "./analytics_adapters.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { postFace } from "./analytics_face.js";
 import { publicationsInWindow } from "./analytics_window.js";
 import { claimStatus, measurementClaims } from "./analytics_claims.js";
 import { summarizeByRecipe, type RecipeSummary } from "./analytics_recipe.js";
-import { summarizeByFamily, type FamilySummary } from "./analytics_family.js";
 
 import { SCAN_LIMIT } from "./analytics_window.js";
 
@@ -185,7 +183,7 @@ export async function summarizeProject(
 }
 
 export type PublicationAttribution =
-  | { status: "attributed"; recipeId: string; recipeName: string; version: number; familyId?: string; familyName?: string }
+  | { status: "attributed"; recipeId: string; recipeName: string; version: number }
   | { status: "unattributed" };
 
 export type PublicationReading = {
@@ -218,7 +216,7 @@ export type PublicationList = {
   publications: PublicationReading[];
   /** More Publications matched than `limit`: the list was cut (newest kept). */
   truncated: boolean;
-  /** Publications of the period (before the recipe and family filters) with no Recipe Snapshot. */
+  /** Publications of the period (before the recipe filter) with no Recipe Snapshot. */
   unattributed: number;
   scanLimited: boolean;
   oldestScannedCreatedAt?: number;
@@ -234,20 +232,15 @@ export async function listPublicationReadings(
   instanceId: string,
   window: { from: number; to: number },
   limit: number,
-  options: { platform?: string; recipeId?: string; familyId?: string; scanLimit?: number; now?: number } = {},
+  options: { platform?: string; recipeId?: string; scanLimit?: number; now?: number } = {},
 ): Promise<PublicationList> {
   const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
   const now = options.now ?? Date.now();
   const unattributed = inWindow.filter(({ mission }) => !mission.recipeSnapshot).length;
-  const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId)).take(2000);
-  const recipesCut = recipes.length >= 2000;
-  const familyIdOf = new Map<string, string>(recipes.map((r) => [r._id as string, r.creativeFamilyId as string]));
-  const familyNames = new Map<string, string>();
   const matching = inWindow
     .filter(({ mission }) => {
       const recipeId = mission.recipeSnapshot?.recipeId;
       if (options.recipeId !== undefined && recipeId !== options.recipeId) return false;
-      if (options.familyId !== undefined && (recipeId === undefined || familyIdOf.get(recipeId) !== options.familyId)) return false;
       return true;
     })
     .sort((a, b) => b.publishedAt - a.publishedAt);
@@ -268,14 +261,11 @@ export async function listPublicationReadings(
     const snapshot = mission.recipeSnapshot;
     let attribution: PublicationAttribution = { status: "unattributed" };
     if (snapshot) {
-      const familyId = familyIdOf.get(snapshot.recipeId);
-      if (familyId && !familyNames.has(familyId)) familyNames.set(familyId, (await ctx.db.get(familyId as never as Id<"creativeFamilies">))?.name ?? "");
       attribution = {
         status: "attributed",
         recipeId: snapshot.recipeId,
         recipeName: snapshot.recipeName,
         version: snapshot.version,
-        ...(familyId ? { familyId, familyName: familyNames.get(familyId) ?? "" } : {}),
       };
     }
     rows.push({
@@ -304,13 +294,13 @@ export async function listPublicationReadings(
     unattributed,
     scanLimited,
     ...(oldestScannedCreatedAt !== undefined ? { oldestScannedCreatedAt } : {}),
-    partial: scanLimited || recipesCut,
+    partial: scanLimited,
   };
 }
 
 /**
  * Summary of a Project's Publications over the last `days` (default 30) or a `from`/`to` range, optionally for one platform.
- * By default grouped by platform, format and Mission type; `groupBy: "recipe"` groups by Production Recipe (optionally one `recipeId`), `groupBy: "family"` by Creative Family (optionally one `familyId`).
+ * By default grouped by platform, format and Mission type; `groupBy: "recipe"` groups by Production Recipe (optionally one `recipeId`).
  */
 export const summaryForProject = query({
   args: {
@@ -319,20 +309,14 @@ export const summaryForProject = query({
     from: v.optional(v.number()),
     to: v.optional(v.number()),
     platform: v.optional(v.string()),
-    groupBy: v.optional(v.union(v.literal("recipe"), v.literal("family"))),
+    groupBy: v.optional(v.literal("recipe")),
     recipeId: v.optional(v.string()),
-    familyId: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<AnalyticsSummary | RecipeSummary | FamilySummary | null> => {
+  handler: async (ctx, args): Promise<AnalyticsSummary | RecipeSummary | null> => {
     if (!(await readOwnerId(ctx, args.instanceId))) return null;
     const window = resolveWindow(args);
-    if (args.groupBy === "recipe") {
-      if (args.familyId !== undefined) throw new Error('familyId needs groupBy "family".');
-      return summarizeByRecipe(ctx, args.instanceId, window, { platform: args.platform, recipeId: args.recipeId });
-    }
-    if (args.groupBy === "family") return summarizeByFamily(ctx, args.instanceId, window, { platform: args.platform, familyId: args.familyId });
+    if (args.groupBy === "recipe") return summarizeByRecipe(ctx, args.instanceId, window, { platform: args.platform, recipeId: args.recipeId });
     if (args.recipeId !== undefined) throw new Error('recipeId needs groupBy "recipe".');
-    if (args.familyId !== undefined) throw new Error('familyId needs groupBy "family".');
     return summarizeProject(ctx, args.instanceId, window, { platform: args.platform });
   },
 });

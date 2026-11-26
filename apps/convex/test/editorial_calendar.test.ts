@@ -27,8 +27,7 @@ beforeEach(async () => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: "job-cal", status: "running", createdAt: now, openclawId: INSTANCE, updatedAt: now, userId: OWNER.subject });
     await insertInstance(ctx, { jobId: "job-cal-2", status: "running", createdAt: now, openclawId: OTHER, updatedAt: now, userId: STRANGER.subject });
-    const familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "Reaction", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "tpl", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "tpl", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
   });
 });
 afterEach(() => undefined);
@@ -76,7 +75,7 @@ describe("editorial_calendar.range", () => {
     expect(days.items[0]).not.toHaveProperty("ownerId");
   });
 
-  it("resolves each publish target to its label, service and adapter, and the Creative Family", async () => {
+  it("resolves each publish target to its label, service and adapter", async () => {
     await t.run((ctx) => ctx.db.insert("publishers", { instanceId: INSTANCE, adapter: "example", url: "https://publisher.example.com", targets: [{ target: "social:example", channelService: "social", channelProfile: "handle1" }], updatedAt: 1 } as never));
     const a = await plan("2030-03-04", "2030-03-10");
     await content(a, { publishTargets: ["social:example", "gone:x"] });
@@ -85,7 +84,7 @@ describe("editorial_calendar.range", () => {
       { target: "social:example", label: "@handle1", service: "social", adapter: "example" },
       { target: "gone:x", label: "gone:x" },
     ]);
-    expect(item.creativeFamily).toEqual({ name: "Reaction" });
+    expect(item).not.toHaveProperty("creativeFamily");
   });
 
   it("bounds the range inclusively", async () => {

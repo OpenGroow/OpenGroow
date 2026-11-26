@@ -4,13 +4,11 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { IN_FLIGHT_STATUSES, type GenerationPin } from "./recipe_generation_shared.js";
 import { readOwnerId } from "./instance_ownership.js";
 
-// What the Creative Library shows of Recipe Generations (ADR-087, ticket #194). Read-only: the state of a generation
+// What the Recipes workspace shows of Recipe Generations (ADR-087, ADR-088). Read-only: the state of a generation
 // is derived from its last Run, no status is stored. One generation is one row whatever its number of tries.
 
-/** Generations shown on a family. */
-export const GENERATIONS_SHOWN = 5;
-/** Runs of the family read before keeping the first tries (up to MAX tries per generation). */
-const FAMILY_RUN_SCAN = 100;
+/** Generations shown in the history. */
+export const GENERATIONS_SHOWN = 10;
 
 export type GenerationState = "in_progress" | "ready_to_review" | "no_opportunity" | "failed" | "created" | "recipe_deleted";
 
@@ -45,18 +43,18 @@ async function lastRunOf(ctx: Pick<QueryCtx, "db">, generationId: Id<"runs">): P
   return tries.filter(isGenerationRun).reduce<GenerationRun | null>((best, run) => (best === null || run.recipeGeneration.tryCount > best.recipeGeneration.tryCount ? run : best), null);
 }
 
-/** The five latest generations of a family (newest first), one row each, and whether one is in flight. */
+/** The latest generations of the Project (newest first), one row each, and whether one is in flight. */
 export const listGenerations = query({
-  args: { instanceId: v.string(), familyId: v.id("creativeFamilies") },
+  args: { instanceId: v.string() },
   handler: async (ctx, args) => {
     const ownerId = await readOwnerId(ctx, args.instanceId);
     if (ownerId === null) return { generations: [], inFlight: false };
     const rows = await ctx.db
       .query("runs")
-      .withIndex("by_instance_family", (q) => q.eq("instanceId", args.instanceId).eq("recipeGeneration.familyId", args.familyId))
+      .withIndex("by_instance_try", (q) => q.eq("instanceId", args.instanceId).eq("recipeGeneration.tryCount", 1))
       .order("desc")
-      .take(FAMILY_RUN_SCAN);
-    const firstTries = rows.filter(isGenerationRun).filter((run) => run.recipeGeneration.tryCount === 1).slice(0, GENERATIONS_SHOWN);
+      .take(GENERATIONS_SHOWN);
+    const firstTries = rows.filter(isGenerationRun);
     const generations = [];
     for (const first of firstTries) {
       const last = (await lastRunOf(ctx, first._id)) ?? first;
@@ -70,6 +68,7 @@ export const listGenerations = query({
         runId: last._id,
         createdAt: first.createdAt,
         tryCount: last.recipeGeneration.tryCount,
+        ...(first.recipeGeneration.idea ? { idea: first.recipeGeneration.idea } : {}),
         ...(first.recipeGeneration.instructions ? { instructions: first.recipeGeneration.instructions } : {}),
         ...(recipeDeleted ? { state: "recipe_deleted" as const } : derived),
         ...(proposal !== undefined && !recipeDeleted ? { proposal } : {}),
