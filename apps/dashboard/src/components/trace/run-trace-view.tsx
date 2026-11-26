@@ -40,6 +40,7 @@ export function RunTraceView({
     workspaceKey: decodeURIComponent(workspaceKey),
     runId,
     enabled: hasSession,
+    runStatus: run?.status,
   });
 
   if (run === undefined) return <LogsStatePanel title="Loading trace" description="Reading the Run." />;
@@ -66,6 +67,11 @@ export function RunTraceView({
   const events = normalizeTrace(turns, { id: run._id, status: run.status });
   return (
     <div className="grid min-w-0 gap-4">
+      {transcript.pollError ? (
+        <p role="status" className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
+          Updating is interrupted. Showing the last loaded trace; retrying.
+        </p>
+      ) : null}
       <TraceSummary
         runStatus={run.status}
         runDurationMs={isTerminalRunStatus(run.status) ? runDurationMs(run) : undefined}
