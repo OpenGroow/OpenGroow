@@ -1,6 +1,7 @@
 /** Waterfall geometry of Trace Events. Pure; an event without a start timestamp gets no bar. */
 
-export const MIN_BAR_WIDTH_PCT = 1.5;
+/** A call lasts milliseconds in a Run of minutes: its bar stays wide enough to be seen and to be clicked. */
+export const MIN_BAR_WIDTH_PCT = 5;
 
 export type TimelineBar = { offsetPct: number; widthPct: number };
 

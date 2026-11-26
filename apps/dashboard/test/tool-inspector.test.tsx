@@ -67,11 +67,11 @@ describe("Tool inspector", () => {
     const inspector = () => container.querySelector('[data-testid="tool-inspector"]')!;
     expect(inspector().textContent).toContain('"prompt": "hello"');
 
-    const tab = (name: string) =>
-      [...inspector().querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((t) => t.textContent === name)!;
-    await act(async () => tab("Output").click());
-    expect(inspector().textContent).toContain("all good");
-    await act(async () => tab("Metadata").click());
+    // The call and its result are shown together: no tab to switch.
+    expect(inspector().querySelector('[role="tab"]')).toBeNull();
+    expect(inspector().querySelector('[aria-label="Input"]')!.textContent).toContain('"prompt": "hello"');
+    expect(inspector().querySelector('[aria-label="Output"]')!.textContent).toContain("all good");
+    expect(inspector().querySelector('[aria-label="Completed"]')).not.toBeNull();
     expect(inspector().textContent).toContain("c1");
     expect(inspector().textContent).toContain("2.0 s");
 
