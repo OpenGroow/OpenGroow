@@ -111,16 +111,23 @@ describe("CreativeLibraryContent", () => {
 
     expect(text()).toContain("Reaction");
     expect(text()).toContain("A close-up reaction");
-    expect(text()).toContain("5 Sources");
+    expect(text()).toContain("5 sources · A close-up reaction");
     expect(text()).not.toContain("Active");
     expect(document.body.querySelectorAll("li img").length).toBe(3);
     const link = document.body.querySelector("li a[data-family-name]");
     expect(link?.getAttribute("href")).toBe("/projects/instance-1/library/fam-1");
   });
 
+  it("fills the mosaic with placeholders when a family has fewer than three Sources, and shows the count on it", async () => {
+    await render([makeFamily({ sourceCount: 1, recentSources: [makeSource("a")] })]);
+    expect(document.body.querySelectorAll("li img").length).toBe(1);
+    expect(document.body.querySelectorAll('li [aria-hidden="true"].bg-muted').length).toBe(2);
+    expect(text()).toContain("1 source ·");
+  });
+
   it("shows a capped count as 100+", async () => {
     await render([makeFamily({ sourceCount: 100, sourceCountCapped: true })]);
-    expect(text()).toContain("100+ Sources");
+    expect(text()).toContain("100+ sources");
   });
 
   it("searches by name", async () => {
