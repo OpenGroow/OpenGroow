@@ -53,10 +53,13 @@ describe("Generate Recipe", () => {
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
   };
+  const openTab = async (name: string) => await act(async () => (Array.from(document.body.querySelectorAll('[role="tab"]')).find((t) => t.textContent === name) as HTMLElement).click());
   const tick = async (label: string) => await act(async () => (document.body.querySelector(`[aria-label="${label}"]`) as HTMLElement).click());
 
   it("needs an idea or a Source, and offers no Source that is not ready", async () => {
     expect(submitButton().disabled).toBe(true);
+    expect(document.body.textContent).toContain("Write an idea or select at least one source");
+    await openTab("Sources");
     expect(document.body.querySelector('[aria-label="Source Summary 0"]')).not.toBeNull();
     expect(document.body.querySelectorAll('[aria-label^="Source "]')).toHaveLength(30);
     await type("#generation-idea", "A calm reaction");
@@ -70,13 +73,28 @@ describe("Generate Recipe", () => {
   });
 
   it("sends the selected Sources and, as a shortcut, the selected Creative Families", async () => {
-    await tick("Source Summary 2");
     await tick("Family Reaction");
+    await openTab("Sources");
+    await tick("Source Summary 2");
+    expect(document.body.textContent).toContain("2 selected");
     await act(async () => submitButton().click());
     expect(generate).toHaveBeenCalledWith({ instanceId: "p1", sourceIds: ["src-2"], familyIds: ["fam-1"] });
   });
 
+  it("shows the Creative Families first, with their Source count, and searches them", async () => {
+    expect(document.body.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe("Creative Families");
+    expect(document.body.querySelector('[aria-label="Family Reaction"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("12");
+    const search = document.body.querySelector('input[aria-label="Search creative families"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "zzz");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(document.body.querySelector('[aria-label="Family Reaction"]')).toBeNull();
+  });
+
   it("warns before starting when more than 25 Sources are selected, and does not start", async () => {
+    await openTab("Sources");
     for (let i = 0; i < 26; i++) await tick(`Source Summary ${i}`);
     expect(document.body.textContent).toContain("26 Sources are selected, a generation reads at most 25");
     expect(submitButton().disabled).toBe(true);

@@ -4,13 +4,13 @@ import * as React from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Sparkles } from "lucide-react";
+import { ArrowRight, Check, Info, Layers, Sparkles, SquarePlay } from "lucide-react";
+import { SearchField } from "@/components/opengroow/filter-bar";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 
@@ -83,7 +83,35 @@ export function GenerateRecipeButton({ instanceId }: { instanceId: string }) {
 type FamilyChoice = { _id: string; name: string; status: "active" | "archived"; sourceCount: number; sourceCountCapped: boolean };
 type SourceChoice = { _id: string; label: string; status: string; excluded?: boolean; origin: string; marketing: { summary?: string } };
 
-/** Optional inspiration: Creative Families (a shortcut) and Sources the user can tick. */
+function Step({ n, title, optional, hint, children }: { n: number; title: string; optional?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="grid gap-3" aria-label={title}>
+      <div className="grid gap-1">
+        <h3 className="m-0 flex items-center gap-3 text-base font-semibold text-foreground">
+          <span className="flex size-7 items-center justify-center rounded-md bg-primary/20 text-sm font-semibold text-primary">{n}</span>
+          {title}
+          {optional ? <span className="font-semibold text-foreground">(optional)</span> : null}
+        </h3>
+        {hint ? <p className="m-0 text-sm text-muted-foreground">{hint}</p> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function PickRow({ label, count, checked, onToggle, ariaLabel }: { label: string; count?: number | string; checked: boolean; onToggle: () => void; ariaLabel: string }) {
+  return (
+    <li className={checked ? "rounded-lg bg-primary/10" : "border-b border-border last:border-b-0"}>
+      <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm">
+        <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={ariaLabel} />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {count !== undefined ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground">{count}</span> : null}
+      </label>
+    </li>
+  );
+}
+
+/** Optional inspiration: Creative Families (a shortcut to their recent Sources) or Sources, one tab each. */
 function InspirationPicker({
   instanceId,
   sourceIds,
@@ -103,53 +131,84 @@ function InspirationPicker({
     status: string;
     loadMore: (numItems: number) => void;
   };
+  const [tab, setTab] = React.useState<"families" | "sources">("families");
+  const [search, setSearch] = React.useState("");
+  const needle = search.trim().toLowerCase();
   const toggle = (list: string[], id: string, set: (ids: string[]) => void) => set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
-  const readable = results.filter((s) => s.status === "ready" && s.excluded !== true);
-  const activeFamilies = (families ?? []).filter((f) => f.status === "active" && f.sourceCount > 0);
+  const titleOf = (source: SourceChoice) => source.marketing.summary ?? source.origin;
+  const familyRows = (families ?? []).filter((f) => f.status === "active" && f.sourceCount > 0 && f.name.toLowerCase().includes(needle));
+  const sourceRows = results.filter((s) => s.status === "ready" && s.excluded !== true && titleOf(s).toLowerCase().includes(needle));
+  const selected = familyIds.length + sourceIds.length;
+  const tabButton = (id: "families" | "sources", label: string, Icon: typeof Layers) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={tab === id}
+      onClick={() => {
+        setTab(id);
+        setSearch("");
+      }}
+      className={
+        tab === id
+          ? "flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
+          : "flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
+      }
+    >
+      <Icon aria-hidden="true" className="size-4" />
+      {label}
+    </button>
+  );
   return (
-    <fieldset className="grid gap-3 border-0 p-0">
-      <legend className="p-0 text-sm font-medium text-foreground">Inspiration (optional)</legend>
-      {activeFamilies.length > 0 ? (
-        <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Creative Families: their most recent Sources are selected.</span>
-          <ul className="m-0 grid max-h-32 list-none gap-1 overflow-y-auto p-0">
-            {activeFamilies.map((family) => (
-              <li key={family._id}>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={familyIds.includes(family._id)} onCheckedChange={() => toggle(familyIds, family._id, onFamilies)} aria-label={`Family ${family.name}`} />
-                  <span className="min-w-0 flex-1 truncate">{family.name}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{family.sourceCountCapped ? `${family.sourceCount}+` : family.sourceCount}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      <div className="grid gap-1">
-        <span className="text-xs text-muted-foreground">Sources</span>
-        {status === "LoadingFirstPage" ? (
-          <p className="m-0 text-sm text-muted-foreground">Loading…</p>
-        ) : readable.length === 0 ? (
-          <p className="m-0 text-sm text-muted-foreground">No Source is ready yet.</p>
+    <div className="grid gap-3 rounded-xl border border-border p-3">
+      <div role="tablist" aria-label="Inspiration" className="grid grid-cols-2 gap-2">
+        {tabButton("families", "Creative Families", Layers)}
+        {tabButton("sources", "Sources", SquarePlay)}
+      </div>
+      <SearchField value={search} onChange={setSearch} label={tab === "families" ? "Search creative families" : "Search sources"} placeholder={tab === "families" ? "Search creative families…" : "Search sources…"} className="w-full" />
+      {tab === "families" ? (
+        familyRows.length === 0 ? (
+          <p className="m-0 py-4 text-center text-sm text-muted-foreground">{families === undefined ? "Loading…" : "No Creative Family."}</p>
         ) : (
-          <ul className="m-0 grid max-h-44 list-none gap-1 overflow-y-auto p-0">
-            {readable.map((source) => (
-              <li key={source._id}>
-                <label className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={sourceIds.includes(source._id)} onCheckedChange={() => toggle(sourceIds, source._id, onSources)} aria-label={`Source ${source.marketing.summary ?? source.origin}`} />
-                  <span className="min-w-0 flex-1 truncate">{source.marketing.summary ?? source.origin}</span>
-                </label>
-              </li>
+          <ul className="m-0 grid max-h-52 list-none overflow-y-auto p-0">
+            {familyRows.map((family) => (
+              <PickRow
+                key={family._id}
+                label={family.name}
+                count={family.sourceCountCapped ? `${family.sourceCount}+` : family.sourceCount}
+                checked={familyIds.includes(family._id)}
+                onToggle={() => toggle(familyIds, family._id, onFamilies)}
+                ariaLabel={`Family ${family.name}`}
+              />
             ))}
           </ul>
+        )
+      ) : status === "LoadingFirstPage" ? (
+        <p className="m-0 py-4 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : sourceRows.length === 0 ? (
+        <p className="m-0 py-4 text-center text-sm text-muted-foreground">No Source is ready yet.</p>
+      ) : (
+        <ul className="m-0 grid max-h-52 list-none overflow-y-auto p-0">
+          {sourceRows.map((source) => (
+            <PickRow key={source._id} label={titleOf(source)} checked={sourceIds.includes(source._id)} onToggle={() => toggle(sourceIds, source._id, onSources)} ariaLabel={`Source ${titleOf(source)}`} />
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center justify-between gap-3">
+        {selected > 0 ? (
+          <span className="flex items-center gap-2 rounded-lg bg-primary/15 px-3 py-1.5 text-sm font-semibold text-primary">
+            <Check aria-hidden="true" className="size-4" />
+            {selected} selected
+          </span>
+        ) : (
+          <span />
         )}
-        {status === "CanLoadMore" ? (
-          <Button type="button" variant="link" className="h-auto w-fit p-0" onClick={() => loadMore(25)}>
-            Show more Sources
+        {tab === "sources" && status === "CanLoadMore" ? (
+          <Button type="button" variant="link" className="h-auto p-0 text-primary" onClick={() => loadMore(25)}>
+            Show more sources <ArrowRight aria-hidden="true" className="size-4" />
           </Button>
         ) : null}
       </div>
-    </fieldset>
+    </div>
   );
 }
 
@@ -178,10 +237,11 @@ function GenerateRecipeDialog({ instanceId, open, onOpenChange }: { instanceId: 
   const tooLong = length > MAX_INSTRUCTIONS_LENGTH;
   const tooManySources = sourceIds.length > MAX_GENERATION_SOURCES;
   const hasInput = idea.trim() !== "" || sourceIds.length > 0 || familyIds.length > 0;
+  const blocked = submitting || tooLong || tooManySources || !hasInput;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting || tooLong || tooManySources || !hasInput) return;
+    if (blocked) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -205,40 +265,64 @@ function GenerateRecipeDialog({ instanceId, open, onOpenChange }: { instanceId: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Generate Recipe</DialogTitle>
-          <DialogDescription>The Strategy Agent proposes a Production Recipe from your idea and the inspiration you choose, for you to review.</DialogDescription>
-        </DialogHeader>
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          <div className="grid gap-2">
-            <Label htmlFor="generation-idea">Idea</Label>
-            <Textarea id="generation-idea" value={idea} rows={3} placeholder="What do you want to try?" onChange={(e) => setIdea(e.target.value)} />
+      <DialogContent className="max-h-[92vh] w-[min(94vw,44rem)] max-w-none overflow-y-auto">
+        <DialogHeader className="flex flex-row items-center gap-4">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Sparkles aria-hidden="true" className="size-6" />
+          </span>
+          <div className="grid gap-1">
+            <DialogTitle className="text-2xl">Generate Recipe</DialogTitle>
+            <DialogDescription>The Strategy Agent proposes a Production Recipe from your idea and inspiration, for you to review.</DialogDescription>
           </div>
-          <InspirationPicker instanceId={instanceId} sourceIds={sourceIds} familyIds={familyIds} onSources={setSourceIds} onFamilies={setFamilyIds} />
-          {tooManySources ? (
-            <p role="alert" className="m-0 text-sm text-destructive">{`${sourceIds.length} Sources are selected, a generation reads at most ${MAX_GENERATION_SOURCES}: unselect some.`}</p>
-          ) : familyIds.length > 0 ? (
-            <p className="m-0 text-xs text-muted-foreground">{`The generation reads at most ${MAX_GENERATION_SOURCES} Sources: yours first, then the most recent of the selected families.`}</p>
-          ) : null}
-          <div className="grid gap-2">
-            <Label htmlFor="generation-instructions">Additional instructions (optional)</Label>
-            <Textarea id="generation-instructions" value={instructions} rows={3} aria-invalid={tooLong} onChange={(e) => setInstructions(e.target.value)} />
+        </DialogHeader>
+        <form className="grid gap-6" onSubmit={handleSubmit}>
+          <Step n={1} title="Core idea" hint="e.g. a content format, story angle, theme, or creative experiment.">
+            <Textarea id="generation-idea" aria-label="Core idea" value={idea} rows={3} placeholder="Describe the content pattern or creative idea you want to explore…" onChange={(e) => setIdea(e.target.value)} />
+          </Step>
+          <div className="border-t border-border" />
+          <Step n={2} title="Inspiration" optional hint="Creative Families are shortcuts to recent Sources, such as recurring formats, themes, or styles.">
+            <InspirationPicker instanceId={instanceId} sourceIds={sourceIds} familyIds={familyIds} onSources={setSourceIds} onFamilies={setFamilyIds} />
+            {tooManySources ? (
+              <p role="alert" className="m-0 text-sm text-destructive">{`${sourceIds.length} Sources are selected, a generation reads at most ${MAX_GENERATION_SOURCES}: unselect some.`}</p>
+            ) : familyIds.length > 0 ? (
+              <p className="m-0 text-xs text-muted-foreground">{`The generation reads at most ${MAX_GENERATION_SOURCES} Sources: yours first, then the most recent of the selected families.`}</p>
+            ) : null}
+          </Step>
+          <div className="border-t border-border" />
+          <Step n={3} title="Additional instructions" optional>
+            <Textarea
+              id="generation-instructions"
+              aria-label="Additional instructions"
+              value={instructions}
+              rows={3}
+              aria-invalid={tooLong}
+              placeholder="Add constraints, tone, target audience, or anything the agent should keep in mind…"
+              onChange={(e) => setInstructions(e.target.value)}
+            />
             <p className={tooLong ? "m-0 text-xs text-destructive" : "m-0 text-xs text-muted-foreground"} role={tooLong ? "alert" : undefined}>
               {tooLong
                 ? `Too long: ${length} characters, the limit is ${MAX_INSTRUCTIONS_LENGTH}.`
                 : `${length} / ${MAX_INSTRUCTIONS_LENGTH} characters. Closing this window does not stop the generation.`}
             </p>
-          </div>
-          {!hasInput ? <p className="m-0 text-xs text-muted-foreground">Write an idea or choose at least one Source.</p> : null}
+          </Step>
           {error ? <p role="alert" className="m-0 break-words text-sm text-destructive [overflow-wrap:anywhere]">{error}</p> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={submitting} disabled={submitting || tooLong || tooManySources || !hasInput}>
-              Generate Recipe
-            </Button>
+          <DialogFooter className="items-center border-t border-border pt-4 sm:justify-between">
+            <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground">
+              {!hasInput ? (
+                <>
+                  <Info aria-hidden="true" className="size-4 shrink-0" />
+                  Write an idea or select at least one source.
+                </>
+              ) : null}
+            </p>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={submitting} disabled={blocked}>
+                Generate Recipe
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
