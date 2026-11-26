@@ -100,8 +100,8 @@ describe("RunTraceView", () => {
     expect(file.textContent).toContain("run.md");
     expect(mcp.textContent).toContain("list_keywords");
     expect(mcp.textContent).toContain("seo-mcp");
-    expect(container.querySelectorAll('[data-testid="trace-bar"]')).toHaveLength(4);
-    expect(container.querySelector('[data-testid="trace-event-agent"] [data-testid="trace-bar"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="trace-bar"]')).toHaveLength(3);
+    expect(container.querySelector('[data-testid="trace-event-agent"][data-testid="trace-bar"]')).toBeNull();
   });
 
   it("shows the elapsed Run duration of an active Run", async () => {
