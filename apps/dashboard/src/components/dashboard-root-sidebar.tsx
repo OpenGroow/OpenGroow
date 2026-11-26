@@ -2,7 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { Activity } from "lucide-react";
 import { signOut } from "@/src/lib/auth-client";
+import { TRACE_LIST_HREF } from "@/src/lib/instance-path";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +16,12 @@ type RootNavItem = {
 
 const ROOT_NAV_ITEMS: RootNavItem[] = [
   { href: "/", label: "Projects", icon: AppGridIcon },
+  { href: TRACE_LIST_HREF, label: "Trace", icon: TraceIcon },
 ];
+
+function TraceIcon() {
+  return <Activity aria-hidden="true" />;
+}
 
 export function DashboardRootSidebar({
   activeHref,

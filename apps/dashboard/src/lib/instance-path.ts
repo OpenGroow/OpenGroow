@@ -27,6 +27,19 @@ export function missionRunHref(instanceId: string, missionId: string, runId: str
   return `${missionHref(instanceId, missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
 }
 
+/** The Trace list: recent Runs across the caller's Projects. */
+export const TRACE_LIST_HREF = "/trace";
+
+/**
+ * The Trace of a Job's or a Source's Run (no Mission to live under): the
+ * "View trace" target next to `runLogsHref`'s "View logs".
+ */
+export function runTraceHref(instanceId: string, templateId: string, runId: string): string {
+  const project = encodeURIComponent(instanceId);
+  const template = encodeURIComponent(templateId);
+  return `/projects/${project}/agents/${template}/trace?runId=${encodeURIComponent(runId)}`;
+}
+
 /** A Mission's page. */
 export function missionHref(instanceId: string, missionId: string): string {
   return `/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(missionId)}`;
