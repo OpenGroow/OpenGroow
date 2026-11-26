@@ -103,4 +103,30 @@ describe("Tool inspector", () => {
     await act(async () => copy.click());
     expect(writeText).toHaveBeenCalledWith(JSON.stringify({ a: 1 }, null, 2));
   });
+
+  it("opens the full text of an Instruction or Agent message", async () => {
+    const long = "I'll start by reading the run notes. ".repeat(10).trim();
+    useQueryMock.mockReturnValue({ _id: "run-1", status: "completed", createdAt: 0, completedAt: 9000 });
+    transcriptMock.mockResolvedValue({
+      found: true,
+      turns: [
+        { kind: "message", role: "user", text: "Read missions/abc and report", timestamp: ts(1) },
+        { kind: "message", role: "assistant", text: long, timestamp: ts(2) },
+      ],
+    });
+    await act(async () => {
+      root.render(
+        <React.Suspense fallback={null}>
+          <RunTraceView params={params} runId={"run-1" as never} />
+        </React.Suspense>,
+      );
+    });
+    await act(async () => {});
+    const inspector = () => container.querySelector('[data-testid="tool-inspector"]')!;
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="trace-event-agent"] button')!.click());
+    expect(inspector().textContent).toContain(long);
+    expect(inspector().textContent).toContain("Agent");
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="trace-event-instruction"] button')!.click());
+    expect(inspector().textContent).toContain("Read missions/abc and report");
+  });
 });

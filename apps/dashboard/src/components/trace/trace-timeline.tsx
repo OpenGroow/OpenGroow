@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/opengroow/status-badge";
 import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { cn } from "@/lib/utils";
 import { formatDurationMs, previewPayload } from "@/src/lib/trace/format-trace";
-import type { TraceEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
+import type { TraceEvent, TraceMessageEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
 import { computeTimelineLayout, type TimelineBar } from "@/src/lib/trace/timeline-layout";
 
 export type TraceTimelineProps = {
@@ -17,6 +17,8 @@ export type TraceTimelineProps = {
    * - #203 handoff: `renderToolBadge` adds a label (e.g. "External Job started") to a Tool Call.
    */
   onSelectTool?: (event: TraceToolEvent) => void;
+  /** Makes Instruction and Agent message rows selectable, like Tool Call rows. */
+  onSelectMessage?: (event: TraceMessageEvent) => void;
   selectedEventId?: string;
   renderToolBadge?: (event: TraceToolEvent) => React.ReactNode;
 };
@@ -50,7 +52,7 @@ function axisLabel(ms: number | undefined): string {
 }
 
 /** Waterfall of Trace Events in transcript order; payloads are truncated previews only. */
-export function TraceTimeline({ events, onSelectTool, selectedEventId, renderToolBadge }: TraceTimelineProps) {
+export function TraceTimeline({ events, onSelectTool, onSelectMessage, selectedEventId, renderToolBadge }: TraceTimelineProps) {
   const layout = React.useMemo(() => computeTimelineLayout(events), [events]);
   return (
     <div className="grid min-w-0 gap-1">
@@ -73,7 +75,12 @@ export function TraceTimeline({ events, onSelectTool, selectedEventId, renderToo
                 badge={renderToolBadge?.(event)}
               />
             ) : (
-              <MessageRow event={event} bar={layout.bars.get(event.id)} />
+              <MessageRow
+                event={event}
+                bar={layout.bars.get(event.id)}
+                selected={selectedEventId === event.id}
+                onSelect={onSelectMessage}
+              />
             )}
           </li>
         ))}
@@ -119,19 +126,37 @@ function Label({ kind, small, main }: { kind: Kind; small?: string; main: string
 function MessageRow({
   event,
   bar,
+  selected,
+  onSelect,
 }: {
-  event: Extract<TraceEvent, { type: "instruction" | "agent" }>;
+  event: TraceMessageEvent;
   bar?: TimelineBar;
+  selected: boolean;
+  onSelect?: (event: TraceMessageEvent) => void;
 }) {
-  return (
-    <div className={cn(ROW_GRID, "rounded-lg px-3 py-1")}>
+  const body = (
+    <>
       <Label
         kind="message"
         small={previewPayload(event.text, 80)}
         main={event.type === "instruction" ? "Instruction" : "Agent"}
       />
       <Lane bar={bar} kind="message" failed={false} />
-    </div>
+    </>
+  );
+  const frame = cn("rounded-lg px-3 py-1", selected ? "bg-muted" : "hover:bg-muted/50");
+  return onSelect ? (
+    <Button
+      type="button"
+      variant="ghost"
+      className={cn(frame, ROW_GRID, "h-auto w-full justify-stretch whitespace-normal font-normal")}
+      aria-pressed={selected}
+      onClick={() => onSelect(event)}
+    >
+      {body}
+    </Button>
+  ) : (
+    <div className={cn(ROW_GRID, "rounded-lg px-3 py-1")}>{body}</div>
   );
 }
 

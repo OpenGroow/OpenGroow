@@ -8,8 +8,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
 import { runDurationMs } from "@/src/lib/trace/format-trace";
-import { isTerminalRunStatus, normalizeTrace, summarizeTrace, type TraceToolEvent } from "@/src/lib/trace/normalize-trace";
-import { ToolInspector } from "./tool-inspector";
+import { isTerminalRunStatus, normalizeTrace, summarizeTrace, type TraceMessageEvent, type TraceToolEvent } from "@/src/lib/trace/normalize-trace";
+import { MessageInspector, ToolInspector } from "./tool-inspector";
 import { TraceSummary } from "./trace-summary";
 import { TraceTimeline } from "./trace-timeline";
 import { useRunTranscript } from "./use-run-transcript";
@@ -68,6 +68,10 @@ export function RunTraceView({
   const turns = transcript.found ? transcript.turns : [];
   const events = normalizeTrace(turns, { id: run._id, status: run.status, mcpJob: run.mcpJob });
   const selectedTool = events.find((e): e is TraceToolEvent => e.type === "tool" && e.id === selectedEventId);
+  const selectedMessage = events.find(
+    (e): e is TraceMessageEvent => e.type !== "tool" && e.id === selectedEventId,
+  );
+  const selected = selectedTool ?? selectedMessage;
   return (
     <div className="grid min-w-0 gap-4">
       {transcript.pollError ? (
@@ -90,11 +94,12 @@ export function RunTraceView({
       {events.length === 0 ? (
         <LogsStatePanel title="No activity recorded" description="This Run did not produce any recorded events." />
       ) : (
-        <div className={selectedTool ? "grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]" : "grid min-w-0"}>
+        <div className={selected ? "grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]" : "grid min-w-0"}>
           <TraceTimeline
             events={events}
             selectedEventId={selectedEventId}
             onSelectTool={(e) => setSelectedEventId(e.id)}
+            onSelectMessage={(e) => setSelectedEventId(e.id)}
             renderToolBadge={(event) =>
               event.externalJobHandoff ? (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary" data-testid="external-job-badge">
@@ -104,6 +109,7 @@ export function RunTraceView({
             }
           />
           {selectedTool ? <ToolInspector key={selectedTool.id} event={selectedTool} /> : null}
+          {selectedMessage ? <MessageInspector key={selectedMessage.id} event={selectedMessage} /> : null}
         </div>
       )}
     </div>

@@ -5,7 +5,7 @@ import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { formatDurationMs } from "@/src/lib/trace/format-trace";
-import type { TraceToolEvent } from "@/src/lib/trace/normalize-trace";
+import type { TraceMessageEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
 
 const TABS = ["Input", "Output", "Metadata"] as const;
 type Tab = (typeof TABS)[number];
@@ -106,6 +106,55 @@ export function ToolInspector({ event }: { event: TraceToolEvent }) {
       {tab === "Input" ? <PayloadPanel label="Input" text={formatPayload(event.input)} /> : null}
       {tab === "Output" ? <PayloadPanel label="Output" text={formatPayload(event.output)} /> : null}
       {tab === "Metadata" ? <MetadataPanel event={event} /> : null}
+    </aside>
+  );
+}
+
+const MESSAGE_TABS = ["Content", "Metadata"] as const;
+
+/** Right-side inspector of an Instruction or Agent message: its full text. */
+export function MessageInspector({ event }: { event: TraceMessageEvent }) {
+  const [tab, setTab] = React.useState<(typeof MESSAGE_TABS)[number]>("Content");
+  const rows: [string, string | undefined][] = [
+    ["Started", event.startedAt ? new Date(event.startedAt).toLocaleString() : undefined],
+  ];
+  return (
+    <aside
+      className="grid min-w-0 content-start gap-3 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
+      data-testid="tool-inspector"
+      aria-label="Inspector"
+    >
+      <h2 className="m-0 text-sm text-muted-foreground">Inspector</h2>
+      <p className="m-0 truncate text-sm font-semibold text-foreground">
+        {event.type === "instruction" ? "Instruction" : "Agent"}
+      </p>
+      <div role="tablist" className="flex gap-1">
+        {MESSAGE_TABS.map((t) => (
+          <Button
+            key={t}
+            type="button"
+            role="tab"
+            variant={tab === t ? "secondary" : "ghost"}
+            size="sm"
+            className="rounded-full"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </Button>
+        ))}
+      </div>
+      {tab === "Content" ? <PayloadPanel label="Content" text={event.text || undefined} /> : null}
+      {tab === "Metadata" ? (
+        <dl className="m-0 grid gap-2 text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="grid min-w-0 gap-0.5">
+              <dt className="text-xs font-semibold text-muted-foreground">{k}</dt>
+              <dd className="m-0 min-h-5 break-words text-foreground">{v ?? ""}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </aside>
   );
 }
