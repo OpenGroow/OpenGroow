@@ -87,6 +87,18 @@ describe("useRunTranscript polling", () => {
     expect(afterFinal).toBeGreaterThanOrEqual(2);
   });
 
+  it("makes the final read promptly when the Run turns terminal during the wait", async () => {
+    transcriptMock.mockResolvedValue(ok(1));
+    await render("running");
+    await tick(1000);
+    expect(transcriptMock).toHaveBeenCalledTimes(1);
+    await render("completed");
+    await tick(50);
+    expect(transcriptMock).toHaveBeenCalledTimes(2);
+    await tick(15_000);
+    expect(transcriptMock).toHaveBeenCalledTimes(2);
+  });
+
   it("stops polling when unmounted", async () => {
     transcriptMock.mockResolvedValue(ok(1));
     await render("running");

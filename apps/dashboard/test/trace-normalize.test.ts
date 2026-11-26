@@ -140,6 +140,15 @@ describe("External Job handoff", () => {
     expect(e).toMatchObject({ externalJobHandoff: true });
   });
 
+  it("does not treat a longer id or a free-text mention in an object as the job id", () => {
+    const run_ = { ...run("awaiting_job"), mcpJob };
+    expect(tools(normalizeTrace(turns({ jobId: "job-421" }), run_))[0]).toMatchObject({ externalJobHandoff: false });
+    expect(tools(normalizeTrace(turns({ note: "see job-42x" }), run_))[0]).toMatchObject({ externalJobHandoff: false });
+    expect(tools(normalizeTrace(turns({ data: { ids: ["job-42"] } }), run_))[0]).toMatchObject({ externalJobHandoff: true });
+    expect(tools(normalizeTrace(turns("Started job-42 ok"), run_))[0]).toMatchObject({ externalJobHandoff: true });
+    expect(tools(normalizeTrace(turns("Started job-421"), run_))[0]).toMatchObject({ externalJobHandoff: false });
+  });
+
   it("leaves a started reply that does not match the Run's mcpJob as a plain Tool Call", () => {
     const other = JSON.stringify({ status: "started", jobId: "job-7" });
     expect(tools(normalizeTrace(turns(other), { ...run("awaiting_job"), mcpJob }))[0]).toMatchObject({ externalJobHandoff: false });

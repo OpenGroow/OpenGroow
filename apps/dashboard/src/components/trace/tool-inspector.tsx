@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { formatDurationMs } from "@/src/lib/trace/format-trace";
 import type { TraceToolEvent } from "@/src/lib/trace/normalize-trace";
 
@@ -60,7 +60,7 @@ function MetadataPanel({ event }: { event: TraceToolEvent }) {
     ["Started", event.startedAt ? new Date(event.startedAt).toLocaleString() : undefined],
     ["Ended", event.endedAt ? new Date(event.endedAt).toLocaleString() : undefined],
     ["Observed duration", formatDurationMs(event.observedDurationMs)],
-    ["Status", event.status],
+    ["Status", toolCallStatus(event.status).label],
     ["Error", event.error],
   ];
   return (
@@ -90,19 +90,17 @@ export function ToolInspector({ event }: { event: TraceToolEvent }) {
       ) : null}
       <div role="tablist" className="flex gap-1">
         {TABS.map((t) => (
-          <button
+          <Button
             key={t}
             type="button"
             role="tab"
+            variant={tab === t ? "secondary" : "ghost"}
+            size="sm"
             aria-selected={tab === t}
-            className={cn(
-              "rounded-md px-3 py-1 text-sm",
-              tab === t ? "bg-muted font-semibold text-foreground" : "text-muted-foreground",
-            )}
             onClick={() => setTab(t)}
           >
             {t}
-          </button>
+          </Button>
         ))}
       </div>
       {tab === "Input" ? <PayloadPanel label="Input" text={formatPayload(event.input)} /> : null}

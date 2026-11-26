@@ -77,7 +77,7 @@ export function RunTraceView({
       ) : null}
       <TraceSummary
         runStatus={run.status}
-        runDurationMs={isTerminalRunStatus(run.status) ? runDurationMs(run) : undefined}
+        runDurationMs={runDurationMs(run, isTerminalRunStatus(run.status))}
         {...summarizeTrace(events)}
         footer={
           run.status === "awaiting_job" ? (

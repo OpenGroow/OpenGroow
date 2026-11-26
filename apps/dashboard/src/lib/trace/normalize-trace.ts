@@ -48,10 +48,27 @@ export type TraceRunInfo = {
   mcpJob?: { serverName: string; jobId: string; jobType?: string };
 };
 
+function containsToken(text: string, jobId: string): boolean {
+  const escaped = jobId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`).test(text);
+}
+
+/** The job id as a whole token in a string, or as a whole field value anywhere in structured output. */
 function carriesJobId(output: unknown, jobId: string): boolean {
   if (!jobId || output === undefined || output === null) return false;
-  const text = typeof output === "string" ? output : JSON.stringify(output);
-  return text.includes(jobId);
+  if (typeof output === "string") {
+    try {
+      const parsed: unknown = JSON.parse(output);
+      if (parsed !== null && typeof parsed === "object") return carriesJobId(parsed, jobId);
+    } catch {
+      // Plain text: fall through to the token search.
+    }
+    return containsToken(output, jobId);
+  }
+  if (typeof output === "number" || typeof output === "boolean") return String(output) === jobId;
+  if (Array.isArray(output)) return output.some((v) => carriesJobId(v, jobId));
+  if (typeof output === "object") return Object.values(output).some((v) => carriesJobId(v, jobId));
+  return false;
 }
 
 /** True only when server + tool name match the Run's `mcpJob` and the output carries its job id. */

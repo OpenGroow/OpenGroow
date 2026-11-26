@@ -1,14 +1,10 @@
 import * as React from "react";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/opengroow/status-badge";
+import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { cn } from "@/lib/utils";
 import { formatDurationMs, previewPayload } from "@/src/lib/trace/format-trace";
-import type { ToolCallStatus, TraceEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
-
-const STATUS_STYLE: Record<ToolCallStatus, string> = {
-  running: "bg-status-warning/15 text-status-warning",
-  completed: "bg-muted text-muted-foreground",
-  failed: "bg-destructive/10 text-destructive",
-  unknown: "bg-muted text-muted-foreground",
-};
+import type { TraceEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
 
 export type TraceTimelineProps = {
   events: readonly TraceEvent[];
@@ -76,6 +72,7 @@ function ToolRow({
   badge?: React.ReactNode;
 }) {
   const failed = event.status === "failed";
+  const status = toolCallStatus(event.status);
   const duration = formatDurationMs(event.observedDurationMs);
   const inputPreview = previewPayload(event.input);
   const outputPreview = previewPayload(failed ? event.error : event.output);
@@ -85,11 +82,8 @@ function ToolRow({
         <span className="font-semibold text-foreground">{event.name}</span>
         {event.server ? <span className="text-xs text-muted-foreground">{event.server}</span> : null}
         {badge}
-        <span
-          className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", STATUS_STYLE[event.status])}
-          data-testid="tool-status"
-        >
-          {event.status}
+        <span data-testid="tool-status">
+          <StatusBadge tone={status.tone} label={status.label} />
         </span>
         <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
           {time(event.startedAt) ? <span>{time(event.startedAt)}</span> : null}
@@ -105,14 +99,20 @@ function ToolRow({
     </>
   );
   const frame = cn(
-    "grid w-full gap-1 rounded-xl border-l-4 bg-status-warning/10 px-4 py-3 text-left ring-1 ring-inset ring-border",
-    failed ? "border-destructive" : "border-status-warning",
+    "grid w-full gap-1 rounded-xl border-l-4 px-4 py-3 text-left ring-1 ring-inset ring-border",
+    failed ? "border-destructive bg-destructive/5" : "border-border",
     selected && "ring-2 ring-primary",
   );
   return onSelect ? (
-    <button type="button" className={frame} onClick={() => onSelect(event)}>
+    <Button
+      type="button"
+      variant="ghost"
+      className={cn(frame, "h-auto items-stretch justify-start whitespace-normal font-normal")}
+      aria-pressed={selected}
+      onClick={() => onSelect(event)}
+    >
       {body}
-    </button>
+    </Button>
   ) : (
     <div className={frame}>{body}</div>
   );

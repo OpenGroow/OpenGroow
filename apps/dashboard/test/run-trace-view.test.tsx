@@ -75,8 +75,15 @@ describe("RunTraceView", () => {
     const tool = container.querySelector('[data-testid="trace-event-tool"]')!;
     expect(tool.textContent).toContain("generate");
     expect(tool.textContent).toContain("media");
-    expect(tool.querySelector('[data-testid="tool-status"]')!.textContent).toBe("failed");
+    expect(tool.querySelector('[data-testid="tool-status"]')!.textContent).toBe("Failed");
     expect(tool.textContent).toContain("2.0 s");
+  });
+
+  it("shows the elapsed Run duration of an active Run", async () => {
+    useQueryMock.mockReturnValue({ _id: "run-1", status: "running", createdAt: Date.now() - 125_000 });
+    transcriptMock.mockResolvedValue({ found: true, turns: [] });
+    await render();
+    expect(container.querySelector('[data-testid="trace-summary"]')!.textContent).toMatch(/Run duration\s*2 min/);
   });
 
   it("shows an empty state, not an error, for a Run with no session yet", async () => {

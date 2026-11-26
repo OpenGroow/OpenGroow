@@ -10,9 +10,18 @@ export function formatDurationMs(ms: number | undefined): string | undefined {
   return `${m} min ${rest} s`;
 }
 
-/** Run duration: Run creation to completion. Undefined while the Run has not completed. */
-export function runDurationMs(run: { createdAt: number; completedAt?: number }): number | undefined {
-  return run.completedAt === undefined ? undefined : run.completedAt - run.createdAt;
+/**
+ * Run duration: elapsed time from Run creation to completion, or to `now` while
+ * the Run is active. Undefined when a timestamp is missing.
+ */
+export function runDurationMs(
+  run: { createdAt?: number; completedAt?: number },
+  terminal: boolean,
+  now: number = Date.now(),
+): number | undefined {
+  if (typeof run.createdAt !== "number") return undefined;
+  const end = terminal ? run.completedAt : now;
+  return typeof end === "number" ? end - run.createdAt : undefined;
 }
 
 /** Truncated one-line-ish preview of a payload, so large payloads never weigh on the DOM. */

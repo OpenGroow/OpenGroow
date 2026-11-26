@@ -188,6 +188,25 @@ describe("run_trace_list.listRecent", () => {
     expect(asAlice.items[0]?.status).toBe("pending");
   });
 
+  it("limits the Agent filter options to the selected Project", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstance(t, "inst-a", ALICE, "Alpha");
+    await seedInstance(t, "inst-b", ALICE, "Beta");
+    await t.run(async (ctx) => {
+      for (const [instanceId, templateId] of [["inst-a", "writer"], ["inst-b", "scorer"]] as const) {
+        await ctx.db.insert("projectAgents", { instanceId, templateId, status: "active", mcpServerKeys: [], createdAt: 0, updatedAt: 0 } as never);
+      }
+    });
+    const asAlice = t.withIdentity(ALICE);
+    const all = await asAlice.query(api.run_trace_list.filterOptions, {});
+    expect(all.agents.map((a) => a.templateId).sort()).toEqual(["scorer", "writer"]);
+    const one = await asAlice.query(api.run_trace_list.filterOptions, { instanceId: "inst-a" });
+    expect(one.agents.map((a) => a.templateId)).toEqual(["writer"]);
+    expect(one.projects).toHaveLength(2);
+    const foreign = await asAlice.query(api.run_trace_list.filterOptions, { instanceId: "inst-zzz" });
+    expect(foreign.agents).toEqual([]);
+  });
+
   it("requires authentication", async () => {
     const t = convexTest(schema, modules);
     await expect(t.query(api.run_trace_list.listRecent, args(10))).rejects.toThrow(/Authentication/);

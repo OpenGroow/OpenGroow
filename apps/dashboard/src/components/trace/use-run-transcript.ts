@@ -33,12 +33,18 @@ export function useRunTranscript(args: {
   const getTranscript = useAction(api.workspace_logs_node.getWorkspaceRunTranscript);
   const [state, setState] = React.useState<RunTranscriptState>({ status: "loading" });
   const terminalRef = React.useRef(false);
+  const wakeRef = React.useRef<(() => void) | undefined>(undefined);
   terminalRef.current = runStatus !== undefined && isTerminalRunStatus(runStatus);
+  const terminal = terminalRef.current;
+  React.useEffect(() => {
+    if (terminal) wakeRef.current?.();
+  }, [terminal]);
 
   React.useEffect(() => {
     if (!enabled || !instanceId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let wake: (() => void) | undefined;
     setState({ status: "loading" });
 
     const read = async () => {
@@ -53,8 +59,14 @@ export function useRunTranscript(args: {
     };
     const wait = () =>
       new Promise<void>((resolve) => {
+        wake = resolve;
         timer = setTimeout(resolve, TRANSCRIPT_POLL_INTERVAL_MS);
       });
+    // A status change ends the wait early so the final read is prompt.
+    wakeRef.current = () => {
+      if (timer) clearTimeout(timer);
+      wake?.();
+    };
 
     void (async () => {
       while (!cancelled) {
@@ -68,6 +80,7 @@ export function useRunTranscript(args: {
 
     return () => {
       cancelled = true;
+      wakeRef.current = undefined;
       if (timer) clearTimeout(timer);
     };
     // getTranscript is intentionally omitted: useAction returns a stable ref.

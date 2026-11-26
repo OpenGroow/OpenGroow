@@ -29,6 +29,19 @@ const RUN_STATUS: Record<string, { label: string; tone: StatusTone }> = {
   cancelled: { label: "Stopped", tone: "neutral" },
 }
 
+// Tool Call statuses of a Trace. Only a failed Tool Call is highlighted, the
+// others stay neutral so failures stand out.
+const TOOL_CALL_STATUS: Record<string, { label: string; tone: StatusTone }> = {
+  running: { label: "Running", tone: "neutral" },
+  completed: { label: "Completed", tone: "neutral" },
+  failed: { label: "Failed", tone: "error" },
+  unknown: { label: "No result", tone: "neutral" },
+}
+
+export function toolCallStatus(status: string): { label: string; tone: StatusTone } {
+  return TOOL_CALL_STATUS[status] ?? { label: status, tone: "neutral" }
+}
+
 export function runStatus(status: string): { label: string; tone: StatusTone } {
   return RUN_STATUS[status] ?? { label: status, tone: "neutral" }
 }

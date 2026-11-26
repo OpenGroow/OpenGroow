@@ -88,4 +88,16 @@ describe("TraceListPage", () => {
     const lastListCall = useQueryMock.mock.calls.filter((c) => c[0] === "listRecent").at(-1);
     expect(lastListCall?.[1]).toMatchObject({ status: "failed" });
   });
+
+  it("asks for the Agents of the selected Project only", async () => {
+    await act(async () => root.render(<TraceListPage />));
+    const select = container.querySelector<HTMLSelectElement>("select[data-testid='trace-filter-project']");
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+      setter?.call(select, "project-1");
+      select!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const lastOptionsCall = useQueryMock.mock.calls.filter((c) => c[0] === "filterOptions").at(-1);
+    expect(lastOptionsCall?.[1]).toEqual({ instanceId: "project-1" });
+  });
 });

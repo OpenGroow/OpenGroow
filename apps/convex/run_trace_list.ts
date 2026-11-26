@@ -106,14 +106,15 @@ export const listRecent = query({
   },
 });
 
-/** The Projects and Agents the Trace list can be filtered by. */
+/** The Projects the Trace list can be filtered by, and the Agents of the selected Project (all Projects when none). */
 export const filterOptions = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { instanceId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
     const owned = await ownedInstances(ctx);
     const projects = [...owned].map(([instanceId, name]) => ({ instanceId, name: name ?? instanceId }));
     const agents = new Map<string, string>();
     for (const instanceId of owned.keys()) {
+      if (args.instanceId !== undefined && instanceId !== args.instanceId) continue;
       const rows = await ctx.db
         .query("projectAgents")
         .withIndex("by_instance_template", (q) => q.eq("instanceId", instanceId))

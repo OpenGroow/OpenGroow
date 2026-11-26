@@ -19,19 +19,24 @@ import { formatDurationMs } from "@/src/lib/trace/format-trace";
 const PAGE_SIZE = 25;
 
 type Cursor = { createdAt: number; creationTime: number };
-type Filters = { instanceId?: string; templateId?: string; status?: string };
-
 const STATUSES = ["pending", "dispatching", "running", "awaiting_job", "completed", "resumed", "failed", "cancelled"] as const;
+type RunStatusFilter = (typeof STATUSES)[number];
+type Filters = { instanceId?: string; templateId?: string; status?: RunStatusFilter };
 
 /** Recent Runs of Missions and Jobs across the caller's Projects; selecting one opens its Trace. */
 export function TraceListPage() {
   const [filters, setFilters] = React.useState<Filters>({});
   // One entry per loaded page (the first has no cursor); a filter change starts over.
   const [cursors, setCursors] = React.useState<Array<Cursor | undefined>>([undefined]);
-  const options = useQuery(api.run_trace_list.filterOptions, {});
+  const options = useQuery(api.run_trace_list.filterOptions, filters.instanceId ? { instanceId: filters.instanceId } : {});
 
   function setFilter(key: keyof Filters, value: string) {
-    setFilters((current) => ({ ...current, [key]: value === "" ? undefined : value }));
+    setFilters((current) => ({
+      ...current,
+      [key]: value === "" ? undefined : value,
+      // An Agent of another Project is no longer a valid choice.
+      ...(key === "instanceId" ? { templateId: undefined } : {}),
+    }));
     setCursors([undefined]);
   }
 
@@ -83,7 +88,7 @@ export function TraceListPage() {
         </div>
         <div className="grid gap-3" data-testid="trace-list">
           {cursors.map((cursor, index) => (
-            <TraceListPageRows
+            <TraceRunRows
               key={`${cursor?.createdAt ?? "first"}-${cursor?.creationTime ?? ""}`}
               filters={filters}
               cursor={cursor}
@@ -98,7 +103,7 @@ export function TraceListPage() {
   );
 }
 
-function TraceListPageRows({
+function TraceRunRows({
   filters,
   cursor,
   isFirst,
@@ -115,7 +120,6 @@ function TraceListPageRows({
     limit: PAGE_SIZE,
     ...(cursor ? { cursor } : {}),
     ...filters,
-    status: filters.status as (typeof STATUSES)[number] | undefined,
   });
   if (page === undefined) return <p className="m-0 text-sm text-muted-foreground">Loading Runs…</p>;
   if (isFirst && page.items.length === 0) {
