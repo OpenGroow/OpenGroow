@@ -32,8 +32,8 @@ export type TraceToolEvent = BaseEvent & {
   output?: unknown;
   error?: string;
   /**
-   * Extension point (#203): a later pass that knows the Run's `mcpJob` sets
-   * this. Always false from `normalizeTrace`.
+   * True for the Tool Call that launched the Run's External Job (see
+   * `isExternalJobHandoff`). Never changes the Tool Call's status.
    */
   externalJobHandoff: boolean;
 };
@@ -41,7 +41,26 @@ export type TraceToolEvent = BaseEvent & {
 export type TraceEvent = TraceMessageEvent | TraceToolEvent;
 
 /** The part of a Run the normalization needs. #203 adds `mcpJob` here. */
-export type TraceRunInfo = { id: string; status: string };
+export type TraceRunInfo = {
+  id: string;
+  status: string;
+  /** The Run's External Job pointer; `jobType` is its MCP tool name (absent or "legacy" on old Runs). */
+  mcpJob?: { serverName: string; jobId: string; jobType?: string };
+};
+
+function carriesJobId(output: unknown, jobId: string): boolean {
+  if (!jobId || output === undefined || output === null) return false;
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  return text.includes(jobId);
+}
+
+/** True only when server + tool name match the Run's `mcpJob` and the output carries its job id. */
+function isExternalJobHandoff(event: TraceToolEvent, mcpJob: TraceRunInfo["mcpJob"]): boolean {
+  if (!mcpJob || !mcpJob.jobType || mcpJob.jobType === "legacy") return false;
+  return (
+    event.server === mcpJob.serverName && event.name === mcpJob.jobType && carriesJobId(event.output, mcpJob.jobId)
+  );
+}
 
 export const TERMINAL_RUN_STATUSES: readonly string[] = ["completed", "resumed", "failed", "cancelled"];
 export const isTerminalRunStatus = (status: string): boolean => TERMINAL_RUN_STATUSES.includes(status);
@@ -124,6 +143,9 @@ export function normalizeTrace(turns: readonly SessionTranscriptTurn[], run: Tra
       externalJobHandoff: false,
     });
   });
+  for (const event of events) {
+    if (event.type === "tool") event.externalJobHandoff = isExternalJobHandoff(event, run.mcpJob);
+  }
   return events;
 }
 

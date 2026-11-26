@@ -65,7 +65,7 @@ export function RunTraceView({
   }
 
   const turns = transcript.found ? transcript.turns : [];
-  const events = normalizeTrace(turns, { id: run._id, status: run.status });
+  const events = normalizeTrace(turns, { id: run._id, status: run.status, mcpJob: run.mcpJob });
   const selectedTool = events.find((e): e is TraceToolEvent => e.type === "tool" && e.id === selectedEventId);
   return (
     <div className="grid min-w-0 gap-4">
@@ -73,12 +73,30 @@ export function RunTraceView({
         runStatus={run.status}
         runDurationMs={isTerminalRunStatus(run.status) ? runDurationMs(run) : undefined}
         {...summarizeTrace(events)}
+        footer={
+          run.status === "awaiting_job" ? (
+            <p className="m-0 text-sm text-muted-foreground" data-testid="trace-awaiting-job">
+              Waiting for its External Job to finish.
+            </p>
+          ) : undefined
+        }
       />
       {events.length === 0 ? (
         <LogsStatePanel title="No activity recorded" description="This Run did not produce any recorded events." />
       ) : (
         <div className={selectedTool ? "grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]" : "grid min-w-0"}>
-          <TraceTimeline events={events} selectedEventId={selectedEventId} onSelectTool={(e) => setSelectedEventId(e.id)} />
+          <TraceTimeline
+            events={events}
+            selectedEventId={selectedEventId}
+            onSelectTool={(e) => setSelectedEventId(e.id)}
+            renderToolBadge={(event) =>
+              event.externalJobHandoff ? (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary" data-testid="external-job-badge">
+                  External Job started
+                </span>
+              ) : null
+            }
+          />
           {selectedTool ? <ToolInspector key={selectedTool.id} event={selectedTool} /> : null}
         </div>
       )}
