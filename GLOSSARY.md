@@ -66,6 +66,7 @@ Definitions are in `docs/domain/`. Read the file of the domain you work on; do n
 | **RunResult** | Terminal value produced by a Run upon completion. | [docs/domain/missions.md](docs/domain/missions.md) |
 | **Intermediate Result** | Non-terminal value produced by OpenGroow upon completion of an intermediate External Job. | [docs/domain/missions.md](docs/domain/missions.md) |
 | **External Job** | Long-running asynchronous work launched by an Agent in an external service during a Run. | [docs/domain/missions.md](docs/domain/missions.md) |
+| **Trace** | Read-only view of what an Agent did during one Run, derived from its session transcript and never stored. Also defines: Trace Event, Tool Call, Tool Call status, Observed duration, External Job handoff. | [docs/domain/missions.md](docs/domain/missions.md) |
 | **Artifact** | Business deliverable produced by a Run, viewable by the user. Also defines: Engagement Session. | [docs/domain/missions.md](docs/domain/missions.md) |
 | **Marketing Mock** | Illustrative, fictional demonstration of a product behavior intended to make | [docs/domain/missions.md](docs/domain/missions.md) |
 | **Brand Core** | Persistent business knowledge, curated by the human, attached to a Project, read by all Agents of the Project to contextualize their work. Also defines: Written by the human, static, Do not confuse, Composition at execution time. | [docs/domain/missions.md](docs/domain/missions.md) |

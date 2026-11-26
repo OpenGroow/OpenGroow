@@ -581,7 +581,10 @@ export default defineSchema({
     .index("by_instance_family", ["instanceId", "recipeGeneration.familyId"])
     // The tries of one generation, and (tryCount 1) the latest generations of a Project.
     .index("by_generation", ["recipeGeneration.generationId"])
-    .index("by_instance_try", ["instanceId", "recipeGeneration.tryCount"]),
+    .index("by_instance_try", ["instanceId", "recipeGeneration.tryCount"])
+    // The Trace list (#205): a Project's Runs, newest first, for any Agent and
+    // status, without a per-Agent scan.
+    .index("by_instance_created", ["instanceId", "createdAt"]),
   // A Strategic Review (ADR-085): immutable, attached to the Project. No update,
   // delete or purge function exists. Each row holds its own whole memory.
   strategicReviews: defineTable({

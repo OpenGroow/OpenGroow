@@ -119,6 +119,17 @@ Long-running asynchronous work launched by an Agent in an external service durin
 
 **Intermediate External Job**: its completion closes neither the Run nor the Mission — it produces an **Intermediate Result** (cf. RunResult) and starts a new Run for the same Mission, which resumes in `doing`. Used when a long step must be followed by a decision or continuation made by the Agent itself, without human validation (e.g. an article plan the Agent must judge valid before continuing). _Avoid_: treating an intermediate External Job as producing an Artifact — its result is never viewable by the user.
 
+### Trace
+
+Read-only view of what an Agent did during one **Run**, built on demand from that Run's session transcript. A Trace is derived, never stored: it adds no table and changes nothing in how a Run executes. The raw logs stay available beside it. _Avoid_: calling it "logs" (the raw transcript) or "execution graph" (out of scope).
+
+- **Trace Event**: one entry of the Trace, of three kinds: **Instruction** (a user message present in the transcript), **Agent message** (assistant text), **Tool Call**. Only what the transcript really contains is shown: no instruction or context is reconstructed.
+- **Tool Call**: a tool invocation and its result grouped as one element. The call and the result are grouped only through their native `toolCallId`; without it, or without a match, they stay separate and the result is never guessed from the tool name. A Tool Call has a **tool name**, an **MCP server** when the name is prefixed by one (file reads/writes have none), a start, an end and a status.
+- **Tool Call status** (never to be confused with a Run status): `running` (no result yet, Run not terminal), `completed`, `failed` (the result is flagged as an error), `unknown` (no result on a terminal Run, or unmatched result). A missing result is never a failure.
+- **Observed duration**: end minus start of a Tool Call, taken from the transcript's own timestamps, empty when one is missing. It is not the **Run duration** (Run creation to completion); the two are always displayed apart. Parallel calls of one Agent turn share the same start.
+- **External Job handoff**: a Tool Call that launched the Run's External Job: its server and tool name match the Run's `mcpJob` and its output carries that job's id. A reply merely containing `status: started` is not a handoff. The Tool Call stays `completed`; whether the External Job is still in progress is told by the Run status (`awaiting_job`), never by the Tool Call.
+- Read-only: a Trace never retries a call, replays a Run or infers a relationship the transcript does not state.
+
 ### Artifact
 
 Business deliverable produced by a Run, viewable by the user. An Artifact is a **generic, structured pointer** to the content produced by the Agent — not a container for the content itself.

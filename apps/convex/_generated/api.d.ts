@@ -169,6 +169,7 @@ import type * as recipe_proposal from "../recipe_proposal.js";
 import type * as recipe_usage from "../recipe_usage.js";
 import type * as run_parent from "../run_parent.js";
 import type * as run_result from "../run_result.js";
+import type * as run_trace_list from "../run_trace_list.js";
 import type * as runs from "../runs.js";
 import type * as runtime_commands_node from "../runtime_commands_node.js";
 import type * as runtime_commands_node_parsers from "../runtime_commands_node_parsers.js";
@@ -389,6 +390,7 @@ declare const fullApi: ApiFromModules<{
   recipe_usage: typeof recipe_usage;
   run_parent: typeof run_parent;
   run_result: typeof run_result;
+  run_trace_list: typeof run_trace_list;
   runs: typeof runs;
   runtime_commands_node: typeof runtime_commands_node;
   runtime_commands_node_parsers: typeof runtime_commands_node_parsers;

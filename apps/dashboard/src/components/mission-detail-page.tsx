@@ -22,7 +22,7 @@ import { Card } from "@/components/ui/card";
 import { PublicationList } from "./publication-list";
 import { MissionReviewContent } from "./mission-review-page";
 import { titleCase } from "@/src/lib/mission-type";
-import { Bot, Calendar, Code, Ellipsis, FileText, Layers, RefreshCw, Trash2, type LucideIcon } from "lucide-react";
+import { Bot, Calendar, Code, Ellipsis, FileText, Layers, ListTree, RefreshCw, Trash2, type LucideIcon } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type Props = {
@@ -168,6 +168,16 @@ function RunRow({
             >
               <FileText />
               View logs
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              nativeButton={false}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "trace")} />}
+            >
+              <ListTree />
+              View trace
             </Button>
           </>
         )}

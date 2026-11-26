@@ -2,18 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { ListTree } from "lucide-react";
 import { signOut } from "@/src/lib/auth-client";
+import { TRACE_LIST_HREF } from "@/src/lib/instance-path";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type RootNavItem = {
   href: string;
   label: string;
-  icon: () => React.JSX.Element;
+  icon: React.ComponentType;
 };
 
 const ROOT_NAV_ITEMS: RootNavItem[] = [
   { href: "/", label: "Projects", icon: AppGridIcon },
+  { href: TRACE_LIST_HREF, label: "Trace", icon: ListTree },
 ];
 
 export function DashboardRootSidebar({

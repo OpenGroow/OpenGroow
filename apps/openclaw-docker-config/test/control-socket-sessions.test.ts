@@ -153,12 +153,14 @@ describe("readSessionTranscript", () => {
       {
         kind: "tool_call",
         toolName: "carousel-mcp.create_carousel",
+        toolCallId: "call_1",
         arguments: { carouselFormat: "contrast", contentPattern: "do_dont" },
         timestamp: "2026-07-02T10:00:05.000Z",
       },
       {
         kind: "tool_result",
         toolName: "carousel-mcp.create_carousel",
+        toolCallId: "call_1",
         success: true,
         result: "ok",
         timestamp: "2026-07-02T10:00:10.000Z",
@@ -196,6 +198,7 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "bash",
         success: false,
         result: "command failed",
@@ -228,6 +231,7 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "carousel-mcp.create_carousel",
         success: true,
         result: { id: "carousel-1", slides: [{ doText: "1" }] },
@@ -260,12 +264,37 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "carousel-mcp.status_check",
         success: true,
         result: { type: "toolResult", structured: { status: "ready" } },
         timestamp: "2026-07-02T10:00:10.000Z",
       },
     ]);
+  });
+
+  it("tolerates tool turns without a toolCallId", async () => {
+    const homeDir = await makeHomeDir();
+    await makeAgentDb(homeDir, "seo-agent", "no-ids", [
+      {
+        type: "message",
+        message: { role: "assistant", content: [{ type: "toolCall", name: "write_file", arguments: {} }] },
+      },
+      {
+        type: "message",
+        message: { role: "toolResult", toolName: "write_file", isError: false, content: [] },
+      },
+    ]);
+
+    const result = await readSessionTranscript(
+      { agentName: "seo-agent", sessionKey: "no-ids" },
+      { homeDir },
+    );
+
+    expect(result.turns).toHaveLength(2);
+    for (const turn of result.turns) {
+      expect(turn.toolCallId).toBeUndefined();
+    }
   });
 
   it("rejects an agentName that looks like a path traversal attempt", async () => {

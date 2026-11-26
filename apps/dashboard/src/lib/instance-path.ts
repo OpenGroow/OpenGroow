@@ -23,8 +23,21 @@ export function runLogsHref(instanceId: string, templateId: string, runId: strin
  * prompt" / "View logs" on a Mission's Runs). A Source's or a job's Run has no
  * Mission and keeps `runLogsHref` (the Agent's Logs).
  */
-export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs"): string {
+export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs" | "trace"): string {
   return `${missionHref(instanceId, missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
+}
+
+/** The Trace list: recent Runs across the caller's Projects. */
+export const TRACE_LIST_HREF = "/trace";
+
+/**
+ * The Trace of a Job's or a Source's Run (no Mission to live under): the
+ * "View trace" target next to `runLogsHref`'s "View logs".
+ */
+export function runTraceHref(instanceId: string, templateId: string, runId: string): string {
+  const project = encodeURIComponent(instanceId);
+  const template = encodeURIComponent(templateId);
+  return `/projects/${project}/agents/${template}/trace?runId=${encodeURIComponent(runId)}`;
 }
 
 /** A Mission's page. */
