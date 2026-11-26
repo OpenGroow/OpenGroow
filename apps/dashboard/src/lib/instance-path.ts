@@ -23,7 +23,7 @@ export function runLogsHref(instanceId: string, templateId: string, runId: strin
  * prompt" / "View logs" on a Mission's Runs). A Source's or a job's Run has no
  * Mission and keeps `runLogsHref` (the Agent's Logs).
  */
-export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs"): string {
+export function missionRunHref(instanceId: string, missionId: string, runId: string, tab: "prompt" | "logs" | "trace"): string {
   return `${missionHref(instanceId, missionId)}/runs/${encodeURIComponent(runId)}/${tab}`;
 }
 
