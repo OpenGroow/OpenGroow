@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { CountTile } from "@/components/opengroow/count-tile";
 import { SearchField } from "@/components/opengroow/filter-bar";
-import { Plus, Sparkles } from "lucide-react";
+import { ListChecks, Plus, Sparkles, Trash2 } from "lucide-react";
 
 type Props = {
   params: Promise<{ instanceId: string }>;
@@ -54,6 +54,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     loadMore: loadMoreDone,
   } = usePaginatedQuery(api.missions.listDoneByInstance, { instanceId }, { initialNumItems: DONE_PAGE_SIZE });
   const createMission = useMutation(api.missions.create);
+  const deleteMission = useMutation(api.missions.deleteMission);
 
   // Agents that only run Jobs (e.g. `source`) declare `jobTypes` but no
   // `missionTypes`: there is nothing to create a Mission for.
@@ -73,6 +74,9 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const effectiveTemplateId = templateId || activeAgents[0]?.templateId || "";
   const effectiveManifest = manifests.find((m) => m.id === effectiveTemplateId);
@@ -119,6 +123,33 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   }, [effectiveTemplateId, hiddenKey, declaredKey]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
+
+  function toggleSelected(missionId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(missionId)) next.add(missionId);
+      return next;
+    });
+  }
+
+  // One `deleteMission` per Mission: each is checked on the server, so one refused
+  // (a Run went live since) does not stop the others. Those that failed stay selected.
+  async function handleDeleteSelected() {
+    const ids = [...selected];
+    if (!window.confirm(`Permanently delete ${ids.length} mission${ids.length === 1 ? "" : "s"} and all their runs?`)) return;
+    setDeleting(true);
+    const results = await Promise.allSettled(ids.map((id) => deleteMission({ missionId: id as Id<"missions"> })));
+    setDeleting(false);
+    const failed = ids.filter((_, i) => results[i]?.status === "rejected");
+    setSelected(new Set(failed));
+    if (failed.length === 0) setSelecting(false);
+    else window.alert(`${failed.length} of ${ids.length} missions could not be deleted (a run may be in flight).`);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -372,6 +403,31 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
       <section className="grid gap-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            {selecting ? (
+              <>
+                <span className="text-sm text-muted-foreground" aria-live="polite">
+                  {selected.size} selected
+                </span>
+                <Button
+                  variant="destructive"
+                  type="button"
+                  loading={deleting}
+                  disabled={selected.size === 0}
+                  onClick={() => { void handleDeleteSelected(); }}
+                >
+                  <Trash2 />
+                  Delete{selected.size > 0 ? ` (${selected.size})` : ""}
+                </Button>
+                <Button variant="outline" type="button" disabled={deleting} onClick={stopSelecting}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" type="button" onClick={() => setSelecting(true)}>
+                <ListChecks />
+                Select
+              </Button>
+            )}
             <SearchField value={query} onChange={setQuery} label="Search missions" placeholder="Search missions…" />
             <NativeSelect
               aria-label="Sort missions"
@@ -395,6 +451,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
             onLoadMoreDone={() => loadMoreDone(DONE_PAGE_SIZE)}
             query={query}
             sort={sort}
+            selection={selecting ? { selected, onToggle: toggleSelected } : undefined}
           />
         )}
       </section>

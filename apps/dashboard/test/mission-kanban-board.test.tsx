@@ -80,6 +80,46 @@ describe("MissionKanbanBoard", () => {
     });
   }
 
+  describe("selection mode", () => {
+    async function renderSelecting(missions: Mission[], onToggle = vi.fn()) {
+      await act(async () => {
+        root.render(
+          <MissionKanbanBoard missions={missions} projectId="proj-1" selection={{ selected: new Set(["m-todo"]), onToggle }} />,
+        );
+      });
+      return onToggle;
+    }
+
+    it("shows no checkbox outside selection mode", async () => {
+      await render([makeMission({ _id: "m-todo", status: "todo" })]);
+      expect(document.body.querySelector('[role="checkbox"]')).toBeNull();
+    });
+
+    it("shows a checkbox per card, checked for the selected ones", async () => {
+      await renderSelecting([makeMission({ _id: "m-todo", status: "todo" }), makeMission({ _id: "m-other", status: "todo" })]);
+      const boxes = [...document.body.querySelectorAll('[role="checkbox"]')];
+      expect(boxes.map((b) => b.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+    });
+
+    it("toggles instead of opening the Mission when a card is clicked", async () => {
+      const onToggle = await renderSelecting([makeMission({ _id: "m-other", status: "todo" })]);
+      const link = document.body.querySelector<HTMLAnchorElement>('a[href*="/missions/m-other"]')!;
+      await act(async () => {
+        link.click();
+      });
+      expect(onToggle).toHaveBeenCalledWith("m-other");
+    });
+
+    it("does not let a Mission with a Run in flight be selected", async () => {
+      const onToggle = await renderSelecting([makeMission({ _id: "m-run", status: "doing" })]);
+      expect(document.body.querySelector('[role="checkbox"]')?.hasAttribute("data-disabled")).toBe(true);
+      await act(async () => {
+        document.body.querySelector<HTMLAnchorElement>('a[href*="/missions/m-run"]')!.click();
+      });
+      expect(onToggle).not.toHaveBeenCalled();
+    });
+  });
+
   it("renders all 6 column headers", async () => {
     await render([]);
     const text = document.body.textContent ?? "";

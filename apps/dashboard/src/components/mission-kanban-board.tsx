@@ -16,6 +16,7 @@ import { blockedExternalResult } from "@/src/lib/mission-result";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { titleCase } from "@/src/lib/mission-type";
@@ -53,7 +54,14 @@ type Props = {
   // summary of a Mission. Empty shows everything.
   query?: string;
   sort?: "newest" | "oldest";
+  // Selection mode: each card shows a checkbox (and a click on the card toggles
+  // it instead of opening the Mission). A Mission with a Run in flight cannot be
+  // deleted, so it is not selectable.
+  selection?: { selected: ReadonlySet<string>; onToggle: (missionId: string) => void };
 };
+
+/** A Mission can be deleted unless its Run is live on the Project (`deleteMission` refuses it). */
+export const isSelectable = (mission: Pick<Mission, "status">): boolean => mission.status !== "doing";
 
 // `dot` is the column's colour marker (a label always sits next to it); the
 // empty state tells the user what the column is for.
@@ -149,6 +157,7 @@ export function MissionKanbanBoard({
   onLoadMoreDone,
   query = "",
   sort = "newest",
+  selection,
 }: Props) {
   const [visibleCount, setVisibleCount] = useState<Partial<Record<ColumnId, number>>>({});
   const byColumn: Record<ColumnId, Mission[]> = {
@@ -209,7 +218,7 @@ export function MissionKanbanBoard({
                 ? byColumn.done
                 : byColumn[col.id].slice(0, visibleCount[col.id] ?? COLUMN_PAGE_SIZE)
               ).map((mission) => (
-                <MissionCard key={mission._id} mission={mission} projectId={projectId} />
+                <MissionCard key={mission._id} mission={mission} projectId={projectId} selection={selection} />
               ))
             )}
 
@@ -250,7 +259,7 @@ export function MissionKanbanBoard({
   );
 }
 
-function MissionCard({ mission, projectId }: { mission: Mission; projectId: string }) {
+function MissionCard({ mission, projectId, selection }: { mission: Mission; projectId: string; selection: Props["selection"] }) {
   const blocked = blockedExternalResult(mission);
   const detailHref = `/projects/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(mission._id)}`;
 
@@ -258,11 +267,24 @@ function MissionCard({ mission, projectId }: { mission: Mission; projectId: stri
     <Card
       data-mission={mission._id}
       size="sm"
-      className="glow-hover gap-2 px-3 py-3"
+      className={cn("glow-hover gap-2 px-3 py-3", selection?.selected.has(mission._id) && "ring-2 ring-primary")}
     >
+      {selection ? (
+        <Checkbox
+          aria-label={`Select ${titleCase(mission.type)}${mission.number !== undefined ? ` #${mission.number}` : ""}`}
+          checked={selection.selected.has(mission._id)}
+          disabled={!isSelectable(mission)}
+          onCheckedChange={() => selection.onToggle(mission._id)}
+        />
+      ) : null}
       <Link
         href={detailHref}
         className="flex flex-col gap-2 no-underline"
+        onClick={(event) => {
+          if (!selection) return;
+          event.preventDefault();
+          if (isSelectable(mission)) selection.onToggle(mission._id);
+        }}
       >
         <div className="flex flex-col gap-1.5">
           <span className="flex items-start gap-2 break-words text-sm font-semibold text-foreground">
