@@ -39,6 +39,8 @@ const transcriptTurnZ = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("tool_call"),
     toolName: z.string(),
+    // Native id pairing a call with its result; absent in older transcripts.
+    toolCallId: z.string().optional(),
     // `.optional()` is load-bearing under zod v4: a bare `z.unknown()` object
     // key was optional at runtime in v3 but is required in v4, which would
     // reject a whole transcript over one turn that omits `arguments`.
@@ -48,6 +50,7 @@ const transcriptTurnZ = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("tool_result"),
     toolName: z.string(),
+    toolCallId: z.string().optional(),
     success: z.boolean(),
     result: z.unknown().optional(),
     timestamp: z.string().optional(),

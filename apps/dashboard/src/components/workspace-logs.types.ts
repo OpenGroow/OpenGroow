@@ -5,8 +5,8 @@ import type { Id } from "@convex/_generated/dataModel";
 // (e.g. an MCP server like carousel-mcp) during the Run.
 export type SessionTranscriptTurn =
   | { kind: "message"; role: "user" | "assistant"; text: string; timestamp?: string }
-  | { kind: "tool_call"; toolName: string; arguments?: unknown; timestamp?: string }
-  | { kind: "tool_result"; toolName: string; success: boolean; result?: unknown; timestamp?: string };
+  | { kind: "tool_call"; toolName: string; toolCallId?: string; arguments?: unknown; timestamp?: string }
+  | { kind: "tool_result"; toolName: string; toolCallId?: string; success: boolean; result?: unknown; timestamp?: string };
 
 export type TranscriptState =
   | { status: "loading" }

@@ -281,6 +281,34 @@ describe("workspace_logs_node.getWorkspaceRunTranscript", () => {
     });
   });
 
+  it("passes `toolCallId` through on tool calls and results", async () => {
+    const t = convexTest(schema, modules);
+    await seedInstance(t);
+    await seedProjectAgent(t);
+    const missionId = await seedMission(t);
+    const runId = await seedRun(t, missionId, { sessionKey: "mega-run-latest", createdAt: 1000 });
+
+    const resultPromise = t
+      .withIdentity(OWNER)
+      .action(api.workspace_logs_node.getWorkspaceRunTranscript, {
+        instanceId: INSTANCE_ID,
+        workspaceKey: WORKSPACE_KEY,
+      });
+
+    const turns = [
+      { kind: "tool_call", toolName: "write_file", toolCallId: "call_1" },
+      { kind: "tool_result", toolName: "write_file", success: true, toolCallId: "call_1" },
+    ];
+    await simulateSessionTranscriptResult(t, { found: true, turns });
+
+    await expect(resultPromise).resolves.toStrictEqual({
+      found: true,
+      turns,
+      runId,
+      parent: { kind: "mission", missionId },
+    });
+  });
+
   it("accepts tool turns that omit `arguments` / `result`", async () => {
     // zod v3 treated a bare `z.unknown()` object key as optional at runtime;
     // v4 does not. Without `.optional()` on those two keys, one such turn

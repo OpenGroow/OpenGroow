@@ -11,6 +11,7 @@ import { TabNav } from "@/components/opengroow/tab-nav";
 import { AgentWorkspaceView } from "@/src/components/agent-workspace-view";
 import { WorkspacePromptPage } from "@/src/components/workspace-prompt-page";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
+import { RunTraceView } from "@/src/components/trace/run-trace-view";
 import { TranscriptPanel } from "@/src/components/workspace-logs-transcript";
 import type { TranscriptState } from "@/src/components/workspace-logs.types";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
@@ -52,6 +53,7 @@ function MissionRunHeader({ instanceId, missionId, runId, children }: RunViewPro
   const tabs = [
     { label: "Prompt", href: missionRunHref(instanceId, missionId, runId, "prompt"), enabled: true },
     { label: "Logs", href: missionRunHref(instanceId, missionId, runId, "logs"), enabled: true },
+    { label: "Trace", href: missionRunHref(instanceId, missionId, runId, "trace"), enabled: true },
   ];
 
   // A Run belongs to one Mission: a URL pairing a Mission with another Mission's Run shows neither.
@@ -105,6 +107,14 @@ export function MissionRunLogsView({ instanceId, runId }: Pick<RunViewProps, "in
   return (
     <RunWorkspace instanceId={instanceId} runId={runId}>
       {(params) => <RunTranscript params={params} runId={runId as Id<"runs">} />}
+    </RunWorkspace>
+  );
+}
+
+export function MissionRunTraceView({ instanceId, runId }: Pick<RunViewProps, "instanceId" | "runId">) {
+  return (
+    <RunWorkspace instanceId={instanceId} runId={runId}>
+      {(params) => <RunTraceView params={params} runId={runId as Id<"runs">} />}
     </RunWorkspace>
   );
 }

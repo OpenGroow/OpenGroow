@@ -218,7 +218,7 @@ describe("WorkspaceLogsPage", () => {
     await renderPage();
 
     expect(document.querySelector("strong")?.textContent).toBe("19 Publications");
-    expect(document.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelectorAll("ul li")).toHaveLength(2);
     expect(document.querySelector("code")?.textContent).toBe("report.json");
     expect(document.body.textContent).not.toContain("**19 Publications**");
     expect(document.body.textContent).toContain("Use **this** literally");
@@ -357,8 +357,27 @@ describe("WorkspaceLogsPage", () => {
       workspaceKey: "ws-hello",
       runId: "job-run-1",
     });
-    expect(document.body.textContent).toContain("Tool call · read_file");
-    expect(document.body.textContent).toContain("Tool result · read_file");
+    expect(document.body.textContent).toContain("read_file");
+    expect(document.body.textContent).toContain("batch.json");
+    expect(document.body.textContent).toContain("batch content");
+  });
+
+  it("shows the activity list and opens a Tool Call to its full payloads", async () => {
+    getWorkspaceRunTranscriptMock.mockResolvedValue({
+      found: true,
+      turns: [
+        { kind: "tool_call", toolName: "read_file", toolCallId: "c1", arguments: { path: "a-very-long-path.json" } },
+        { kind: "tool_result", toolName: "read_file", toolCallId: "c1", success: true, result: "file body" },
+      ],
+      runId: "run-1",
+      parent: { kind: "mission", missionId: "mission-1" },
+    });
+    await renderPage();
+    expect(document.querySelector('[data-testid="trace-list"]')).not.toBeNull();
+    const details = document.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.textContent).toContain("a-very-long-path.json");
+    expect(details?.textContent).toContain("file body");
   });
 
   it("expands a generic Job when its Run transcript is selected", async () => {

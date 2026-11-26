@@ -7,7 +7,7 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import { runLogsHref } from "@/src/lib/instance-path";
+import { runLogsHref, runTraceHref } from "@/src/lib/instance-path";
 import { formatCadence, WEEKDAYS } from "@/src/components/instance-schedules-page";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,7 @@ import {
   ChartColumn,
   Clock,
   Download,
+  Activity,
   Ellipsis,
   Pause,
   Play,
@@ -386,6 +387,12 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   <DropdownMenuLinkItem render={<Link href={runLogsHref(instanceId, job.templateId, job.latestRunId)} />}>
                     <ScrollText />
                     View logs
+                  </DropdownMenuLinkItem>
+                ) : null}
+                {job.workspaceKey !== undefined && job.latestRunId !== undefined ? (
+                  <DropdownMenuLinkItem render={<Link href={runTraceHref(instanceId, job.templateId, job.latestRunId)} />}>
+                    <Activity />
+                    View trace
                   </DropdownMenuLinkItem>
                 ) : null}
               </DropdownMenuContent>

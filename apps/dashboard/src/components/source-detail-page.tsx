@@ -12,7 +12,7 @@ import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
 import { useProduceSource } from "@/src/components/source-route-target";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
-import { runLogsHref } from "@/src/lib/instance-path";
+import { runLogsHref, runTraceHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
 import { SOURCE_PIPELINE_STAGES, deriveSourcePipelineState, type SourcePipelineState } from "@/src/lib/source-pipeline";
 import { formatSourceDate, SourceStatusPill } from "@/src/components/source-status-pill";
@@ -130,6 +130,14 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
                 className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 View Run
+              </Link>
+              <span aria-hidden="true">·</span>
+              <Link
+                data-testid="source-run-trace-link"
+                href={runTraceHref(instanceId, source.templateId, source.runId)}
+                className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                View trace
               </Link>
             </>
           ) : null}

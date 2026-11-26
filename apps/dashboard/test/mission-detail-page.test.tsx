@@ -452,7 +452,7 @@ describe("MissionDetailContent", () => {
     const row = document.querySelector('[data-testid="run-row"]')!;
     expect(row.textContent).toContain("Create Article #3");
     const pills = Array.from(row.querySelectorAll("a")).map((a) => a.textContent);
-    expect(pills).toEqual(["View logs", "View prompt"]);
+    expect(pills).toEqual(["View logs", "View trace", "View prompt"]);
     expect(row.querySelectorAll("svg").length).toBeGreaterThanOrEqual(4);
     expect(row.textContent).toContain("Started");
     expect(row.textContent).toContain("Completed");
