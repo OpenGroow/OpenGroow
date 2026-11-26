@@ -355,14 +355,21 @@ describe("InstanceSourcesContent", () => {
       expect(Array.from(document.querySelectorAll("[aria-label='Ready sources'] li")).some((row) => row.textContent?.includes("Search keyword"))).toBe(true);
     });
 
-    it("cuts a long title to 100 characters below lg, and keeps the whole title for desktop", async () => {
+    it("shows the Sources as a gallery of cards, a long title clamped by the layout and complete in its tooltip", async () => {
       const long = "A Christmas gift reel for a wife. ".repeat(10).trim();
       await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready" });
-      const links = Array.from(document.querySelectorAll("[aria-label='Ready sources'] li a"));
-      const cut = links.find((link) => link.getAttribute("title") === long)!;
-      expect(cut.querySelector(".lg\\:hidden")!.textContent).toBe(`${long.slice(0, 100).trimEnd()}…`);
-      expect(cut.querySelector(".hidden")!.textContent).toBe(long);
-      expect(links.find((link) => link.getAttribute("title") === "Short title")!.querySelector(".lg\\:hidden")!.textContent).toBe("Short title");
+      const gallery = document.querySelector("[aria-label='Ready sources'] ul")!;
+      expect(gallery.className).toContain("grid-cols");
+      expect(gallery.querySelectorAll(":scope > li")).toHaveLength(2);
+      const link = Array.from(gallery.querySelectorAll("li a")).find((a) => a.getAttribute("title") === long)!;
+      expect(link.className).toContain("line-clamp-2");
+      expect(link.textContent).toBe(long);
+    });
+
+    it("shows the status, Agent and date of a Source on the Other tab's cards", async () => {
+      await render([makeSource({ _id: "a", status: "failed" })], { tab: "other" });
+      const card = document.querySelector("ul li")!;
+      expect(card.textContent).toContain("Failed");
     });
 
     it("uses the same Select mode as All to delete several Ready Sources", async () => {

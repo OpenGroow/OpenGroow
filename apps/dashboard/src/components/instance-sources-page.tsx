@@ -205,33 +205,20 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
             {visible.length === 0 ? (
               <p className="text-sm text-muted-foreground">No Sources match these filters.</p>
             ) : (
-              <div className="grid gap-3">
-                <div
-                  aria-hidden="true"
-                  className={cn(selection.selecting ? SELECT_ROW_GRID : ROW_GRID, "px-5 text-sm text-muted-foreground max-lg:hidden")}
-                >
-                  {selection.selecting ? <span /> : null}
-                  <span>Source</span>
-                  <span>Status</span>
-                  <span>Agent</span>
-                  <span>Created</span>
-                  <span>Score</span>
-                  <span className="text-right">Actions</span>
-                </div>
-                <ul className="grid gap-3">
-                  {visible.map((source) => (
-                    <SourceRowItem
-                      key={source._id}
-                      source={source}
-                      instanceId={instanceId}
-                      platform={platformFor(source)}
-                      selecting={selection.selecting}
-                      selected={selection.selected.has(source._id)}
-                      onToggle={() => selection.toggleOne(source._id)}
-                    />
-                  ))}
-                </ul>
-              </div>
+              <ul className={GALLERY}>
+                {visible.map((source) => (
+                  <SourceCard
+                    key={source._id}
+                    source={source}
+                    instanceId={instanceId}
+                    platform={platformFor(source)}
+                    selecting={selection.selecting}
+                    selected={selection.selected.has(source._id)}
+                    onToggle={() => selection.toggleOne(source._id)}
+                    showStatus
+                  />
+                ))}
+              </ul>
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -396,20 +383,20 @@ function DeleteSourcesDialog({ selection }: { selection: SourceSelection }) {
 /** Matches the server's `MAX_SOURCES_PER_REMOVAL`. */
 const DELETE_CHUNK = 100;
 
-const ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
+const GALLERY = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
-// Select mode adds a leading checkbox column.
-const SELECT_ROW_GRID =
-  "grid items-center gap-x-4 lg:grid-cols-[1.25rem_minmax(0,3fr)_9rem_minmax(0,1.2fr)_7rem_4rem_6rem]";
-
-function SourceRowItem({
+/**
+ * A Source in the gallery: its image, with the format and the score over it, and its title below. `showStatus`
+ * (the Other tab) adds the pipeline status, the Agent and the date, since those Sources are not scored yet.
+ */
+function SourceCard({
   source,
   instanceId,
   platform,
   selecting,
   selected,
   onToggle,
+  showStatus = false,
 }: {
   source: SourceRow;
   instanceId: string;
@@ -417,64 +404,63 @@ function SourceRowItem({
   selecting: boolean;
   selected: boolean;
   onToggle: () => void;
+  showStatus?: boolean;
 }) {
-  // What the Source teaches is the most readable title; the origin is the
-  // fallback, and is then only repeated below as provenance when it is not
-  // already the title.
+  // What the Source teaches is the most readable title; the origin is the fallback.
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
   return (
     <li>
       <Card
         className={cn(
-          selecting ? SELECT_ROW_GRID : ROW_GRID,
-          "relative cursor-pointer gap-y-3 px-5 py-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
-          selected && "ring-2 ring-primary"
+          "relative flex h-full cursor-pointer flex-col gap-3 p-2 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+          selected && "ring-2 ring-primary",
         )}
       >
-        {selecting ? (
-          <div className="relative z-10">
-            <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
-          </div>
-        ) : null}
-        <div className="flex min-w-0 items-center gap-4">
-          <SourceThumbnail source={source} className="size-24" />
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0.5">
-            <Link
-              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
-              className="m-0 w-fit max-w-full truncate text-base font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
-              onClick={(event) => {
-                // In select mode the whole row toggles; it never opens the Source.
-                if (!selecting) return;
-                event.preventDefault();
-                onToggle();
-              }}
-            >
-              {title}
-            </Link>
-            <div>
-              <FormatBadge source={source} platform={platform} />
+        <div className="relative aspect-[4/5] overflow-hidden rounded-xl bg-muted">
+          <SourceThumbnail source={source} className="size-full rounded-none" />
+          {selecting ? (
+            <div className="absolute left-2 top-2 z-10 rounded bg-background/90 p-1">
+              <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
             </div>
+          ) : null}
+          <div className="absolute bottom-2 left-2 right-2 flex items-end justify-between gap-2">
+            <FormatBadge source={source} platform={platform} />
+            {score !== undefined ? <Badge variant="outline" className="bg-background/90 tabular-nums">Score {score}</Badge> : null}
           </div>
-        </div>
-        <div>
-          <SourcePipelinePill source={source} />
-        </div>
-        <span className="truncate text-sm text-muted-foreground">{agentLabel(source.templateId)}</span>
-        <span className="text-sm text-muted-foreground tabular-nums">{formatSourceDate(source.createdAt)}</span>
-        <span className="text-sm text-foreground tabular-nums">
-          {score ?? (stageOf(source) === "Ready" ? <NotScoredHint /> : "–")}
-        </span>
-        <div className="relative z-10 flex justify-end">
           {isWebUrl(source.origin) ? (
             <Button
               variant="outline"
               size="icon"
+              className="absolute right-2 top-2 z-10 size-8 bg-background/90"
               nativeButton={false}
               render={<a href={source.origin} target="_blank" rel="noreferrer" aria-label="Open original" />}
             >
               <ExternalLink />
             </Button>
+          ) : null}
+        </div>
+        <div className="grid min-w-0 gap-1 px-1 pb-1">
+          <Link
+            href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
+            title={title}
+            className="m-0 line-clamp-2 text-sm font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+            onClick={(event) => {
+              // In select mode the whole card toggles; it never opens the Source.
+              if (!selecting) return;
+              event.preventDefault();
+              onToggle();
+            }}
+          >
+            {title}
+          </Link>
+          {showStatus ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <SourcePipelinePill source={source} />
+              {stageOf(source) === "Ready" ? <NotScoredHint /> : null}
+              <span className="truncate">{agentLabel(source.templateId)}</span>
+              <span className="tabular-nums">{formatSourceDate(source.createdAt)}</span>
+            </div>
           ) : null}
         </div>
       </Card>
@@ -483,10 +469,6 @@ function SourceRowItem({
 }
 
 type ReadySort = "score" | "newest";
-
-// Below the `lg` breakpoint a Ready title is cut at this many characters.
-const READY_TITLE_CHARS = 100;
-const shortTitle = (title: string): string => (title.length > READY_TITLE_CHARS ? `${title.slice(0, READY_TITLE_CHARS).trimEnd()}…` : title);
 
 function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadMore }: {
   tabs: React.ReactNode;
@@ -535,14 +517,9 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
       {ready.length === 0 ? (
         <p className="text-sm text-muted-foreground">No scored Sources yet.</p>
       ) : (
-        <div className="grid gap-3">
-          {/* Same height as the column names of the Other tab, so the rows start at the same place on both tabs. */}
-          <div aria-hidden="true" className="px-5 text-sm max-lg:hidden">
-            &nbsp;
-          </div>
-          <ul className="grid gap-3">
+        <ul className={GALLERY}>
             {ready.map((source) => (
-              <ReadySourceRow
+              <SourceCard
                 key={source._id}
                 source={source}
                 instanceId={instanceId}
@@ -553,7 +530,6 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
               />
             ))}
           </ul>
-        </div>
       )}
 
       {hasMore ? (
@@ -566,58 +542,5 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
 
       <DeleteSourcesDialog selection={selection} />
     </section>
-  );
-}
-
-function ReadySourceRow({ source, instanceId, platform, selecting, selected, onToggle }: {
-  source: SourceRow;
-  instanceId: string;
-  platform?: SourcePlatform;
-  selecting: boolean;
-  selected: boolean;
-  onToggle: () => void;
-}) {
-  const title = source.marketing.summary ?? source.origin;
-  const score = sourceScore(source.scoring);
-
-  return (
-    <li>
-      <Card
-        className={cn(
-          "relative flex cursor-pointer flex-col gap-4 p-3 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center lg:pr-5",
-          selected && "ring-2 ring-primary",
-        )}
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-4">
-          {selecting ? (
-            <div className="relative z-10 pl-2">
-              <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={`Select ${title}`} />
-            </div>
-          ) : null}
-          <SourceThumbnail source={source} className="size-24" />
-          <div className="grid min-w-0 max-w-lg gap-2 lg:max-w-none">
-            <Link
-              href={`/projects/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(source._id)}`}
-              title={title}
-              className="m-0 break-words text-sm font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
-              onClick={(event) => {
-                // In select mode the title toggles the row; it never opens the Source.
-                if (!selecting) return;
-                event.preventDefault();
-                onToggle();
-              }}
-            >
-              {/* Cut at READY_TITLE_CHARS below `lg` only: desktop shows the whole title. */}
-              <span className="lg:hidden">{shortTitle(title)}</span>
-              <span className="hidden lg:inline">{title}</span>
-            </Link>
-            <div className="flex flex-wrap items-center gap-2">
-              <FormatBadge source={source} platform={platform} />
-              {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
-            </div>
-          </div>
-        </div>
-      </Card>
-    </li>
   );
 }
