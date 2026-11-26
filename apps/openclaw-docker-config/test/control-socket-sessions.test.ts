@@ -198,6 +198,7 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "bash",
         success: false,
         result: "command failed",
@@ -230,6 +231,7 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "carousel-mcp.create_carousel",
         success: true,
         result: { id: "carousel-1", slides: [{ doText: "1" }] },
@@ -262,6 +264,7 @@ describe("readSessionTranscript", () => {
     expect(result.turns).toEqual([
       {
         kind: "tool_result",
+        toolCallId: "call_1",
         toolName: "carousel-mcp.status_check",
         success: true,
         result: { type: "toolResult", structured: { status: "ready" } },
