@@ -28,8 +28,7 @@ type Review = {
 };
 
 type ReviewReferences = {
-  families: Array<{ id: string; name: string | null; archived: boolean }>;
-  recipes: Array<{ id: string; name: string | null; archived: boolean; familyId: string | null }>;
+  recipes: Array<{ id: string; name: string | null; archived: boolean }>;
   publications: Array<{ id: string; target: string | null; missionId: string | null }>;
 };
 
@@ -146,11 +145,10 @@ function References({ instanceId, references }: { instanceId: string; references
   const base = `/projects/${encodeURIComponent(instanceId)}`;
   const enc = encodeURIComponent;
   const items: Array<{ key: string; label: string | null; href: string | null; archived: boolean }> = [
-    ...references.families.map((f) => ({ key: `f-${f.id}`, label: f.name, href: f.name ? `${base}/library/${enc(f.id)}` : null, archived: f.archived })),
     ...references.recipes.map((r) => ({
       key: `r-${r.id}`,
       label: r.name,
-      href: r.name && r.familyId ? `${base}/library/${enc(r.familyId)}/recipes/${enc(r.id)}` : null,
+      href: r.name ? `${base}/recipes/${enc(r.id)}` : null,
       archived: r.archived,
     })),
     ...references.publications.map((p) => ({

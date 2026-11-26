@@ -4,7 +4,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FamilyRecipes } from "../src/components/family-recipes";
+import { RecipesContent } from "../src/components/recipes-page";
 import { ProductionRecipeContent } from "../src/components/production-recipe-page";
 
 globalThis.PointerEvent ??= MouseEvent as typeof PointerEvent;
@@ -24,6 +24,7 @@ let versions: unknown;
 
 vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
+  usePaginatedQuery: () => ({ results: [], status: "Exhausted", loadMore: () => undefined }),
   useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : undefined),
   useMutation: (key: string) => mutations[key],
 }));
@@ -39,6 +40,10 @@ vi.mock("@convex/_generated/api", () => ({
       listTargets: "recipes.listTargets",
       setTarget: "recipes.setTarget",
     },
+    recipe_generation: { generateRecipe: "generation.generate" },
+    recipe_generation_views: { listGenerations: "generation.list" },
+    creative_families: { list: "families.list" },
+    sources: { listByInstance: "sources.list" },
   },
 }));
 
@@ -50,7 +55,7 @@ const V2 = {
   createdAt: Date.UTC(2026, 0, 2),
 };
 const V1 = { ...V2, version: 1, prompt: "Close-up", createdAt: Date.UTC(2026, 0, 1) };
-const RECIPE = { _id: "rec-1", creativeFamilyId: "fam-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
+const RECIPE = { _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
 
 const TARGETS = [
   {
@@ -104,18 +109,18 @@ describe("Production Recipes UI", () => {
     await act(async () => (document.body.querySelector("form") as HTMLFormElement).requestSubmit());
   };
 
-  it("lists the recipes of a family with a link to each", async () => {
-    recipes = [{ _id: "rec-1", creativeFamilyId: "fam-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 2 }];
-    await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
+  it("lists the recipes of the Project with a link to each", async () => {
+    recipes = [{ _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 2 }];
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
     expect(container.textContent).toContain("Reaction clip");
     expect(container.textContent).toContain("v2");
     expect(container.textContent).toContain("Video Demo · Letter video");
-    expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/library/fam-1/recipes/rec-1");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/recipes/rec-1");
   });
 
   it("creates a recipe with prompt and constraints", async () => {
-    await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
-    await press("New recipe");
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    await press("Create Recipe");
     await fill("#recipe-name", " Reaction clip ");
     await fill("#recipe-description", "A reaction");
     await choose("#recipe-target", "0");
@@ -125,7 +130,6 @@ describe("Production Recipes UI", () => {
     await submit();
     expect(mutations["recipes.create"]).toHaveBeenCalledWith({
       instanceId: "p1",
-      familyId: "fam-1",
       templateId: "@example/video-demo",
       missionType: "create_letter_video",
       name: "Reaction clip",
@@ -139,8 +143,8 @@ describe("Production Recipes UI", () => {
 
   it("shows the server error and keeps the form open", async () => {
     mutations["recipes.create"].mockRejectedValue(new Error("[Request ID: x] Server Error\nUncaught Error: Something went wrong\n    at handler"));
-    await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
-    await press("New recipe");
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    await press("Create Recipe");
     await fill("#recipe-name", "R");
     await fill("#recipe-description", "d");
     await choose("#recipe-target", "0");
@@ -190,7 +194,7 @@ describe("Production Recipes UI", () => {
     expect(writeText.mock.calls[0]![0].length).toBeGreaterThan(0);
   });
 
-  it("deletes after a confirmation, then returns to the family's Recipes", async () => {
+  it("deletes after a confirmation, then returns to the Recipes page", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
     await press("Delete");
@@ -214,8 +218,8 @@ describe("Production Recipes UI", () => {
   });
 
   it("asks for a Mission type before creating, and says when none is available", async () => {
-    await act(async () => root.render(<FamilyRecipes instanceId="p1" familyId="fam-1" canCreate />));
-    await press("New recipe");
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    await press("Create Recipe");
     await fill("#recipe-name", "R");
     await fill("#recipe-description", "d");
     await fill("#recipe-instructions", "i");

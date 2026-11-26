@@ -12,7 +12,7 @@ import { INSTALLED_PUBLISHERS, PUBLISHER_PACKAGES_LIST } from "./postiz-installe
 // Seam 3: `analytics.listForProject` is simulated.
 const refreshAction = vi.fn(async (..._args: unknown[]) => ({ read: 2, unavailable: 0, failed: 0 }));
 // `rows` may depend on the adapter the page asks for; `adapters` is what `analytics.adaptersForProject` answers.
-let rows: unknown[] | undefined | ((args: { adapter?: string; familyId?: string }) => unknown[]) = [];
+let rows: unknown[] | undefined | ((args: { adapter?: string; recipeId?: string }) => unknown[]) = [];
 let adapters: unknown[] = [];
 let unavailable: unknown[] = [];
 let emptyReason: unknown = { reason: "none" };
@@ -31,10 +31,9 @@ const SOCIAL_ADAPTER = {
     { key: "saves", label: "Saves", type: "counter", format: "number" },
   ],
 };
-const listArgs: Array<{ adapter?: string; recipeId?: string; familyId?: string; from?: number }> = [];
+const listArgs: Array<{ adapter?: string; recipeId?: string; from?: number }> = [];
 // What `analytics_summary.summaryForProject` answers for each grouping.
 let recipeSummary: unknown = { groupBy: "recipe", recipes: [], unattributed: 0, partial: false };
-let familySummary: unknown = { groupBy: "family", families: [], unattributed: 0, partial: false };
 const summaryArgs: Array<Record<string, unknown>> = [];
 vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
@@ -48,7 +47,7 @@ vi.mock("convex/react", () => ({
     if (name === "analytics_summary.summaryForProject") {
       if ((args as unknown) === "skip") return undefined;
       summaryArgs.push(args as Record<string, unknown>);
-      return (args as { groupBy?: string }).groupBy === "family" ? familySummary : recipeSummary;
+      return recipeSummary;
     }
     if (name === "analytics.listForProject") {
       if (args === undefined || (args as unknown) === "skip") return undefined;
@@ -112,7 +111,6 @@ describe("Analytics page", () => {
     listArgs.length = 0;
     summaryArgs.length = 0;
     recipeSummary = { groupBy: "recipe", recipes: [], unattributed: 0, partial: false };
-    familySummary = { groupBy: "family", families: [], unattributed: 0, partial: false };
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -317,7 +315,7 @@ describe("Analytics page", () => {
     expect(container.querySelector("li button video, button[data-publication] video")?.getAttribute("src")).toBe("https://cdn.example.com/v.mp4#t=0.1");
   });
 
-  describe("Publications, Recipes and Families views (ADR-084)", () => {
+  describe("Publications and Recipes views (ADR-084, ADR-088)", () => {
     const view = (name: string) => Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Analytics view"] button')).find((t) => t.textContent === name)!;
     const open = async (name: string) => act(async () => view(name).click());
     const trigger = (label: string) => container.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
@@ -351,37 +349,24 @@ describe("Analytics page", () => {
       unavailable: [],
       ...over,
     });
-    const family = (over: Record<string, unknown> = {}) => ({
-      familyId: "fam-1",
-      familyName: "Reaction",
-      archived: false,
-      publications: 3,
-      lastPublishedAt: Date.UTC(2026, 10, 15),
-      adapters: [reading("postiz")],
-      unavailable: [],
-      recipes: [recipe()],
-      ...over,
-    });
-
-    it("offers the three views in each adapter tab, opening on Publications", async () => {
+    it("offers the two views in each adapter tab, opening on Publications", async () => {
       rows = [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })];
       await render();
       expect(Array.from(container.querySelectorAll('[aria-label="Analytics view"] button')).map((t) => [t.textContent, t.getAttribute("aria-pressed")])).toEqual([
         ["Publications", "true"],
         ["Recipes", "false"],
-        ["Families", "false"],
       ]);
       expect(listed()[0]).toContain("Reel");
     });
 
-    it("shows each Publication's recipe, version and family, or Unattributed", async () => {
+    it("shows each Publication's recipe and version, or Unattributed", async () => {
       rows = [
-        row({ title: "Made", snapshots: [snap(DAY, { views: 12 })], attribution: { recipeId: "rec-1", recipeName: "Close-up", version: 2, familyId: "fam-1", familyName: "Reaction" } }),
+        row({ title: "Made", snapshots: [snap(DAY, { views: 12 })], attribution: { recipeId: "rec-1", recipeName: "Close-up", version: 2 } }),
         row({ title: "Free", snapshots: [snap(2 * DAY, { views: 5 })] }),
       ];
       await render();
       const made = listed().find((t) => t.includes("Made"))!;
-      expect(made).toContain("Close-up v2 · Reaction");
+      expect(made).toContain("Close-up v2");
       expect(made).not.toContain("Unattributed");
       expect(listed().find((t) => t.includes("Free"))).toContain("Unattributed");
     });
@@ -419,28 +404,14 @@ describe("Analytics page", () => {
       expect(container.querySelectorAll('ul[aria-label="Recipes"] > li')).toHaveLength(0);
     });
 
-    it("lists the families and says which recipes they hold", async () => {
-      familySummary = { groupBy: "family", families: [family()], unattributed: 0, partial: false };
+    it("has no Families view and no family filter", async () => {
       await render();
-      await open("Families");
-      await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Families"] button[aria-expanded]')!.click());
-      expect(container.querySelector('ul[aria-label="Families"]')!.textContent).toContain("3 publications · 1 recipe");
-    });
-
-    it("counts a family's Publications and recipes for the adapter being viewed only", async () => {
-      const split = recipe({ publications: 5, adapters: [reading("postiz", { publications: 2 }), reading("search", { publications: 3 })] });
-      familySummary = { groupBy: "family", families: [family({ recipes: [split] })], unattributed: 0, partial: false };
-      await render();
-      await open("Families");
-      await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Families"] button[aria-expanded]')!.click());
-      const text = container.querySelector('ul[aria-label="Families"]')!.textContent!;
-      expect(text).toContain("3 publications · 1 recipe");
-      expect(text).not.toContain("5 publications");
+      expect(Array.from(container.querySelectorAll('[aria-label="Analytics view"] button')).map((t) => t.textContent)).not.toContain("Families");
+      expect(container.querySelector('[aria-label="Filter by family"]')).toBeNull();
     });
 
     it("drills down from a group to its Publications through the same filters", async () => {
       recipeSummary = { groupBy: "recipe", recipes: [recipe()], unattributed: 0, partial: false };
-      familySummary = { groupBy: "family", families: [family()], unattributed: 0, partial: false };
       await render();
       await open("Recipes");
       await act(async () => container.querySelector<HTMLButtonElement>('ul[aria-label="Recipes"] button[aria-expanded]')!.click());
@@ -462,11 +433,11 @@ describe("Analytics page", () => {
     });
 
     it("keeps the filters reachable when they leave no Publication", async () => {
-      familySummary = { groupBy: "family", families: [family()], unattributed: 0, partial: false };
-      rows = (args) => (args.familyId ? [] : [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })]);
+      recipeSummary = { groupBy: "recipe", recipes: [recipe()], unattributed: 0, partial: false };
+      rows = (args) => (args.recipeId ? [] : [row({ title: "Reel", snapshots: [snap(DAY, { views: 12 })] })]);
       await render();
-      await choose("Filter by family", "fam-1");
-      expect(listArgs.at(-1)).toMatchObject({ familyId: "fam-1" });
+      await choose("Filter by recipe", "rec-1");
+      expect(listArgs.at(-1)).toMatchObject({ recipeId: "rec-1" });
       expect(text()).toContain("No posts match these filters.");
     });
   });

@@ -14,7 +14,6 @@ export type PlannedContentView = {
   status: string;
   publishTargets: PublishTargetView[];
   recipe: { id: string; name: string } | null;
-  creativeFamily: { id: string; name: string } | null;
   source: { id: string; label: string } | null;
 };
 

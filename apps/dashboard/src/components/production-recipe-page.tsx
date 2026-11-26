@@ -16,13 +16,13 @@ import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-f
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
-// One Production Recipe (issue #143): its content, version history, edit
+// One Production Recipe (issue #143, ADR-088): its content, version history, edit
 // (saves a new version), delete, and the Mission type it is written for.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
-type RecipeDetail = { _id: string; creativeFamilyId: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
+type RecipeDetail = { _id: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
 
-type Props = { params: Promise<{ projectId: string; familyId: string; recipeId: string }> };
+type Props = { params: Promise<{ projectId: string; recipeId: string }> };
 
 export function ProductionRecipePage({ params }: Props) {
   const { projectId, recipeId } = use(params);
@@ -59,12 +59,12 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     : [...offered, { templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }];
   const viewingOld = shown !== null && recipe.latest !== null && shown.version !== recipe.latest.version;
 
-  async function handleDelete(familyId: string) {
+  async function handleDelete() {
     if (!window.confirm("Permanently delete this Production Recipe and its versions? Missions already created with it are not affected.")) return;
     setError(null);
     try {
       await removeRecipe({ instanceId, recipeId: id });
-      router.replace(`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(familyId)}?tab=recipes`);
+      router.replace(`/projects/${encodeURIComponent(instanceId)}/recipes`);
     } catch (e) {
       setError(extractConvexErrorMessage(e, "Could not delete the recipe."));
     }
@@ -74,11 +74,11 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     <div className="grid gap-8">
       <div className="grid gap-4">
         <Link
-          href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(recipe.creativeFamilyId)}`}
+          href={`/projects/${encodeURIComponent(instanceId)}/recipes`}
           className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          Creative Family
+          Recipes
         </Link>
         <PageHeader
           title={recipe.name}
@@ -91,7 +91,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
                   Edit
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={() => handleDelete(recipe.creativeFamilyId)}>
+              <Button type="button" variant="outline" onClick={handleDelete}>
                 <Trash2 className="size-4" />
                 Delete
               </Button>

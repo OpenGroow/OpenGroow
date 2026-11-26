@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
 import { formatValue, type MetricDecl } from "@/src/lib/analytics-figures";
 
-// The Recipes and Families views of the Analytics page (ADR-084): one row per group, read for one Analytics
+// The Recipes view of the Analytics page (ADR-084): one row per group, read for one Analytics
 // Adapter. A row is concise (Publications, how many are measured, last published); the figures sit in the
 // expanded row, platform by platform: nothing is added up across platforms or adapters. Marketing performance
 // only: no Mission, Run or usage figure, and a recipe with no Publication is not a group.
@@ -18,7 +18,6 @@ export type PlatformReading = { platform: string; publisherAdapter?: string; pub
 export type AdapterReading = { adapter: string; publications: number; measured: number; freshness?: { oldestReadingAt: number; newestReadingAt: number }; platforms: PlatformReading[] };
 export type PerformanceGroup = { publications: number; lastPublishedAt: number; adapters: AdapterReading[] };
 export type RecipeGroup = PerformanceGroup & { recipeId: string; recipeName: string; archived: boolean; versions: Array<{ version: number; publications: number }> };
-export type FamilyGroup = PerformanceGroup & { familyId: string; familyName: string; archived: boolean; recipes: Array<{ recipeId: string; recipeName: string; adapters: AdapterReading[] }> };
 
 const day = (at: number) => new Date(at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -193,28 +192,6 @@ export function RecipeGroups({ groups, adapterId, metrics, onShowPublications }:
             adapter={adapter}
             metrics={metrics}
             onShowPublications={() => onShowPublications(group.recipeId)}
-          />,
-        ];
-      })}
-    </ul>
-  );
-}
-
-export function FamilyGroups({ groups, adapterId, metrics, onShowPublications }: { groups: FamilyGroup[]; adapterId: string; metrics: MetricDecl[]; onShowPublications: (familyId: string) => void }) {
-  return (
-    <ul className="m-0 grid list-none gap-3 p-0" aria-label="Families">
-      {groups.flatMap((group) => {
-        const adapter = readingOf(group, adapterId);
-        if (!adapter) return [];
-        return [
-          <GroupRow
-            key={group.familyId}
-            name={group.familyName}
-            badges={group.archived ? ["Archived"] : []}
-            subtitle={`${plural(adapter.publications, "publication")} · ${plural(group.recipes.filter((r) => readingOf(r, adapterId)).length, "recipe")}`}
-            adapter={adapter}
-            metrics={metrics}
-            onShowPublications={() => onShowPublications(group.familyId)}
           />,
         ];
       })}

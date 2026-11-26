@@ -29,11 +29,8 @@ vi.mock("@convex/_generated/api", () => ({
     creative_family_details: { create: "creative_family_details.create", update: "creative_family_details.update" },
     creative_family_sources: { assign: "creative_family_sources.assign", remove: "creative_family_sources.remove" },
     creative_families_archive: { archive: "creative_families_archive.archive", unarchive: "creative_families_archive.unarchive" },
-    production_recipes: { list: "production_recipes.list", create: "production_recipes.create", listTargets: "production_recipes.listTargets" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
-    recipe_generation: { generateRecipe: "recipe_generation.generateRecipe" },
-    recipe_generation_views: { listGenerations: "recipe_generation_views.listGenerations" },
   },
 }));
 
@@ -230,16 +227,11 @@ describe("CreativeFamilyContent", () => {
     expect(loadMore).toHaveBeenCalled();
   });
 
-  it("shows Sources by default and switches to Recipes with the tabs", async () => {
+  it("is only a group of Sources: no Recipes tab, no Recipe generation, no recipe list", async () => {
     await render({ sources: [makeSource()] });
-    const tab = (name: string) => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name) as HTMLElement;
-    expect(tab("Sources").getAttribute("aria-selected")).toBe("true");
+    expect(document.querySelector('[role="tab"]')).toBeNull();
     expect(document.querySelector('[aria-label="Production Recipes"]')).toBeNull();
-    await act(async () => {
-      tab("Recipes").click();
-    });
-    expect(tab("Recipes").getAttribute("aria-selected")).toBe("true");
-    expect(document.querySelector('[aria-label="Production Recipes"]')).not.toBeNull();
-    expect((document.querySelector('[aria-label="Family Sources"]') as HTMLElement).hidden).toBe(true);
+    expect([...document.querySelectorAll("button")].some((b) => /generate recipe/i.test(b.textContent ?? ""))).toBe(false);
+    expect(document.querySelector('[aria-label="Family Sources"]')).not.toBeNull();
   });
 });

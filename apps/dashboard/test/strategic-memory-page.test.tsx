@@ -39,12 +39,11 @@ function makeReview(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 const REFERENCES = {
-  families: [
-    { id: "fam-1", name: "Reaction", archived: false },
-    { id: "fam-2", name: "Old mechanic", archived: true },
-    { id: "fam-3", name: null, archived: false },
+  recipes: [
+    { id: "rec-1", name: "Reel recipe", archived: false },
+    { id: "rec-2", name: "Old mechanic", archived: true },
+    { id: "rec-3", name: null, archived: false },
   ],
-  recipes: [{ id: "rec-1", name: "Reel recipe", archived: false, familyId: "fam-1" }],
   publications: [{ id: "pub-1", target: "instagram:example", missionId: "mis-1" }],
 };
 
@@ -128,9 +127,8 @@ describe("StrategicMemoryContent", () => {
     expect(document.querySelector("li[data-review]")?.textContent).toContain("Old memory");
     const hrefs = Array.from(document.querySelectorAll("li[data-review] a")).map((a) => a.getAttribute("href"));
     expect(hrefs).toEqual([
-      "/projects/instance-1/library/fam-1",
-      "/projects/instance-1/library/fam-2",
-      "/projects/instance-1/library/fam-1/recipes/rec-1",
+      "/projects/instance-1/recipes/rec-1",
+      "/projects/instance-1/recipes/rec-2",
       "/projects/instance-1/missions/mis-1",
     ]);
     expect(text()).toContain("Old mechanic");

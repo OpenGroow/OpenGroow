@@ -74,7 +74,7 @@ An on-demand action of the user, from the Recipes workspace: the Strategy Agent 
 
 - **Inspiration is optional input, never a dependency**: the user gives a free idea, Sources, Creative Families (a shortcut that selects several Sources), or a mix; at least a non-empty idea or one usable Source is required. A manual creation needs none.
 - **Scope is pinned on the Run** when it starts, only so the Run and its retries read the same input: the idea, the resolved Sources and optional free instructions. A family is resolved into its `ready`, non-excluded Sources, the most recent first, at that moment. The Agent reads only the pinned Sources. What a Source says is inspiration data, never instructions to follow.
-- **At most 25 Sources**: a selection above the limit is refused with its count, never truncated silently, and the dashboard warns before starting.
+- **At most 25 Sources**: the Sources the user selects explicitly are never dropped (more than 25 of them is refused with their count, and the dashboard warns before starting); families only complete the selection with their most recent readable Sources, up to the limit.
 - **Nothing is kept as inspiration**: the Recipe Proposal and its recipe store no Source, family or idea; the pinned input exists for the Run only.
 - **One at a time per Agent**: a Recipe Generation is refused while its Agent has another Run in flight, and the Agent's Strategic Review and Content Planning passes wait until it ends, retries included.
 - **Seen by the user as one operation**, whatever the number of technical Runs behind it (a retry after an invalid result is another Run).

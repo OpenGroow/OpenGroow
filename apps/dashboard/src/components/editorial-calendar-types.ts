@@ -13,7 +13,6 @@ export type CalendarItem = {
   rationale: string;
   publishTargets: string[];
   targets?: CalendarTarget[];
-  creativeFamily?: { name: string } | null;
   plan: { periodStart: string; periodEnd: string } | null;
 };
 

@@ -13,7 +13,7 @@ import type { Generation } from "@/src/components/recipe-generation";
 import { cn } from "@/lib/utils";
 import { recipeTargetLabel, type RecipeTarget } from "@/src/lib/production-recipe-form";
 
-// Review of a Recipe Proposal (ADR-087, ticket #195): the existing Production Recipe form, prefilled and editable,
+// Review of a Recipe Proposal (ADR-087, ticket #195, ADR-088): the existing Production Recipe form, prefilled and editable,
 // with the rationale and cited Sources read-only. Cancel writes nothing; Save creates the Recipe from the proposal's Run.
 
 export type RecipeProposal = {
@@ -25,6 +25,7 @@ export type RecipeProposal = {
   instructions: string;
   constraints: string[];
   rationale: string;
+  sourceIds?: string[];
 };
 
 type CitedSource = { sourceId: string; title: string };
@@ -92,7 +93,7 @@ function ProposalContext({ instanceId, generation, proposal }: { instanceId: str
         </Button>
       </div>
       <div className="border-t border-border pt-4">
-        <CitedSources instanceId={instanceId} runId={generation.runId} />
+        {proposal.sourceIds && proposal.sourceIds.length > 0 ? <CitedSources instanceId={instanceId} runId={generation.runId} /> : <p className="m-0 text-sm text-muted-foreground">Generated from your idea, with no Source.</p>}
       </div>
     </div>
   );
@@ -111,15 +112,10 @@ const countLines = (text: string) => text.split("\n").filter((line) => line.trim
 
 export function RecipeProposalReview({
   instanceId,
-  familyId,
-  familyName,
   generation,
   onClose,
 }: {
   instanceId: string;
-  familyId: string;
-  /** Shown as "Generated from …" in the review header. */
-  familyName?: string;
   /** The generation under review; null when the review is closed. */
   generation: Generation | null;
   onClose: () => void;
@@ -130,7 +126,7 @@ export function RecipeProposalReview({
   if (!generation || !proposal) return null;
 
   if (generation.recipeId) {
-    const recipeHref = `/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(familyId)}/recipes/${encodeURIComponent(generation.recipeId)}`;
+    const recipeHref = `/projects/${encodeURIComponent(instanceId)}/recipes/${encodeURIComponent(generation.recipeId)}`;
     const target = targets?.find((t) => t.templateId === proposal.templateId && t.missionType === proposal.missionType);
     return (
       <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
@@ -189,12 +185,12 @@ export function RecipeProposalReview({
       open
       onOpenChange={(open) => (open ? undefined : onClose())}
       title="Review recipe"
-      review={{ subtitle: familyName ? `Generated from ${familyName}` : "Generated from this Creative Family", aside: <ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} /> }}
+      review={{ subtitle: "Generated from your idea and Sources", aside: <ProposalContext instanceId={instanceId} generation={generation} proposal={proposal} /> }}
       targets={targets}
       initial={{ ...(proposal.prompt ? { prompt: proposal.prompt } : {}), instructions: proposal.instructions, constraints: proposal.constraints }}
       prefill={{ name: proposal.name, description: proposal.description, templateId: proposal.templateId, missionType: proposal.missionType }}
       onSubmit={async (fields) => {
-        await create({ instanceId, familyId: familyId as Id<"creativeFamilies">, ...fields, proposalRunId: generation.runId as Id<"runs"> });
+        await create({ instanceId, ...fields, proposalRunId: generation.runId as Id<"runs"> });
       }}
     />
   );

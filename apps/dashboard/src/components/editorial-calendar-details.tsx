@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { CalendarDays, ExternalLink, FileText, Layers, Shapes, Sparkles, Target } from "lucide-react";
+import { CalendarDays, ExternalLink, FileText, Shapes, Sparkles, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -75,11 +75,6 @@ export function Details({ item, instanceId }: { item: CalendarItem; instanceId: 
             <Row icon={<Target aria-hidden="true" />} label="Intent:">
               <StatusBadge tone={item.intent === "explore" ? "info" : "neutral"} label={intentLabel(item.intent)} />
             </Row>
-            {item.creativeFamily ? (
-              <Row icon={<Layers aria-hidden="true" />} label="Creative Family:">
-                <span>{item.creativeFamily.name}</span>
-              </Row>
-            ) : null}
           </div>
           <div className="grid gap-2 border-t pt-4">
             <h4 className="m-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Publish targets</h4>

@@ -42,7 +42,7 @@ describe("RecipeProposalReview", () => {
     await act(async () => root.unmount());
     container.remove();
   });
-  const render = (generation: Generation | null) => act(async () => root.render(<RecipeProposalReview instanceId="p1" familyId="fam-1" generation={generation} onClose={onClose} />));
+  const render = (generation: Generation | null) => act(async () => root.render(<RecipeProposalReview instanceId="p1" generation={generation} onClose={onClose} />));
   const submit = () => act(async () => (document.body.querySelector("form") as HTMLFormElement).requestSubmit());
 
   it("prefills the form and shows the rationale and linked Sources read-only", async () => {
@@ -58,7 +58,7 @@ describe("RecipeProposalReview", () => {
     await render(GENERATION);
     await submit();
     expect(create).toHaveBeenCalledWith({
-      instanceId: "p1", familyId: "fam-1", templateId: "@example/video-demo", missionType: "make_post", name: "Reaction clip",
+      instanceId: "p1", templateId: "@example/video-demo", missionType: "make_post", name: "Reaction clip",
       description: "A reaction", instructions: "Write a hook", constraints: ["short"], proposalRunId: "run-1",
     });
   });
@@ -75,10 +75,16 @@ describe("RecipeProposalReview", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("says a proposal generated from an idea alone cites no Source", async () => {
+    await render({ ...GENERATION, proposal: { ...PROPOSAL, sourceIds: [] } });
+    expect(document.body.textContent).toContain("Generated from your idea, with no Source");
+    expect(document.body.querySelector('a[href^="/projects/p1/sources/"]')).toBeNull();
+  });
+
   it("opens a created proposal read-only with a link to the Recipe", async () => {
     await render({ ...GENERATION, state: "created", recipeId: "rec-1" });
     expect(document.body.querySelector("form")).toBeNull();
-    expect(document.body.querySelector('a[href="/projects/p1/library/fam-1/recipes/rec-1"]')).not.toBeNull();
+    expect(document.body.querySelector('a[href="/projects/p1/recipes/rec-1"]')).not.toBeNull();
     expect(document.body.textContent).toContain("It works");
   });
 });
