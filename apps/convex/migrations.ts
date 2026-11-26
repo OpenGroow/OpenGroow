@@ -362,6 +362,48 @@ export const stripRecipeGenerationFamily = migrations.define({
 });
 
 /**
+ * ADR-089: Source routing is gone, and with it everything a Source carried to be produced: the day's pick, its
+ * routing decision, the producer chosen by hand and the production pointers. Clears them from every Source; the
+ * Missions that were created stay as they are. Idempotent. The fields leave the schema once this has run.
+ */
+export const dropSourceProduction = migrations.define({
+  table: "sources",
+  migrateOne: async (ctx, source) => {
+    if (
+      source.selectedAt === undefined && source.producedAt === undefined && source.publishedAt === undefined &&
+      source.productionMissionId === undefined && source.routing === undefined && source.routeTo === undefined
+    ) return;
+    await ctx.db.patch(source._id, {
+      selectedAt: undefined, producedAt: undefined, publishedAt: undefined, productionMissionId: undefined, routing: undefined, routeTo: undefined,
+    });
+  },
+});
+
+/**
+ * ADR-089: deletes the `source_routing` Jobs (one per Source Agent) with their Runs and those Runs' reconcile
+ * events, since no code runs or reads them any more. Missions are untouched. Idempotent.
+ */
+export const deleteSourceRoutingJobs = migrations.define({
+  table: "jobs",
+  migrateOne: async (ctx, job) => {
+    if (job.type !== "source_routing") return;
+    for (;;) {
+      const runs = await ctx.db.query("runs").withIndex("by_job", (q) => q.eq("jobId", job._id)).take(100);
+      if (runs.length === 0) break;
+      for (const run of runs) {
+        for (;;) {
+          const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
+          if (events.length === 0) break;
+          for (const event of events) await ctx.db.delete(event._id);
+        }
+        await ctx.db.delete(run._id);
+      }
+    }
+    await ctx.db.delete(job._id);
+  },
+});
+
+/**
  * ADR-072: a Publisher package is looked up by `provides` (its adapter id),
  * from its `meta`. Packages installed before either field existed have
  * neither, and would read as not installed: both are derived again from the
@@ -403,6 +445,8 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.describeHubPackages,
   internal.migrations.dropRecipeFamily,
   internal.migrations.stripRecipeGenerationFamily,
+  internal.migrations.dropSourceProduction,
+  internal.migrations.deleteSourceRoutingJobs,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

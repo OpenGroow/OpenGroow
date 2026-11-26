@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
+import { Ban, CircleCheck, CircleX, ExternalLink, Layers, ListChecks, LoaderCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { sourceScore } from "@/src/lib/source-score";
 import { FormatBadge, NotScoredHint, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
-import { agentLabel, RouteTargetSelect, useProduceSource, useRouteTargets } from "@/src/components/source-route-target";
+import { agentLabel } from "@/src/lib/mission-type";
 import { cn } from "@/lib/utils";
 
 // Matches the server's `COUNT_CAP` (`sources.counts`): a status with that many Sources shows "5000+".
@@ -47,15 +47,9 @@ type SourceRow = Pick<
   | "createdAt"
   | "marketing"
   | "scoring"
-  | "selectedAt"
-  | "productionMissionId"
-  | "producedAt"
-  | "publishedAt"
   | "excluded"
   | "sourceId"
   | "analysis"
-  | "routing"
-  | "routeTo"
   | "thumbnailTriedAt"
 > & { _id: string; thumbnailUrl?: string | null };
 
@@ -66,17 +60,13 @@ const TOOLBAR_ROW = "flex flex-col justify-between gap-4 lg:flex-row lg:items-ce
 const TOOLBAR_SEARCH = "lg:w-52";
 const TOOLBAR_SELECT = "h-11 sm:w-40";
 
-// The Scored tab lists the Sources the pipeline calls Scored: analysed, scored
-// and not picked for production yet.
+// The Scored tab lists the Sources the pipeline calls Scored: analysed and scored.
 const READY_TAB_STAGE = "Scored";
 
 // The Status of a Source is its pipeline stage, derived from the Source facts
 // (`deriveSourcePipelineState`), never stored, so no index serves the filter
-// and it works on the loaded rows. A Source that was picked for production
-// (Routed, In production, Produced, Published) is followed on the Missions board,
-// and a Scored one is on the Scored tab: neither is listed in Other. Nothing sets
-// `excluded` any more.
-const PRODUCTION_STAGES: readonly string[] = ["Routed", "In production", "Produced", "Published"];
+// and it works on the loaded rows. A Scored Source is on the Scored tab and is not
+// listed in Other. Nothing sets `excluded` any more.
 const STATUS_FILTERS = [
   { id: "processing", label: "Processing", stages: ["Ingestion"] },
   { id: "not-scored", label: "Not scored yet", stages: ["Ready"] },
@@ -110,7 +100,7 @@ export function InstanceSourcesContent({ instanceId }: { instanceId: string }) {
   ) as { results: SourceRow[]; status: string; loadMore: (numItems: number) => void };
 
   const needle = search.trim().toLowerCase();
-  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE && !PRODUCTION_STAGES.includes(stageOf(source)));
+  const others = sources.filter((source) => stageOf(source) !== READY_TAB_STAGE);
   const visible = others.filter(
     (source) =>
       matchesStatus(source, stage) &&
@@ -509,7 +499,6 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
   const [sort, setSort] = useState<ReadySort>("score");
   const [agent, setAgent] = useState("all");
   const [search, setSearch] = useState("");
-  const targets = useRouteTargets(instanceId);
   const needle = search.trim().toLowerCase();
   const ready = sources
     .filter((source) => stageOf(source) === READY_TAB_STAGE)
@@ -544,7 +533,7 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
       <SelectionBar selection={selection} />
 
       {ready.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No scored Sources waiting for production.</p>
+        <p className="text-sm text-muted-foreground">No scored Sources yet.</p>
       ) : (
         <div className="grid gap-3">
           {/* Same height as the column names of the Other tab, so the rows start at the same place on both tabs. */}
@@ -558,7 +547,6 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
                 source={source}
                 instanceId={instanceId}
                 platform={platformFor(source)}
-                targets={targets}
                 selecting={selection.selecting}
                 selected={selection.selected.has(source._id)}
                 onToggle={() => selection.toggleOne(source._id)}
@@ -581,21 +569,16 @@ function ReadySources({ tabs, sources, instanceId, hasMore, loadingMore, onLoadM
   );
 }
 
-function ReadySourceRow({ source, instanceId, platform, targets, selecting, selected, onToggle }: {
+function ReadySourceRow({ source, instanceId, platform, selecting, selected, onToggle }: {
   source: SourceRow;
   instanceId: string;
   platform?: SourcePlatform;
-  targets: ReturnType<typeof useRouteTargets>;
   selecting: boolean;
   selected: boolean;
   onToggle: () => void;
 }) {
-  const { produce, busy } = useProduceSource(source._id);
   const title = source.marketing.summary ?? source.origin;
   const score = sourceScore(source.scoring);
-  // What Produce will use: the producer chosen by hand, else the router's own
-  // proposal, else the router decides when Produce is pressed.
-  const proposal = source.routing?.state === "proposed" ? source.routing : undefined;
 
   return (
     <li>
@@ -633,16 +616,6 @@ function ReadySourceRow({ source, instanceId, platform, targets, selecting, sele
               {score !== undefined ? <Badge variant="outline" className="tabular-nums">Score {score}</Badge> : null}
             </div>
           </div>
-        </div>
-        <div className="relative z-10 flex flex-wrap items-end gap-3 lg:justify-end">
-          <label className="flex flex-col items-start gap-1 text-sm text-muted-foreground" title={proposal && !source.routeTo ? proposal.rationale : undefined}>
-            Routed to:
-            <RouteTargetSelect source={source} targets={targets} className="h-10 w-56" />
-          </label>
-          <Button type="button" variant="accent" className="h-10" disabled={busy} onClick={() => void produce()}>
-            <Sparkles />
-            Produce
-          </Button>
         </div>
       </Card>
     </li>

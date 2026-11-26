@@ -10,19 +10,17 @@ import { deriveSourcePipelineState, SourceDetailContent } from "../src/component
 
 const useQueryMock = vi.fn();
 const retryMock = vi.fn();
-const forceProductionMock = vi.fn();
 const requestThumbnailsMock = vi.fn();
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   useMutation: (ref: string) =>
-    ({ "source_routing.forceProduction": forceProductionMock, "source_thumbnails.request": requestThumbnailsMock })[ref] ?? retryMock,
+    ({ "source_thumbnails.request": requestThumbnailsMock })[ref] ?? retryMock,
 }));
 
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { get: "sources.get", retry: "sources.retry" },
-    source_routing: { forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -52,7 +50,6 @@ describe("SourceDetailContent", () => {
   beforeEach(() => {
     useQueryMock.mockReset();
     retryMock.mockReset();
-    forceProductionMock.mockReset();
     requestThumbnailsMock.mockReset().mockResolvedValue(undefined);
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -108,18 +105,6 @@ describe("SourceDetailContent", () => {
     ["processing", {}, "Ingestion"],
     ["ready", {}, "Ready"],
     ["ready", { scoring: { productFit: 0.75 } }, "Scored"],
-    ["ready", { scoring: { productFit: 0.75 }, selectedAt: 1 }, "Routed"],
-    ["ready", { scoring: { productFit: 0.75 }, selectedAt: 1, productionMissionId: "mission-1" }, "In production"],
-    [
-      "ready",
-      { scoring: { productFit: 0.75 }, selectedAt: 1, productionMissionId: "mission-1", producedAt: 2 },
-      "Produced",
-    ],
-    [
-      "ready",
-      { scoring: { productFit: 0.75 }, selectedAt: 1, productionMissionId: "mission-1", producedAt: 2, publishedAt: 3 },
-      "Published",
-    ],
   ] as const)("derives and renders the %s pipeline stage", async (status, fields, stage) => {
     await render({ source: makeSource({ status, ...fields }), analysisSchema: null });
     expect(deriveSourcePipelineState({ status, ...fields })).toEqual({ kind: "stage", current: stage });
@@ -134,7 +119,7 @@ describe("SourceDetailContent", () => {
     await render({ source: makeSource({ status, ...fields }), analysisSchema: null });
     expect(deriveSourcePipelineState({ status, ...fields })).toEqual({ kind: "terminal", label });
     expect(document.querySelector("[data-testid='source-pipeline-terminal']")?.textContent).toContain(label);
-    expect(document.querySelector("[data-stage='Published']")).toBeNull();
+    expect(document.querySelector("[data-stage]")).toBeNull();
   });
 
   it("keeps all six numeric scores collapsed below the pipeline", async () => {
@@ -263,35 +248,13 @@ describe("SourceDetailContent", () => {
     expect(retryMock).toHaveBeenCalledWith({ sourceId: "src-1" });
   });
 
-  describe("Produce", () => {
-    const scored = { productFit: 0.75 };
-    const button = () => Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Produce");
-
-    it("is offered for a Scored Source (ready, scored, not picked yet) and produces it by id", async () => {
-      forceProductionMock.mockResolvedValue(undefined);
-      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
-      await act(async () => {
-        button()!.click();
-      });
-      expect(forceProductionMock).toHaveBeenCalledWith({ sourceId: "src-1" });
-    });
-
-    it("is not offered otherwise: not scored, already picked, not ready, or in production", async () => {
-      for (const overrides of [
-        {}, // ready but not scored
-        { scoring: scored, selectedAt: 1 },
-        { scoring: scored, selectedAt: 1, productionMissionId: "mission-1" },
-        { status: "processing", scoring: scored },
-        { status: "failed" },
-      ]) {
+  describe("no production", () => {
+    it("offers no Produce button and no producer choice, whatever the Source", async () => {
+      for (const overrides of [{ scoring: { productFit: 0.75 } }, {}, { status: "processing" }, { status: "failed" }]) {
         await render({ source: makeSource(overrides), analysisSchema: null });
-        expect(button()).toBeUndefined();
+        expect(Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Produce")).toBeUndefined();
+        expect(document.querySelector("select")).toBeNull();
       }
-    });
-
-    it("has no producer choice on the page", async () => {
-      await render({ source: makeSource({ scoring: scored }), analysisSchema: null });
-      expect(document.querySelector("select")).toBeNull();
     });
   });
 
@@ -339,13 +302,5 @@ describe("SourceDetailContent", () => {
     expect(text()).toContain("next run");
     await render({ source: makeSource({ status: "processing" }), analysisSchema: null });
     expect(text()).not.toContain("next run");
-  });
-
-  it("links directly to the production Mission, not the retired routing Mission", async () => {
-    await render({ source: makeSource({ productionMissionId: "mission-42" }), analysisSchema: null });
-    const link = document.querySelector("[data-testid='source-production-mission-link']");
-    expect(link?.getAttribute("href")).toBe("/projects/instance-1/missions/mission-42");
-    expect(text()).toContain("View production Mission");
-    expect(text()).not.toContain("delegateMissionId");
   });
 });

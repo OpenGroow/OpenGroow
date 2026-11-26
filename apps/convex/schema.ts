@@ -23,7 +23,6 @@ import { artifactV, runResultV } from "./run_result.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
-import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
 import { recipeStatusV } from "./production_validators.js";
 
@@ -871,11 +870,10 @@ export default defineSchema({
     producedAt: v.optional(v.number()),
     publishedAt: v.optional(v.number()),
     productionMissionId: v.optional(v.id("missions")),
-    // The routing decision (ADR-076): which producing Mission type was chosen
-    // for this Source, why, and whether a human still has to approve it.
-    routing: v.optional(routingDecisionV),
-    // The producer the user picked by hand on the Sources page ("Routed to").
-    // Produce routes the Source to it instead of letting the router choose.
+    // Transitional (ADR-089): Source routing is gone and nothing reads or writes the fields below
+    // (`selectedAt`, `producedAt`, `publishedAt`, `productionMissionId`, `routing`, `routeTo`); `dropSourceProduction`
+    // clears them and they leave the schema once it has run.
+    routing: v.optional(v.any()),
     routeTo: v.optional(v.object({ templateId: v.string(), missionType: v.string() })),
     // The page's `og:image`, copied into storage (the CDN URLs expire). Set by
     // `source_thumbnails`; `thumbnailTriedAt` records that a fetch was attempted.

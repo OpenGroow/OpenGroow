@@ -190,8 +190,6 @@ import type * as source_jobs_source_run_result from "../source_jobs/source_run_r
 import type * as source_origin from "../source_origin.js";
 import type * as source_platform from "../source_platform.js";
 import type * as source_platforms from "../source_platforms.js";
-import type * as source_routing from "../source_routing.js";
-import type * as source_routing_decision from "../source_routing_decision.js";
 import type * as source_schema from "../source_schema.js";
 import type * as source_scoring from "../source_scoring.js";
 import type * as source_thumbnails from "../source_thumbnails.js";
@@ -410,8 +408,6 @@ declare const fullApi: ApiFromModules<{
   source_origin: typeof source_origin;
   source_platform: typeof source_platform;
   source_platforms: typeof source_platforms;
-  source_routing: typeof source_routing;
-  source_routing_decision: typeof source_routing_decision;
   source_schema: typeof source_schema;
   source_scoring: typeof source_scoring;
   source_thumbnails: typeof source_thumbnails;

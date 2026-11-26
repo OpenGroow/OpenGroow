@@ -82,14 +82,14 @@ async function call(token: string, name: string, args: unknown = {}) {
   return JSON.parse(result.content[0].text);
 }
 
-async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; replicationScore?: number; producedAt?: number; excluded?: boolean; familyId?: Id<"creativeFamilies"> } = {}) {
+async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; replicationScore?: number; excluded?: boolean; familyId?: Id<"creativeFamilies"> } = {}) {
   const at = o.capturedAt ?? 1000;
   return t.run((ctx) =>
     ctx.db.insert("sources", {
       instanceId: projectId, ownerId: "owner", templateId: "example/source", sourceId: "post", label, family: "fam", status: (o.status ?? "ready") as never,
       origin: "https://example.com/p", capturedAt: at, createdAt: at, marketing: { summary: `about ${label}` }, analysis: { hook: `hook of ${label}` },
       ...(o.replicationScore !== undefined ? { scoring: { replicationScore: o.replicationScore } } : {}),
-      ...(o.producedAt ? { producedAt: o.producedAt } : {}), ...(o.excluded ? { excluded: true } : {}),
+      ...(o.excluded ? { excluded: true } : {}),
     } as never),
   );
 }
@@ -127,7 +127,7 @@ describe("list_generation_sources", () => {
     await source(PROJECT_A, "not given");
     await give(runId, [keep, processing, excluded]);
     const out = await call(token, "list_generation_sources");
-    expect(out.sources).toEqual([expect.objectContaining({ sourceId: keep, label: "keep", replicationScore: 0.7, produced: false })]);
+    expect(out.sources).toEqual([expect.objectContaining({ sourceId: keep, label: "keep", replicationScore: 0.7 })]);
     expect(JSON.stringify(out)).not.toContain("hook of keep");
   });
 
@@ -141,7 +141,7 @@ describe("list_generation_sources", () => {
     const { token, runId } = await seed(PROJECT_A);
     const given = [
       await source(PROJECT_A, "old-best", { capturedAt: 1000, replicationScore: 0.9 }),
-      await source(PROJECT_A, "mid", { capturedAt: 2000, replicationScore: 0.5, producedAt: 5 }),
+      await source(PROJECT_A, "mid", { capturedAt: 2000, replicationScore: 0.5 }),
       await source(PROJECT_A, "new-worst", { capturedAt: 3000, replicationScore: 0.1 }),
     ];
     await give(runId, given);
@@ -149,7 +149,6 @@ describe("list_generation_sources", () => {
     expect(labels(await call(token, "list_generation_sources"))).toEqual(["new-worst", "mid", "old-best"]);
     expect(labels(await call(token, "list_generation_sources", { sort: "score" }))).toEqual(["old-best", "mid", "new-worst"]);
     expect(labels(await call(token, "list_generation_sources", { minReplicationScore: 0.5 }))).toEqual(["mid", "old-best"]);
-    expect(labels(await call(token, "list_generation_sources", { produced: true }))).toEqual(["mid"]);
     const first = await call(token, "list_generation_sources", { limit: 2 });
     expect(labels(first)).toEqual(["new-worst", "mid"]);
     expect(first.nextCursor).toBeTypeOf("string");

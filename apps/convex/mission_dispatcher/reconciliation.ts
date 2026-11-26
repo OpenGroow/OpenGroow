@@ -113,11 +113,11 @@ export type ReconcileDecision =
  */
 function decideInvalidOutput(
   message: string,
-  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; sourceRouting?: boolean; strategicReview?: boolean; contentPlanning?: boolean; recipeGeneration?: boolean },
+  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; strategicReview?: boolean; contentPlanning?: boolean; recipeGeneration?: boolean },
 ): ReconcileDecision {
   // A Job has no Mission to resume: the failure is settled on the Job,
   // which resumes its own execution with the error (bounded, #567).
-  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.sourceRouting === true || ctx.strategicReview === true || ctx.contentPlanning === true || ctx.recipeGeneration === true) {
+  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.strategicReview === true || ctx.contentPlanning === true || ctx.recipeGeneration === true) {
     return { type: "markFailed", code: "file_invalid", message, retryWithFeedback: true };
   }
   const decision = decideBoundedRetry(
@@ -244,7 +244,6 @@ export function decideReconciliation(
     parent: RunParent;
     sourceIngestion?: boolean;
     sourceScoring?: boolean;
-    sourceRouting?: boolean;
     strategicReview?: boolean;
     contentPlanning?: boolean;
     recipeGeneration?: boolean;
@@ -451,11 +450,8 @@ export function decideReconciliation(
   // instead of polling it to completion. Park the run in `awaiting_job`;
   // the separate External Job polling loop takes it from here (issue #138).
   if (validation.data.status === "in_progress") {
-    if (ctx.sourceScoring === true || ctx.sourceRouting === true) {
-      return decideInvalidOutput(
-        `status "in_progress" is not supported for ${ctx.sourceRouting === true ? "Source routing" : "Source scoring"} Job Runs`,
-        ctx,
-      );
+    if (ctx.sourceScoring === true) {
+      return decideInvalidOutput('status "in_progress" is not supported for Source scoring Job Runs', ctx);
     }
     // A Mission type that fetches its media from the MCP when the job ends
     // (`publish.resource`) needs the Agent's text part now: nobody runs the

@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { sourceScore } from "@/src/lib/source-score";
-import { useProduceSource } from "@/src/components/source-route-target";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests } from "@/src/components/source-visuals";
 import { runLogsHref, runTraceHref } from "@/src/lib/instance-path";
 import { SchemaFields, SchemaValue, type JsonSchema } from "@/src/components/schema-value";
@@ -35,7 +34,6 @@ export function SourceDetailPage({ params }: Props) {
 export function SourceDetailContent({ instanceId, sourceId }: { instanceId: string; sourceId: string }) {
   const result = useQuery(api.sources.get, { sourceId: sourceId as Id<"sources"> });
   const retry = useMutation(api.sources.retry);
-  const { produce, busy: producing } = useProduceSource(sourceId);
   const visual = result ? { ...result.source, thumbnailUrl: result.thumbnailUrl } : undefined;
   useThumbnailRequests(instanceId, visual ? [visual] : []);
   const platformFor = useSourcePlatforms(instanceId);
@@ -91,14 +89,6 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
               ) : null}
             </div>
           </div>
-          {/* Only for a Source that is scored and not picked yet: the ones the Scored tab lists.
-              Its own column, so the thumbnail, the title and the button start on the same line. */}
-          {pipeline.kind === "stage" && pipeline.current === "Scored" ? (
-            <Button type="button" variant="accent" className="h-10 shrink-0 sm:self-start" disabled={producing} onClick={() => void produce()}>
-              <Sparkles />
-              Produce
-            </Button>
-          ) : null}
         </div>
         {source.status === "processing" && source.retryRequested ? (
           <p className="m-0 text-sm text-muted-foreground">
@@ -142,15 +132,6 @@ export function SourceDetailContent({ instanceId, sourceId }: { instanceId: stri
             </>
           ) : null}
         </p>
-        {source.productionMissionId ? (
-          <Link
-            data-testid="source-production-mission-link"
-            href={`/projects/${encodeURIComponent(instanceId)}/missions/${encodeURIComponent(source.productionMissionId)}`}
-            className="w-fit font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            View production Mission
-          </Link>
-        ) : null}
       </header>
 
       <SourcePipelineStepper state={pipeline} />
@@ -209,7 +190,7 @@ function SourcePipelineStepper({ state }: { state: SourcePipelineState }) {
           Terminal state: {state.label}
         </p>
       ) : (
-        <ol aria-label="Source pipeline stages" className="m-0 grid gap-2 p-0 sm:grid-cols-7">
+        <ol aria-label="Source pipeline stages" className="m-0 grid gap-2 p-0 sm:grid-cols-3">
           {SOURCE_PIPELINE_STAGES.map((stage, index) => {
             const currentIndex = SOURCE_PIPELINE_STAGES.indexOf(state.current);
             const status = index < currentIndex ? "Complete" : index === currentIndex ? "Current" : "Upcoming";

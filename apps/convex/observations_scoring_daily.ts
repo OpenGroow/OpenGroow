@@ -84,7 +84,6 @@ function toScorable(source: Doc<"sources">, now: number): ScorableObservation | 
     // Pre-#486 rows carry no `excluded` at all — schema.ts: readers must
     // treat `undefined` as "not excluded".
     source.excluded === true ||
-    source.selectedAt !== undefined ||
     source.capturedAt < now - OBSERVATION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000 ||
     // A future-dated `capturedAt` (clock skew, bad client data) must not pass
     // the lookback check on its lower bound alone — cap it at `now` too.

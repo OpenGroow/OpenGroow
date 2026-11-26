@@ -27,7 +27,6 @@ export async function pinnedGeneration(ctx: Pick<QueryCtx, "db">, scope: Scope, 
   return undefined;
 }
 
-const isProduced = (s: Doc<"sources">) => s.producedAt !== undefined || s.productionMissionId !== undefined;
 const isReadable = (s: Doc<"sources">) => s.status === "ready" && s.excluded !== true;
 const scoreOf = (s: Doc<"sources">) => s.scoring?.replicationScore ?? -1;
 
@@ -39,7 +38,6 @@ async function readableGivenSources(ctx: Pick<QueryCtx, "db">, scope: Scope, pin
 
 export async function listGenerationSources(ctx: Pick<QueryCtx, "db">, scope: Scope, args: Record<string, unknown>) {
   const pin = await pinnedGeneration(ctx, scope, { required: true });
-  if (args.produced !== undefined && typeof args.produced !== "boolean") throw new Error("produced must be true or false.");
   if (args.minReplicationScore !== undefined && (typeof args.minReplicationScore !== "number" || !Number.isFinite(args.minReplicationScore))) throw new Error("minReplicationScore must be a number.");
   if (args.sort !== undefined && args.sort !== "recent" && args.sort !== "score") throw new Error('sort must be "recent" or "score".');
   const limit = boundedLimit(args.limit, GENERATION_SOURCES_DEFAULT_LIMIT, GENERATION_SOURCES_MAX_LIMIT);
@@ -48,7 +46,7 @@ export async function listGenerationSources(ctx: Pick<QueryCtx, "db">, scope: Sc
 
   const sources = await readableGivenSources(ctx, scope, pin);
   const kept = sources.filter(
-    (s) => (args.produced === undefined || isProduced(s) === args.produced) && (args.minReplicationScore === undefined || scoreOf(s) >= (args.minReplicationScore as number)),
+    (s) => args.minReplicationScore === undefined || scoreOf(s) >= (args.minReplicationScore as number),
   );
   if (args.sort === "score") kept.sort((a, b) => scoreOf(b) - scoreOf(a) || b.capturedAt - a.capturedAt);
   else kept.sort((a, b) => b.capturedAt - a.capturedAt);
@@ -66,7 +64,6 @@ export async function listGenerationSources(ctx: Pick<QueryCtx, "db">, scope: Sc
         ...(replicationScore !== undefined ? { replicationScore } : {}),
         ...(Object.keys(subScores).length ? { scores: subScores } : {}),
         ...(s.marketing?.summary ? { summary: s.marketing.summary } : {}),
-        produced: isProduced(s),
       };
     }),
     total: kept.length,
@@ -88,7 +85,6 @@ export async function getSource(ctx: Pick<QueryCtx, "db">, scope: Scope, args: R
     analysis: source.analysis,
     scoring: source.scoring ?? {},
     marketing: source.marketing,
-    produced: isProduced(source),
   };
 }
 

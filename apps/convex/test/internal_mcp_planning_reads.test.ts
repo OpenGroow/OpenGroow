@@ -91,7 +91,7 @@ async function source(projectId: string, label: string, o: { status?: string; ca
     ctx.db.insert("sources", {
       instanceId: projectId, ownerId: "owner", templateId: "example/source", sourceId: "post", label, family: "fam", status: (o.status ?? "ready") as never,
       origin: "https://example.com/p", capturedAt: o.capturedAt ?? 1000, createdAt: o.capturedAt ?? 1000, marketing: o.summary ? { summary: o.summary } : {}, analysis: { big: "payload" },
-      ...(o.scoring ? { scoring: o.scoring } : {}), ...(o.producedAt ? { producedAt: o.producedAt } : {}), ...(o.selectedAt ? { selectedAt: o.selectedAt } : {}),
+      ...(o.scoring ? { scoring: o.scoring } : {}),
       ...(o.creativeFamilyId ? { creativeFamilyId: o.creativeFamilyId } : {}),
     } as never),
   );
@@ -139,31 +139,30 @@ describe("list_sources", () => {
       {
         sourceId: id, label: "Post one", origin: "https://example.com/p", status: "ready", capturedAt: 1000,
         replicationScore: 0.8, scores: { productFit: 0.9, replicability: 0.7, creativeStrength: 0.6 },
-        summary: "A short summary", creativeFamily: { id: f, name: "Hooks" }, selected: false, produced: false,
+        summary: "A short summary", creativeFamily: { id: f, name: "Hooks" },
       },
     ]);
     expect(out.truncated).toBe(false);
     expect(JSON.stringify(out)).not.toContain("payload");
   });
 
-  it("serves not selected, not produced Sources first, then the best score", async () => {
+  it("serves the best Replication Score first, then the newest", async () => {
     const token = await seedProject(PROJECT_A);
-    await source(PROJECT_A, "produced", { scoring: { replicationScore: 0.99 }, producedAt: 5, capturedAt: 10 });
     await source(PROJECT_A, "low", { scoring: { replicationScore: 0.2 }, capturedAt: 20 });
-    await source(PROJECT_A, "selected", { scoring: { replicationScore: 0.95 }, selectedAt: 5, capturedAt: 30 });
-    await source(PROJECT_A, "high", { scoring: { replicationScore: 0.7 }, capturedAt: 40 });
+    await source(PROJECT_A, "high", { scoring: { replicationScore: 0.7 }, capturedAt: 10 });
+    await source(PROJECT_A, "high newer", { scoring: { replicationScore: 0.7 }, capturedAt: 30 });
     const out = await call(token, "list_sources");
-    expect(out.sources.map((s: { label: string }) => s.label)).toEqual(["high", "low", "produced", "selected"]);
+    expect(out.sources.map((s: { label: string }) => s.label)).toEqual(["high newer", "high", "low"]);
+    expect(out.sources[0]).not.toHaveProperty("produced");
+    expect(out.sources[0]).not.toHaveProperty("selected");
   });
 
-  it("filters by status (ready by default) and by produced", async () => {
+  it("filters by status (ready by default)", async () => {
     const token = await seedProject(PROJECT_A);
     await source(PROJECT_A, "ready one");
     await source(PROJECT_A, "failed one", { status: "failed" });
-    await source(PROJECT_A, "done one", { producedAt: 5 });
-    expect((await call(token, "list_sources")).sources.map((s: { label: string }) => s.label).sort()).toEqual(["done one", "ready one"]);
+    expect((await call(token, "list_sources")).sources.map((s: { label: string }) => s.label)).toEqual(["ready one"]);
     expect((await call(token, "list_sources", { status: "failed" })).sources.map((s: { label: string }) => s.label)).toEqual(["failed one"]);
-    expect((await call(token, "list_sources", { produced: false })).sources.map((s: { label: string }) => s.label)).toEqual(["ready one"]);
     await expect(call(token, "list_sources", { status: "bogus" })).rejects.toThrow(/status/);
   });
 

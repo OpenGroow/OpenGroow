@@ -189,11 +189,11 @@ describe("strategic_review Job: Jobs page", () => {
   it("lists after the Source Jobs, labelled, and Run Now works", async () => {
     const jobId = await insertJob();
     await t.run((ctx) => ctx.db.insert("jobs", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, type: "source_routing", state: "active", config: {}, runtime: {},
+      ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, type: "source_scoring", state: "active", config: {}, runtime: {},
       unit: "daily", hour: 6, minute: 0, timezone: "UTC", nextRunAt: NOW, createdAt: NOW, updatedAt: NOW,
     }));
     const jobs = await t.withIdentity(OWNER).query(api.jobs.listByInstance, { instanceId: INSTANCE });
-    expect(jobs.map((j: { type: string }) => j.type)).toEqual(["source_routing", "strategic_review"]);
+    expect(jobs.map((j: { type: string }) => j.type)).toEqual(["source_scoring", "strategic_review"]);
     expect(jobs[1]).toMatchObject({ _id: jobId, label: "Strategic review", config: { analysisDays: 30 } });
     await expect(runNow(jobId)).resolves.toEqual({ status: "queued" });
   });

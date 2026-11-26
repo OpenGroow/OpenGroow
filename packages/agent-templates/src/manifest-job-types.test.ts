@@ -19,13 +19,12 @@ const baseManifest = {
 };
 
 describe("validateManifest — explicit Job capabilities", () => {
-  it("accepts the three Source-pipeline Job declarations", () => {
+  it("accepts the Source-pipeline Job declarations", () => {
     const result = validateManifest({
       ...baseManifest,
       jobTypes: [
         { type: "source_ingestion", sourceTypes: ["reel"] },
         { type: "source_scoring", agentsMd: "jobs/source-scoring.md" },
-        { type: "source_routing", agentsMd: "jobs/source-routing.md" },
       ],
     });
 
@@ -42,10 +41,10 @@ describe("validateManifest — explicit Job capabilities", () => {
     if (!result.ok) expect(result.reason).toContain('unknown Source type "unknown"');
   });
 
-  it("requires dedicated instruction files for scoring and routing only", () => {
+  it("requires a dedicated instruction file for scoring", () => {
     const result = validateManifest({
       ...baseManifest,
-      jobTypes: [{ type: "source_scoring" }, { type: "source_routing" }],
+      jobTypes: [{ type: "source_scoring" }],
     });
 
     expect(result).toMatchObject({ ok: false });

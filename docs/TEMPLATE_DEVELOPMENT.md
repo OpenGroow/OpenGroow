@@ -126,7 +126,7 @@ missionTypes:
           - { value: letter-only, label: Letter only }
 ```
 
-Only the forms check `fields`; the backend does not. A Mission created another way (routing from a Source, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
+Only the forms check `fields`; the backend does not. A Mission created another way (a Schedule, for example) is not checked against them, so the Agent's instructions must still handle a missing or invalid value.
 
 ### One Mission type per creative variant
 

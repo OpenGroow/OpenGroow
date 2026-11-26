@@ -97,7 +97,6 @@ function jobLabel(type: Doc<"jobs">["type"]): string {
   switch (type) {
     case "source_ingestion": return "Social source ingestion";
     case "source_scoring": return "Source scoring";
-    case "source_routing": return "Source routing";
     default: return type;
   }
 }

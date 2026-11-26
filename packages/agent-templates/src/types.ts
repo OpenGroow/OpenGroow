@@ -379,7 +379,7 @@ export type MissionPayloadField = {
 export type MissionType = {
   type: string;
   label: string;
-  /** Optional routing description for Source Agents choosing a producer. */
+  /** Optional description of what the Mission type produces, read by the Agents that choose one. */
   description?: string;
   /** JSON-serialised default payload string (e.g. `'{"keyword":""}'`). */
   payload: string;

@@ -108,8 +108,6 @@ export const listRunsToReconcile = internalQuery({
             && (await ctx.db.get((r as typeof r & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_ingestion",
           sourceScoring: ((r as typeof r & { jobId?: Id<"jobs"> }).jobId !== undefined)
             && (await ctx.db.get((r as typeof r & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_scoring",
-          sourceRouting: ((r as typeof r & { jobId?: Id<"jobs"> }).jobId !== undefined)
-            && (await ctx.db.get((r as typeof r & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_routing",
           strategicReview: r.strategicReview !== undefined,
           contentPlanning: r.contentPlanning !== undefined,
           recipeGeneration: "recipeGeneration" in r && r.recipeGeneration !== undefined,
@@ -213,8 +211,6 @@ export const loadReconcileState = internalQuery({
         && (await ctx.db.get((run as typeof run & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_ingestion",
       sourceScoring: ((run as typeof run & { jobId?: Id<"jobs"> }).jobId !== undefined)
         && (await ctx.db.get((run as typeof run & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_scoring",
-      sourceRouting: ((run as typeof run & { jobId?: Id<"jobs"> }).jobId !== undefined)
-        && (await ctx.db.get((run as typeof run & { jobId?: Id<"jobs"> }).jobId!))?.type === "source_routing",
       strategicReview: run.strategicReview !== undefined,
       contentPlanning: run.contentPlanning !== undefined,
       recipeGeneration: "recipeGeneration" in run && run.recipeGeneration !== undefined,

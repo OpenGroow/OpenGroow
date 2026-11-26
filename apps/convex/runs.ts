@@ -6,7 +6,6 @@ import { runResultV } from "./run_result.js";
 import { settleSourceJobRun } from "./source_jobs.js";
 import { ingestAndDecideOutcome, ingestHandoff } from "./source_jobs/ingest_sources.js";
 import { failScoringRun, settleScoringRun } from "./score_jobs.js";
-import { failRoutingRun, settleRoutingRun } from "./source_routing.js";
 import { failRecipeGenerationRun, settleRecipeGenerationRun } from "./recipe_generation.js";
 import { failContentPlanningRun, settleContentPlanningRun } from "./content_planning_runs.js";
 import { CONTENT_PLANNING_JOB_TYPE } from "./content_planning_shared.js";
@@ -316,12 +315,6 @@ export const markCompleted = internalMutation({
       return { applied: true };
     }
 
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await ctx.db.patch(args.runId, { status: "completed", result: args.result, completedAt: now, updatedAt: now });
-      await settleRoutingRun(ctx, { ...run, jobId: parent.jobId }, args.result);
-      return { applied: true };
-    }
-
     if (parent.kind === "job") {
       const jobOutcome = args.result.status === "failed" ? "failed" : "succeeded";
       await ctx.db.patch(args.runId, {
@@ -471,10 +464,6 @@ export const markFailed = internalMutation({
       await failScoringRun(ctx, { ...run, jobId: parent.jobId }, errorMessage, args.retryWithFeedback === true);
       return { applied: true };
     }
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await failRoutingRun(ctx, { ...run, jobId: parent.jobId }, errorMessage, args.retryWithFeedback === true);
-      return { applied: true };
-    }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
       await failStrategicReviewRun(ctx, run, parent.jobId, errorMessage, args.retryWithFeedback === true);
       return { applied: true };
@@ -551,10 +540,6 @@ export const markCancelled = internalMutation({
     if (parent.kind === "standalone") return;
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
       await failScoringRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
-      return;
-    }
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await failRoutingRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
       return;
     }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
