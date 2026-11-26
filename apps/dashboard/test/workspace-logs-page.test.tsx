@@ -218,7 +218,7 @@ describe("WorkspaceLogsPage", () => {
     await renderPage();
 
     expect(document.querySelector("strong")?.textContent).toBe("19 Publications");
-    expect(document.querySelectorAll("li")).toHaveLength(2);
+    expect(document.querySelectorAll("ul li")).toHaveLength(2);
     expect(document.querySelector("code")?.textContent).toBe("report.json");
     expect(document.body.textContent).not.toContain("**19 Publications**");
     expect(document.body.textContent).toContain("Use **this** literally");
