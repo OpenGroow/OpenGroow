@@ -141,6 +141,14 @@ describe("WorkspaceLogsPage", () => {
     });
   }
 
+  async function showRaw() {
+    const toggle = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Raw transcript");
+    if (!(toggle instanceof HTMLButtonElement)) throw new Error("Raw toggle not found");
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+  }
+
   it("requests the default transcript for the matched runtime instance and workspace key", async () => {
     getWorkspaceRunTranscriptMock.mockReturnValue(new Promise(() => {}));
 
@@ -216,6 +224,7 @@ describe("WorkspaceLogsPage", () => {
     });
 
     await renderPage();
+    await showRaw();
 
     expect(document.querySelector("strong")?.textContent).toBe("19 Publications");
     expect(document.querySelectorAll("li")).toHaveLength(2);
@@ -357,8 +366,27 @@ describe("WorkspaceLogsPage", () => {
       workspaceKey: "ws-hello",
       runId: "job-run-1",
     });
+    expect(document.body.textContent).toContain("read_file");
+    expect(document.body.textContent).toContain("batch.json");
+    expect(document.body.textContent).toContain("batch content");
+
+    await showRaw();
     expect(document.body.textContent).toContain("Tool call · read_file");
     expect(document.body.textContent).toContain("Tool result · read_file");
+  });
+
+  it("shows the activity list by default and the raw turns on demand", async () => {
+    getWorkspaceRunTranscriptMock.mockResolvedValue({
+      found: true,
+      turns: [{ kind: "message", role: "assistant", text: "Here is the report." }],
+      runId: "run-1",
+      parent: { kind: "mission", missionId: "mission-1" },
+    });
+    await renderPage();
+    expect(document.querySelector('[data-testid="trace-list"]')).not.toBeNull();
+    await showRaw();
+    expect(document.querySelector('[data-testid="trace-list"]')).toBeNull();
+    expect(document.body.textContent).toContain("Here is the report.");
   });
 
   it("expands a generic Job when its Run transcript is selected", async () => {

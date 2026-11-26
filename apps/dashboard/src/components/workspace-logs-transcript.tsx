@@ -1,4 +1,8 @@
+import * as React from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { TraceList } from "@/src/components/trace/trace-list";
+import { normalizeTrace } from "@/src/lib/trace/normalize-trace";
 import { cn } from "@/lib/utils";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { WorkspaceMarkdown } from "@/src/components/workspace-markdown";
@@ -20,7 +24,28 @@ export function TranscriptPanel({ transcript }: { transcript: TranscriptState })
       />
     );
   }
-  return <TranscriptList turns={transcript.turns} />;
+  return <TranscriptView turns={transcript.turns} runId={transcript.runId} />;
+}
+
+/** The Run's activity as a list of events; the raw transcript turns stay one click away. */
+function TranscriptView({ turns, runId }: { turns: SessionTranscriptTurn[]; runId: string | null }) {
+  const [raw, setRaw] = React.useState(false);
+  // The Run is read after the fact here, so an unanswered call is "unknown", never "running".
+  const events = React.useMemo(
+    () => normalizeTrace(turns, { id: runId ?? "run", status: "completed" }),
+    [turns, runId],
+  );
+  if (turns.length === 0) return <TranscriptList turns={turns} />;
+  return (
+    <div className="grid gap-3 self-start">
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" size="sm" aria-pressed={raw} onClick={() => setRaw((v) => !v)}>
+          Raw transcript
+        </Button>
+      </div>
+      {raw ? <TranscriptList turns={turns} /> : <TraceList events={events} />}
+    </div>
+  );
 }
 
 function TranscriptList({ turns }: { turns: SessionTranscriptTurn[] }) {
