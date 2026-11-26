@@ -70,15 +70,14 @@ The result of a Mission that the human approved, which is what a Publication sen
 
 ### Attributed Publication
 
-A Publication whose Mission was created with a **Recipe Snapshot**. Its Production Recipe is read from that snapshot and its **Creative Family** from the recipe, so it counts once in the aggregates of its recipe and of its family. A Publication is never attributed to a recipe by similarity, by its Source or by its Mission type.
+A Publication whose Mission was created with a **Recipe Snapshot**. Its Production Recipe is read from that snapshot, so it counts once in the aggregates of its recipe. There is no aggregate by Creative Family: the performance of our own productions is attributed to Recipes only. A Publication is never attributed to a recipe by similarity, by its Source or by its Mission type.
 
-- A Creative Family is derived from the recipe and never copied: a Production Recipe never changes Creative Family.
-- Attribution follows the Publication, not the Analytics Adapter: every adapter's groupings can be read by recipe and by family, each adapter on its own, and the numbers of two adapters are never added.
+- Attribution follows the Publication, not the Analytics Adapter: every adapter's groupings can be read by recipe, each adapter on its own, and the numbers of two adapters are never added.
 - _Avoid_: "tagged" or "labelled" Publication, and saying a recipe was "used" without saying which step is meant (see **Recipe usage**).
 
 ### Unattributed Publication
 
-A Publication whose Mission has no Recipe Snapshot (created without a recipe, by a Schedule, from a Source's pipeline, or before recipes existed). It stays in the general analytics, is reported as unattributed, and contributes to no recipe or family aggregate. No attribution is invented for it.
+A Publication whose Mission has no Recipe Snapshot (created without a recipe, by a Schedule, from a Source's pipeline, or before recipes existed). It stays in the general analytics, is reported as unattributed, and contributes to no recipe aggregate. No attribution is invented for it.
 
 ### Postiz translation (V1)
 

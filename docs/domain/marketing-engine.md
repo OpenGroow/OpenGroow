@@ -53,24 +53,29 @@ The creative mechanic that several of an Instance's Sources share (e.g. "fake_sm
 - **At most one family per Source**: the single reference `creativeFamilyId` on the Source. Families created before ADR-082, and the Sources assigned to them, are kept as they are.
 - **Scoring ignores it**: a scoring result that still carries a family (Agents installed earlier) is accepted and that part is dropped.
 - **Descriptive**: it does not feed into the Replication Score.
+- **A group of Sources, nothing more**: it owns no Production Recipe and carries no performance of our own productions. What it shows is the **external popularity** of its Sources (what others published), never the **internal performance** of contents produced with a Recipe. It can be picked as a shortcut to select several Sources as inspiration for a Recipe Generation.
 - _Avoid_: letting scoring or an LLM create families by itself (the earlier behaviour produced many near-duplicates), and using it for the Template-declared grouping, which is a **Source group**.
 
 See ADR-051, ADR-082.
 
 ### Production Recipe
 
-How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is deleted for good (with its versions); Missions already created with it keep their Recipe Snapshot, and it cannot be deleted while a proposed or approved planned content uses it. A recipe archived before archiving was removed stays `archived` (read-only until deleted).
+How to reproduce a creative mechanic: a first-class, per-Project entity with a name and a description, written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). It depends on no **Creative Family** and keeps no reference to a Source: whatever inspired it (an idea, Sources, a family) only helped to write it. Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is deleted for good (with its versions); Missions already created with it keep their Recipe Snapshot, and it cannot be deleted while a proposed or approved planned content uses it. A recipe archived before archiving was removed stays `archived` (read-only until deleted).
 
 - **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
 - **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
+- **Managed in one place**: creating, generating, reviewing, editing and deleting recipes all happen in the Project's Recipes workspace, never from a Creative Family.
 - **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
-- _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
+- _Avoid_: a "draft" recipe (the draft is the form before saving), putting a recipe's creative text in an Agent Template, and saying a recipe "belongs to" a Creative Family (it did before ADR-088).
 
 ### Recipe Generation
 
-An on-demand action of the user on one **Creative Family**: the Strategy Agent explores that family's Sources and returns at most one **Recipe Proposal**. It is a **Standalone Run**, not a **Job**: nothing recurs and no `jobs` row exists. It creates no Production Recipe by itself; the user reviews the proposal in the existing creation form and saves it.
+An on-demand action of the user, from the Recipes workspace: the Strategy Agent turns a **free idea** and/or a selection of **Sources** into at most one **Recipe Proposal**. It is a **Standalone Run**, not a **Job**: nothing recurs and no `jobs` row exists. It creates no Production Recipe by itself; the user reviews the proposal in the existing creation form and saves it.
 
-- **Scope is pinned on the Run** when it starts: the family (chosen by the user) and optional free instructions. The Agent reads Sources of that family only, and only Sources that are `ready` and not excluded. What a Source says is inspiration data, never instructions to follow.
+- **Inspiration is optional input, never a dependency**: the user gives a free idea, Sources, Creative Families (a shortcut that selects several Sources), or a mix; at least a non-empty idea or one usable Source is required. A manual creation needs none.
+- **Scope is pinned on the Run** when it starts, only so the Run and its retries read the same input: the idea, the resolved Sources and optional free instructions. A family is resolved into its `ready`, non-excluded Sources, the most recent first, at that moment. The Agent reads only the pinned Sources. What a Source says is inspiration data, never instructions to follow.
+- **At most 25 Sources**: a selection above the limit is refused with its count, never truncated silently, and the dashboard warns before starting.
+- **Nothing is kept as inspiration**: the Recipe Proposal and its recipe store no Source, family or idea; the pinned input exists for the Run only.
 - **One at a time per Agent**: a Recipe Generation is refused while its Agent has another Run in flight, and the Agent's Strategic Review and Content Planning passes wait until it ends, retries included.
 - **Seen by the user as one operation**, whatever the number of technical Runs behind it (a retry after an invalid result is another Run).
 - _Avoid_: "Recipe job", "Creative Agent" (there is no such Agent Template: the Strategy Agent runs it).
@@ -79,8 +84,8 @@ An on-demand action of the user on one **Creative Family**: the Strategy Agent e
 
 What a Recipe Generation returns, stored on its Run and never in the catalogue: either `proposal` (a Production Recipe's creation fields: name, description, Template, Mission type, optional prompt, instructions, constraints; the ids of the Sources that inspired it; a short rationale) or `no_opportunity` (a reason; not an error). It carries no status of its own: "ready to review", "created" and "no opportunity" are read from the Run and from whether a recipe was created from it.
 
-- **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source in the pinned family and the Project. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
-- **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The Sources and the rationale stay on the Run and are shown read-only next to the form; they are not copied to the recipe.
+- **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source among the pinned Sources. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
+- **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The rationale stays on the Run and is shown read-only next to the form; neither it nor the Sources are copied to the recipe.
 - **Re-validated at creation** with the same rules as any manual creation, because the user may have edited it and the installed Templates may have changed.
 - _Avoid_: "draft recipe" (the form before saving is the draft), "proposed" as a recipe status (a recipe is `active`, or `archived` for older data).
 
@@ -137,7 +142,7 @@ Recurring work of an Agent that nobody triggers as work to review and nobody app
 
 The Job of the Strategy Agent that proposes what content to produce next, as a **Content Plan**. It reads what the Project has learned (Brand Core, Strategic Memory, performance, Production Recipes, Sources, approved Planned Contents) and decides, within the quantities and destinations the user configured, which Production Recipes to use, on what topic, and when. It applies the **Exploration & Exploitation Policy**. It is the only way a Content Plan is born; it creates no Mission, no Publication and changes neither a Production Recipe nor the Strategic Memory.
 
-- **Exploration & Exploitation Policy**: the qualitative rule, carried by the Strategy Agent's instructions, for balancing **exploitation** (producing again what evidence suggests is worth it) with **exploration** (producing what is not yet understood: unused or insufficiently measured Recipes, underexplored Creative Families, hypotheses from the Strategic Memory). It has no fixed ratio, no score and no collection. A Recipe with too few measurements is unexplored, never underperforming.
+- **Exploration & Exploitation Policy**: the qualitative rule, carried by the Strategy Agent's instructions, for balancing **exploitation** (producing again what evidence suggests is worth it) with **exploration** (producing what is not yet understood: unused or insufficiently measured Recipes, hypotheses from the Strategic Memory). It has no fixed ratio, no score and no collection. A Recipe with too few measurements is unexplored, never underperforming.
 - _Avoid_: "Planner Agent" (there is no such Agent), "Strategic Review" (that one learns; Content Planning decides what to propose).
 
 ### Production target
@@ -158,7 +163,7 @@ A proposal produced by one Content Planning Run: a Planning period, a Markdown s
 
 ### Planned Content
 
-One distinct content a Content Plan proposes: a Production Recipe, optionally a Source, a title, a creative brief, a planned date, the Publish targets it is meant for, an exploration or exploitation intent and a rationale. It is the same record while proposed, edited and approved; approval only changes its status. Its Creative Family is that of its Production Recipe. A Planned Content is not a Mission and not a Publication, and its date is a day, never a Publication time.
+One distinct content a Content Plan proposes: a Production Recipe, optionally a Source, a title, a creative brief, a planned date, the Publish targets it is meant for, an exploration or exploitation intent and a rationale. It is the same record while proposed, edited and approved; approval only changes its status. A Planned Content is not a Mission and not a Publication, and its date is a day, never a Publication time.
 
 - _Avoid_: "Planned Mission", "post", "Calendar entry" (the calendar is a view of Planned Contents).
 
