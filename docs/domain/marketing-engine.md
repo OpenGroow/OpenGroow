@@ -57,7 +57,7 @@ See ADR-051, ADR-082.
 
 ### Production Recipe
 
-How to reproduce a creative mechanic: a first-class, per-Project entity with a name and a description, written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). It depends on no **Creative Family** and keeps no reference to a Source: whatever inspired it (an idea, Sources, a family) only helped to write it. Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is deleted for good (with its versions); Missions already created with it keep their Recipe Snapshot, and it cannot be deleted while a proposed or approved planned content uses it. A recipe archived before archiving was removed stays `archived` (read-only until deleted).
+A reusable creative method for producing content with one Mission type: a first-class, per-Project entity with a name and a description, written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). It depends on no **Creative Family** and keeps no reference to a Source: whatever inspired it (an idea, Sources, a family) only helped to write it. Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe has no status: it is never archived, it is deleted for good, in one transaction, with its versions and its Planned Contents not produced yet (the proposals of the draft plan and the approved contents whose date has not passed), after a confirmation that gives their number. Those contents hold only the recipe id, no snapshot, so they could not be produced without it. Missions already created with it, running ones included, keep their Recipe Snapshot and run, retry and resume from it; their Publications stay attributed to it. Rejected and past contents stay as history, showing the recipe as deleted.
 
 - **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
 - **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
@@ -84,7 +84,7 @@ What a Recipe Generation returns, stored on its Run and never in the catalogue: 
 - **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source among the pinned Sources. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
 - **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The rationale stays on the Run and is shown read-only next to the form; neither it nor the Sources are copied to the recipe.
 - **Re-validated at creation** with the same rules as any manual creation, because the user may have edited it and the installed Templates may have changed.
-- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed" as a recipe status (a recipe is `active`, or `archived` for older data).
+- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed", "active" or "archived" as a recipe status (a recipe has none).
 
 ### Recipe Version
 
@@ -93,9 +93,9 @@ One immutable save of a **Production Recipe**: an optional verbatim `prompt`, fr
 
 ### Recipe Snapshot
 
-What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or deleting the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
 
-- **Checks at creation**, in order: the recipe belongs to the Project and is not archived; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
+- **Checks at creation**, in order: the recipe belongs to the Project; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
 - The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
 - _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
 

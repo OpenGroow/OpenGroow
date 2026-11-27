@@ -84,7 +84,7 @@ async function family(projectId: string, name: string) {
   return t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: projectId, slug: name.toLowerCase(), name, description: "d" }));
 }
 async function recipe(projectId: string, creativeFamilyId: Id<"creativeFamilies">, name: string, missionType: string, templateId = PLANNER) {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d", status: "active" }));
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d" }));
 }
 async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; scoring?: Record<string, number>; producedAt?: number; selectedAt?: number; creativeFamilyId?: Id<"creativeFamilies">; summary?: string } = {}) {
   return t.run((ctx) =>
@@ -122,7 +122,7 @@ describe("list_mission_types and list_production_recipes: format and Source requ
     await recipe(PROJECT_A, f, "Orphan", "gone_type", "example/uninstalled");
     const out = await call(token, "list_production_recipes");
     const by = (name: string) => out.recipes.find((r: { name: string }) => r.name === name);
-    expect(by("Image recipe")).toMatchObject({ kind: "image", sourceRequired: true, missionType: "make_image", archived: false });
+    expect(by("Image recipe")).toMatchObject({ kind: "image", sourceRequired: true, missionType: "make_image" });
     expect(by("Article recipe")).toMatchObject({ kind: "article", sourceRequired: false });
     expect(by("Orphan")).toMatchObject({ kind: null, sourceRequired: false });
     expect(out).toHaveProperty("total", 3);

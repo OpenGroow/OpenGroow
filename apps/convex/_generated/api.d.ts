@@ -123,7 +123,6 @@ import type * as planning_reads from "../planning_reads.js";
 import type * as post_url from "../post_url.js";
 import type * as production_recipe_rules from "../production_recipe_rules.js";
 import type * as production_recipes from "../production_recipes.js";
-import type * as production_validators from "../production_validators.js";
 import type * as project_agents from "../project_agents.js";
 import type * as project_agents_activation_helpers from "../project_agents/activation_helpers.js";
 import type * as project_agents_auth from "../project_agents/auth.js";
@@ -341,7 +340,6 @@ declare const fullApi: ApiFromModules<{
   post_url: typeof post_url;
   production_recipe_rules: typeof production_recipe_rules;
   production_recipes: typeof production_recipes;
-  production_validators: typeof production_validators;
   project_agents: typeof project_agents;
   "project_agents/activation_helpers": typeof project_agents_activation_helpers;
   "project_agents/auth": typeof project_agents_auth;

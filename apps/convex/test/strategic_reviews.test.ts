@@ -37,8 +37,8 @@ const newRun = (instanceId = INSTANCE_ID) =>
     });
   });
 
-const newRecipe = (instanceId = INSTANCE_ID, status: "active" | "archived" = "active") =>
-  t.run(async (ctx) => await ctx.db.insert("productionRecipes", { instanceId, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d", status }));
+const newRecipe = (instanceId = INSTANCE_ID) =>
+  t.run(async (ctx) => await ctx.db.insert("productionRecipes", { instanceId, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d" }));
 
 const newPublication = (instanceId = INSTANCE_ID) =>
   t.run(async (ctx) => {
@@ -106,15 +106,15 @@ describe("strategic_reviews.persist", () => {
     created(await persist(run, ok({ report: "a".repeat(reportChars), consolidatedMemory: "b".repeat(memoryChars) })));
   });
 
-  it("stores deduplicated references to existing entities of the Project, archived ones included", async () => {
+  it("stores deduplicated references to existing entities of the Project", async () => {
     const run = await newRun();
     const recipe = await newRecipe();
-    const archived = await newRecipe(INSTANCE_ID, "archived");
+    const other = await newRecipe(INSTANCE_ID);
     const publication = await newPublication();
-    const result = created(await persist(run, ok({ references: { recipeIds: [recipe, archived, recipe], publicationIds: [publication, publication] } })));
+    const result = created(await persist(run, ok({ references: { recipeIds: [recipe, other, recipe], publicationIds: [publication, publication] } })));
     const review = await latest();
     expect(review?._id).toBe(result.reviewId);
-    expect(review?.references).toEqual({ recipeIds: [recipe, archived], publicationIds: [publication] });
+    expect(review?.references).toEqual({ recipeIds: [recipe, other], publicationIds: [publication] });
   });
 
   it("references no Creative Family: a family list in the result is ignored and never stored", async () => {

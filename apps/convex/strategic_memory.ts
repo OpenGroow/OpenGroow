@@ -38,8 +38,8 @@ export const history = query({
 });
 
 /**
- * The entities a Review references, for links. Archived ones still resolve;
- * one deleted since (or of another Project) has a null name.
+ * The entities a Review references, for links. One deleted since (or of
+ * another Project) has a null name.
  */
 export const references = query({
   args: { instanceId: v.string(), reviewId: v.id("strategicReviews") },
@@ -52,7 +52,7 @@ export const references = query({
     const recipes = await Promise.all(
       review.references.recipeIds.map(async (id) => {
         const recipe = own(await ctx.db.get(id));
-        return { id, name: recipe?.name ?? null, archived: recipe?.status === "archived" };
+        return { id, name: recipe?.name ?? null };
       }),
     );
     const publications = await Promise.all(

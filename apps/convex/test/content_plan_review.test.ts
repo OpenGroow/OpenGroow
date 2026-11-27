@@ -48,7 +48,7 @@ beforeEach(async () => {
       instanceId: INSTANCE, adapter: "example", url: "https://publisher.example.com", updatedAt: 1,
       targets: [{ target: "social:example", channelService: "instagram" }, { target: "blog:example" }],
     } as never);
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "producer-cpv", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "producer-cpv", missionType: "make_video", name: "Reel recipe", description: "d" } as never);
     sourceId = await ctx.db.insert("sources", { instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "producer-cpv", sourceId: "s", label: "Article 1", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: 1, createdAt: 1, analysis: {} } as never);
   });
 });

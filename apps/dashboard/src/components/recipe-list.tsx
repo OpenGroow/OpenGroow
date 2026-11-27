@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { BarChart3, BookOpen, Ellipsis, ExternalLink, Layers, Play, Trash2 } from "lucide-react";
@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLinkItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NativeSelect } from "@/components/ui/native-select";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import type { RecipeTarget } from "@/src/lib/production-recipe-form";
+import { recipeDeletionMessage, type RecipeTarget } from "@/src/lib/production-recipe-form";
 
 // The Project's Production Recipes as a gallery, on the Recipes page (issue #143, ADR-088).
 
@@ -23,7 +23,6 @@ type RecipeRow = {
   missionType: string;
   name: string;
   description: string;
-  status: "active" | "archived";
   latestVersion: number;
 };
 type RecipeStats = { recipeId: string; publications: number };
@@ -106,6 +105,7 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
   // Published posts per recipe over the last year, from the Analytics read; absent until it arrives.
   const summary = useQuery(api.analytics_summary.summaryForProject, { instanceId, days: 365, groupBy: "recipe" }) as { recipes?: RecipeStats[] } | null | undefined;
   const removeRecipe = useMutation(api.production_recipes.remove);
+  const convex = useConvex();
   const [search, setSearch] = React.useState("");
   const [type, setType] = React.useState("all");
   const [sort, setSort] = React.useState<Sort>("recent");
@@ -123,9 +123,10 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
     .sort((a, b) => (sort === "name" ? a.name.localeCompare(b.name) : sort === "posts" ? (postsOf(b) ?? 0) - (postsOf(a) ?? 0) : b.createdAt - a.createdAt));
 
   async function handleDelete(recipe: RecipeRow) {
-    if (!window.confirm("Permanently delete this Production Recipe and its versions? Missions already created with it are not affected.")) return;
     setError(null);
     try {
+      const impact = await convex.query(api.production_recipes.deletionImpact, { instanceId, recipeId: recipe._id as Id<"productionRecipes"> });
+      if (!window.confirm(recipeDeletionMessage(impact?.plannedContents ?? 0))) return;
       await removeRecipe({ instanceId, recipeId: recipe._id as Id<"productionRecipes"> });
     } catch (e) {
       setError(extractConvexErrorMessage(e, "Could not delete the recipe."));

@@ -26,7 +26,6 @@ export type RecipeCatalog = {
     description: string;
     missionType: string;
     templateId: string;
-    archived: boolean;
     usage: Usage;
     /** Absent (unknown) when the Missions read was incomplete and none was seen. */
     neverUsedEver?: boolean;
@@ -125,7 +124,6 @@ export async function recipeCatalog(
         description: recipe.description,
         missionType: recipe.missionType,
         templateId: recipe.templateId,
-        archived: recipe.status === "archived",
         usage: u,
         ...(neverUsedEver !== undefined ? { neverUsedEver } : {}),
         ...(neverPublishedEver !== undefined ? { neverPublishedEver } : {}),

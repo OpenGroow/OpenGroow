@@ -88,13 +88,13 @@ export const remove = mutation({
   },
 });
 
-/** The active Recipes a proposal can switch to: the Project's, written for its Mission type. */
+/** The Recipes a proposal can switch to: the Project's, written for its Mission type. */
 export const recipeOptions = query({
   args: { contentId: v.id("plannedContents") },
   handler: async (ctx, args) => {
     const content = await ctx.db.get(args.contentId);
     if (!content || (await readOwnerId(ctx, content.instanceId)) === null) return [];
     const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", content.instanceId)).collect();
-    return recipes.filter((recipe) => recipe.status === "active" && recipe.missionType === content.missionType).map((recipe) => ({ id: recipe._id, name: recipe.name }));
+    return recipes.filter((recipe) => recipe.missionType === content.missionType).map((recipe) => ({ id: recipe._id, name: recipe.name }));
   },
 });

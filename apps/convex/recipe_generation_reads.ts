@@ -97,7 +97,6 @@ export async function getProductionRecipe(ctx: QueryCtx, scope: Scope, args: Rec
     description: recipe.description,
     templateId: recipe.templateId,
     missionType: recipe.missionType,
-    archived: recipe.status === "archived",
     latestVersion: version ? { version: version.version, prompt: version.prompt, instructions: version.instructions, constraints: version.constraints, createdAt: version.createdAt } : null,
   };
 }

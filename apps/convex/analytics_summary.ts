@@ -94,7 +94,7 @@ export type AnalyticsSummary = {
   }>;
   /** Publications whose channel is linked to no adapter: analytics unavailable, not "no data yet". */
   unavailable: Array<{ platform: string; format?: string; missionType: string; publications: number }>;
-  /** Publications in the period whose Mission has no Recipe Snapshot (no recipe, no family). */
+  /** Publications in the period whose Mission has no Recipe Snapshot (no recipe). */
   unattributed: number;
   /** The read stopped at the scan limit: older Publications may be missing. Distinct from truncating a list. */
   scanLimited: boolean;

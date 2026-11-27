@@ -339,6 +339,18 @@ export const dropRecipeFamily = migrations.define({
   },
 });
 
+/**
+ * Archiving a Production Recipe was replaced by deleting it: a recipe has no status any more. Removes the field, so a
+ * recipe archived before is usable (editable, offered to Missions and Content Plans) and deletable like any other.
+ * Idempotent. The field leaves the schema once this has run.
+ */
+export const dropRecipeStatus = migrations.define({
+  table: "productionRecipes",
+  migrateOne: async (ctx, recipe) => {
+    if (recipe.status !== undefined) await ctx.db.patch(recipe._id, { status: undefined });
+  },
+});
+
 const RUN_SETTLED = new Set(["completed", "failed", "cancelled"]);
 
 /**
@@ -438,6 +450,7 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInRuns,
   internal.migrations.describeHubPackages,
   internal.migrations.dropRecipeFamily,
+  internal.migrations.dropRecipeStatus,
   internal.migrations.stripRecipeGenerationFamily,
   internal.migrations.dropSourceProduction,
   internal.migrations.deleteSourceRoutingJobs,

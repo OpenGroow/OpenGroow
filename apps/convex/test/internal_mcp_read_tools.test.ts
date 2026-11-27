@@ -152,7 +152,7 @@ describe("get_analytics_summary", () => {
 
 async function seedRecipe(name: string) {
   return t.run(async (ctx) => {
-    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: "@test/social", missionType: "make_image", name, description: "d", status: "active" } as never);
+    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: "@test/social", missionType: "make_image", name, description: "d" } as never);
     const runId = await ctx.db.query("runs").first();
     return { recipeId: recipeId as string, runId: runId!._id as string };
   });

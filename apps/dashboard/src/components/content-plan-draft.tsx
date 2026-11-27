@@ -103,7 +103,7 @@ export function DraftPlan({ draft }: { draft: DraftPlanView }) {
   );
 }
 
-/** Approve or reject the whole plan; a refusal (past date, archived Recipe, exceeded quantity…) is shown as is. */
+/** Approve or reject the whole plan; a refusal (past date, deleted Recipe, exceeded quantity…) is shown as is. */
 function PlanDecision({ planId }: { planId: string }) {
   const approve = useMutation(api.content_plan_decision.approve);
   const reject = useMutation(api.content_plan_decision.reject);

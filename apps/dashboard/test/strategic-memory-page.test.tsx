@@ -40,9 +40,9 @@ function makeReview(overrides: Partial<Record<string, unknown>> = {}) {
 
 const REFERENCES = {
   recipes: [
-    { id: "rec-1", name: "Reel recipe", archived: false },
-    { id: "rec-2", name: "Old mechanic", archived: true },
-    { id: "rec-3", name: null, archived: false },
+    { id: "rec-1", name: "Reel recipe" },
+    { id: "rec-2", name: "Old mechanic" },
+    { id: "rec-3", name: null },
   ],
   publications: [{ id: "pub-1", target: "instagram:example", missionId: "mis-1" }],
 };
@@ -132,7 +132,6 @@ describe("StrategicMemoryContent", () => {
       "/projects/instance-1/missions/mis-1",
     ]);
     expect(text()).toContain("Old mechanic");
-    expect(text()).toContain("Archived");
     expect(text()).toContain("Deleted");
   });
 

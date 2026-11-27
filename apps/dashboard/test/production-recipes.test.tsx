@@ -17,6 +17,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.remove": vi.fn(),
   "recipes.setTarget": vi.fn(),
 };
+const convexQuery = vi.fn();
 let targets: unknown;
 let recipes: unknown;
 let recipe: unknown;
@@ -28,6 +29,7 @@ vi.mock("convex/react", () => ({
   usePaginatedQuery: () => ({ results: [], status: "Exhausted", loadMore: () => undefined }),
   useQuery: (key: string) => (key === "recipes.list" ? recipes : key === "recipes.get" ? recipe : key === "recipes.listVersions" ? versions : key === "recipes.listTargets" ? targets : key === "analytics.summary" ? summary : undefined),
   useMutation: (key: string) => mutations[key],
+  useConvex: () => ({ query: convexQuery }),
 }));
 vi.mock("@convex/_generated/api", () => ({
   api: {
@@ -35,6 +37,7 @@ vi.mock("@convex/_generated/api", () => ({
       create: "recipes.create",
       saveVersion: "recipes.saveVersion",
       remove: "recipes.remove",
+      deletionImpact: "recipes.deletionImpact",
       list: "recipes.list",
       get: "recipes.get",
       listVersions: "recipes.listVersions",
@@ -57,7 +60,7 @@ const V2 = {
   createdAt: Date.UTC(2026, 0, 2),
 };
 const V1 = { ...V2, version: 1, prompt: "Close-up", createdAt: Date.UTC(2026, 0, 1) };
-const RECIPE = { _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latest: V2 };
+const RECIPE = { _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", latest: V2 };
 
 const TARGETS = [
   {
@@ -74,6 +77,7 @@ describe("Production Recipes UI", () => {
 
   beforeEach(() => {
     for (const m of Object.values(mutations)) m.mockReset().mockResolvedValue(null);
+    convexQuery.mockReset().mockResolvedValue({ plannedContents: 0 });
     recipes = [];
     summary = { groupBy: "recipe", recipes: [] };
     targets = TARGETS;
@@ -113,7 +117,7 @@ describe("Production Recipes UI", () => {
   };
 
   it("lists the recipes of the Project with a link to each", async () => {
-    recipes = [{ _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 2 }];
+    recipes = [{ _id: "rec-1", templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", latestVersion: 2 }];
     await act(async () => root.render(<RecipesContent instanceId="p1" />));
     expect(container.textContent).toContain("Reaction clip");
     expect(container.textContent).toContain("v2");
@@ -122,7 +126,7 @@ describe("Production Recipes UI", () => {
     expect(container.querySelector("a")?.getAttribute("href")).toBe("/projects/p1/recipes/rec-1");
   });
 
-  const REC = (over: Record<string, unknown>) => ({ _id: "rec-1", createdAt: 1, templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", status: "active", latestVersion: 1, ...over });
+  const REC = (over: Record<string, unknown>) => ({ _id: "rec-1", createdAt: 1, templateId: "@example/video-demo", missionType: "create_letter_video", name: "Reaction clip", description: "A reaction", latestVersion: 1, ...over });
   const names = () => Array.from(container.querySelectorAll('[aria-label="Production Recipes"] li a')).map((a) => a.textContent);
   const change = async (label: string, value: string) => {
     const select = container.querySelector(`[aria-label="${label}"]`)!.closest('[data-slot="native-select-wrapper"]')!.querySelector("select") as HTMLSelectElement;
@@ -255,10 +259,22 @@ describe("Production Recipes UI", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
     await press("Delete");
+    expect(confirm).toHaveBeenCalledWith(expect.not.stringContaining("planned"));
     expect(mutations["recipes.remove"]).not.toHaveBeenCalled();
     confirm.mockReturnValue(true);
     await press("Delete");
     expect(mutations["recipes.remove"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
+    confirm.mockRestore();
+  });
+
+  it("says how many planned contents not produced yet go with the recipe, and cancels without deleting", async () => {
+    convexQuery.mockResolvedValue({ plannedContents: 3 });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+    await press("Delete");
+    expect(convexQuery).toHaveBeenCalledWith("recipes.deletionImpact", { instanceId: "p1", recipeId: "rec-1" });
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("3 planned contents that are not produced yet will also be deleted."));
+    expect(mutations["recipes.remove"]).not.toHaveBeenCalled();
     confirm.mockRestore();
   });
 

@@ -126,7 +126,7 @@ async function seed(options: { adapter?: boolean } = {}) {
   const list = (filters: { recipeId?: string; from?: number; to?: number } = {}) => owner.query(api.analytics.listForProject, { instanceId: INSTANCE_ID, ...filters });
   const recipe = (name: string) =>
     t.run(async (ctx) => {
-      const id = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, missionType: "make_reel", name, description: "d", status: "active" } as never);
+      const id = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: TEMPLATE_ID, missionType: "make_reel", name, description: "d" } as never);
       return { id, name, version: 2 };
     });
   return { t, owner, publish, list, recipe };

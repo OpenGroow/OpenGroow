@@ -94,7 +94,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
   // Production Recipes written for this Template and Mission type. The choice is
   // optional and never preselected; one that no longer belongs to the offered
-  // list (the type changed, the recipe was archived) counts as no choice.
+  // list (the type changed, the recipe was deleted) counts as no choice.
   const offeredRecipes = useQuery(
     api.production_recipes.listForMissionType,
     createOpen && effectiveTemplateId && type.trim()

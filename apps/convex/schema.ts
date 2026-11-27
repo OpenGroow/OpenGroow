@@ -24,7 +24,6 @@ import { indexingOutcomeV } from "./indexing.js";
 import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
-import { recipeStatusV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -657,7 +656,9 @@ export default defineSchema({
     // The contents of a plan.
     .index("by_plan", ["planId"])
     // Existing quantity: `approved` of a format within a date range; and the calendar by date.
-    .index("by_instance_status_plannedAt", ["instanceId", "status", "plannedAt"]),
+    .index("by_instance_status_plannedAt", ["instanceId", "status", "plannedAt"])
+    // The contents still to be produced with a Recipe, before deleting it.
+    .index("by_recipe_status_plannedAt", ["recipeId", "status", "plannedAt"]),
   jobs: defineTable({
     ownerId: v.string(),
     instanceId: v.string(),
@@ -775,8 +776,8 @@ export default defineSchema({
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
     .index("by_instance_slug", ["instanceId", "slug"]),
-  // A Production Recipe (issue #137): how to reproduce a Creative Family's
-  // mechanic, written for one Mission type of one Template. Identity only; its
+  // A Production Recipe (issue #137, ADR-088): a reusable creative method,
+  // written for one Mission type of one Template. Identity only; its
   // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
@@ -786,7 +787,8 @@ export default defineSchema({
     missionType: v.string(),
     name: v.string(),
     description: v.string(),
-    status: recipeStatusV,
+    // Transitional: a recipe has no status since archiving was replaced by deletion; removed once `dropRecipeStatus` has run everywhere.
+    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
   })
     .index("by_instance_family", ["instanceId", "creativeFamilyId"])
     // The Create Mission picker: a Project's recipes for one Mission type of one Template.

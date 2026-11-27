@@ -34,4 +34,12 @@ export function contentFromDraft(draft: RecipeDraft): RecipeVersionContent {
 /** A Mission type a recipe can be written for (`production_recipes.listTargets`). */
 export type RecipeTarget = { templateId: string; templateName: string; missionType: string; label: string };
 
+/** The confirmation before deleting a recipe: what goes with it (its Planned Contents not produced yet) and what stays. */
+export function recipeDeletionMessage(plannedContents: number): string {
+  const planned = plannedContents === 0
+    ? ""
+    : ` ${plannedContents} planned ${plannedContents === 1 ? "content that is" : "contents that are"} not produced yet will also be deleted.`;
+  return `Permanently delete this Production Recipe and its versions?${planned} Missions already created with it, their Publications and their performance are kept.`;
+}
+
 export const recipeTargetLabel = (t: RecipeTarget): string => `${t.templateName} · ${t.label}`;

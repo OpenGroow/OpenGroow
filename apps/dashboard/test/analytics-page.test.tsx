@@ -341,7 +341,6 @@ describe("Analytics page", () => {
     const recipe = (over: Record<string, unknown> = {}) => ({
       recipeId: "rec-1",
       recipeName: "Close-up",
-      archived: false,
       publications: 3,
       lastPublishedAt: Date.UTC(2026, 10, 15),
       versions: [{ version: 2, publications: 3, lastPublishedAt: Date.UTC(2026, 10, 15) }],

@@ -66,8 +66,8 @@ async function seed() {
       }
       return publicationId;
     });
-  const recipe = (name: string, status: "active" | "archived" = "active") =>
-    t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "@test/social", missionType: "make_image", name, description: "d", status }));
+  const recipe = (name: string) =>
+    t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "@test/social", missionType: "make_image", name, description: "d" }));
   return { t, owner, post, recipe };
 }
 
@@ -164,7 +164,7 @@ describe("analytics summary (issue #112)", () => {
       await s.post({ target: "tiktok:me", type: "make_video", kind: "video" });
       await s.t.run(async (ctx) => {
         const publication = (await ctx.db.get(withRecipe))!;
-        const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "@test/social", missionType: "make_image", name: "R", description: "d", status: "active" });
+        const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "@test/social", missionType: "make_image", name: "R", description: "d" });
         await ctx.db.patch(publication.missionId, { recipeSnapshot: { recipeId, recipeName: "R", version: 1, instructions: "i", constraints: [] } });
       });
       const summary = (await plain(s.owner, { instanceId: INSTANCE_ID }))!;
@@ -252,7 +252,7 @@ describe("analytics summary (issue #112)", () => {
       expect(res.unattributed).toBe(1);
       expect(res.recipes).toHaveLength(1);
       const [r] = res.recipes;
-      expect(r).toMatchObject({ recipeId: a, recipeName: "R", archived: false, publications: 4 });
+      expect(r).toMatchObject({ recipeId: a, recipeName: "R", publications: 4 });
       expect(r.versions).toEqual([
         expect.objectContaining({ version: 1, publications: 1 }),
         expect.objectContaining({ version: 2, publications: 3 }),
@@ -386,13 +386,15 @@ describe("analytics summary (issue #112)", () => {
       expect(res.recipes[0]).toMatchObject({ recipeId: a, publications: 1, adapters: [], unavailable: [{ platform: "tiktok", publications: 1 }] });
     });
 
-    it("keeps the historical identity of an edited or archived recipe", async () => {
+    it("keeps the historical identity of an edited, then deleted, recipe", async () => {
       const s = await seed();
       const a = await s.recipe("Old name");
       await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: a, name: "Old name", version: 1 } });
-      await s.t.run((ctx) => ctx.db.patch(a, { name: "Renamed", status: "archived" }));
+      await s.t.run((ctx) => ctx.db.patch(a, { name: "Renamed" }));
+      expect((await q(s)).recipes[0]).toMatchObject({ recipeId: a, recipeName: "Old name" });
+      await s.t.run((ctx) => ctx.db.delete(a));
       const [r] = (await q(s)).recipes;
-      expect(r).toMatchObject({ recipeId: a, recipeName: "Old name", archived: true });
+      expect(r).toMatchObject({ recipeId: a, recipeName: "Old name", publications: 1 });
       expect(r.versions[0].version).toBe(1);
     });
 
@@ -404,7 +406,7 @@ describe("analytics summary (issue #112)", () => {
       await s.post({ target: "instagram:me", type: "make_image", kind: "image", recipe: { id: b } });
       expect((await q(s, { recipeId: a })).recipes.map((r: any) => r.recipeId)).toEqual([a]);
       const foreign = await s.t.run(async (ctx) => {
-        return ctx.db.insert("productionRecipes", { instanceId: "other", templateId: "@test/social", missionType: "make_image", name: "Z", description: "d", status: "active" });
+        return ctx.db.insert("productionRecipes", { instanceId: "other", templateId: "@test/social", missionType: "make_image", name: "Z", description: "d" });
       });
       expect((await q(s, { recipeId: foreign })).recipes).toEqual([]);
       expect((await q(s, { recipeId: "not-an-id" })).recipes).toEqual([]);

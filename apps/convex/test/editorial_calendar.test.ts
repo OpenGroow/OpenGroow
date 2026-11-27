@@ -27,7 +27,7 @@ beforeEach(async () => {
     const now = new Date().toISOString();
     await insertInstance(ctx, { jobId: "job-cal", status: "running", createdAt: now, openclawId: INSTANCE, updatedAt: now, userId: OWNER.subject });
     await insertInstance(ctx, { jobId: "job-cal-2", status: "running", createdAt: now, openclawId: OTHER, updatedAt: now, userId: STRANGER.subject });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "tpl", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "tpl", missionType: "make_video", name: "Reel recipe", description: "d" } as never);
   });
 });
 afterEach(() => undefined);

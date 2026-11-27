@@ -194,7 +194,7 @@ describe("get_production_recipe", () => {
   it("returns a recipe with its target and latest version, and refuses another Project's", async () => {
     const { token } = await seed(PROJECT_A);
     const recipeId = await t.run(async (ctx) => {
-      const id = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: STRATEGIST, missionType: "make_image", name: "R", description: "d", status: "active" });
+      const id = await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: STRATEGIST, missionType: "make_image", name: "R", description: "d" });
       await ctx.db.insert("productionRecipeVersions", { instanceId: PROJECT_A, recipeId: id, version: 1, instructions: "old", constraints: [], createdAt: 1 });
       await ctx.db.insert("productionRecipeVersions", { instanceId: PROJECT_A, recipeId: id, version: 2, instructions: "new", prompt: "p", constraints: ["c"], createdAt: 2 });
       return id;
@@ -203,7 +203,7 @@ describe("get_production_recipe", () => {
     expect(out).toMatchObject({ recipeId, name: "R", templateId: STRATEGIST, missionType: "make_image", latestVersion: { version: 2, instructions: "new", prompt: "p", constraints: ["c"] } });
     expect(out).not.toHaveProperty("creativeFamily");
     await seed(PROJECT_B);
-    const foreign = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: PROJECT_B, templateId: STRATEGIST, missionType: "make_image", name: "F", description: "d", status: "active" }));
+    const foreign = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: PROJECT_B, templateId: STRATEGIST, missionType: "make_image", name: "F", description: "d" }));
     expect((await call(token, "get_production_recipe", { recipeId: foreign })).error).toMatch(/not found/);
   });
 });

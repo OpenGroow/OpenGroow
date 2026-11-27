@@ -107,11 +107,11 @@ describe("strategic_memory.history", () => {
 });
 
 describe("strategic_memory.references", () => {
-  it("resolves recipes and publications, archived ones included, and flags deleted ones", async () => {
+  it("resolves recipes and publications, and flags deleted ones", async () => {
     const { recipe, publication, gone } = await t.run(async (ctx) => {
       const now = Date.now();
-      const recipe = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d", status: "archived" });
-      const gone = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Deleted", description: "d", status: "active" });
+      const recipe = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d" });
+      const gone = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Deleted", description: "d" });
       await ctx.db.delete(gone);
       const missionId = await ctx.db.insert("missions", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "tpl", type: "make_reel", payload: {}, status: "done", createdAt: now, updatedAt: now });
       const publication = await ctx.db.insert("publications", { missionId, instanceId: INSTANCE_ID, target: "instagram:me", status: "published", createdAt: now, updatedAt: now });
@@ -119,7 +119,7 @@ describe("strategic_memory.references", () => {
     });
     const id = await review(INSTANCE_ID, { createdAt: 10, refs: { recipeIds: [recipe, gone], publicationIds: [publication] } });
     const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
-    expect(refs?.recipes).toEqual([expect.objectContaining({ id: recipe, name: "Recipe", archived: true }), expect.objectContaining({ id: gone, name: null })]);
+    expect(refs?.recipes).toEqual([expect.objectContaining({ id: recipe, name: "Recipe" }), expect.objectContaining({ id: gone, name: null })]);
     expect(refs?.publications).toEqual([expect.objectContaining({ id: publication, target: "instagram:me" })]);
   });
 
@@ -134,14 +134,14 @@ describe("strategic_memory.references", () => {
   it("never resolves an entity of another Project referenced by a review", async () => {
     const foreign = await t.run(async (ctx) => {
       const now = Date.now();
-      const recipe = await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Foreign recipe", description: "d", status: "active" });
+      const recipe = await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Foreign recipe", description: "d" });
       const missionId = await ctx.db.insert("missions", { ownerId: STRANGER.subject, instanceId: OTHER_INSTANCE_ID, templateId: "tpl", type: "make_reel", payload: {}, status: "done", createdAt: now, updatedAt: now });
       const publication = await ctx.db.insert("publications", { missionId, instanceId: OTHER_INSTANCE_ID, target: "instagram:other", status: "published", createdAt: now, updatedAt: now });
       return { recipe, publication };
     });
     const id = await review(INSTANCE_ID, { createdAt: 10, refs: { recipeIds: [foreign.recipe], publicationIds: [foreign.publication] } });
     const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
-    expect(refs?.recipes).toEqual([{ id: foreign.recipe, name: null, archived: false }]);
+    expect(refs?.recipes).toEqual([{ id: foreign.recipe, name: null }]);
     expect(refs?.publications).toEqual([{ id: foreign.publication, target: null, missionId: null }]);
   });
 

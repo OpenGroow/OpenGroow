@@ -69,11 +69,11 @@ async function call(token: string, name: string, args: unknown = {}) {
 async function recipes(token: string, args: unknown = {}) {
   return JSON.parse((await call(token, "list_production_recipes", args)).result.content[0].text);
 }
-type Entry = { name: string; neverUsedEver?: boolean; neverPublishedEver?: boolean; archived: boolean; usage: { lifetime: Record<string, number>; period: Record<string, number>; lastMissionAt?: number; lastAttemptAt?: number; lastPublicationAt?: number } };
+type Entry = { name: string; neverUsedEver?: boolean; neverPublishedEver?: boolean; usage: { lifetime: Record<string, number>; period: Record<string, number>; lastMissionAt?: number; lastAttemptAt?: number; lastPublicationAt?: number } };
 const entry = (answer: { recipes: Entry[] }, name: string) => answer.recipes.find((r) => r.name === name)!;
 
-async function recipe(projectId: string, name: string, status: "active" | "archived" = "active") {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, templateId: STRATEGIST, missionType: "make_image", name, description: "d", status }));
+async function recipe(projectId: string, name: string) {
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, templateId: STRATEGIST, missionType: "make_image", name, description: "d" }));
 }
 async function mission(projectId: string, recipeId: Id<"productionRecipes"> | undefined, o: { status?: string; ageDays?: number } = {}) {
   return t.run((ctx) => {
@@ -227,11 +227,12 @@ describe("list_production_recipes", () => {
     expect(entry(answer, "Idle").neverUsedEver).toBeUndefined();
   });
 
-  it("flags archived recipes, and lists a never-used one", async () => {
+  it("lists a never-used recipe, with no archived flag", async () => {
     const token = await seedProject(PROJECT_A);
-    await recipe(PROJECT_A, "Old", "archived");
+    await recipe(PROJECT_A, "Old");
     const answer = await recipes(token);
-    expect(entry(answer, "Old")).toMatchObject({ archived: true, neverUsedEver: true, neverPublishedEver: true });
+    expect(entry(answer, "Old")).toMatchObject({ neverUsedEver: true, neverPublishedEver: true });
+    expect(entry(answer, "Old")).not.toHaveProperty("archived");
     expect(answer.partial).toBe(false);
   });
 

@@ -51,6 +51,30 @@ describe("migrations.dropRecipeFamily", () => {
   });
 });
 
+describe("migrations.dropRecipeStatus", () => {
+  it("removes the status of every recipe, archived ones included, and leaves the rest and their versions as they are", async () => {
+    const t = convexTest(schema, modules);
+    migrationsComponent.register(t);
+    const ids = await t.run(async (ctx) => {
+      const recipe = (name: string, status: "active" | "archived") =>
+        ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "example/post", missionType: "make_post", name, description: "d", status });
+      const archived = await recipe("Archived recipe", "archived");
+      const active = await recipe("Active recipe", "active");
+      await ctx.db.insert("productionRecipeVersions", { instanceId: INSTANCE, recipeId: archived, version: 1, instructions: "i", constraints: [], createdAt: NOW });
+      return { archived, active };
+    });
+
+    await migrate(t, internal.migrations.dropRecipeStatus);
+    await migrate(t, internal.migrations.dropRecipeStatus);
+
+    await t.run(async (ctx) => {
+      for (const id of [ids.archived, ids.active]) expect(await ctx.db.get(id)).not.toHaveProperty("status");
+      expect(await ctx.db.get(ids.archived)).toMatchObject({ name: "Archived recipe", templateId: "example/post", missionType: "make_post" });
+      expect(await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", ids.archived)).collect()).toHaveLength(1);
+    });
+  });
+});
+
 describe("migrations.stripRecipeGenerationFamily", () => {
   const addSource = (ctx: { db: any }, familyId: Id<"creativeFamilies">, capturedAt: number, o: { status?: string; excluded?: boolean } = {}) =>
     ctx.db.insert("sources", {
@@ -91,7 +115,7 @@ describe("migrations.stripRecipeGenerationFamily", () => {
     const { runId, recipeId } = await t.run(async (ctx) => {
       const familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "article-1", name: "Example family", description: "A mechanic" });
       await addSource(ctx, familyId, NOW);
-      const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "example/post", missionType: "make_post", name: "Example recipe", description: "d", status: "active" });
+      const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "example/post", missionType: "make_post", name: "Example recipe", description: "d" });
       const runId = await ctx.db.insert("runs", {
         ...base, status: "completed", recipeGeneration: { familyId, tryCount: 1 }, recipeProposal: { proposal: { name: "Example recipe" } }, recipeId,
       } as never);

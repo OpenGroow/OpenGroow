@@ -48,7 +48,7 @@ beforeEach(async () => {
     } as never);
     await ctx.db.insert("projectAgents", { instanceId: INSTANCE, templateId: TEMPLATE, status: "active", workspaceKey: "ws", openclawAgentName: "a", mcpServerKeys: [], createdAt: NOW, updatedAt: NOW } as never);
     familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "F", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d" } as never);
   });
 });
 afterEach(() => {
@@ -147,10 +147,10 @@ describe("content_plan_decision.approve", () => {
     expect(await owner().mutation(api.content_plan_decision.approve, { planId })).toMatchObject({ ok: false, reason: "over_quota" });
   });
 
-  it("is refused when the Recipe was archived", async () => {
+  it("is refused when the Recipe was deleted", async () => {
     const planId = await plan();
     await content(planId);
-    await t.run((ctx) => ctx.db.patch(recipeId, { status: "archived" } as never));
+    await t.run((ctx) => ctx.db.delete(recipeId));
     expect(await owner().mutation(api.content_plan_decision.approve, { planId })).toMatchObject({ ok: false, reason: "invalid" });
     expect((await statuses(planId)).plan).toBe("draft");
   });
