@@ -20,6 +20,7 @@ const modules = {
   "../strategic_review_jobs.ts": () => import("../strategic_review_jobs.js"),
   "../source_jobs.ts": () => import("../source_jobs.js"),
   "../score_jobs.ts": () => import("../score_jobs.js"),
+  "../commands_node.ts": () => import("../commands_node.js"),
 };
 
 const INSTANCE = "instance-rg";
@@ -406,6 +407,41 @@ describe("retries", () => {
     expect(await runs()).toHaveLength(1);
     expect(await getRun(runId)).toMatchObject({ status: "cancelled" });
     expect(await recipes()).toEqual([]);
+  });
+});
+
+describe("workspace files", () => {
+  const deletes = async () =>
+    (await t.run((ctx) => ctx.db.query("commands").collect()))
+      .filter((c) => c.type === "runtime.workspace.file.delete_batch")
+      .map((c) => c.payload as { workspaceKey: string; filePaths: string[] });
+  const filesOf = (...ids: Id<"runs">[]) => ids.flatMap((id) => [`standalone/${id}/run.md`, `standalone/${id}/outputs/${id}.json`]);
+
+  it("keeps the files while a retry is possible, then deletes every try's files once the generation completes", async () => {
+    const sourceId = await addSource();
+    const { runId: first } = await generate({ sources: [sourceId] });
+    await running(first);
+    await complete(first, proposal([sourceId], { missionType: "nothing" }));
+    expect(await deletes()).toEqual([]);
+    const second = (await runs()).find((r) => r.status === "pending")!._id;
+    await running(second);
+    await complete(second, proposal([sourceId]));
+    expect(await getRun(second)).toMatchObject({ status: "completed", recipeProposal: { proposal: expect.anything() } });
+    const [batch, ...more] = await deletes();
+    expect(more).toEqual([]);
+    expect(batch!.workspaceKey).toBe("ws");
+    expect([...batch!.filePaths].sort()).toEqual(filesOf(first, second).sort());
+  });
+
+  it("deletes the files when the last try fails, and when a generation is cancelled or fails without retry", async () => {
+    const { runId } = await started();
+    await fail(runId, "model unavailable");
+    expect((await deletes()).map((d) => d.filePaths)).toEqual([filesOf(runId)]);
+
+    const { runId: cancelled } = await generate({ idea: "An idea" });
+    await running(cancelled);
+    await t.mutation(internal.runs.markCancelled, { runId: cancelled });
+    expect((await deletes()).map((d) => d.filePaths)).toEqual([filesOf(runId), filesOf(cancelled)]);
   });
 });
 

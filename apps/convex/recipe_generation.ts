@@ -1,7 +1,10 @@
 import { v } from "convex/values";
+import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import { internalQuery, mutation, type MutationCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
+import { enqueueCommand } from "./commands.js";
 import { ownerIdFor } from "./instance_ownership.js";
+import { standaloneResultFilePath, standaloneRunFilePath } from "./source_jobs/job_files.js";
 import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { requireValidTarget } from "./production_recipes.js";
@@ -124,14 +127,40 @@ export const generateRecipe = mutation({
 });
 
 /**
- * A Recipe Generation Run failed or was cancelled (the caller already marked it failed). When `reasons` are given (a
- * refused or unreadable result) and the budget allows, the next try is inserted here, in the same mutation, so the
- * Agent's lock is never released between two tries. Otherwise the generation ends and nothing was created.
+ * A generation has ended (its last try settled, with no retry left): deletes the run file and the result file of every
+ * try from the Agent's workspace, as a settled SourceJob does, through one background workspace command queued in the
+ * settling transaction. The result is already on the Run by then. Missing files are fine; best effort.
+ */
+async function scheduleGenerationFilesCleanup(ctx: MutationCtx, run: Doc<"runs">): Promise<void> {
+  if (!("recipeGeneration" in run) || !run.recipeGeneration) return;
+  const agent = await ctx.db
+    .query("projectAgents")
+    .withIndex("by_instance_template", (q) => q.eq("instanceId", run.instanceId).eq("templateId", run.templateId))
+    .unique();
+  if (!agent?.workspaceKey) return;
+  const generationId = run.recipeGeneration.generationId ?? run._id;
+  const tries = await ctx.db.query("runs").withIndex("by_generation", (q) => q.eq("recipeGeneration.generationId", generationId)).take(MAX_RECIPE_GENERATION_TRIES + 1);
+  const runIds = new Set<Id<"runs">>([run._id, ...tries.map((t) => t._id)]);
+  await enqueueCommand(ctx, {
+    instanceId: run.instanceId,
+    type: RUNTIME_WORKSPACE_FILE_DELETE_BATCH,
+    payload: { workspaceKey: agent.workspaceKey, filePaths: [...runIds].flatMap((id) => [standaloneRunFilePath(id), standaloneResultFilePath(id)]) },
+  });
+}
+
+/**
+ * A Recipe Generation Run failed or was cancelled (the caller already marked it failed or cancelled). When `reasons`
+ * are given (a refused or unreadable result) and the budget allows, the next try is inserted here, in the same
+ * mutation, so the Agent's lock is never released between two tries. Otherwise the generation ends, nothing was
+ * created, and its workspace files are deleted.
  */
 export async function failRecipeGenerationRun(ctx: MutationCtx, run: Doc<"runs">, reasons?: string[]): Promise<void> {
   if (!("recipeGeneration" in run) || !run.recipeGeneration) return;
   const pin = run.recipeGeneration;
-  if (!reasons || pin.tryCount >= MAX_RECIPE_GENERATION_TRIES) return;
+  if (!reasons || pin.tryCount >= MAX_RECIPE_GENERATION_TRIES) {
+    await scheduleGenerationFilesCleanup(ctx, run);
+    return;
+  }
   const now = Date.now();
   const runId = await ctx.db.insert("runs", {
     ownerId: run.ownerId,
@@ -195,6 +224,7 @@ export async function settleRecipeGenerationRun(ctx: MutationCtx, run: Doc<"runs
     ? { proposal: parsed.proposal }
     : { no_opportunity: { reason: parsed.reason, ...(parsed.details ? { details: parsed.details } : {}) } };
   await ctx.db.patch(run._id, { status: "completed", result, recipeProposal, completedAt: now, updatedAt: now });
+  await scheduleGenerationFilesCleanup(ctx, run);
 }
 
 export const isRecipeGenerationRun = internalQuery({

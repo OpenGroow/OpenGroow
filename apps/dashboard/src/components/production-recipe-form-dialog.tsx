@@ -183,7 +183,7 @@ export function ProductionRecipeFormDialog({ mode, open, onOpenChange, initial, 
           <DialogTitle>{title ?? (mode === "create" ? "New Production Recipe" : "Edit Production Recipe")}</DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Describe how to reproduce this family's mechanic."
+              ? "Define a reusable creative method for producing content with a specific Mission Type."
               : "Saving appends a new version. Earlier versions are never changed."}
           </DialogDescription>
         </DialogHeader>

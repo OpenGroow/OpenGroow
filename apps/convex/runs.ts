@@ -537,7 +537,10 @@ export const markCancelled = internalMutation({
     });
     const parent = runParent(run);
     // A cancelled Recipe Generation creates nothing and is never retried.
-    if (parent.kind === "standalone") return;
+    if (parent.kind === "standalone") {
+      await failRecipeGenerationRun(ctx, run);
+      return;
+    }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
       await failScoringRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
       return;

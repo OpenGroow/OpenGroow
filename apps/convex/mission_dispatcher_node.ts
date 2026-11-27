@@ -785,6 +785,6 @@ async function dispatchContentPlanningRun(ctx: ActionCtx, runId: Id<"runs">, par
 async function dispatchRecipeGenerationRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "standalone" }>): Promise<void> {
   const inputs = await ctx.runQuery(internal.recipe_generation.loadDispatchInputs, { runId });
   if (!(await dispatchJobRun(ctx, runId, parent, inputs, (loaded) => loaded.runFile))) {
-    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_inputs_missing", message: "could not load the Creative Family or the Agent" });
+    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_inputs_missing", message: "the Agent that runs this Recipe Generation is not set up in the Project" });
   }
 }
