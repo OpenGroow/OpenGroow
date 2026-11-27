@@ -7,6 +7,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { AutoPublishToggle, supportsAutoPublish } from "./auto-publish-toggle";
 import { COLUMNS, columnForMission, MissionKanbanBoard } from "./mission-kanban-board";
 import { MissionPayloadEditor } from "./mission-payload-editor";
+import { RecipeField, useRecipeChoice } from "./production-recipe-select";
 import { PublishChannelPicker } from "./publish-channel-picker";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
 import {
@@ -71,7 +72,6 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   const [payloadText, setPayloadText] = useState("");
   const [rawPayloadMode, setRawPayloadMode] = useState(false);
   const [autoPublish, setAutoPublish] = useState(false);
-  const [recipeId, setRecipeId] = useState<Id<"productionRecipes"> | "">("");
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -95,22 +95,16 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
   // Manifests load after the Agent list: re-seed once the declared types arrive.
   const declaredKey = declaredMissionTypes.map((t) => t.type).join("\u0000");
   const payloadFields = missionTypes.find((t) => t.type === type)?.fields;
-  // A creative Mission type requires a Production Recipe (ADR-091): the recipes written for this Template and
-  // Mission type are listed with the Default preselected, and there is no empty choice. A choice that no longer
-  // belongs to the offered list (the type changed, the recipe was deleted) falls back to the Default.
+  // A creative Mission type requires a Production Recipe (ADR-091): the Default is preselected, there is no fallback to
+  // another one and no empty choice.
   const isCreative = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.kind === "creative";
-  const offeredRecipes = useQuery(
-    api.production_recipes.listForMissionType,
-    createOpen && isCreative && effectiveTemplateId && type.trim()
-      ? { instanceId, templateId: effectiveTemplateId, missionType: type.trim() }
-      : "skip",
-  );
-  const chosenRecipeId: Id<"productionRecipes"> | "" = !isCreative
-    ? ""
-    : offeredRecipes?.some((r) => r._id === recipeId)
-      ? recipeId
-      : (offeredRecipes?.find((r) => r.isDefault) ?? offeredRecipes?.[0])?._id ?? "";
-  const recipeMissing = isCreative && chosenRecipeId === "";
+  const { offeredRecipes, chosenRecipeId, setRecipeId, recipeMissing } = useRecipeChoice({
+    instanceId,
+    templateId: effectiveTemplateId,
+    type: type.trim(),
+    isCreative,
+    enabled: createOpen,
+  });
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type.trim());
   // A Mission type that declares `publish` groups channels, Auto-publish and the
   // date in one "Publish" card; others keep the standalone toggle.
@@ -194,7 +188,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
     }
 
     if (recipeMissing) {
-      setError("This Mission type needs a Production Recipe: there is none to choose yet.");
+      setError("This Mission type needs a Production Recipe: choose one.");
       return;
     }
 
@@ -378,24 +372,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
               onRawModeChange={setRawPayloadMode}
             />
 
-            {isCreative && offeredRecipes && offeredRecipes.length > 0 ? (
-              <label className="grid gap-1.5">
-                <span className="text-sm font-semibold text-muted-foreground">Production Recipe</span>
-                <NativeSelect value={chosenRecipeId} onChange={(e) => setRecipeId(e.target.value as Id<"productionRecipes">)}>
-                  {offeredRecipes.map((r) => (
-                    <option key={r._id} value={r._id}>
-                      {r.name}
-                      {r.isDefault ? " (Default)" : ""} (v{r.latestVersion})
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-            ) : null}
-            {isCreative && offeredRecipes && offeredRecipes.length === 0 ? (
-              <p className="rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground">
-                This Mission type needs a Production Recipe and none is available. Update the Template or create a recipe first.
-              </p>
-            ) : null}
+            {isCreative ? <RecipeField recipes={offeredRecipes} value={chosenRecipeId} onChange={setRecipeId} /> : null}
 
             {error ? (
               <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

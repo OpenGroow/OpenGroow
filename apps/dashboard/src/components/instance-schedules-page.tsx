@@ -7,6 +7,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
 import { ScheduleCadenceEditor } from "./schedule-cadence-editor";
 import { PublishChannelPicker } from "./publish-channel-picker";
+import { RecipeField, useRecipeChoice } from "./production-recipe-select";
+import { RunNowButton, ScheduleRecipePicker } from "./schedule-row-controls";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
   AutoPublishToggle,
@@ -33,7 +35,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
@@ -116,76 +117,6 @@ const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", 
 
 const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
 
-/** Fixes a Schedule whose recipe is unavailable: picks a compatible recipe, which clears the reason but never resumes it. */
-function ScheduleRecipePicker({ instanceId, schedule }: { instanceId: string; schedule: { _id: Id<"schedules">; templateId: string; type: string } }) {
-  const offered = useQuery(api.production_recipes.listForMissionType, { instanceId, templateId: schedule.templateId, missionType: schedule.type });
-  const setRecipe = useMutation(api.schedules.setRecipe);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-      Choose a recipe
-      <NativeSelect
-        data-testid="schedule-recipe-picker"
-        value=""
-        onChange={(e) => {
-          setError(null);
-          setRecipe({ scheduleId: schedule._id, recipeId: e.target.value as Id<"productionRecipes"> }).catch((err: unknown) =>
-            setError(extractConvexErrorMessage(err, "Failed to set the recipe.")),
-          );
-        }}
-      >
-        <option value="" disabled>
-          Select...
-        </option>
-        {(offered ?? []).map((r) => (
-          <option key={r._id} value={r._id}>
-            {r.name}
-            {r.isDefault ? " (Default)" : ""}
-          </option>
-        ))}
-      </NativeSelect>
-      {error ? <span role="alert" className="text-destructive">{error}</span> : null}
-    </label>
-  );
-}
-
-/** Creates a Mission from the Schedule now: shows it is running and says why when it is refused. */
-function RunNowButton({ run, blockedReason }: { run: () => Promise<unknown>; blockedReason?: string }) {
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleClick() {
-    setRunning(true);
-    setError(null);
-    try {
-      await run();
-    } catch (err) {
-      setError(extractConvexErrorMessage(err, "Failed to run the Schedule now."));
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        className="rounded-full"
-        data-action="run-now"
-        loading={running}
-        disabled={blockedReason !== undefined}
-        title={blockedReason}
-        onClick={() => { void handleClick(); }}
-      >
-        <Play />
-        Run now
-      </Button>
-      {blockedReason ? <span className="sr-only" data-testid="run-now-blocked">{blockedReason}</span> : null}
-      {error ?<span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
-    </>
-  );
-}
-
 export function InstanceSchedulesPage({ params }: Props) {
   const { instanceId } = use(params);
   return <InstanceSchedulesContent instanceId={decodeURIComponent(instanceId)} />;
@@ -200,7 +131,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const resumeSchedule = useMutation(api.schedules.resume);
   const removeSchedule = useMutation(api.schedules.remove);
   const updateSchedulePayload = useMutation(api.schedules.updatePayload);
-  const createMission = useMutation(api.missions.create);
+  const runScheduleNow = useMutation(api.schedules.runNow);
   const updateScheduleFrequency = useMutation(api.schedules.updateFrequency);
   const setScheduleAutoPublish = useMutation(api.schedules.setAutoPublish);
 
@@ -224,7 +155,6 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const [hour, setHour] = useState(9);
   const [minute, setMinute] = useState(0);
   const [autoPublish, setAutoPublish] = useState(false);
-  const [recipeId, setRecipeId] = useState<Id<"productionRecipes"> | "">("");
 
   const effectiveTemplateId = templateId || activeAgents[0]?.templateId || "";
   const effectiveManifest = manifests.find((m) => m.id === effectiveTemplateId);
@@ -243,22 +173,16 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
   const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
   const declaresPublish = publishDecl !== undefined;
-  // A creative Mission type needs a recipe (ADR-091): the compatible ones are listed with the Default preselected,
-  // and there is no empty choice.
+  // A creative Mission type needs a recipe (ADR-091): the Default is preselected, there is no fallback to another one.
   const isCreative = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.kind === "creative";
   const [createOpen, setCreateOpen] = useState(false);
-  const offeredRecipes = useQuery(
-    api.production_recipes.listForMissionType,
-    createOpen && isCreative && effectiveTemplateId && type.trim()
-      ? { instanceId, templateId: effectiveTemplateId, missionType: type.trim() }
-      : "skip",
-  );
-  const chosenRecipeId: Id<"productionRecipes"> | "" = !isCreative
-    ? ""
-    : offeredRecipes?.some((r) => r._id === recipeId)
-      ? recipeId
-      : (offeredRecipes?.find((r) => r.isDefault) ?? offeredRecipes?.[0])?._id ?? "";
-  const recipeMissing = isCreative && chosenRecipeId === "";
+  const { offeredRecipes, chosenRecipeId, setRecipeId, recipeMissing } = useRecipeChoice({
+    instanceId,
+    templateId: effectiveTemplateId,
+    type: type.trim(),
+    isCreative,
+    enabled: createOpen,
+  });
   const recipeNames = new Map((useQuery(api.production_recipes.list, { instanceId }) ?? []).map((r) => [r._id, r.name]));
 
   useEffect(() => {
@@ -303,7 +227,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
       return;
     }
     if (recipeMissing) {
-      setError("This Mission type needs a Production Recipe: there is none to choose yet.");
+      setError("This Mission type needs a Production Recipe: choose one.");
       return;
     }
     const payloadError = validateMissionPayload({
@@ -491,27 +415,8 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               )}
             </label>
 
-            {isCreative && offeredRecipes && offeredRecipes.length > 0 ? (
-              <label className="grid gap-1.5">
-                <span className="text-sm font-semibold text-muted-foreground">Production Recipe</span>
-                <NativeSelect
-                  data-testid="schedule-recipe"
-                  value={chosenRecipeId}
-                  onChange={(e) => setRecipeId(e.target.value as Id<"productionRecipes">)}
-                >
-                  {offeredRecipes.map((r) => (
-                    <option key={r._id} value={r._id}>
-                      {r.name}
-                      {r.isDefault ? " (Default)" : ""}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </label>
-            ) : null}
-            {isCreative && offeredRecipes && offeredRecipes.length === 0 ? (
-              <p className="rounded-xl border border-border px-4 py-3 text-sm text-muted-foreground">
-                This Mission type needs a Production Recipe and none is available. Update the Template or create a recipe first.
-              </p>
+            {isCreative ? (
+              <RecipeField recipes={offeredRecipes} value={chosenRecipeId} onChange={setRecipeId} testId="schedule-recipe" />
             ) : null}
 
             {autoPublishAllowed && !declaresPublish && (
@@ -796,16 +701,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                       : schedule.pausedReason
                                         ? { blockedReason: "Recipe unavailable: choose a compatible recipe first." }
                                         : {})}
-                                    run={() =>
-                                      createMission({
-                                        instanceId,
-                                        templateId: schedule.templateId,
-                                        type: schedule.type,
-                                        payload: schedule.payload,
-                                        // The same recipe, through the same validation, as the tick.
-                                        ...(schedule.recipeId ? { recipe: { recipeId: schedule.recipeId } } : {}),
-                                      })
-                                    }
+                                    run={() => runScheduleNow({ scheduleId: schedule._id })}
                                   />
                                   {paused ? (
                                     <Button

@@ -32,7 +32,6 @@ vi.mock("@convex/_generated/api", () => ({
       getForProject: "project_templates.getForProject",
     },
     project_agents: { listByInstance: "project_agents.listByInstance" },
-    missions: { create: "missions.create" },
     production_recipes: { list: "production_recipes.list", listForMissionType: "production_recipes.listForMissionType" },
     schedules: {
       setRecipe: "schedules.setRecipe",
@@ -44,6 +43,7 @@ vi.mock("@convex/_generated/api", () => ({
       updatePayload: "schedules.updatePayload",
       updateFrequency: "schedules.updateFrequency",
       setAutoPublish: "schedules.setAutoPublish",
+      runNow: "schedules.runNow",
     },
   },
 }));
@@ -427,20 +427,16 @@ describe("InstanceSchedulesContent", () => {
       if (key === "project_agents.listByInstance") return [];
       return undefined;
     });
-    const createMission = vi.fn().mockResolvedValue(undefined);
-    useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+    const runNow = vi.fn().mockResolvedValue(undefined);
+    useMutationMock.mockImplementation((ref: string) => (ref === "schedules.runNow" ? runNow : vi.fn()));
 
     await render();
     await act(async () => {
       document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
     });
 
-    expect(createMission).toHaveBeenCalledWith({
-      instanceId: "instance-1",
-      templateId: "@opengroow/seo",
-      type: "report",
-      payload: { a: 1 },
-    });
+    // Only the Schedule is sent: the server reads its type, payload and recipe.
+    expect(runNow).toHaveBeenCalledWith({ scheduleId: "schedule-1" });
   });
 
   it("Run now shows why the Mission was refused and is enabled again afterwards", async () => {
@@ -449,8 +445,8 @@ describe("InstanceSchedulesContent", () => {
       if (key === "project_agents.listByInstance") return [];
       return undefined;
     });
-    const createMission = vi.fn().mockRejectedValue(new Error("projectAgent for @opengroow/seo is not active"));
-    useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+    const runNow = vi.fn().mockRejectedValue(new Error("projectAgent for @opengroow/seo is not active"));
+    useMutationMock.mockImplementation((ref: string) => (ref === "schedules.runNow" ? runNow : vi.fn()));
 
     await render();
     await act(async () => {
@@ -538,16 +534,32 @@ describe("InstanceSchedulesContent", () => {
       expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ recipeId: "recipe-freeform" }));
     });
 
-    it("shows the recipe of a Schedule and runs it now with that recipe", async () => {
+    it("shows the recipe of a Schedule and runs it now without sending a recipe", async () => {
       serve([makeSchedule({ recipeId: "recipe-punchy" })]);
-      const createMission = vi.fn().mockResolvedValue(undefined);
-      useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+      const runNow = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation((ref: string) => (ref === "schedules.runNow" ? runNow : vi.fn()));
       await render([creative(seoManifest), socialEngagementManifest]);
       expect(document.querySelector('[data-testid="schedule-recipe-name"]')?.textContent).toContain("Punchy");
       await act(async () => {
         document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
       });
-      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-punchy" } }));
+      expect(runNow).toHaveBeenCalledWith({ scheduleId: "schedule-1" });
+    });
+
+    it("preselects nothing when no recipe is the Default, and cannot be submitted until one is chosen", async () => {
+      serve([], RECIPES.map((r) => ({ ...r, isDefault: false })));
+      const createSchedule = vi.fn().mockResolvedValue({});
+      useMutationMock.mockImplementation((ref: string) => (ref === "schedules.create" ? createSchedule : vi.fn()));
+      await render([creative(seoManifest), socialEngagementManifest]);
+
+      const select = document.querySelector<HTMLSelectElement>('[data-testid="schedule-recipe"]')!;
+      expect(select.value).toBe("");
+      expect(select.options[0]!.disabled).toBe(true);
+      await act(async () => {
+        document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      expect(createSchedule).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain("needs a Production Recipe");
     });
 
     it("shows the pause reason, blocks Resume and Run now, and sets a recipe from the picker", async () => {

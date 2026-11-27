@@ -648,6 +648,16 @@ describe("InstanceMissionsContent — mission list", () => {
       expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-default" } }));
     });
 
+    it("preselects nothing when no recipe is the Default, and refuses to submit until one is chosen", async () => {
+      const createMission = await renderVideoForm(RECIPES.map((r) => ({ ...r, isDefault: false })));
+      expect(recipeSelect()?.value).toBe("");
+      await submit();
+      expect(createMission).not.toHaveBeenCalled();
+      await setValue(recipeSelect()!, "recipe-custom");
+      await submit();
+      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-custom" } }));
+    });
+
     it("sends another recipe when the user picks it", async () => {
       const createMission = await renderVideoForm(RECIPES);
       await setValue(recipeSelect()!, "recipe-custom");
