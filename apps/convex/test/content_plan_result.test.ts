@@ -31,7 +31,7 @@ const OWNER = { name: "Owner", email: "owner@example.com", tokenIdentifier: "tes
 const NOW = Date.UTC(2030, 2, 4, 10, 0, 0);
 const SUCCESS = { status: "success" as const, summary: "Content Plan received" };
 
-const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, ...extra });
+const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, kind: "creative", ...extra });
 const producer = () => {
   const base = loadFixtureTemplate(TEMPLATE);
   return {
@@ -43,7 +43,8 @@ const producer = () => {
         mission("make_post", { publish: { kind: "image" } }),
         mission("make_carousel", { publish: { kind: "carousel" }, contextProviders: ["observation-production-source"] }),
         mission("make_tiktok", { publish: { kind: "video", platforms: ["tiktok"] } }),
-        mission("research"),
+        mission("make_note"),
+        mission("research", { kind: "operational" }),
       ],
     },
   } as unknown as ReturnType<typeof loadFixtureTemplate>;
@@ -251,6 +252,18 @@ describe("an invalid result", () => {
   });
   it("rejects a Recipe written for another Mission type", async () => {
     await fails({ rationale: "r", items: [await item({ missionType: "make_post" })] }, /Mission type "make_video"/);
+  });
+  it("rejects a Mission type that is operational, even with a Recipe stored for it", async () => {
+    await fails({ rationale: "r", items: [await item({ missionType: "research", recipeId: await recipe("research") })] }, /items\[0\].*not creative/);
+  });
+  it("rejects a creative Mission type that declares no publishing: it has no Content Type", async () => {
+    await fails({ rationale: "r", items: [await item({ missionType: "make_note", recipeId: await recipe("make_note") })] }, /items\[0\].*no Content Type/);
+  });
+  it("accepts a Bundled Recipe, which is compatible like a Custom one", async () => {
+    const runId = await startRun();
+    const bundled = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: PRODUCER, missionType: "make_video", name: "B", description: "d", bundledId: "freeform", isDefault: true } as never));
+    await complete(runId, { rationale: "r", items: [await item({ recipeId: bundled })] });
+    expect(await contents()).toMatchObject([{ recipeId: bundled, missionType: "make_video" }]);
   });
   it("rejects a Mission type whose Agent is not active", async () => {
     const runId = await startRun();

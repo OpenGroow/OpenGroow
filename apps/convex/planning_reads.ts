@@ -7,9 +7,9 @@ import { getTemplateRegistry } from "./template_registry.js";
 // The Internal MCP's read tools for Content Planning (ADR-086, issue #178). Read-only,
 // scoped to one Project, bounded in page size and date range.
 
-export type MissionTypeFormat = {
-  /** The format (`publish.kind`); null when the Mission type publishes nothing (it cannot be planned). */
-  kind: string | null;
+export type MissionTypeContentType = {
+  /** The Content Type (`publish.kind` of the manifest: video, image, carousel, article...); null when the Mission type declares no publishing (it cannot be planned). */
+  contentType: string | null;
   platforms: string[];
   /** The Mission type declares the `observation-production-source` context provider. */
   sourceRequired: boolean;
@@ -18,25 +18,25 @@ export type MissionTypeFormat = {
 type ManifestMissionType = { type: string; publish?: { kind?: string; platforms?: string[] }; contextProviders?: string[] };
 
 /** `inheritedProviders`: the Template-level context providers, which apply to a Mission type that declares none of its own. */
-export function formatOf(missionType: ManifestMissionType | undefined, inheritedProviders?: readonly string[]): MissionTypeFormat {
+export function contentTypeOf(missionType: ManifestMissionType | undefined, inheritedProviders?: readonly string[]): MissionTypeContentType {
   return {
-    kind: missionType?.publish?.kind ?? null,
+    contentType: missionType?.publish?.kind ?? null,
     platforms: missionType?.publish?.platforms ?? [],
     sourceRequired: (missionType?.contextProviders ?? inheritedProviders)?.includes(SOURCE_PROVIDER) ?? false,
   };
 }
 
-/** The format of the Mission types of a Project's Templates, resolved once per Template; unknown ones are null. */
-export function missionTypeFormats(ctx: Pick<QueryCtx, "db">, instanceId: string) {
+/** The Content Type of the Mission types of a Project's Templates, resolved once per Template; unknown ones are null. */
+export function missionTypeContentTypes(ctx: Pick<QueryCtx, "db">, instanceId: string) {
   const registry = getTemplateRegistry(ctx as QueryCtx);
   const cache = new Map<string, Promise<ManifestMissionType[]>>();
-  return async (templateId: string, missionType: string): Promise<MissionTypeFormat> => {
+  return async (templateId: string, missionType: string): Promise<MissionTypeContentType> => {
     let types = cache.get(templateId);
     if (!types) {
       types = registry.resolve(instanceId, templateId).then((t) => (t?.manifest.missionTypes ?? []) as ManifestMissionType[]);
       cache.set(templateId, types);
     }
-    return formatOf((await types).find((m) => m.type === missionType));
+    return contentTypeOf((await types).find((m) => m.type === missionType));
   };
 }
 
@@ -135,7 +135,7 @@ export async function listPlannedContents(ctx: Pick<QueryCtx, "db">, instanceId:
     plannedContents: page.map((p) => ({
       plannedContentId: p._id as string,
       planId: p.planId as string,
-      kind: p.kind,
+      contentType: p.kind,
       missionType: p.missionType,
       recipeId: p.recipeId as string,
       ...(p.sourceId ? { sourceId: p.sourceId as string } : {}),

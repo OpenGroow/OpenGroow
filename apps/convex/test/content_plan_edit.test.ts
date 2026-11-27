@@ -20,7 +20,7 @@ const TEMPLATE = "strategy-capable";
 const OWNER = { name: "Owner", email: "o@example.com", tokenIdentifier: "test|owner-cpe", subject: "owner-cpe" };
 const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|stranger-cpe", subject: "stranger-cpe" };
 
-const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, ...extra });
+const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, kind: "creative", ...extra });
 const producer = () => {
   const base = loadFixtureTemplate(TEMPLATE);
   return {

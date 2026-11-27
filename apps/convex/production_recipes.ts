@@ -114,7 +114,7 @@ function requireCustom(recipe: Doc<"productionRecipes">, action: string) {
 }
 
 /** Where a recipe comes from, and whether it is the Default Recipe of its Mission type. */
-const originOf = (recipe: Doc<"productionRecipes">) => ({
+export const originOf = (recipe: Doc<"productionRecipes">) => ({
   origin: recipe.bundledId === undefined ? ("custom" as const) : ("bundled" as const),
   isDefault: recipe.bundledId !== undefined && recipe.isDefault === true,
 });
