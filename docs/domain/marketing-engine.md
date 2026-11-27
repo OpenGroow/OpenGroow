@@ -59,11 +59,39 @@ See ADR-051, ADR-082.
 
 A reusable creative method for producing content with one Mission type: a first-class, per-Project entity with a name and a description, written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). It depends on no **Creative Family** and keeps no reference to a Source: whatever inspired it (an idea, Sources, a family) only helped to write it. Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe has no status: it is never archived, it is deleted for good, in one transaction, with its versions and its Planned Contents not produced yet (the proposals of the draft plan and the approved contents whose date has not passed), after a confirmation that gives their number. Those contents hold only the recipe id, no snapshot, so they could not be produced without it. Missions already created with it, running ones included, keep their Recipe Snapshot and run, retry and resume from it; their Publications stay attributed to it. Rejected and past contents stay as history, showing the recipe as deleted.
 
-- **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
-- **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
+- **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and is **creative** (see **Recipe Compatibility**).
+- **Mandatory for a creative Mission**: a Mission of a creative Mission type is created with a recipe, never without one (ADR-091). A Mission of an operational Mission type has none.
+- **Never selected by the server**: the recipe is chosen explicitly at Mission creation. The interface may preselect the **Default Recipe** as a suggestion; the server never fills in a missing one.
+- **Bundled or Custom**: it is either provided by a Template (**Bundled Recipe**) or written by the user (**Custom Recipe**); both share the same data and versioning.
 - **Managed in one place**: creating, generating, reviewing, editing and deleting recipes all happen in the Project's Recipes workspace, never from a Creative Family.
+- **Always targeted**: a recipe has a **Recipe target**, required at creation and compatible with an installed Template; it is what decides Recipe Compatibility. It does not depend on an Agent instance: with no compatible Agent it stays, unusable.
 - **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
 - _Avoid_: a "draft" recipe (the draft is the form before saving), putting a recipe's creative text in an Agent Template, and saying a recipe "belongs to" a Creative Family (it did before ADR-088).
+
+### Recipe target
+
+The Template id and the Mission type a **Production Recipe** is written for: the technical contract it depends on. It is set when the recipe is created and can be changed only for a **Custom Recipe**. It ties the recipe to a Template, not to an Agent: with no compatible Agent the recipe stays, and cannot be used. _Avoid_: "Production target" (the quantity of contents Content Planning aims for) and "Publish target" (a destination of publication); the three are different.
+
+### Bundled Recipe
+
+A **Production Recipe** provided by an Agent Template for one of its creative Mission types, and provisioned into every Project that installs the Template. Its identity is the Project, the Template, the Mission type and the id the Template gives it, which stays stable across Template versions. It is usable as is, but read-only for the user: it cannot be edited, retargeted or deleted on its own. It is **duplicated** into a **Custom Recipe** to be changed. When a new Template version changes its content, it gets a new Recipe Version, only if the content changed; Missions already created keep their Recipe Snapshot.
+
+- **Provisioned, never created at Mission creation**: provisioning is idempotent and runs when the Template is installed or updated and when an Agent is activated. Creating a Mission only checks and never creates a recipe.
+- **Removed from a Template version**: it becomes a Custom Recipe, with its identity, versions, snapshots and references kept, and it is no longer the Default. The Template update shows it. A Custom Recipe is never overwritten by a Template: if a removed Bundled Recipe comes back in a later version, a new Bundled Recipe is provisioned beside the Custom one.
+- **Outlives its Agent**: it belongs to the Project, not to an Agent. Deleting an Agent deletes no recipe, Bundled or Custom; they keep their target and cannot be used to create a Mission until a compatible Agent exists again. Installing the Template again finds them (same identity) and provisioning reuses them, never duplicates them. It is deleted only with its Project, never on its own.
+- _Avoid_: "built-in" or "system" recipe, and saying a Custom Recipe "inherits" from a Bundled one: a duplicate keeps no link to its source.
+
+### Default Recipe
+
+The **Bundled Recipe** that a creative Mission type designates as the one the interface preselects, exactly one per creative Mission type. It is not another kind of recipe. Its instructions are neutral and tell the Agent to follow the **Mission Brief**, so a user can create **freeform** content without choosing or writing a recipe. It is never applied by the server on its own (see **Production Recipe**).
+
+### Custom Recipe
+
+A **Production Recipe** written by the user, generated from the Recipes workspace, or obtained by duplicating a **Bundled Recipe**. It can be edited, retargeted and deleted, with the existing deletion rules. It is never changed by a Template update.
+
+### Recipe Compatibility
+
+A recipe is compatible with a Mission when it belongs to the Mission's Project, is written for the same Template and Mission type, and that Mission type is creative in the Template version the Mission is pinned to. The server checks it at Mission creation, for a Schedule, and for a Planned Content; the interface only offers compatible recipes. A recipe that stops being compatible (deleted, or its Mission type gone) pauses the Schedules that use it, with the reason "recipe unavailable", and is never replaced silently by the Default Recipe.
 
 ### Recipe Generation
 
@@ -93,13 +121,14 @@ One immutable save of a **Production Recipe**: an optional verbatim `prompt`, fr
 
 ### Recipe Snapshot
 
-What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or deleting the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or deleting the recipe afterwards leaves the Mission unchanged. It is rendered as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
 
-- **Checks at creation**, in order: the recipe belongs to the Project; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
-- The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
+- **Checks at creation**, in order: the recipe belongs to the Project; it is written for the Mission's Template and Mission type; that Mission type is creative in the Template version the Mission is pinned to (see **Recipe Compatibility**).
+- **Always taken for a creative Mission**, and always rendered in `context.md`, whatever the manifest declares. A Mission created before ADR-091, or of an operational Mission type, may have no snapshot and an unchanged `context.md`.
+- The payload is untouched.
 - _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
 
-See ADR-083.
+See ADR-083, ADR-091.
 
 ### Production Attempt
 
@@ -144,7 +173,7 @@ The Job of the Strategy Agent that proposes what content to produce next, as a *
 
 ### Production target
 
-How many distinct contents of one format the user wants within a **Planning period**, and to which **Publish targets** they are meant to go. A format is the kind of Publishable a Mission type produces (video, image, carousel, article). A Production target counts contents, not Publications: one video for two Publish targets counts once.
+How many distinct contents of one **Content Type** the user wants within a **Planning period**, and to which **Publish targets** they are meant to go. The Content Type is the kind of Publishable a Mission type produces (video, image, carousel, article). A Production target counts contents, not Publications: one video for two Publish targets counts once.
 
 - _Avoid_: "quota" in the UI, "goal" (that means a business objective).
 
