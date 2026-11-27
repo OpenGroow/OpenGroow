@@ -4,22 +4,30 @@ name: Publish groowhub CLI
 # the manifest readers in packages/agent-templates and packages/publisher-sdk, so the
 # hub repository checks and builds its packages with the product's own code.
 #
-# To release: bump "version" in packages/groowhub-cli/package.json, merge, then
-#   git tag groowhub-cli@<version> && git push origin groowhub-cli@<version>
+# To release: bump "version" in packages/groowhub-cli/package.json and merge. A push to main that
+# changes that file publishes the version if npm does not have it yet, then tags the commit
+# `groowhub-cli@<version>`. Nothing happens when the version is already published, so a merge that
+# leaves the version alone (or a re-run) is harmless. `workflow_dispatch` retries a failed publish.
 #
 # No npm token: this uses npm trusted publishing (OIDC). On npmjs.com, package
 # @opengroow/groowhub-cli, Settings, Trusted Publisher, GitHub Actions: set the
 # organization/user and repository that hold this workflow, and the workflow file name
 # `publish-groowhub-cli.yml`. Renaming the repository or this file means updating that setting.
-# Only a tag push triggers it, so only people who can push tags can publish.
+# Who can publish is who can merge to main (branch protection decides).
 
 on:
   push:
-    tags:
-      - "groowhub-cli@*"
+    branches: [main]
+    paths:
+      - packages/groowhub-cli/package.json
+  workflow_dispatch:
+
+concurrency:
+  group: publish-groowhub-cli
+  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write # pushes the release tag
   id-token: write # npm trusted publishing (OIDC), no stored secret
 
 jobs:
@@ -39,28 +47,36 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile --filter @opengroow/groowhub-cli... --filter @opengroow/agent-templates... --filter @opengroow/publisher-sdk...
 
-      - name: The tag matches the package version
+      - name: Is this version already published?
+        id: version
         run: |
           version=$(node -p "require('./packages/groowhub-cli/package.json').version")
-          if [ "${GITHUB_REF_NAME}" != "groowhub-cli@${version}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}" >&2
-            exit 1
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "@opengroow/groowhub-cli@${version}" version >/dev/null 2>&1; then
+            echo "@opengroow/groowhub-cli@${version} is already on npm: nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Test
+        if: steps.version.outputs.publish == 'true'
         run: pnpm exec vitest run packages/groowhub-cli packages/agent-templates packages/publisher-sdk
 
       # Trusted publishing needs npm 11.5.1 or later; Node 22 ships an older one.
       - name: Update npm
+        if: steps.version.outputs.publish == 'true'
         run: npm install -g npm@^11.5.1
 
       - name: Build
+        if: steps.version.outputs.publish == 'true'
         run: pnpm --filter @opengroow/groowhub-cli build
 
       # Publish the packed tarball, not the folder: npm 11 `publish <folder>` drops
       # the `bin` entry ("script name dist/cli.js was invalid and removed"), while
       # `npm pack` keeps it. The tarball is checked before it goes out.
       - name: Pack
+        if: steps.version.outputs.publish == 'true'
         id: pack
         working-directory: packages/groowhub-cli
         run: |
@@ -76,4 +92,12 @@ jobs:
           echo "file=$file" >> "$GITHUB_OUTPUT"
 
       - name: Publish
+        if: steps.version.outputs.publish == 'true'
         run: npm publish "${{ steps.pack.outputs.file }}" --access public
+
+      - name: Tag the released commit
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          tag="groowhub-cli@${{ steps.version.outputs.version }}"
+          git tag "$tag"
+          git push origin "$tag"
