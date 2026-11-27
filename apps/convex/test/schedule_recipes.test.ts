@@ -27,7 +27,6 @@ const modules = {
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
   "../runtime_commands_node.ts": () => import("../runtime_commands_node.js"),
   "../schedules.ts": () => import("../schedules.js"),
-  "../schedule_outdated.ts": () => import("../schedule_outdated.js"),
   "../production_recipes.ts": () => import("../production_recipes.js"),
   "../bundled_recipes.ts": () => import("../bundled_recipes.js"),
 };

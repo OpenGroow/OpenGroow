@@ -21,7 +21,6 @@ const modules = {
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
   "../runtime_commands_node.ts": () => import("../runtime_commands_node.js"),
   "../schedules.ts": () => import("../schedules.js"),
-  "../schedule_outdated.ts": () => import("../schedule_outdated.js"),
 };
 
 const INSTANCE_ID = "openclaw-instance-tick";
