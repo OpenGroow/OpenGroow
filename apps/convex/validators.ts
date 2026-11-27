@@ -120,7 +120,6 @@ export const frequencyV = v.object({
   minute: v.number(),
 });
 
-
 // Agent Skills (issue #222): a skill is an OpenClaw skill installed inside an
 // Agent's workspace. MVP source support is ClawHub only.
 export const agentSkillSourceV = v.union(v.literal("clawhub"));
