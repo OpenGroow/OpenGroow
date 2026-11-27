@@ -1,4 +1,4 @@
-schemaVersion: 1
+schemaVersion: 2
 category: social
 mcpServers:
   - name: feed-mcp
@@ -40,6 +40,7 @@ requirements:
 reconfigurable: true
 missionTypes:
   - type: engage
+    kind: operational
     label: Engage
     agentsMd: engage.md
     payload: '{"variant": "a", "sessionDurationMs": 480000}'

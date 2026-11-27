@@ -11,7 +11,7 @@ describe("context providers (issue #660)", () => {
     if (!atTemplate.ok) expect(atTemplate.reason).toMatch(/no-such-provider/);
     const atMissionType = validateManifest({
       ...base,
-      missionTypes: [{ type: "x", label: "X", payload: "{}", agentsMd: "x.md", contextProviders: ["no-such-provider"] }],
+      missionTypes: [{ type: "x", kind: "operational", label: "X", payload: "{}", agentsMd: "x.md", contextProviders: ["no-such-provider"] }],
     });
     expect(atMissionType.ok).toBe(false);
     if (!atMissionType.ok) expect(atMissionType.reason).toMatch(/no-such-provider/);

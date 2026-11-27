@@ -1,0 +1,14 @@
+schemaVersion: 1
+category: marketing
+mcpServers: []
+missionTypes:
+  - type: write_post
+    agentsMd: write_post.md
+    label: Write a post
+    payload: '{"topic":""}'
+    contextProviders:
+      - production-recipe
+  - type: moderate
+    agentsMd: moderate.md
+    label: Moderate comments
+    payload: '{}'

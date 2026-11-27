@@ -70,7 +70,7 @@ describe("run", () => {
       const fixture = join(__dirname, "../../agent-templates/src/__fixtures__/claw/seo");
       const dir = join(mkdtempSync(join(tmpdir(), "validator-")), "template");
       cpSync(fixture, dir, { recursive: true });
-      const profile = ["schemaVersion: 1", "category: marketing", "mcpServers:", "  - name: opengroow", "    transport: streamable-http", "    internal:", "      tools:", ...tools.map((t) => `        - ${t}`)];
+      const profile = ["schemaVersion: 2", "category: marketing", "mcpServers:", "  - name: opengroow", "    transport: streamable-http", "    internal:", "      tools:", ...tools.map((t) => `        - ${t}`)];
       writeFileSync(join(dir, "profiles/opengroow.yml"), `${profile.join("\n")}\n`);
       return dir;
     };

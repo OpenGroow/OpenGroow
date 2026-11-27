@@ -134,6 +134,55 @@ A `select` field is a good fit for a small option (a platform, a tone). When the
 
 Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. To offer Production Recipes on a type, list `production-recipe` in its `contextProviders`; the Create Mission form then shows a "Production Recipe" choice, hidden while the Project has no active recipe for that type.
 
+## Mission type kind and Bundled Recipes (ADR-091)
+
+The profile is `schemaVersion: 2`, for every Template (a Source or Strategy Template, with no Mission types, only changes its `schemaVersion`). Every Mission type declares `kind`, with no default and no third value:
+
+- `creative`: produces content, so a Production Recipe is required to create a Mission of it. It ships its own **Bundled Recipes**.
+- `operational`: anything else (engaging, linking). It declares no `recipes`.
+
+`kind` is independent of `publish`: a creative Mission type that declares no `publish` stays creative (it just cannot be planned).
+
+```yaml
+schemaVersion: 2
+missionTypes:
+  - type: create_article
+    kind: creative
+    agentsMd: create_article.md
+    label: Create article
+    payload: '{"keyword":""}'
+    recipes:
+      - id: freeform                      # unique within the Mission type
+        path: recipes/create_article/freeform.yml
+        default: true                     # exactly one Default Recipe
+      - id: how-to
+        path: recipes/create_article/how-to.yml
+  - type: internal_linking
+    kind: operational
+    agentsMd: internal_linking.md
+    label: Internal linking
+    payload: '{}'
+```
+
+Each recipe is a YAML file under `recipes/` at the package root (not under `workspace/`: the files are read by OpenGroow and never copied to the Agent's workspace, the Agent reads only the recipe chosen for a Mission). `path` is relative to the package root, must start with `recipes/` and end with `.yml`. A file holds exactly these keys:
+
+```yaml
+name: Freeform                  # required
+description: Neutral recipe that follows the Mission Brief.   # required
+prompt: Open with a surprising fact.   # optional
+instructions: Write what the Mission Brief asks for.          # required
+constraints:                    # required, may be []
+  - No more than 120 words
+```
+
+The Default Recipe should be neutral and follow the Mission Brief, so that a user can create freeform content without choosing a recipe. The same folder, git, hub and link installs carry `recipes/` since a package is installed whole.
+
+`pnpm template:validate <folder>` (and the `groowhub-cli` in a hub's CI) refuses, with the Mission type and recipe named: a missing or invalid `kind`, a creative type with no `recipes`, no or two defaults, a duplicate id, a missing or unsafe recipe file (outside `recipes/`, `..`, absolute, another extension) or an invalid one, and a `recipes` declaration on an operational type. Fixtures: `packages/agent-templates/src/__fixtures__/claw/studio` (a valid v2 package) and `legacy` (a stored v1).
+
+### Outdated versions
+
+A Template version stored under `schemaVersion: 1` is **outdated**. It is still read from its stored files (Missions, Artifacts, Publications and Recipe Snapshots keep their history; `kind` and `recipes` are not valid in it), but nothing new may start from it until the Project updates the Template. Whether a version is outdated is derived, never stored: `isTemplateVersionRunnable(manifest)` and `profileSchemaVersionOf(manifest)` from `@opengroow/agent-templates` read the `schemaVersion` the reader records on the manifest (absent means 1). `template:validate` refuses to publish a version 1 package. A deployment that does not know a `schemaVersion` refuses the version at install and update, leaving the current version untouched; this is why the Template releases can be prepared before the product is deployed.
+
 ## A default Schedule
 
 A Mission type may declare the cadence of the Schedule OpenGroow creates for it when the Agent is activated:

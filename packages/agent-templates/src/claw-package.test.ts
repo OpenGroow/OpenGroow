@@ -90,9 +90,9 @@ describe("clawPackageToTemplate — SEO fixture as a Claw package (issue #649)",
     expect(result.template.agentsMd.length).toBeGreaterThan(0);
   });
 
-  it("does not leak the schema version or the portable prompt into the manifest", () => {
+  it("records the profile schema version on the manifest, not the Claw one", () => {
     const result = clawPackageToTemplate(readPackage("seo"));
-    expect(result.ok && result.template.manifest).not.toHaveProperty("schemaVersion");
+    expect(result.ok && result.template.manifest.schemaVersion).toBe(2);
   });
 });
 
@@ -170,7 +170,7 @@ describe("clawPackageToTemplate — schemaVersion", () => {
   });
 
   it("refuses a newer schema version, naming it and the accepted one", () => {
-    expectRefused(profile("", "schemaVersion: 2"), "schemaVersion", "2", "1");
+    expectRefused(profile("", "schemaVersion: 3"), "schemaVersion", "3", "1 and 2");
   });
 
   it("refuses schema version 0, which never shipped", () => {

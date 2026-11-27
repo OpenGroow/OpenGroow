@@ -366,6 +366,33 @@ export type MissionPayloadField = {
     }
 );
 
+export type MissionTypeKind = "creative" | "operational";
+
+/** A Bundled Recipe as the manifest declares it; its content lives in the file at `path`. */
+export type BundledRecipeDeclaration = {
+  /** Unique within the Mission type; with the Project, Template and Mission type it identifies the recipe. */
+  id: string;
+  /** Safe relative path of a `.yml` file inside the package's `recipes/` folder. */
+  path: string;
+  /** Exactly one recipe per creative Mission type is the Default Recipe. */
+  default?: boolean;
+};
+
+/**
+ * A Bundled Recipe read from its file: the fields of a Recipe Version plus
+ * the recipe's name and description.
+ */
+export type BundledRecipe = {
+  missionType: string;
+  id: string;
+  default: boolean;
+  name: string;
+  description: string;
+  prompt?: string;
+  instructions: string;
+  constraints: string[];
+};
+
 /**
  * A selectable mission type declared by an Agent Template.
  * `type` is the agent-interpreted string written on the Mission.
@@ -378,6 +405,18 @@ export type MissionPayloadField = {
  */
 export type MissionType = {
   type: string;
+  /**
+   * Creative (produces content, needs a Production Recipe) or operational
+   * (anything else). Required on every Mission type of a schemaVersion 2
+   * Template, with no default (ADR-091); absent on a stored version 1.
+   */
+  kind?: MissionTypeKind;
+  /**
+   * The Bundled Recipes of a creative Mission type: files under `recipes/` at
+   * the package root, exactly one being the Default Recipe. Not copied to the
+   * Agent workspace; the file content is exposed as `AgentTemplate.recipes`.
+   */
+  recipes?: BundledRecipeDeclaration[];
   label: string;
   /** Optional description of what the Mission type produces, read by the Agents that choose one. */
   description?: string;
@@ -580,6 +619,12 @@ export type JobTypeDeclaration = {
 };
 
 export type AgentManifest = {
+  /**
+   * The profile schema version this manifest was read under, recorded by the
+   * reader. Absent on a manifest stored before it was recorded: that is
+   * version 1 (see `profileSchemaVersionOf`).
+   */
+  schemaVersion?: number;
   id: string;
   name: string;
   description: string;
@@ -835,6 +880,12 @@ export type AgentTemplate = {
    * stays the OpenGroow profile.
    */
   plugins?: TemplatePlugin[];
+  /**
+   * The Bundled Recipes of the Template's creative Mission types, read from
+   * the package's `recipes/` folder (schemaVersion 2). Never materialized in
+   * the Agent workspace: the Agent reads only the recipe chosen for a Mission.
+   */
+  recipes?: BundledRecipe[];
   /**
    * Per-mission instruction files, keyed by mission type. Populated by
    * codegen from `missionTypes[].agentsMd` entries in the manifest.

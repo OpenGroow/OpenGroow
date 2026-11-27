@@ -10,6 +10,8 @@ import { isValidExternalJobPollingCore, validateSourceDeclarations } from "./sou
 import { validateJobTypeDeclarations } from "./job-declarations";
 import { findUnknownManifestKey } from "./manifest-keys";
 import { exclusiveResourcesProblem } from "./exclusive-resources";
+import { missionTypeContractProblem } from "./bundled-recipes";
+import { SUPPORTED_PROFILE_SCHEMA_VERSIONS } from "./schema-version";
 import { validateRunContext } from "./run-context";
 
 /**
@@ -35,6 +37,9 @@ export type {
   AgentTemplate,
   BoundedHttpEffect,
   BlockerResolutionKind,
+  BundledRecipe,
+  BundledRecipeDeclaration,
+  MissionTypeKind,
   ConfigCompletenessStatus,
   ExternalJobHandoff,
   ExternalJobPollingContract,
@@ -60,10 +65,15 @@ export type {
   TemplatePlugin,
 } from "./types";
 export {
-  clawPackageToTemplate,
   CURRENT_PROFILE_SCHEMA_VERSION,
-  MAX_PROFILE_BYTES,
+  MIN_RUNNABLE_PROFILE_SCHEMA_VERSION,
   SUPPORTED_PROFILE_SCHEMA_VERSIONS,
+  isTemplateVersionRunnable,
+  profileSchemaVersionOf,
+} from "./schema-version";
+export {
+  clawPackageToTemplate,
+  MAX_PROFILE_BYTES,
   type ClawPackageFiles,
   type ClawPackageResult,
 } from "./claw-package";
@@ -481,6 +491,15 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
     return { ok: false, reason: `invalid 'visibility' value ${JSON.stringify(visibility)} — must be "production" or "development"` };
   }
 
+  // The schema version the reader recorded; a manifest without it is the legacy contract (version 1).
+  const schemaVersion = m.schemaVersion ?? 1;
+  if (typeof schemaVersion !== "number" || !SUPPORTED_PROFILE_SCHEMA_VERSIONS.includes(schemaVersion)) {
+    return {
+      ok: false,
+      reason: `unsupported schemaVersion ${JSON.stringify(m.schemaVersion)}; OpenGroow reads schemaVersion ${SUPPORTED_PROFILE_SCHEMA_VERSIONS.join(" and ")}`,
+    };
+  }
+
   const requirements = m.requirements;
   if (requirements !== undefined) {
     if (!Array.isArray(requirements) || !requirements.every((field) => isValidRequirementField(field))) {
@@ -554,6 +573,8 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
         reason: "every entry in 'missionTypes' must declare a unique type",
       };
     }
+    const contractProblem = missionTypeContractProblem(validatedMissionTypes, schemaVersion);
+    if (contractProblem) return { ok: false, reason: contractProblem };
     const instructionPaths = validatedMissionTypes.map((entry) => entry.agentsMd as string);
     if (new Set(instructionPaths).size !== instructionPaths.length) {
       return {
