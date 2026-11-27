@@ -28,8 +28,9 @@ It replaces `@opengroow/template-validator` (last version 0.2.2, deprecated): `p
 The code is not copied anywhere: `dist/cli.js` is bundled from the repository at publication time, so the published CLI is exactly the readers of the commit it is built from. The **Publish groowhub CLI** workflow does it on a tag:
 
 ```bash
-# bump "version" in this package.json, merge, then:
-git tag groowhub-cli@0.1.1 && git push origin groowhub-cli@0.1.1
+# bump "version" in this package.json and merge to main: nothing else to do.
 ```
 
-There is no npm token: the workflow uses npm trusted publishing (OIDC), configured on npmjs.com for this package (Settings, Trusted Publisher, GitHub Actions; repository and workflow file `publish-groowhub-cli.yml`). Update that setting if the repository or the workflow file is renamed; the `repository` field of this package.json must also match the repository once it is public. Tag only from `main`.
+The workflow runs on the push to `main` that changes this `package.json`. It publishes the version when npm does not have it yet, then tags the commit `groowhub-cli@<version>`. A merge that leaves the version alone publishes nothing. To retry a failed publish, run the workflow by hand (`workflow_dispatch`).
+
+There is no npm token: the workflow uses npm trusted publishing (OIDC), configured on npmjs.com for this package (Settings, Trusted Publisher, GitHub Actions; repository and workflow file `publish-groowhub-cli.yml`). Update that setting if the repository or the workflow file is renamed; the `repository` field of this package.json must also match the repository once it is public. Whoever can merge to `main` can publish.
