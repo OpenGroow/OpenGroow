@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { RecipeOriginBadges } from "@/src/components/recipe-list";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { recipeDeletionMessage, recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
@@ -20,7 +21,17 @@ import { recipeDeletionMessage, recipeTargetLabel, type RecipeTarget, type Recip
 // (saves a new version), delete, and the Mission type it is written for.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
-type RecipeDetail = { _id: string; templateId: string; missionType: string; name: string; description: string; latest: Version | null };
+type RecipeDetail = {
+  _id: string;
+  templateId: string;
+  missionType: string;
+  name: string;
+  description: string;
+  latest: Version | null;
+  /** Bundled recipes come from their Template and are read-only; absent means Custom. */
+  origin?: "bundled" | "custom";
+  isDefault?: boolean;
+};
 
 type Props = { params: Promise<{ projectId: string; recipeId: string }> };
 
@@ -37,6 +48,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   const saveVersion = useMutation(api.production_recipes.saveVersion);
   const setTarget = useMutation(api.production_recipes.setTarget);
   const removeRecipe = useMutation(api.production_recipes.remove);
+  const duplicateRecipe = useMutation(api.production_recipes.duplicate);
   const convex = useConvex();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -58,6 +70,18 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     ? offered
     : [...offered, { templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }];
   const viewingOld = shown !== null && recipe.latest !== null && shown.version !== recipe.latest.version;
+
+  const bundled = recipe.origin === "bundled";
+
+  async function handleDuplicate() {
+    setError(null);
+    try {
+      const copy = await duplicateRecipe({ instanceId, recipeId: id });
+      router.push(`/projects/${encodeURIComponent(instanceId)}/recipes/${encodeURIComponent(copy.recipeId)}`);
+    } catch (e) {
+      setError(extractConvexErrorMessage(e, "Could not duplicate the recipe."));
+    }
+  }
 
   async function handleDelete() {
     setError(null);
@@ -86,16 +110,23 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
           description={recipe.description}
           action={
             <div className="flex items-center gap-3">
-              {recipe.latest ? (
+              <RecipeOriginBadges recipe={recipe} />
+              <Button type="button" variant="outline" onClick={handleDuplicate}>
+                <Copy className="size-4" />
+                Duplicate
+              </Button>
+              {recipe.latest && !bundled ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   <Pencil className="size-4" />
                   Edit
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={handleDelete}>
-                <Trash2 className="size-4" />
-                Delete
-              </Button>
+              {bundled ? null : (
+                <Button type="button" variant="outline" onClick={handleDelete}>
+                  <Trash2 className="size-4" />
+                  Delete
+                </Button>
+              )}
             </div>
           }
         />
@@ -103,6 +134,9 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
       </div>
 
       <ContentCard icon={Play} title="Mission type">
+        {bundled ? (
+          <p className="m-0 text-sm text-foreground">{recipeTargetLabel(options.find((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType)!)}</p>
+        ) : (
         <NativeSelect
           aria-label="Mission type"
           value={String(options.findIndex((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType))}
@@ -123,6 +157,7 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
             </option>
           ))}
         </NativeSelect>
+        )}
       </ContentCard>
 
       {shown ? (

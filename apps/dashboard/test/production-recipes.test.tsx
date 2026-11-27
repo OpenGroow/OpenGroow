@@ -16,6 +16,7 @@ const mutations: Record<string, ReturnType<typeof vi.fn>> = {
   "recipes.saveVersion": vi.fn(),
   "recipes.remove": vi.fn(),
   "recipes.setTarget": vi.fn(),
+  "recipes.duplicate": vi.fn(),
 };
 const convexQuery = vi.fn();
 let targets: unknown;
@@ -43,6 +44,7 @@ vi.mock("@convex/_generated/api", () => ({
       listVersions: "recipes.listVersions",
       listTargets: "recipes.listTargets",
       setTarget: "recipes.setTarget",
+      duplicate: "recipes.duplicate",
     },
     recipe_generation: { generateRecipe: "generation.generate" },
     recipe_generation_views: { listGenerations: "generation.list" },
@@ -173,6 +175,51 @@ describe("Production Recipes UI", () => {
     expect(names()).toEqual(["Charlie"]);
   });
 
+  it("shows Bundled or Custom on each recipe and the Default Recipe", async () => {
+    recipes = [
+      REC({ _id: "rec-1", name: "Freeform", origin: "bundled", isDefault: true }),
+      REC({ _id: "rec-2", name: "Punchy", origin: "bundled", isDefault: false }),
+      REC({ _id: "rec-3", name: "Mine", origin: "custom", isDefault: false }),
+    ];
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    const card = (name: string) => Array.from(container.querySelectorAll('[aria-label="Production Recipes"] li')).find((li) => li.querySelector("a")?.textContent === name)!;
+    expect(card("Freeform").textContent).toContain("Bundled");
+    expect(card("Freeform").textContent).toContain("Default");
+    expect(card("Punchy").textContent).toContain("Bundled");
+    expect(card("Punchy").textContent).not.toContain("Default");
+    expect(card("Mine").textContent).toContain("Custom");
+    expect(card("Mine").textContent).not.toContain("Bundled");
+  });
+
+  const openMenu = async (name: string) => {
+    const trigger = container.querySelector(`button[aria-label="Actions for ${name}"]`) as HTMLElement;
+    await act(async () => {
+      trigger.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      trigger.click();
+    });
+    return Array.from(document.body.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim());
+  };
+
+  it("offers Duplicate on a Bundled Recipe and hides Delete, and offers both on a Custom Recipe", async () => {
+    recipes = [REC({ _id: "rec-1", name: "Freeform", origin: "bundled", isDefault: true })];
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    expect(await openMenu("Freeform")).toEqual(["Open", "Duplicate"]);
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    recipes = [REC({ _id: "rec-3", name: "Mine", origin: "custom" })];
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    expect(await openMenu("Mine")).toEqual(["Open", "Duplicate", "Delete"]);
+  });
+
+  it("duplicates a recipe from its card", async () => {
+    recipes = [REC({ _id: "rec-1", name: "Freeform", origin: "bundled", isDefault: true })];
+    await act(async () => root.render(<RecipesContent instanceId="p1" />));
+    await openMenu("Freeform");
+    const item = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((i) => i.textContent?.trim() === "Duplicate") as HTMLElement;
+    await act(async () => item.click());
+    expect(mutations["recipes.duplicate"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
+  });
+
   it("opens the creation form from the Build a new Recipe panel", async () => {
     await act(async () => root.render(<RecipesContent instanceId="p1" />));
     await press("Create manually");
@@ -232,6 +279,31 @@ describe("Production Recipes UI", () => {
       instructions: "Write a longer hook",
       constraints: ["No dialogue", "No text overlay"],
     });
+  });
+
+  it("shows a Bundled Recipe read-only: no Edit, Delete or Mission type change, but Duplicate", async () => {
+    mutations["recipes.duplicate"]!.mockResolvedValue({ recipeId: "rec-copy" });
+    recipe = { ...RECIPE, origin: "bundled", isDefault: true };
+    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+    const buttons = Array.from(container.querySelectorAll("button")).map((b) => b.textContent?.trim());
+    expect(buttons).toContain("Duplicate");
+    expect(buttons).not.toContain("Edit");
+    expect(buttons).not.toContain("Delete");
+    expect(container.querySelector('select[data-slot="native-select"]')).toBeNull();
+    expect(container.textContent).toContain("Bundled");
+    expect(container.textContent).toContain("Default");
+    expect(container.textContent).toContain("Close-up of a woman");
+    await press("Duplicate");
+    expect(mutations["recipes.duplicate"]).toHaveBeenCalledWith({ instanceId: "p1", recipeId: "rec-1" });
+  });
+
+  it("keeps Edit, Delete and the Mission type on a Custom Recipe", async () => {
+    recipe = { ...RECIPE, origin: "custom", isDefault: false };
+    await act(async () => root.render(<ProductionRecipeContent instanceId="p1" recipeId="rec-1" />));
+    const buttons = Array.from(container.querySelectorAll("button")).map((b) => b.textContent?.trim());
+    expect(buttons).toEqual(expect.arrayContaining(["Duplicate", "Edit", "Delete"]));
+    expect(container.querySelector('select[data-slot="native-select"]')).not.toBeNull();
+    expect(container.textContent).toContain("Custom");
   });
 
   it("browses the version history", async () => {

@@ -7,6 +7,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 import type { McpUrlOverrides } from "./mcp_url_override.js";
 import { env } from "./env.js";
+import { provisionCurrentTemplate } from "./bundled_recipes.js";
 
 /** The version legacy Missions were pinned to when Templates were compiled in (#674); never a real installed version. */
 
@@ -202,6 +203,24 @@ function assertScopeReservation(manifest: AgentManifest, origin: Doc<"installedT
 }
 
 export async function installTemplatePackage(
+  ctx: MutationCtx,
+  args: {
+    projectId: ProjectId;
+    files: readonly PackageFile[];
+    origin: Doc<"installedTemplates">["origin"];
+    gitOrigin?: Doc<"installedTemplates">["gitOrigin"];
+    installedBy?: string;
+  },
+): Promise<InstallResult> {
+  const installed = await storeInstalledPackage(ctx, args);
+  // Every install path provisions the Bundled Recipes of the Template, a reinstall included (ADR-091); the call is
+  // idempotent. Only a version that is the current one provisions: an older stored version is not what the Project runs.
+  const current = await findCurrentVersion(ctx, args.projectId, installed.templateId);
+  if (current === installed.version) await provisionCurrentTemplate(ctx, args.projectId, installed.templateId);
+  return installed;
+}
+
+async function storeInstalledPackage(
   ctx: MutationCtx,
   args: {
     projectId: ProjectId;
@@ -451,6 +470,8 @@ export async function applyStagedUpdate(
     .take(10);
   await demoteCurrentExcept(ctx, currents, staged._id);
   await ctx.db.patch(staged._id, { current: true, staged: false, installedAt: Date.now() });
+  // The new version's Bundled Recipes: added, updated, or turned into Custom Recipes when it no longer ships them.
+  await provisionCurrentTemplate(ctx, projectId, templateId);
 }
 
 export type TemplateUpdateOffer = {
@@ -461,9 +482,14 @@ export type TemplateUpdateOffer = {
   plan: UpdatePlan;
 };
 
-async function pluginIdsOf(ctx: RegistryDbCtx, doc: Doc<"installedTemplates">): Promise<string[]> {
+async function updateSideOf(ctx: RegistryDbCtx, doc: Doc<"installedTemplates">) {
   const converted = clawPackageToTemplate(toClawFiles(await fileDocsOf(ctx, doc._id)));
-  return converted.ok ? (converted.template.plugins ?? []).map((plugin) => plugin.id) : [];
+  return {
+    version: doc.version,
+    manifest: doc.manifest as AgentManifest,
+    pluginIds: converted.ok ? (converted.template.plugins ?? []).map((plugin) => plugin.id) : [],
+    recipes: converted.ok ? (converted.template.recipes ?? []).map(({ missionType, id, name }) => ({ missionType, id, name })) : [],
+  };
 }
 
 /** The updates offered to the Project, each with its plan against the current version. */
@@ -487,8 +513,8 @@ export async function listUpdateOffers(ctx: RegistryDbCtx, projectId: ProjectId)
       .withIndex("by_instance_template", (q) => q.eq("instanceId", projectId).eq("templateId", staged.templateId))
       .collect();
     const plan = buildUpdatePlan(
-      { version: current.version, manifest: current.manifest as AgentManifest, pluginIds: await pluginIdsOf(ctx, current) },
-      { version: staged.version, manifest: staged.manifest as AgentManifest, pluginIds: await pluginIdsOf(ctx, staged) },
+      await updateSideOf(ctx, current),
+      await updateSideOf(ctx, staged),
       schedules.map((schedule) => schedule.type),
     );
     offers.push({

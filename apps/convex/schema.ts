@@ -787,6 +787,12 @@ export default defineSchema({
     missionType: v.string(),
     name: v.string(),
     description: v.string(),
+    // Bundled Recipe (ADR-091): the manifest id of the recipe a Template ships. Absent means a Custom Recipe. A
+    // Bundled Recipe's identity is (Project, Template, Mission type, bundledId); both fields are cleared when a new
+    // Template version no longer ships it, which turns it into a Custom Recipe.
+    bundledId: v.optional(v.string()),
+    // The Default Recipe of its Mission type: the Template's choice, only on a Bundled Recipe.
+    isDefault: v.optional(v.boolean()),
     // Transitional: a recipe has no status since archiving was replaced by deletion; removed once `dropRecipeStatus` has run everywhere.
     status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
   })

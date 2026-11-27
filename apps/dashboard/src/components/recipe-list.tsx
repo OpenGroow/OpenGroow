@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { BarChart3, BookOpen, Ellipsis, ExternalLink, Layers, Play, Trash2 } from "lucide-react";
+import { BarChart3, BookOpen, Copy, Ellipsis, ExternalLink, Layers, Play, Trash2 } from "lucide-react";
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,6 +24,9 @@ type RecipeRow = {
   name: string;
   description: string;
   latestVersion: number;
+  /** Bundled recipes come from their Template and are read-only; absent means Custom. */
+  origin?: "bundled" | "custom";
+  isDefault?: boolean;
 };
 type RecipeStats = { recipeId: string; publications: number };
 type Sort = "recent" | "name" | "posts";
@@ -46,7 +49,17 @@ export function RecipeCover({ recipeId, className }: { recipeId: string; classNa
   );
 }
 
-function RecipeCard({ recipe, instanceId, target, posts, onDelete }: { recipe: RecipeRow; instanceId: string; target?: RecipeTarget; posts?: number; onDelete: () => void }) {
+/** The Bundled or Custom badge of a recipe, with the Default mark of a Bundled Recipe. */
+export function RecipeOriginBadges({ recipe }: { recipe: { origin?: "bundled" | "custom"; isDefault?: boolean } }) {
+  return (
+    <>
+      <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground">{recipe.origin === "bundled" ? "Bundled" : "Custom"}</span>
+      {recipe.isDefault ? <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-semibold text-primary">Default</span> : null}
+    </>
+  );
+}
+
+function RecipeCard({ recipe, instanceId, target, posts, onDelete, onDuplicate }: { recipe: RecipeRow; instanceId: string; target?: RecipeTarget; posts?: number; onDelete: () => void; onDuplicate: () => void }) {
   const href = `/projects/${encodeURIComponent(instanceId)}/recipes/${encodeURIComponent(recipe._id)}`;
   return (
     <li className="min-w-0">
@@ -68,16 +81,23 @@ function RecipeCard({ recipe, instanceId, target, posts, onDelete }: { recipe: R
                     <ExternalLink />
                     Open
                   </DropdownMenuLinkItem>
-                  <DropdownMenuItem onClick={onDelete}>
-                    <Trash2 />
-                    Delete
+                  <DropdownMenuItem onClick={onDuplicate}>
+                    <Copy />
+                    Duplicate
                   </DropdownMenuItem>
+                  {recipe.origin === "bundled" ? null : (
+                    <DropdownMenuItem onClick={onDelete}>
+                      <Trash2 />
+                      Delete
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
           <p className="m-0 line-clamp-2 text-sm text-muted-foreground">{recipe.description}</p>
           <div className="flex flex-wrap items-center gap-2">
+            <RecipeOriginBadges recipe={recipe} />
             <span className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
               <Play aria-hidden="true" className="size-3.5" />
               {target?.templateName ?? recipe.templateId}
@@ -105,6 +125,7 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
   // Published posts per recipe over the last year, from the Analytics read; absent until it arrives.
   const summary = useQuery(api.analytics_summary.summaryForProject, { instanceId, days: 365, groupBy: "recipe" }) as { recipes?: RecipeStats[] } | null | undefined;
   const removeRecipe = useMutation(api.production_recipes.remove);
+  const duplicateRecipe = useMutation(api.production_recipes.duplicate);
   const convex = useConvex();
   const [search, setSearch] = React.useState("");
   const [type, setType] = React.useState("all");
@@ -130,6 +151,15 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
       await removeRecipe({ instanceId, recipeId: recipe._id as Id<"productionRecipes"> });
     } catch (e) {
       setError(extractConvexErrorMessage(e, "Could not delete the recipe."));
+    }
+  }
+
+  async function handleDuplicate(recipe: RecipeRow) {
+    setError(null);
+    try {
+      await duplicateRecipe({ instanceId, recipeId: recipe._id as Id<"productionRecipes"> });
+    } catch (e) {
+      setError(extractConvexErrorMessage(e, "Could not duplicate the recipe."));
     }
   }
 
@@ -167,7 +197,7 @@ export function RecipeList({ instanceId }: { instanceId: string }) {
       ) : (
         <ul className="m-0 grid list-none gap-4 p-0 lg:grid-cols-2 2xl:grid-cols-3">
           {visible.map((recipe) => (
-            <RecipeCard key={recipe._id} recipe={recipe} instanceId={instanceId} target={targetOf(recipe)} posts={postsOf(recipe)} onDelete={() => void handleDelete(recipe)} />
+            <RecipeCard key={recipe._id} recipe={recipe} instanceId={instanceId} target={targetOf(recipe)} posts={postsOf(recipe)} onDelete={() => void handleDelete(recipe)} onDuplicate={() => void handleDuplicate(recipe)} />
           ))}
         </ul>
       )}

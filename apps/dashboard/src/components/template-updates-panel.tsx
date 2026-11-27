@@ -38,6 +38,10 @@ export function planSections(offer: UpdateOffer): Section[] {
     { title: "Fields requiring re-activation", items: plan.reactivationFields.map((f) => f.label) },
     { title: "Mission types removed", items: plan.removedMissionTypes },
     {
+      title: "Bundled Recipes no longer shipped (they stay in your Project as Custom Recipes)",
+      items: plan.recipesBecomingCustom.map((recipe) => `${recipe.name} (${recipe.missionType})`),
+    },
+    {
       title: "Removed Mission types still used by a Schedule",
       items: plan.removedMissionTypesInUse.map((u) => `${u.type} (${u.schedules} ${u.schedules === 1 ? "Schedule" : "Schedules"})`),
       warning: true,
