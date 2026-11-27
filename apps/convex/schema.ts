@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { hubPackageTables } from "./hub_packages_schema.js";
 import { publisherTables } from "./publisher_schema.js";
 import { analyticsTables } from "./analytics_schema.js";
+import { RECIPE_UNAVAILABLE } from "./schedule_reasons.js";
 import {
   commandStatusV,
   jobOutcomeV,
@@ -704,7 +705,7 @@ export default defineSchema({
     recipeId: v.optional(v.id("productionRecipes")),
     // Why the Schedule was paused by the system: its recipe was deleted or stopped being compatible. Blocks resuming
     // until a compatible recipe is set; it is cleared by that change, which never resumes the Schedule.
-    pausedReason: v.optional(v.literal("recipe unavailable")),
+    pausedReason: v.optional(v.literal(RECIPE_UNAVAILABLE)),
     // Default `autoPublish` propagated to every Mission this Schedule creates
     // (issue #330, PRD #326). Same capability restriction as a manually
     // created Mission — see `templateSupportsAutoPublish` in

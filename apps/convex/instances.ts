@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server.js";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { isOptionalPluginEnabled } from "./optional_plugins.js";
 import { v } from "convex/values";
 import { internal } from "./_generated/api.js";
@@ -821,6 +821,15 @@ export const setRuntimeStateByOpenclawId = internalMutation({
   }
 });
 
+async function deleteProjectRecipes(ctx: MutationCtx, instanceId: string): Promise<void> {
+  const recipes = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", instanceId)).collect();
+  for (const recipe of recipes) {
+    const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", recipe._id)).collect();
+    for (const version of versions) await ctx.db.delete(version._id);
+    await ctx.db.delete(recipe._id);
+  }
+}
+
 export const deleteByJobId = internalMutation({
   args: { jobId: v.string() },
   handler: async (ctx, args) => {
@@ -837,7 +846,12 @@ export const deleteByJobId = internalMutation({
           .query("instances")
           .withIndex("by_project", (q) => q.eq("projectId", projectId))
           .first();
-        if (!other) await ctx.db.delete(projectId);
+        if (!other) {
+          const project = await ctx.db.get(projectId);
+          // Only deleting the Project removes its Production Recipes (ADR-091).
+          if (project?.projectId !== undefined) await deleteProjectRecipes(ctx, project.projectId);
+          await ctx.db.delete(projectId);
+        }
       }
     }
     return { deleted: rows.length };

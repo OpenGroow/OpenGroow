@@ -172,6 +172,8 @@ import type * as run_trace_list from "../run_trace_list.js";
 import type * as runs from "../runs.js";
 import type * as runtime_commands_node from "../runtime_commands_node.js";
 import type * as runtime_commands_node_parsers from "../runtime_commands_node_parsers.js";
+import type * as schedule_outdated from "../schedule_outdated.js";
+import type * as schedule_reasons from "../schedule_reasons.js";
 import type * as schedules from "../schedules.js";
 import type * as schedules_frequency from "../schedules/frequency.js";
 import type * as score_jobs from "../score_jobs.js";
@@ -390,6 +392,8 @@ declare const fullApi: ApiFromModules<{
   runs: typeof runs;
   runtime_commands_node: typeof runtime_commands_node;
   runtime_commands_node_parsers: typeof runtime_commands_node_parsers;
+  schedule_outdated: typeof schedule_outdated;
+  schedule_reasons: typeof schedule_reasons;
   schedules: typeof schedules;
   "schedules/frequency": typeof schedules_frequency;
   score_jobs: typeof score_jobs;

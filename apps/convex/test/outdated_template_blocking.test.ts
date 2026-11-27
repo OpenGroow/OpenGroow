@@ -16,6 +16,7 @@ const modules = {
   "../missions.ts": () => import("../missions.js"),
   "../runs.ts": () => import("../runs.js"),
   "../schedules.ts": () => import("../schedules.js"),
+  "../schedule_outdated.ts": () => import("../schedule_outdated.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
   "../recipe_generation.ts": () => import("../recipe_generation.js"),
   "../score_jobs.ts": () => import("../score_jobs.js"),

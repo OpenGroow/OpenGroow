@@ -26,6 +26,7 @@ const modules = {
   "../project_agents_node.ts": () => import("../project_agents_node.js"),
   "../runtime_commands_node.ts": () => import("../runtime_commands_node.js"),
   "../schedules.ts": () => import("../schedules.js"),
+  "../schedule_outdated.ts": () => import("../schedule_outdated.js"),
   "../production_recipes.ts": () => import("../production_recipes.js"),
   "../bundled_recipes.ts": () => import("../bundled_recipes.js"),
 };
@@ -138,6 +139,33 @@ describe("the tick", () => {
     await t.action(internal.schedules.tick, {});
     expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
     expect((await getSchedule(t, id))!.lastError).toMatch(/Production Recipe/);
+  });
+});
+
+describe("Run now", () => {
+  it("creates the Mission with the recipe stored on the Schedule", async () => {
+    const { t, owner } = await setup();
+    const ids = await recipeIds(owner);
+    const { scheduleId } = await create(owner, { recipeId: ids.punchy });
+    await owner.mutation(api.schedules.runNow, { scheduleId });
+    const missions = await t.run((ctx) => ctx.db.query("missions").collect());
+    expect(missions).toHaveLength(1);
+    expect(missions[0]).toMatchObject({ type: "write_post", recipeSnapshot: { recipeId: ids.punchy } });
+  });
+
+  it("is refused for a creative Schedule without a recipe", async () => {
+    const { t, owner } = await setup();
+    const id = await seedLegacy(t);
+    await expect(owner.mutation(api.schedules.runNow, { scheduleId: id })).rejects.toThrow(/Production Recipe/);
+    expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
+  });
+
+  it("is refused for the Schedule of another owner", async () => {
+    const { t, owner } = await setup();
+    const ids = await recipeIds(owner);
+    const { scheduleId } = await create(owner, { recipeId: ids.freeform });
+    const stranger = t.withIdentity({ name: "S", email: "s@example.com", tokenIdentifier: "test|stranger", subject: "stranger" });
+    await expect(stranger.mutation(api.schedules.runNow, { scheduleId })).rejects.toThrow(/Forbidden/);
   });
 });
 

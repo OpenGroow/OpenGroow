@@ -102,9 +102,9 @@ export async function insertMissionAndDispatch(
     recipe?: RecipeArg;
   },
 ): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
-  // Every refusal happens here, before the first write: the single place every entry point goes through (ADR-091).
+  // The recipe is refused here before anything is written; an outdated Template version is refused by `dispatchRun`,
+  // which every entry point goes through (ADR-091), and the throw rolls the whole mutation back.
   const templateVersion = args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId));
-  await assertNewRunAllowed(ctx, args.instanceId, args.templateId, templateVersion);
   const recipeSnapshot = await resolveMissionRecipeSnapshot(ctx, {
     instanceId: args.instanceId,
     templateId: args.templateId,
@@ -141,6 +141,47 @@ export async function insertMissionAndDispatch(
   return { missionId, runId };
 }
 
+type ManualMissionArgs = {
+  instanceId: string;
+  templateId: string;
+  type: string;
+  payload: unknown;
+  name?: string;
+  autoPublish?: boolean;
+  templateVersion?: string;
+};
+
+// The manual creation path (Composer, a Schedule's "Run now") once the owner is known: validates the Mission, checks
+// the Template version asked for and derives the default name.
+export async function createManualMission(
+  ctx: MutationCtx,
+  ownerId: string,
+  args: ManualMissionArgs,
+  recipe: RecipeArg | undefined,
+): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
+  await assertMissionCreatable(ctx, args);
+  if (args.templateVersion !== undefined) {
+    const installed = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.templateVersion);
+    if (!installed) throw new Error(`Template ${args.templateId} version ${args.templateVersion} is not installed in this Project`);
+  }
+  // When the user leaves the name field empty or whitespace-only, derive a
+  // default from the mission type and the per-project sequential number
+  // (e.g. "create_article #14") so the board always has a readable label.
+  // We peek the counter here (read-only) to predict the next number;
+  // `insertMissionAndDispatch` increments it atomically — both operations
+  // run in the same mutation transaction so the number is consistent.
+  // This default-name logic lives ONLY on the manual path so scheduled missions
+  // (createForOwner) are never affected by it.
+  const trimmed = args.name?.trim() || undefined;
+  const currentCounter = await ctx.db
+    .query("projectCounters")
+    .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+    .unique();
+  const nextNumber = (currentCounter?.missionCount ?? 0) + 1;
+  const name = trimmed ?? `${args.type} #${nextNumber}`;
+  return await insertMissionAndDispatch(ctx, { ...args, name, ownerId, ...(recipe ? { recipe } : {}) });
+}
+
 export const create = mutation({
   args: {
     instanceId: v.string(),
@@ -156,27 +197,7 @@ export const create = mutation({
   },
   handler: async (ctx, { recipe, ...args }) => {
     const ownerId = await ownerIdFor(ctx, args.instanceId);
-    await assertMissionCreatable(ctx, args);
-    if (args.templateVersion !== undefined) {
-      const installed = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.templateVersion);
-      if (!installed) throw new Error(`Template ${args.templateId} version ${args.templateVersion} is not installed in this Project`);
-    }
-    // When the user leaves the name field empty or whitespace-only, derive a
-    // default from the mission type and the per-project sequential number
-    // (e.g. "create_article #14") so the board always has a readable label.
-    // We peek the counter here (read-only) to predict the next number;
-    // `insertMissionAndDispatch` increments it atomically — both operations
-    // run in the same mutation transaction so the number is consistent.
-    // This default-name logic lives ONLY in this handler so scheduled missions
-    // (createForOwner) are never affected by it.
-    const trimmed = args.name?.trim() || undefined;
-    const currentCounter = await ctx.db
-      .query("projectCounters")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .unique();
-    const nextNumber = (currentCounter?.missionCount ?? 0) + 1;
-    const name = trimmed ?? `${args.type} #${nextNumber}`;
-    return await insertMissionAndDispatch(ctx, { ...args, name, ownerId, ...(recipe ? { recipe } : {}) });
+    return await createManualMission(ctx, ownerId, args, recipe);
   },
 });
 
@@ -193,7 +214,7 @@ export const createForOwner = internalMutation({
     payload: v.any(),
     name: v.optional(v.string()),
     autoPublish: v.optional(v.boolean()),
-    // The Schedule's recipe (#213 passes it); the same rule as `create`.
+    // The Schedule's recipe; the same rule as `create`.
     recipe: v.optional(recipeArgV),
   },
   handler: async (ctx, args) => {

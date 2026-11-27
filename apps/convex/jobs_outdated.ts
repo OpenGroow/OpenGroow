@@ -1,6 +1,6 @@
 import type { Doc } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
-import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import { computeNextRunAt, frequencyOf } from "./schedules/frequency.js";
 import { newRunBlock } from "./template_runnable.js";
 
 /**
@@ -13,17 +13,10 @@ export async function skipJobOnOutdatedTemplate(ctx: MutationCtx, job: Doc<"jobs
   if (!(await newRunBlock(ctx, job.instanceId, job.templateId))) return false;
   const runtime = (job.runtime ?? {}) as Record<string, unknown>;
   const { runNowRequestedAt: _requested, runNowRestorePaused: _restore, ...rest } = runtime;
-  const frequency: Frequency = {
-    unit: job.unit,
-    ...(job.dayOfWeek !== undefined ? { dayOfWeek: job.dayOfWeek } : {}),
-    ...(job.dayOfMonth !== undefined ? { dayOfMonth: job.dayOfMonth } : {}),
-    hour: job.hour,
-    minute: job.minute,
-  };
   await ctx.db.patch(job._id, {
     runNowAt: undefined,
     runtime: rest,
-    ...(runtime.runNowRestorePaused === true ? { state: "paused" as const } : { nextRunAt: computeNextRunAt(frequency, job.timezone, now) }),
+    ...(runtime.runNowRestorePaused === true ? { state: "paused" as const } : { nextRunAt: computeNextRunAt(frequencyOf(job), job.timezone, now) }),
     lastOutcome: "skipped",
     lastError: undefined,
     updatedAt: now,

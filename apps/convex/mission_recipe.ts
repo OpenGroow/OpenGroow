@@ -76,6 +76,18 @@ export async function buildRecipeSnapshot(ctx: QueryCtx, args: MissionRecipeArgs
   };
 }
 
+/** Whether the Mission type is creative in the Template version pinned (absent: the one currently installed). */
+export async function isCreativeMissionType(
+  ctx: QueryCtx,
+  instanceId: string,
+  templateId: string,
+  type: string,
+  pinnedVersion?: string,
+): Promise<boolean> {
+  const template = await getTemplateRegistry(ctx).resolve(instanceId, templateId, pinnedVersion);
+  return template !== null && template !== undefined && isRecipeTarget(template.manifest, type);
+}
+
 /**
  * The recipe side of a Mission creation: a creative Mission type (in the pinned Template version) requires an
  * explicit compatible recipe and gets its Recipe Snapshot; an operational one takes none. Refuses before anything
@@ -85,8 +97,7 @@ export async function resolveMissionRecipeSnapshot(
   ctx: QueryCtx,
   args: MissionRecipeArgs & { recipe: RecipeArg | undefined },
 ): Promise<RecipeSnapshot | undefined> {
-  const template = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.pinnedVersion);
-  const creative = template !== null && template !== undefined && isRecipeTarget(template.manifest, args.type);
+  const creative = await isCreativeMissionType(ctx, args.instanceId, args.templateId, args.type, args.pinnedVersion);
   if (!args.recipe) {
     if (creative) {
       throw new Error(`Mission type "${args.type}" is creative: a Mission requires a Production Recipe (pick one compatible with it, the Default Recipe for plain content)`);

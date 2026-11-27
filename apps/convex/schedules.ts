@@ -10,11 +10,12 @@ import { internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { provisionCurrentTemplate } from "./bundled_recipes.js";
 import { scheduleUnitV } from "./validators.js";
-import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import { computeNextRunAt, frequencyOf } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
+import { createManualMission } from "./missions.js";
 import { assertValidPublishAt } from "./publish_at.js";
-import { newRunBlock } from "./template_runnable.js";
-import { assertScheduleRunnable, defaultRecipeOf, isCreativeScheduleType, resolveScheduleRecipe } from "./schedule_recipes.js";
+import { assertScheduleRunnable, defaultRecipeOf, resolveScheduleRecipe } from "./schedule_recipes.js";
+import { isCreativeMissionType } from "./mission_recipe.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
 
 export const frequencyV = v.object({
@@ -46,7 +47,7 @@ export const create = mutation({
 
     const recipeId = await resolveScheduleRecipe(ctx, args);
 
-    const frequency = args.frequency as Frequency;
+    const frequency = frequencyOf(args.frequency);
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, args.timezone, now);
 
@@ -58,11 +59,7 @@ export const create = mutation({
       payload: args.payload,
       ...(recipeId ? { recipeId } : {}),
       ...(args.autoPublish !== undefined ? { autoPublish: args.autoPublish } : {}),
-      unit: frequency.unit,
-      ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
-      ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
-      hour: frequency.hour,
-      minute: frequency.minute,
+      ...frequency,
       timezone: args.timezone,
       status: "active",
       nextRunAt,
@@ -97,12 +94,12 @@ export const createDefaults = internalMutation({
     for (const entry of args.defaults) {
       if (existing.some((schedule) => schedule.type === entry.type)) continue;
       let recipeId: Id<"productionRecipes"> | undefined;
-      if (await isCreativeScheduleType(ctx, args.instanceId, args.templateId, entry.type)) {
+      if (await isCreativeMissionType(ctx, args.instanceId, args.templateId, entry.type)) {
         recipeId = (await defaultRecipeOf(ctx, args.instanceId, args.templateId, entry.type))?._id;
         // No Default Recipe to record: no creative Schedule is created without one.
         if (!recipeId) continue;
       }
-      const frequency = entry.frequency as Frequency;
+      const frequency = frequencyOf(entry.frequency);
       await ctx.db.insert("schedules", {
         ownerId,
         instanceId: args.instanceId,
@@ -110,11 +107,7 @@ export const createDefaults = internalMutation({
         type: entry.type,
         payload: entry.payload,
         ...(recipeId ? { recipeId } : {}),
-        unit: frequency.unit,
-        ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
-        ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
-        hour: frequency.hour,
-        minute: frequency.minute,
+        ...frequency,
         timezone: args.timezone,
         status: "active",
         nextRunAt: computeNextRunAt(frequency, args.timezone, now),
@@ -143,13 +136,7 @@ export const resume = mutation({
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
+    const frequency = frequencyOf(schedule);
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
     await assertScheduleRunnable(ctx, schedule);
@@ -180,7 +167,7 @@ export const updateFrequency = mutation({
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
-    const frequency = args.frequency as Frequency;
+    const frequency = frequencyOf(args.frequency);
     const now = Date.now();
     await ctx.db.patch(args.scheduleId, {
       unit: frequency.unit,
@@ -222,6 +209,24 @@ export const setAutoPublish = mutation({
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
     await ctx.db.patch(args.scheduleId, { autoPublish: args.autoPublish, updatedAt: Date.now() });
+  },
+});
+
+// "Run now": a Mission from the Schedule's own type, payload and recipe, through the same validation as the tick and
+// the Composer. The recipe is read here, never taken from the client.
+export const runNow = mutation({
+  args: { scheduleId: v.id("schedules") },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    return await createManualMission(
+      ctx,
+      ownerId,
+      { instanceId: schedule.instanceId, templateId: schedule.templateId, type: schedule.type, payload: schedule.payload },
+      schedule.recipeId ? { recipeId: schedule.recipeId } : undefined,
+    );
   },
 });
 
@@ -272,13 +277,7 @@ export const advanceNextRun = internalMutation({
     if (!schedule) return;
 
     const now = Date.now();
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
+    const frequency = frequencyOf(schedule);
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
 
     await ctx.db.patch(args.scheduleId, {
@@ -291,29 +290,6 @@ export const advanceNextRun = internalMutation({
   },
 });
 
-// The Template of a Schedule is outdated (ADR-091): its occurrence passes without a Mission and without an error, and
-// the Schedule keeps its status. Only the next occurrence moves, so it resumes by itself once the Template is updated.
-export const skipOccurrence = internalMutation({
-  args: { scheduleId: v.id("schedules") },
-  handler: async (ctx, args) => {
-    const schedule = await ctx.db.get(args.scheduleId);
-    if (!schedule) return;
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
-    await ctx.db.patch(args.scheduleId, { nextRunAt: computeNextRunAt(frequency, schedule.timezone, Date.now()) });
-  },
-});
-
-export const isTemplateOutdated = internalQuery({
-  args: { instanceId: v.string(), templateId: v.string() },
-  handler: async (ctx, args) => (await newRunBlock(ctx, args.instanceId, args.templateId)) !== null,
-});
-
 export const recordError = internalMutation({
   args: { scheduleId: v.id("schedules"), error: v.string() },
   handler: async (ctx, args) => {
@@ -321,13 +297,7 @@ export const recordError = internalMutation({
     if (!schedule) return;
 
     const now = Date.now();
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
+    const frequency = frequencyOf(schedule);
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
 
     await ctx.db.patch(args.scheduleId, {
@@ -345,8 +315,8 @@ export const tick = internalAction({
     const due = await ctx.runQuery(internal.schedules.listDueActive, { now: Date.now() });
     for (const schedule of due) {
       try {
-        if (await ctx.runQuery(internal.schedules.isTemplateOutdated, { instanceId: schedule.instanceId, templateId: schedule.templateId })) {
-          await ctx.runMutation(internal.schedules.skipOccurrence, { scheduleId: schedule._id });
+        if (await ctx.runQuery(internal.schedule_outdated.isNewRunBlocked, { instanceId: schedule.instanceId, templateId: schedule.templateId })) {
+          await ctx.runMutation(internal.schedule_outdated.skipOccurrence, { scheduleId: schedule._id });
           continue;
         }
         const { missionId } = await ctx.runMutation(internal.missions.createForOwner, {

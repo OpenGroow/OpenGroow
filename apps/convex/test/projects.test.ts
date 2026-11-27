@@ -99,6 +99,26 @@ describe("projects table review fixes (#724)", () => {
     expect(project?.ownerId).toBe(OWNER);
   });
 
+  it("deleting the last Instance deletes the Project's Production Recipes and their versions, and only theirs", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.instances.createLocalInstance, {
+      userId: OWNER, jobId: "local-rc", port: 1, openclawKeyId: "k",
+    });
+    await t.run(async (ctx) => {
+      for (const instanceId of ["local-rc", "other-project"]) {
+        const recipeId = await ctx.db.insert("productionRecipes", { instanceId, templateId: "@acme/studio", missionType: "write_post", name: "R", description: "d" });
+        await ctx.db.insert("productionRecipeVersions", { instanceId, recipeId, version: 1, instructions: "i", constraints: [], createdAt: 1 });
+      }
+    });
+    await t.mutation(internal.instances.deleteByJobId, { jobId: "local-rc" });
+    const left = await t.run(async (ctx) => ({
+      recipes: await ctx.db.query("productionRecipes").collect(),
+      versions: await ctx.db.query("productionRecipeVersions").collect(),
+    }));
+    expect(left.recipes.map((r) => r.instanceId)).toEqual(["other-project"]);
+    expect(left.versions.map((r) => r.instanceId)).toEqual(["other-project"]);
+  });
+
   it("deleting one Instance keeps a Project another Instance still runs", async () => {
     const t = convexTest(schema, modules);
     await t.run(async (ctx) => {

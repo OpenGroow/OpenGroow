@@ -1,19 +1,11 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { MutationCtx, QueryCtx } from "./_generated/server.js";
-import { assertRecipeCompatible } from "./mission_recipe.js";
-import { isRecipeTarget } from "./production_recipe_rules.js";
-import { getTemplateRegistry } from "./template_registry.js";
+import { RECIPE_UNAVAILABLE } from "./schedule_reasons.js";
+import { assertRecipeCompatible, isCreativeMissionType } from "./mission_recipe.js";
 
 // The recipe of a Schedule (ADR-091). A Schedule of a creative Mission type carries a compatible Production Recipe;
 // one that loses it is paused with a reason and cannot resume until a compatible recipe is set.
 
-export const RECIPE_UNAVAILABLE = "recipe unavailable" as const;
-
-/** Whether the Mission type is creative in the Template version currently installed in the Project. */
-export async function isCreativeScheduleType(ctx: QueryCtx, instanceId: string, templateId: string, type: string): Promise<boolean> {
-  const template = await getTemplateRegistry(ctx).resolve(instanceId, templateId, undefined);
-  return template !== null && template !== undefined && isRecipeTarget(template.manifest, type);
-}
 
 /**
  * The recipe a Schedule is created or edited with: required and compatible for a creative Mission type (the same rule
@@ -23,7 +15,7 @@ export async function resolveScheduleRecipe(
   ctx: QueryCtx,
   args: { instanceId: string; templateId: string; type: string; recipeId?: Id<"productionRecipes"> | undefined },
 ): Promise<Id<"productionRecipes"> | undefined> {
-  const creative = await isCreativeScheduleType(ctx, args.instanceId, args.templateId, args.type);
+  const creative = await isCreativeMissionType(ctx, args.instanceId, args.templateId, args.type);
   if (args.recipeId === undefined) {
     if (creative) {
       throw new Error(`Mission type "${args.type}" is creative: a Schedule requires a Production Recipe (the Default Recipe for plain content)`);
@@ -37,7 +29,7 @@ export async function resolveScheduleRecipe(
 
 /** Throws unless a creative Schedule carries a compatible recipe; an operational one passes. Used before resuming. */
 export async function assertScheduleRunnable(ctx: QueryCtx, schedule: Doc<"schedules">): Promise<void> {
-  if (!(await isCreativeScheduleType(ctx, schedule.instanceId, schedule.templateId, schedule.type))) return;
+  if (!(await isCreativeMissionType(ctx, schedule.instanceId, schedule.templateId, schedule.type))) return;
   if (schedule.pausedReason || !schedule.recipeId) {
     throw new Error("This Schedule has no usable Production Recipe: choose a compatible one before resuming it");
   }
