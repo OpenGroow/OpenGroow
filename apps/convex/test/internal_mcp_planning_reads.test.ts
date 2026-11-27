@@ -84,7 +84,7 @@ async function family(projectId: string, name: string) {
   return t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: projectId, slug: name.toLowerCase(), name, description: "d" }));
 }
 async function recipe(projectId: string, creativeFamilyId: Id<"creativeFamilies">, name: string, missionType: string, templateId = PLANNER) {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d" }));
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, templateId, missionType, name, description: "d" }));
 }
 async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; scoring?: Record<string, number>; producedAt?: number; selectedAt?: number; creativeFamilyId?: Id<"creativeFamilies">; summary?: string } = {}) {
   return t.run((ctx) =>

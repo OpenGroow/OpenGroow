@@ -32,7 +32,6 @@ type T = ReturnType<typeof convexTest>;
 let t: T;
 let restoreRegistry: () => void;
 let recipeId: Id<"productionRecipes">;
-let familyId: Id<"creativeFamilies">;
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -47,8 +46,7 @@ beforeEach(async () => {
       targets: [{ target: "social:example", channelService: "instagram" }],
     } as never);
     await ctx.db.insert("projectAgents", { instanceId: INSTANCE, templateId: TEMPLATE, status: "active", workspaceKey: "ws", openclawAgentName: "a", mcpServerKeys: [], createdAt: NOW, updatedAt: NOW } as never);
-    familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "F", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d" } as never);
   });
 });
 afterEach(() => {

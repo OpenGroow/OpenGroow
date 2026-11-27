@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { ownerOfInstance } from "./projects.js";
-import { frequencyV } from "./schedules.js";
+import { frequencyV } from "./validators.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { listMissionRunsCompletedBetween } from "./runs.js";

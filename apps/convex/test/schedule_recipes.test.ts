@@ -4,6 +4,7 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
+import { fixtureTemplate, installTemplateRegistry } from "./helpers/template_registry.helpers";
 import { installTemplatePackage, offerTemplateUpdate, applyStagedUpdate } from "../template_registry_store";
 import { readClawPackageFixture, withFile, type PackageFile } from "../../../packages/agent-templates/src/__fixtures__/claw-package";
 
@@ -118,6 +119,23 @@ describe("creating a creative Schedule", () => {
     const schedules = await owner.query(api.schedules.listByInstance, { instanceId: PROJECT });
     expect(schedules.find((s) => s.type === "write_post")!.recipeId).toBe(ids.freeform);
     expect(schedules.find((s) => s.type === "moderate")!.recipeId).toBeUndefined();
+  });
+
+  it("default Schedules fail loudly, and create none, when a creative Mission type has no Default Recipe to record", async () => {
+    // The registry resolves a creative Mission type, but nothing provisioned its recipes (no installed snapshot).
+    const restore = installTemplateRegistry([PROJECT], [fixtureTemplate("@example/unprovisioned", { missionTypes: [{ type: "make_post", label: "Post", kind: "creative", agentsMd: "a.md" }] } as never)]);
+    try {
+      const { t, owner } = await setup();
+      await expect(
+        t.mutation(internal.schedules.createDefaults, {
+          ownerId: OWNER.subject, instanceId: PROJECT, templateId: "@example/unprovisioned", timezone: "UTC",
+          defaults: [{ type: "make_post", payload: {}, frequency: DAILY }],
+        }),
+      ).rejects.toThrow(/no Default Recipe.*make_post/s);
+      expect(await owner.query(api.schedules.listByInstance, { instanceId: PROJECT })).toEqual([]);
+    } finally {
+      restore();
+    }
   });
 });
 

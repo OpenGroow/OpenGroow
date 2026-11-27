@@ -9,7 +9,7 @@ import {
 import { internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { provisionCurrentTemplate } from "./bundled_recipes.js";
-import { scheduleUnitV } from "./validators.js";
+import { frequencyV } from "./validators.js";
 import { computeNextRunAt, frequencyOf } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { createManualMission } from "./missions.js";
@@ -17,14 +17,6 @@ import { assertValidPublishAt } from "./publish_at.js";
 import { assertScheduleRunnable, defaultRecipeOf, resolveScheduleRecipe } from "./schedule_recipes.js";
 import { isCreativeMissionType } from "./mission_recipe.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
-
-export const frequencyV = v.object({
-  unit: scheduleUnitV,
-  dayOfWeek: v.optional(v.number()),
-  dayOfMonth: v.optional(v.number()),
-  hour: v.number(),
-  minute: v.number(),
-});
 
 export const create = mutation({
   args: {
@@ -91,14 +83,26 @@ export const createDefaults = internalMutation({
     const now = Date.now();
     // Make sure the Default Recipes exist: a Default Schedule of a creative type records one explicitly.
     await provisionCurrentTemplate(ctx, args.instanceId, args.templateId);
+    // Resolve every recipe first: a creative Default Schedule records its Default Recipe explicitly. Provisioning
+    // guarantees one (the package validator requires exactly one), so a missing one is an integrity problem
+    // (recipes not provisioned, Template outdated): fail with nothing created rather than skip it silently. The
+    // caller (Agent activation) records the error without failing the activation, and the next activation retries.
+    const pending: { entry: (typeof args.defaults)[number]; recipeId: Id<"productionRecipes"> | undefined }[] = [];
+    const missing: string[] = [];
     for (const entry of args.defaults) {
       if (existing.some((schedule) => schedule.type === entry.type)) continue;
-      let recipeId: Id<"productionRecipes"> | undefined;
-      if (await isCreativeMissionType(ctx, args.instanceId, args.templateId, entry.type)) {
-        recipeId = (await defaultRecipeOf(ctx, args.instanceId, args.templateId, entry.type))?._id;
-        // No Default Recipe to record: no creative Schedule is created without one.
-        if (!recipeId) continue;
+      if (!(await isCreativeMissionType(ctx, args.instanceId, args.templateId, entry.type))) {
+        pending.push({ entry, recipeId: undefined });
+        continue;
       }
+      const recipe = await defaultRecipeOf(ctx, args.instanceId, args.templateId, entry.type);
+      if (recipe) pending.push({ entry, recipeId: recipe._id });
+      else missing.push(entry.type);
+    }
+    if (missing.length > 0) {
+      throw new Error(`Default Schedules of ${args.templateId} not created: no Default Recipe for the creative Mission type(s) ${missing.join(", ")}`);
+    }
+    for (const { entry, recipeId } of pending) {
       const frequency = frequencyOf(entry.frequency);
       await ctx.db.insert("schedules", {
         ownerId,

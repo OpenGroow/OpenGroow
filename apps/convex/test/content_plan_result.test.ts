@@ -86,7 +86,7 @@ afterEach(() => {
 
 const owner = () => t.withIdentity(OWNER);
 const recipe = (missionType = "make_video", instanceId = INSTANCE) =>
-  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId, creativeFamilyId: familyId, templateId: PRODUCER, missionType, name: "R", description: "d" } as never));
+  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId, templateId: PRODUCER, missionType, name: "R", description: "d" } as never));
 const source = (instanceId = INSTANCE) => t.run((ctx) => ctx.db.insert("sources", { instanceId, ownerId: OWNER.subject, templateId: PRODUCER, sourceId: "s", label: "S", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: NOW, createdAt: NOW, analysis: {} } as never));
 
 const configure = (productionTargets: Array<{ kind: string; quantity: number; publishTargets: string[] }>) =>
