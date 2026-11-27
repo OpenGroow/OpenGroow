@@ -37,7 +37,7 @@ useTemplateRegistry(
     fixtureTemplate(STRATEGIST, {
       mcpServers: [internalServer(TOOLS)],
       missionTypes: [
-        { type: "make_image", label: "Make image", agentsMd: "a.md", publish: { kind: "image" }, contextProviders: ["production-recipe"] },
+        { type: "make_image", label: "Make image", agentsMd: "a.md", publish: { kind: "image" }, kind: "creative" },
         { type: "note", label: "Note", agentsMd: "b.md" },
       ],
     } as never),

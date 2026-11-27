@@ -349,7 +349,7 @@ export const listVersions = query({
 
 /**
  * The Mission types of the Project's installed Templates that declare the
- * `production-recipe` provider: what a recipe can be written for.
+ * creative: what a recipe can be written for.
  */
 export const listTargets = query({
   args: { instanceId: v.string() },
@@ -367,7 +367,7 @@ export const listTargets = query({
     const targets: Array<{ templateId: string; templateName: string; missionType: string; label: string }> = [];
     for (const templateId of templateIds) {
       const offered = new Set<string>();
-      // Newest version first: a Mission type is offered once, from the newest version declaring the provider.
+      // Newest version first: a Mission type is offered once, from the newest version that is creative.
       for (const template of await installedVersions(ctx, args.instanceId, templateId)) {
         for (const type of template.manifest.missionTypes ?? []) {
           if (offered.has(type.type) || !isRecipeTarget(template.manifest, type.type)) continue;

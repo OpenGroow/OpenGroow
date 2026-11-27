@@ -1,3 +1,4 @@
+import { recipeFor } from "./helpers/mission_recipe.helpers";
 import { insertInstance } from "./instance_fixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
@@ -60,6 +61,8 @@ const modules = {
   "../instances.ts": () => import("../instances.js"),
   "../instances_node.ts": () => import("../instances_node.js"),
   "../missions.ts": () => import("../missions.js"),
+  "../production_recipes.ts": () => import("../production_recipes.js"),
+  "../bundled_recipes.ts": () => import("../bundled_recipes.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../runs.ts": () => import("../runs.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
@@ -157,6 +160,7 @@ describe("Project Template registry — Mission lifecycle from an installed pack
       templateId: "@acme/seo",
       type: "create_article",
       payload: { keyword: "octopus" },
+      recipe: await recipeFor(as, PROJECT, "@acme/seo", "create_article"),
       name: "Installed SEO mission",
     });
 

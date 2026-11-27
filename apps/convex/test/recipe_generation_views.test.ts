@@ -42,7 +42,7 @@ function strategist(tools: string[] = NEEDED_TOOLS) {
       ...base.manifest,
       mcpServers: [{ name: "opengroow", transport: "streamable-http", url: "", internal: { tools } }],
       missionTypes: [
-        { type: "make_post", label: "Post", agentsMd: "a.md", contextProviders: ["production-recipe"] },
+        { type: "make_post", label: "Post", agentsMd: "a.md", kind: "creative" },
         { type: "plain_note", label: "Note", agentsMd: "b.md" },
       ],
     },

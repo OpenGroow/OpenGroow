@@ -42,7 +42,7 @@ function strategist(tools: string[] = NEEDED_TOOLS) {
       ...base.manifest,
       mcpServers: [{ name: "opengroow", transport: "streamable-http", url: "", internal: { tools } }],
       missionTypes: [
-        { type: "make_post", label: "Post", agentsMd: "a.md", contextProviders: ["production-recipe"] },
+        { type: "make_post", label: "Post", agentsMd: "a.md", kind: "creative" },
         { type: "plain_note", label: "Note", agentsMd: "b.md" },
       ],
     },
@@ -278,7 +278,7 @@ describe("the result of a generation", () => {
 
   describe.each([
     ["an unknown Mission type", (s: string) => proposal([s], { missionType: "nothing" }), /does not exist/],
-    ["a Mission type without the recipe provider", (s: string) => proposal([s], { missionType: "plain_note" }), /production-recipe/],
+    ["an operational Mission type", (s: string) => proposal([s], { missionType: "plain_note" }), /not creative/],
     ["an uninstalled Template", (s: string) => proposal([s], { templateId: "not-installed" }), /not installed/],
     ["a malformed result", () => ({ kind: "proposal", name: "x" }), /description/],
     ["an unknown kind", () => ({ kind: "other" }), /kind must be/],

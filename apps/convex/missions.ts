@@ -8,7 +8,7 @@ import { activeProjectAgent, assertMissionCreatable } from "./mission_validation
 import { indexingOutcomeV } from "./indexing.js";
 import { findLiveRunForMission } from "./runs.js";
 import { currentTemplateVersion, getTemplateRegistry } from "./template_registry.js";
-import { buildRecipeSnapshot, recipeArgV, type RecipeSnapshot } from "./mission_recipe.js";
+import { recipeArgV, resolveMissionRecipeSnapshot, type RecipeArg } from "./mission_recipe.js";
 
 // Inserts a pending Run for a mission against its active projectAgent. Shared by
 // `create` (initial run) and `rejectMission` (revision run with feedback) so the
@@ -85,17 +85,27 @@ export async function insertMissionAndDispatch(
     sourceObservationId?: Id<"sources">;
     /** Pins this installed version instead of the current one (already checked by the caller). */
     templateVersion?: string;
-    recipeSnapshot?: RecipeSnapshot;
+    /** The explicit Production Recipe; required for a creative Mission type, refused for any other. */
+    recipe?: RecipeArg;
   },
 ): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
+  // Every refusal happens here, before the first write: the single place every entry point goes through (ADR-091).
+  const templateVersion = args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId));
+  const recipeSnapshot = await resolveMissionRecipeSnapshot(ctx, {
+    instanceId: args.instanceId,
+    templateId: args.templateId,
+    type: args.type,
+    pinnedVersion: templateVersion,
+    recipe: args.recipe,
+  });
   const number = await nextMissionNumber(ctx, args.instanceId);
   const now = Date.now();
   const missionId = await ctx.db.insert("missions", {
     ownerId: args.ownerId,
     instanceId: args.instanceId,
     templateId: args.templateId,
-    templateVersion: args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId)),
-    ...(args.recipeSnapshot !== undefined ? { recipeSnapshot: args.recipeSnapshot } : {}),
+    templateVersion,
+    ...(recipeSnapshot !== undefined ? { recipeSnapshot } : {}),
     type: args.type,
     payload: args.payload,
     status: "todo",
@@ -127,7 +137,7 @@ export const create = mutation({
     autoPublish: v.optional(v.boolean()),
     // Any version installed in the Project, current or staged (ADR-083).
     templateVersion: v.optional(v.string()),
-    // The Production Recipe to resolve and freeze on the Mission (ADR-083).
+    // The Production Recipe to resolve and freeze on the Mission (ADR-083); required for a creative Mission type (ADR-091).
     recipe: v.optional(recipeArgV),
   },
   handler: async (ctx, { recipe, ...args }) => {
@@ -137,13 +147,6 @@ export const create = mutation({
       const installed = await getTemplateRegistry(ctx).resolve(args.instanceId, args.templateId, args.templateVersion);
       if (!installed) throw new Error(`Template ${args.templateId} version ${args.templateVersion} is not installed in this Project`);
     }
-    const recipeSnapshot = recipe
-      ? await buildRecipeSnapshot(ctx, {
-          ...args,
-          pinnedVersion: args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId)),
-          recipe,
-        })
-      : undefined;
     // When the user leaves the name field empty or whitespace-only, derive a
     // default from the mission type and the per-project sequential number
     // (e.g. "create_article #14") so the board always has a readable label.
@@ -159,7 +162,7 @@ export const create = mutation({
       .unique();
     const nextNumber = (currentCounter?.missionCount ?? 0) + 1;
     const name = trimmed ?? `${args.type} #${nextNumber}`;
-    return await insertMissionAndDispatch(ctx, { ...args, name, ownerId, ...(recipeSnapshot ? { recipeSnapshot } : {}) });
+    return await insertMissionAndDispatch(ctx, { ...args, name, ownerId, ...(recipe ? { recipe } : {}) });
   },
 });
 
@@ -176,6 +179,8 @@ export const createForOwner = internalMutation({
     payload: v.any(),
     name: v.optional(v.string()),
     autoPublish: v.optional(v.boolean()),
+    // The Schedule's recipe (#213 passes it); the same rule as `create`.
+    recipe: v.optional(recipeArgV),
   },
   handler: async (ctx, args) => {
     return await insertMissionAndDispatch(ctx, args);

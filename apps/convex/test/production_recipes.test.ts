@@ -21,7 +21,7 @@ const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|str
 const missionType = (extra: Record<string, unknown> = {}) => ({
   type: "create_letter_video",
   label: "Letter video",
-  contextProviders: ["production-recipe"],
+  kind: "creative",
   fields: [],
   ...extra,
 });
@@ -31,7 +31,7 @@ const TARGET = { templateId: "@example/video-a", missionType: "create_letter_vid
 beforeEach(() => {
   restoreRegistry = installTemplateRegistry(
     [INSTANCE_ID, OTHER_INSTANCE_ID],
-    [template("@example/video-a"), template("@example/video-b"), template("@example/no-provider", [missionType({ contextProviders: [] })])],
+    [template("@example/video-a"), template("@example/video-b"), template("@example/operational-only", [missionType({ kind: "operational" })])],
   );
 });
 afterEach(() => restoreRegistry());
@@ -200,10 +200,10 @@ describe("production_recipes", () => {
     expect(await owner.query(api.production_recipes.get, { instanceId: INSTANCE_ID, recipeId })).toMatchObject(TARGET);
   });
 
-  it("refuses a Mission type without the provider, an unknown one and a Template that is not installed", async () => {
+  it("refuses a Mission type that is not creative, an unknown one and a Template that is not installed", async () => {
     const { owner } = await setup();
     const base = { instanceId: INSTANCE_ID, name: "B", description: "", ...content };
-    await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/no-provider", missionType: "create_letter_video" })).rejects.toThrow("provider");
+    await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/operational-only", missionType: "create_letter_video" })).rejects.toThrow("not creative");
     await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/video-a", missionType: "nope" })).rejects.toThrow("does not exist");
     await expect(owner.mutation(api.production_recipes.create, { ...base, templateId: "@example/missing", missionType: "create_letter_video" })).rejects.toThrow("not installed");
   });
@@ -221,7 +221,7 @@ describe("production_recipes", () => {
     const args = { instanceId: INSTANCE_ID, recipeId };
     await owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/video-b", missionType: "create_letter_video" });
     expect(await owner.query(api.production_recipes.get, args)).toMatchObject({ templateId: "@example/video-b" });
-    await expect(owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/no-provider", missionType: "create_letter_video" })).rejects.toThrow("provider");
+    await expect(owner.mutation(api.production_recipes.setTarget, { ...args, templateId: "@example/operational-only", missionType: "create_letter_video" })).rejects.toThrow("not creative");
     expect(await owner.query(api.production_recipes.get, args)).toMatchObject({ templateId: "@example/video-b" });
   });
 
@@ -235,10 +235,10 @@ describe("production_recipes", () => {
     expect(await t.withIdentity(STRANGER).query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET })).toEqual([]);
   });
 
-  it("lists targets that declare the provider", async () => {
+  it("lists creative targets", async () => {
     const { t, owner } = await setup();
     await t.run(async (ctx) => {
-      for (const templateId of ["@example/video-a", "@example/no-provider"]) {
+      for (const templateId of ["@example/video-a", "@example/operational-only"]) {
         await ctx.db.insert("installedTemplates", { projectId: INSTANCE_ID, templateId, version: "1.0.0", origin: "hub", digest: "d", manifest: {}, current: true, installedAt: 1 } as never);
       }
     });
@@ -250,8 +250,8 @@ describe("production_recipes", () => {
   describe("staged Template version", () => {
     async function setupStaged() {
       const ctx = await setup();
-      // v1 (current) declares no provider; v2 (staged, not applied) does.
-      const v1 = template("@example/video-staged", [missionType({ contextProviders: [] })]);
+      // v1 (current) is operational; v2 (staged, not applied) does.
+      const v1 = template("@example/video-staged", [missionType({ kind: "operational" })]);
       const v2 = template("@example/video-staged", [missionType()]);
       setTemplateRegistryForTests({
         async resolve(_p, id, version) {
@@ -279,12 +279,12 @@ describe("production_recipes", () => {
       ).resolves.toBeTruthy();
     });
 
-    it("still refuses when no installed version declares the provider", async () => {
+    it("still refuses when no installed version is creative", async () => {
       const { owner } = await setupStaged();
-      setTemplateRegistryForTests(inMemoryRegistry([INSTANCE_ID], [template("@example/video-staged", [missionType({ contextProviders: [] })])]));
+      setTemplateRegistryForTests(inMemoryRegistry([INSTANCE_ID], [template("@example/video-staged", [missionType({ kind: "operational" })])]));
       await expect(
         owner.mutation(api.production_recipes.create, { instanceId: INSTANCE_ID, name: "S", description: "", ...content, templateId: "@example/video-staged", missionType: "create_letter_video" }),
-      ).rejects.toThrow("provider");
+      ).rejects.toThrow("not creative");
     });
   });
 });
@@ -352,7 +352,7 @@ describe("production_recipes.create from a Recipe Proposal (ADR-087)", () => {
 
   it("re-validates a changed Template and creates nothing on error", async () => {
     const { t, owner, runId, args } = await withProposal();
-    const bad = { ...args(runId), templateId: "@example/no-provider" };
+    const bad = { ...args(runId), templateId: "@example/operational-only" };
     await expect(owner.mutation(api.production_recipes.create, bad as never)).rejects.toThrow();
     expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
     const run = await t.run((ctx) => ctx.db.get(runId));

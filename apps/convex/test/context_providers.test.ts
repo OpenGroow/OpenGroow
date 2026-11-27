@@ -6,6 +6,7 @@ import {
   renderPlatformAccountSection,
   appendContextProviders,
   VALID_CONTEXT_PROVIDER_NAMES,
+  LEGACY_RECIPE_PROVIDER,
   type ActiveAgentInfo,
   type CarouselPlanningSourceInfo,
   type PlatformAccountInfo,
@@ -382,7 +383,7 @@ describe("platform-account provider (issue #660)", () => {
     expect(() => appendContextProviders(BASE_MD, ["platform-account"], {})).toThrow(/platform-account/);
   });
 
-  it("has a renderer for every provider name the manifest vocabulary knows", () => {
-    expect([...VALID_CONTEXT_PROVIDER_NAMES].sort()).toEqual([...CONTEXT_PROVIDER_NAMES].sort());
+  it("has a renderer for every provider name the manifest vocabulary knows, but the retired recipe provider", () => {
+    expect([...VALID_CONTEXT_PROVIDER_NAMES, LEGACY_RECIPE_PROVIDER].sort()).toEqual([...CONTEXT_PROVIDER_NAMES].sort());
   });
 });

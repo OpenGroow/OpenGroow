@@ -17,7 +17,7 @@ export function buildRecipeGenerationRunFile(input: { idea?: string; sourceCount
     "## Workflow",
     "",
     "1. Read the Brand Core (get_brand_core).",
-    "2. List the Mission types that accept a Production Recipe (list_mission_types, acceptsRecipe). Read the description of each: it says what the Template produces. Target only one of them, and never invent a capability.",
+    "2. List the creative Mission types (list_mission_types, creative: true). Read the description of each: it says what the Template produces. Target only one of them, and never invent a capability.",
     "3. List the existing Production Recipes (list_production_recipes), then read one or two written for the Mission type you target (get_production_recipe). A Recipe that already works shows what the prompt contains for that Mission type and how its instructions are written: follow its shape, not its idea.",
     "4. If you were given Sources, explore them (list_generation_sources, sorted by score and by recent, then get_source). Read all of them when there are few, favouring the best Replication Scores and a variety of executions. A Recipe is a reusable method, not a copy of one content.",
     "5. Find what the strongest Sources have in common that the weaker ones lack: the opening, the structure, the emotion, the format. That shared mechanic is the Recipe. With no Source, turn the idea into a mechanic in the same way. Adapt it to this Project, its Brand and its audience.",

@@ -4,7 +4,7 @@ import { summarizeByRecipe } from "../analytics_recipe.js";
 import { recipeCatalog } from "../recipe_usage.js";
 import { listPlannedContents, listSources, missionTypeFormats, formatOf } from "../planning_reads.js";
 import { getProductionRecipe, getSource, listGenerationSources, pinnedGeneration } from "../recipe_generation_reads.js";
-import { declaresRecipeProvider } from "../production_recipe_rules.js";
+import { isRecipeTarget } from "../production_recipe_rules.js";
 import { readStrategicMemory } from "../strategic_reviews.js";
 import { getTemplateRegistry } from "../template_registry.js";
 import type { QueryCtx } from "../_generated/server.js";
@@ -39,7 +39,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
     .withIndex("by_instance_status", (q) => q.eq("instanceId", scope.instanceId).eq("status", "active"))
     .take(100);
   const registry = getTemplateRegistry(ctx);
-  const types: ({ templateId: string; templateName: string; type: string; label: string; description: string; acceptsRecipe: boolean } & ReturnType<typeof formatOf>)[] = [];
+  const types: ({ templateId: string; templateName: string; type: string; label: string; description: string; creative: boolean } & ReturnType<typeof formatOf>)[] = [];
   for (const agent of agents) {
     const template = await registry.resolve(scope.instanceId, agent.templateId);
     if (!template) continue;
@@ -52,7 +52,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
         type: missionType.type,
         label: missionType.label,
         description: missionType.description ?? template.manifest.description,
-        acceptsRecipe: declaresRecipeProvider(template.manifest, missionType.type),
+        creative: isRecipeTarget(template.manifest, missionType.type),
         ...formatOf(missionType as never),
       });
     }
@@ -129,7 +129,7 @@ async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
 export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> = {
   list_mission_types: {
     description:
-      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, its format (kind: video, image, carousel, article, or null when it publishes nothing and cannot be planned), the platforms it can publish to (empty: any) and sourceRequired (it needs a Source to be produced) and acceptsRecipe (a Production Recipe can target it).",
+      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, its format (kind: video, image, carousel, article, or null when it publishes nothing and cannot be planned), the platforms it can publish to (empty: any) and sourceRequired (it needs a Source to be produced) and creative (a Mission of this type requires a Production Recipe, and a recipe can target it).",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => listMissionTypes(ctx, scope),
   },

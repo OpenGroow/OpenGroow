@@ -569,8 +569,16 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(document.body.textContent).toContain("category");
   });
 
-  describe("Production Recipe picker", () => {
-    const RECIPES = [{ _id: "recipe-1", name: "Calm reaction", description: "", latestVersion: 2 }];
+  describe("Production Recipe picker (ADR-091)", () => {
+    const RECIPES = [
+      { _id: "recipe-custom", name: "Calm reaction", description: "", latestVersion: 2, origin: "custom", isDefault: false },
+      { _id: "recipe-default", name: "Freeform", description: "", latestVersion: 1, origin: "bundled", isDefault: true },
+    ];
+    // create_letter_video is creative, create_marketing_video operational.
+    const kinded = {
+      ...videoManifest,
+      missionTypes: videoManifest.missionTypes?.map((t) => ({ ...t, kind: t.type === "create_letter_video" ? "creative" : "operational" })),
+    } as typeof videoManifest;
 
     async function renderVideoForm(recipes: unknown) {
       const createMission = vi.fn();
@@ -583,13 +591,22 @@ describe("InstanceMissionsContent — mission list", () => {
         if (key === "production_recipes.listForMissionType") return recipes;
         return undefined;
       });
-      await render();
+      await render([seoManifest, kinded]);
       return createMission;
     }
     const recipeSelect = () =>
       Array.from(document.querySelectorAll("select")).find((s) =>
-        Array.from(s.options).some((o) => o.textContent === "No recipe"),
+        Array.from(s.options).some((o) => o.value === "recipe-default"),
       ) as HTMLSelectElement | undefined;
+    const typeSelect = () =>
+      Array.from(document.querySelectorAll("select")).find((x) =>
+        Array.from(x.options).some((o) => o.value === "create_marketing_video"),
+      ) as HTMLSelectElement;
+    const setValue = (select: HTMLSelectElement, value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, value);
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
     const submit = async () => {
       const form = document.querySelector("form") as HTMLFormElement;
       await act(async () => {
@@ -597,46 +614,44 @@ describe("InstanceMissionsContent — mission list", () => {
       });
     };
 
-    it("is hidden when the Mission type has no active recipe", async () => {
-      await renderVideoForm([]);
+    it("preselects the Default Recipe, has no empty choice and sends it explicitly", async () => {
+      const createMission = await renderVideoForm(RECIPES);
+      expect(recipeSelect()?.value).toBe("recipe-default");
+      expect(Array.from(recipeSelect()!.options).map((o) => o.textContent)).toEqual(["Calm reaction (v2)", "Freeform (Default) (v1)"]);
+      expect(document.body.textContent).not.toContain("No recipe");
+      await submit();
+      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-default" } }));
+    });
+
+    it("sends another recipe when the user picks it", async () => {
+      const createMission = await renderVideoForm(RECIPES);
+      await setValue(recipeSelect()!, "recipe-custom");
+      await submit();
+      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-custom" } }));
+    });
+
+    it("falls back to the Default when the Mission type changes and comes back", async () => {
+      await renderVideoForm(RECIPES);
+      await setValue(recipeSelect()!, "recipe-custom");
+      const first = typeSelect().value;
+      await setValue(typeSelect(), "create_marketing_video");
+      await setValue(typeSelect(), first);
+      expect(recipeSelect()!.value).toBe("recipe-default");
+    });
+
+    it("shows no recipe choice for an operational Mission type", async () => {
+      const createMission = await renderVideoForm(RECIPES);
+      await setValue(typeSelect(), "create_marketing_video");
       expect(recipeSelect()).toBeUndefined();
       expect(document.body.textContent).not.toContain("Production Recipe");
+      expect(createMission).not.toHaveBeenCalled();
     });
 
-    it("lists the offered recipes, never preselects one, and creates the Mission without it by default", async () => {
-      const createMission = await renderVideoForm(RECIPES);
-      expect(recipeSelect()?.value).toBe("");
-      expect(Array.from(recipeSelect()!.options).map((o) => o.textContent)).toEqual(["No recipe", "Calm reaction (v2)"]);
+    it("explains and refuses to submit when a creative Mission type has no recipe", async () => {
+      const createMission = await renderVideoForm([]);
+      expect(document.body.textContent).toContain("needs a Production Recipe");
       await submit();
-      expect(createMission.mock.calls[0]![0]).not.toHaveProperty("recipe");
-    });
-
-    it("forgets the chosen recipe when the Mission type changes, even if the user comes back to it", async () => {
-      await renderVideoForm(RECIPES);
-      const setValue = (select: HTMLSelectElement, value: string) =>
-        act(async () => {
-          Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, value);
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-        });
-      await setValue(recipeSelect()!, "recipe-1");
-      expect(recipeSelect()!.value).toBe("recipe-1");
-      const typeSelect = Array.from(document.querySelectorAll("select")).find((x) =>
-        Array.from(x.options).some((o) => o.value === "create_marketing_video"),
-      ) as HTMLSelectElement;
-      const first = typeSelect.value;
-      await setValue(typeSelect, "create_marketing_video");
-      await setValue(typeSelect, first);
-      expect(recipeSelect()!.value).toBe("");
-    });
-
-    it("sends the chosen recipe to the creation", async () => {
-      const createMission = await renderVideoForm(RECIPES);
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(recipeSelect(), "recipe-1");
-        recipeSelect()!.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      await submit();
-      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-1" } }));
+      expect(createMission).not.toHaveBeenCalled();
     });
   });
 });

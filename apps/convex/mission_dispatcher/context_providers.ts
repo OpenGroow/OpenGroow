@@ -11,7 +11,6 @@
  * Brand Core) they are not meaningful to every Template.
  */
 
-import { RECIPE_PROVIDER } from "../production_recipe_rules.js";
 import { SOCIAL_ENGAGEMENT_PLATFORMS, singleLine, type ContextProviderName } from "@opengroow/agent-templates";
 
 // ─── Active agents provider ─────────────────────────────────────────────────
@@ -224,7 +223,7 @@ function renderPlatformAccountFromUnknown(data: unknown): string {
   return renderPlatformAccountSection(data as PlatformAccountInfo);
 }
 
-// ─── Production recipe provider (issue #137, ADR-083) ───────────────────────
+// ─── Production Recipe section (issue #137, ADR-083, ADR-091) ───────────────
 
 /** What the provider renders: the Mission's Recipe Snapshot, nothing else. */
 export type ProductionRecipeInfo = {
@@ -249,7 +248,7 @@ const PROMPT_RULE =
   "Send this text unchanged, never rephrase it, with one exception: every `{PLACEHOLDER}` in it is a slot to fill with a value chosen as the Instructions describe. Never leave an unresolved `{PLACEHOLDER}` in anything you send or write.";
 
 /**
- * Pure renderer for the production-recipe provider: the `Production Recipe`
+ * Pure renderer of the `Production Recipe` section, native to every creative Mission (no provider declaration): the
  * section, built from the Mission's Recipe Snapshot alone (no query), so every
  * Run of the Mission receives the same text. Returns `null` for a Mission
  * without a snapshot.
@@ -273,11 +272,6 @@ export function renderProductionRecipeSection(info: ProductionRecipeInfo): strin
     lines.push("## Constraints", "", ...info.constraints.map((c) => `- ${singleLine(c)}`), "");
   }
   return lines.join("\n");
-}
-
-function renderProductionRecipeFromUnknown(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
-  return renderProductionRecipeSection(data as ProductionRecipeInfo);
 }
 
 // ─── Strategic Review period provider (ADR-085, issue #166) ────────────────
@@ -357,6 +351,9 @@ function renderContentPlanningTargetsFromUnknown(data: unknown): string | null {
 
 // ─── Provider registry ──────────────────────────────────────────────────────
 
+/** The retired recipe provider name: readable in the stored manifest of an outdated Template version, rendering nothing. */
+export const LEGACY_RECIPE_PROVIDER = "production-recipe";
+
 type ContextProviderRenderer = (data: unknown) => string | null;
 
 function renderActiveAgentsFromUnknown(data: unknown): string | null {
@@ -375,11 +372,10 @@ function renderCarouselPlanningSourceFromUnknown(data: unknown): string | null {
  * `contextProviders` and calls the matching renderer with the
  * fetched data. Unknown names cause a validation error.
  */
-export const CONTEXT_PROVIDER_RENDERERS: Record<ContextProviderName, ContextProviderRenderer> = {
+export const CONTEXT_PROVIDER_RENDERERS: Record<Exclude<ContextProviderName, typeof LEGACY_RECIPE_PROVIDER>, ContextProviderRenderer> = {
   "active-agents": renderActiveAgentsFromUnknown,
   "observation-production-source": renderCarouselPlanningSourceFromUnknown,
   "platform-account": renderPlatformAccountFromUnknown,
-  [RECIPE_PROVIDER]: renderProductionRecipeFromUnknown,
   "strategic-review-period": renderStrategicReviewPeriodFromUnknown,
   "content-planning-targets": renderContentPlanningTargetsFromUnknown,
 };
