@@ -6,7 +6,7 @@ import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { frequencyV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
-import { assertNewRunAllowed } from "./template_runnable.js";
+import { assertNewRunAllowed, newRunBlock } from "./template_runnable.js";
 import { SOURCE_TEMPLATE_ID } from "./source_agent.js";
 import {
   buildSourceScoringRunFile,
@@ -114,6 +114,12 @@ async function retryScoringRun(
   tries: number,
   errors: string[] = [],
 ): Promise<void> {
+  // ADR-091: a retry is a new Run, refused on an outdated Template; the Job's execution ends with the reason.
+  const block = await newRunBlock(ctx, job.instanceId, job.templateId);
+  if (block) {
+    await finishJob(ctx, job, "failed", block);
+    return;
+  }
   const now = Date.now();
   const retryRunId = await ctx.db.insert("runs", {
     jobId: job._id,

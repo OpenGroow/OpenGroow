@@ -10,7 +10,7 @@ import { listMissionRunsCompletedBetween } from "./runs.js";
 import { templateHasEnrichment } from "./source_enrichment.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
-import { assertNewRunAllowed } from "./template_runnable.js";
+import { assertNewRunAllowed, newRunBlock } from "./template_runnable.js";
 import { runParent, type RunParentRecord } from "./run_parent.js";
 import { jobResultFilePath, jobRunFilePath } from "./source_jobs/job_files.js";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
@@ -424,13 +424,21 @@ export async function settleSourceJobRun(
   const now = Date.now();
   let outcome = requested;
 
+  // A follow-up execution is a new Run (ADR-091): on an outdated Template none is inserted and the job fails with why.
+  const blocked = () => newRunBlock(ctx, job.instanceId, job.templateId);
+
   // An invalid result with tries left: the job stays in flight and a resumed
   // execution receives the errors (its files stay until the job settles).
   if (!outcome.ok && outcome.feedback) {
     const tries = (job.inFlightTries ?? 0) + 1;
+    const block = tries < MAX_SOURCE_TRIES ? await blocked() : null;
     if (tries < MAX_SOURCE_TRIES) {
-      await resumeWithFeedback(ctx, job, run._id, outcome.feedback, tries, now);
-      return;
+      if (block) {
+        outcome = { ok: false, error: block };
+      } else {
+        await resumeWithFeedback(ctx, job, run._id, outcome.feedback, tries, now);
+        return;
+      }
     }
   }
 
@@ -441,14 +449,15 @@ export async function settleSourceJobRun(
   // rebuilds the batch and its run file lists these Sources again.
   if (outcome.ok && !outcome.keepCursor && (await listAwaitingEnrichment(ctx, job.instanceId, job.templateId)).length > 0) {
     const chained = (job.inFlightChained ?? 0) + 1;
-    if (chained <= MAX_CHAINED_EXECUTIONS) {
+    const block = chained <= MAX_CHAINED_EXECUTIONS ? await blocked() : null;
+    if (chained <= MAX_CHAINED_EXECUTIONS && !block) {
       const chainedRunId = await insertExecutionRun(ctx, job, run.agentName, now, run._id);
       await patchSourceRuntime(ctx, row, { inFlightRunId: chainedRunId, inFlightChained: chained });
       return;
     }
     outcome = {
       ok: false,
-      error: `Stopped after ${MAX_CHAINED_EXECUTIONS} chained executions: Sources are still awaiting enrichment`,
+      error: block ?? `Stopped after ${MAX_CHAINED_EXECUTIONS} chained executions: Sources are still awaiting enrichment`,
     };
   }
 
@@ -567,6 +576,12 @@ export const resumeAfterEnrichment = internalMutation({
         ok: false,
         error: `Stopped after ${MAX_ENRICHMENT_RESUMES} enrichment handoffs in one run`,
       });
+      return null;
+    }
+    // The resumed execution is a new Run (ADR-091): on an outdated Template none is inserted and the job fails with why.
+    const block = await newRunBlock(ctx, job.instanceId, job.templateId);
+    if (block) {
+      await settleSourceJobRun(ctx, run, { ok: false, error: block });
       return null;
     }
     const resumedRunId = await insertExecutionRun(ctx, job, run.agentName, now, run._id);

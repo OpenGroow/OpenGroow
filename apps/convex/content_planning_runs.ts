@@ -3,6 +3,7 @@ import type { MutationCtx } from "./_generated/server.js";
 import { persistContentPlan } from "./content_plans.js";
 import { CONTENT_PLANNING_JOB_TYPE, MAX_CONTENT_PLANNING_TRIES, runtimeOf, type ContentPlanningPins, type Runtime } from "./content_planning_shared.js";
 import type { RunResult } from "./run_result.js";
+import { newRunBlock } from "./template_runnable.js";
 
 // The life of a Content Planning Run (ADR-086): its creation with the pins, the retry of a refused result, and how a
 // result file or a failure ends it. The pass that decides whether a Run starts at all is in content_planning_jobs.
@@ -64,11 +65,14 @@ export async function failContentPlanningRun(ctx: MutationCtx, run: Doc<"runs">,
   if (!job || job.type !== CONTENT_PLANNING_JOB_TYPE || runtimeOf(job).inFlightRunId !== run._id) return;
   const runtime = runtimeOf(job);
   const tries = (typeof runtime.inFlightTries === "number" ? runtime.inFlightTries : 0) + 1;
-  if (reasons && run.contentPlanning && tries < MAX_CONTENT_PLANNING_TRIES) {
+  const retryable = reasons !== undefined && run.contentPlanning !== undefined && tries < MAX_CONTENT_PLANNING_TRIES;
+  // ADR-091: a retry is a new Run, refused on an outdated Template; the Job's execution ends with the reason.
+  const block = retryable ? await newRunBlock(ctx, job.instanceId, job.templateId) : null;
+  if (retryable && !block && reasons) {
     await retryRun(ctx, job, run, tries, reasons);
     return;
   }
-  await ctx.db.patch(job._id, { runtime: clearInFlight(runtime), lastOutcome: "failed", lastError: error, updatedAt: Date.now() });
+  await ctx.db.patch(job._id, { runtime: clearInFlight(runtime), lastOutcome: "failed", lastError: block ?? error, updatedAt: Date.now() });
 }
 
 /** Ends the Job's current execution: the in-flight marker is cleared and the outcome recorded (a newer manual claim is kept). */

@@ -4,6 +4,11 @@ import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import type { Doc, Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
+import { failScoringRun } from "../score_jobs";
+import { failStrategicReviewRun } from "../strategic_review_jobs";
+import { failContentPlanningRun } from "../content_planning_runs";
+import { failRecipeGenerationRun } from "../recipe_generation";
+import { settleSourceJobRun } from "../source_jobs";
 import { fixtureTemplate, installTemplateRegistry, loadFixtureTemplate } from "./helpers/template_registry.helpers";
 
 // ADR-091 (ticket #210): a Template version below profile schemaVersion 2 is outdated. Nothing new starts from it,
@@ -184,6 +189,66 @@ describe("Jobs and Recipe Generation", () => {
     await t.run((ctx) => ctx.db.patch(id, { nextRunAt: NOW - 1 }));
     await t.mutation(internal.strategic_review_jobs.tick, {});
     expect(await rows("runs")).toHaveLength(1);
+  });
+
+  describe("an automatic retry once the Template is outdated", () => {
+    /** A Job of the type with one Run in flight, inserted while the Template was current; the Template then ages. */
+    async function jobWithRunInFlight(type: Doc<"jobs">["type"], run: Partial<Doc<"runs">> = {}, runtime: Record<string, unknown> = {}) {
+      installWriter(2);
+      const jobId = await seedJob(type);
+      const runId = await t.run((ctx) => ctx.db.insert("runs", {
+        jobId, ownerId: OWNER.subject, instanceId: PROJECT, templateId: TEMPLATE, agentName: "writer", sessionKey: "s",
+        status: "failed", createdAt: NOW, updatedAt: NOW, ...run,
+      } as Parameters<typeof ctx.db.insert<"runs">>[1]));
+      await t.run((ctx) => ctx.db.patch(jobId, { runtime: { inFlightRunId: runId, inFlightTries: 0, ...runtime } }));
+      installWriter(1);
+      return { jobId, run: (await t.run((ctx) => ctx.db.get(runId)))! };
+    }
+    const expectEndedWithoutRun = async (jobId: Id<"jobs">) => {
+      expect(await rows("runs")).toHaveLength(1);
+      const ended = await job(jobId);
+      expect(ended.lastOutcome).toBe("failed");
+      expect(ended.lastError).toMatch(/outdated.*update/i);
+      expect((ended.runtime as Record<string, unknown>).inFlightRunId).toBeUndefined();
+    };
+
+    it("Source scoring inserts no Run and fails the Job with the reason", async () => {
+      const { jobId, run } = await jobWithRunInFlight("source_scoring", {}, { inFlightBatch: { sourceIds: [] } });
+      await t.run((ctx) => failScoringRun(ctx, { _id: run._id, agentName: run.agentName, jobId }, "timeout", true));
+      await expectEndedWithoutRun(jobId);
+    });
+
+    it("a Strategic Review inserts no Run and fails the Job with the reason", async () => {
+      const { jobId, run } = await jobWithRunInFlight("strategic_review", { strategicReview: { periodStart: NOW - 1, periodEnd: NOW } });
+      await t.run((ctx) => failStrategicReviewRun(ctx, run, jobId, "timeout", true));
+      await expectEndedWithoutRun(jobId);
+    });
+
+    it("Content Planning inserts no Run and fails the Job with the reason", async () => {
+      const pins = { periodStart: "2030-03-04", periodEnd: "2030-03-10", targets: [], ignored: [] };
+      const { jobId, run } = await jobWithRunInFlight("content_planning", { contentPlanning: pins });
+      await t.run((ctx) => failContentPlanningRun(ctx, run, jobId, "invalid_result: bad", ["bad"]));
+      await expectEndedWithoutRun(jobId);
+    });
+
+    it("Source ingestion resumes no execution after an invalid result and fails the Job with the reason", async () => {
+      const { jobId, run } = await jobWithRunInFlight("source_ingestion", { status: "running" });
+      await t.run((ctx) => settleSourceJobRun(ctx, run, { ok: false, error: "invalid", feedback: { errors: [{ messages: ["bad entry"] }] } }));
+      await expectEndedWithoutRun(jobId);
+    });
+
+    it("a Recipe Generation inserts no Run and its last try says why", async () => {
+      installWriter(2);
+      const runId = await t.run((ctx) => ctx.db.insert("runs", {
+        ownerId: OWNER.subject, instanceId: PROJECT, templateId: TEMPLATE, agentName: "writer", sessionKey: "s", status: "failed",
+        errorMessage: "invalid_result: bad", createdAt: NOW, updatedAt: NOW, recipeGeneration: { idea: "An idea", sourceIds: [], tryCount: 1 },
+      }));
+      installWriter(1);
+      const run = (await t.run((ctx) => ctx.db.get(runId)))!;
+      await t.run((ctx) => failRecipeGenerationRun(ctx, run, ["bad"]));
+      expect(await rows("runs")).toHaveLength(1);
+      expect((await t.run((ctx) => ctx.db.get(runId)))?.errorMessage).toMatch(/invalid_result: bad.*outdated.*update/i);
+    });
   });
 
   it("refuses a Recipe Generation on an outdated Strategy Agent and inserts no Run", async () => {
