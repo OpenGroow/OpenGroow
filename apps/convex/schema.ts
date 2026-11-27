@@ -416,8 +416,8 @@ export default defineSchema({
     templateVersion: v.optional(v.string()),
     // The Recipe Snapshot (issue #137, ADR-083): what the Production Recipe
     // resolved to at creation, written once and never recomputed. The
-    // `production-recipe` context provider renders it for every Run. Absent
-    // for a Mission created without a recipe.
+    // dispatcher renders it for every Run of a creative Mission (ADR-091).
+    // Absent on operational Missions and on Missions created before ADR-091.
     recipeSnapshot: v.optional(
       v.object({
         recipeId: v.id("productionRecipes"),
