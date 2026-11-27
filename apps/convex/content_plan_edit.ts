@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx } from "./_generated/server.js";
 import { isIsoDate, utcDateOf } from "@opengroow/protocol/content-planning-pins";
+import { storedContentTypeOf } from "./content_plan_counts.js";
 import { CONTENT_PLAN_LIMITS } from "./content_plan_rules.js";
 import { NO_PINS_MESSAGE, pinsOf, resolveItem } from "./content_plans.js";
 import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
@@ -63,7 +64,7 @@ export const update = mutation({
         "The Recipe", await projectPublishers(ctx, content.instanceId),
       );
       if (!outcome.ok) throw new Error(outcome.errors.join(" "));
-      if (outcome.value.kind !== content.kind) throw new Error(`The Recipe produces Content Type "${outcome.value.kind}", not "${content.kind}".`);
+      if (outcome.value.contentType !== storedContentTypeOf(content)) throw new Error(`The Recipe produces Content Type "${outcome.value.contentType}", not "${storedContentTypeOf(content)}".`);
       patch.recipeId = args.recipeId;
     }
     if (args.publishTargets !== undefined) {

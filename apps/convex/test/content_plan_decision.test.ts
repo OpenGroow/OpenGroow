@@ -67,7 +67,7 @@ async function plan(over: { remaining?: number; target?: number } = {}) {
       jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: "tpl", agentName: "planner", sessionKey: "s", status: "running", createdAt: NOW, updatedAt: NOW,
       contentPlanning: {
         periodStart: "2030-03-05", periodEnd: "2030-03-11",
-        targets: [{ kind: "video", target, existing: 0, remaining: over.remaining ?? target, publishTargets: ["social:example"] }], ignored: [],
+        targets: [{ contentType: "video", target, existing: 0, remaining: over.remaining ?? target, publishTargets: ["social:example"] }], ignored: [],
       },
     } as never);
     return await ctx.db.insert("contentPlans", { ownerId: OWNER.subject, instanceId: INSTANCE, runId, periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "r", status: "draft", createdAt: NOW });
@@ -77,7 +77,7 @@ async function plan(over: { remaining?: number; target?: number } = {}) {
 const content = (planId: Id<"contentPlans">, over: Record<string, unknown> = {}) =>
   t.run((ctx) =>
     ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind: "video", missionType: "make_video", recipeId,
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType: "video", missionType: "make_video", recipeId,
       publishTargets: ["social:example"], title: "T", brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "proposed", createdAt: 1, ...over,
     } as never),
   );
@@ -134,7 +134,7 @@ describe("content_plan_decision.approve", () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < 1_001; i++) {
         await ctx.db.insert("plannedContents", {
-          ownerId: OWNER.subject, instanceId: INSTANCE, planId: earlier, kind: "video", missionType: "make_video", recipeId,
+          ownerId: OWNER.subject, instanceId: INSTANCE, planId: earlier, contentType: "video", missionType: "make_video", recipeId,
           publishTargets: ["social:example"], title: "T", brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "approved", createdAt: 1,
         } as never);
       }

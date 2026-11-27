@@ -15,7 +15,7 @@ vi.mock("@convex/_generated/api", () => ({ api: { editorial_calendar: { range: "
 vi.mock("../src/components/platform-logo", () => ({ PlatformLogo: ({ service }: { service: string }) => <span data-logo={service} /> }));
 
 const item = (over: Record<string, unknown> = {}) => ({
-  _id: "pc-1", planId: "plan-1", kind: "video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.", plannedAt: "2030-03-06",
+  _id: "pc-1", planId: "plan-1", contentType: "video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.", plannedAt: "2030-03-06",
   intent: "exploit", rationale: "Reactions led last month.", publishTargets: ["social:example"], targets: [{ target: "social:example", label: "@handle1", service: "social", adapter: "example" }], creativeFamily: { name: "Reaction" }, plan: { periodStart: "2030-03-04", periodEnd: "2030-03-10" }, ...over,
 });
 

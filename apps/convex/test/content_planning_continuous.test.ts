@@ -76,7 +76,7 @@ beforeEach(async () => {
     familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "F", description: "d" });
   });
   jobId = (await t.run((ctx) => ctx.db.query("jobs").collect())).find((job) => job.type === "content_planning")!._id;
-  await owner().mutation(api.content_planning_jobs.setConfig, { jobId, planningDays: 7, productionTargets: [{ kind: "video", quantity: 3, publishTargets: ["social:example"] }] });
+  await owner().mutation(api.content_planning_jobs.setConfig, { jobId, planningDays: 7, productionTargets: [{ contentType: "video", quantity: 3, publishTargets: ["social:example"] }] });
 });
 afterEach(() => {
   vi.useRealTimers();

@@ -4,7 +4,7 @@ import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
-import { countByKind } from "./content_plan_counts.js";
+import { storedContentTypeOf, countByContentType } from "./content_plan_counts.js";
 import { capabilityOfTarget, channelOf, projectPublishers, type ProjectPublisher, type PublisherChannelEntry } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -56,9 +56,9 @@ async function contentViews(ctx: QueryCtx, rows: readonly Doc<"plannedContents">
     return registry.resolve(instanceId, templateId);
   });
   const capabilityOf = memoized((key: string) => {
-    const [target, kind, platforms] = JSON.parse(key) as [string, string, string[] | null];
+    const [target, contentType, platforms] = JSON.parse(key) as [string, string, string[] | null];
     const found = channelOf(publishers, target)!;
-    return capabilityOfTarget(ctx, found, kind, platforms ?? undefined);
+    return capabilityOfTarget(ctx, found, contentType, platforms ?? undefined);
   });
   return await Promise.all(rows.map((content) => contentView(content, publishers, { instanceOf, recipeOf, sourceOf, templateOf, capabilityOf })));
 }
@@ -90,22 +90,22 @@ async function contentView(content: Doc<"plannedContents">, publishers: readonly
     }
     const { channel, publisher } = found;
     const identity = { service: channel.channelService, adapter: publisher.adapter, label: channelLabel(channel) };
-    const capability = await capabilityOf(JSON.stringify([target, content.kind, declaration?.platforms ?? null]));
+    const capability = await capabilityOf(JSON.stringify([target, storedContentTypeOf(content), declaration?.platforms ?? null]));
     publishTargets.push(
       capability.level === "uncertain" ? { target, uncertain: true, reason: capability.reason ?? "", ...identity }
       : capability.level === "unsupported" ? { target, uncertain: false, unsupported: true, reason: capability.reason ?? "", ...identity }
       : { target, uncertain: false, ...identity },
     );
   }
-  const { _id, kind, missionType, title, brief, plannedAt, intent, rationale, status } = content;
+  const { _id, missionType, title, brief, plannedAt, intent, rationale, status } = content;
   return {
-    _id, kind, missionType, title, brief, plannedAt, intent, rationale, status, publishTargets,
+    _id, contentType: storedContentTypeOf(content), missionType, title, brief, plannedAt, intent, rationale, status, publishTargets,
     recipe: recipe ? { id: recipe._id, name: recipe.name } : null,
     source: source ? { id: source._id, label: source.label } : null,
   };
 }
 
-/** The Project's draft Content Plan with its contents (by date), quantities by format and intent distribution, or null. */
+/** The Project's draft Content Plan with its contents (by date), quantities by Content Type and intent distribution, or null. */
 export const current = query({
   args: { instanceId: v.string() },
   handler: async (ctx, args) => {
@@ -117,11 +117,11 @@ export const current = query({
     const contents = await contentViews(ctx, rows, publishers);
     // A removed proposal is kept (shown struck) but counts toward nothing.
     const live = rows.filter((row) => row.status !== "rejected");
-    const byKind = countByKind(live);
+    const byContentType = countByContentType(live);
     return {
       ...planView(draft),
       contents,
-      quantities: [...byKind].map(([kind, count]) => ({ kind, count })),
+      quantities: [...byContentType].map(([contentType, count]) => ({ contentType, count })),
       distribution: { explore: live.filter((row) => row.intent === "explore").length, exploit: live.filter((row) => row.intent === "exploit").length },
     };
   },

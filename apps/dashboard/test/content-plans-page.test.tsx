@@ -36,7 +36,7 @@ vi.mock("@convex/_generated/api", () => ({
 
 function makeContent(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    _id: "pc-1", kind: "video", missionType: "make_video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.",
+    _id: "pc-1", contentType: "video", missionType: "make_video", title: "Reaction to article 1", brief: "Film a silent close-up reaction.",
     plannedAt: "2030-03-06", intent: "exploit", rationale: "Reactions led last month.", status: "proposed",
     publishTargets: [{ target: "social:example", uncertain: false }],
     recipe: { id: "rec-1", name: "Reel recipe" }, creativeFamily: { id: "fam-1", name: "Reaction" }, source: { id: "src-1", label: "Article 1" },
@@ -47,8 +47,8 @@ function makeContent(overrides: Partial<Record<string, unknown>> = {}) {
 function makeDraft(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     _id: "plan-1", periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "## Strategy\n\nDouble down on reactions.", status: "draft", createdAt: Date.UTC(2030, 2, 4),
-    contents: [makeContent(), makeContent({ _id: "pc-2", title: "Carousel test", kind: "carousel", intent: "explore", source: null })],
-    quantities: [{ kind: "video", count: 1 }, { kind: "carousel", count: 1 }],
+    contents: [makeContent(), makeContent({ _id: "pc-2", title: "Carousel test", contentType: "carousel", intent: "explore", source: null })],
+    quantities: [{ contentType: "video", count: 1 }, { contentType: "carousel", count: 1 }],
     distribution: { explore: 1, exploit: 1 },
     ...overrides,
   };

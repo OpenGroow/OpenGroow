@@ -99,7 +99,7 @@ async function source(projectId: string, label: string, o: { status?: string; ca
 async function planned(projectId: string, recipeId: Id<"productionRecipes">, plannedAt: string, o: { status?: string; title?: string } = {}) {
   return t.run(async (ctx) => {
     const planId = await ctx.db.insert("contentPlans", { ownerId: "owner", instanceId: projectId, runId: (await ctx.db.query("runs").first())!._id, periodStart: "2026-12-01", periodEnd: "2026-12-31", rationale: "r", status: "approved", createdAt: 1 } as never);
-    return ctx.db.insert("plannedContents", { ownerId: "owner", instanceId: projectId, planId, kind: "image", missionType: "make_image", recipeId, publishTargets: ["t1"], title: o.title ?? "T", brief: "b", plannedAt, intent: "explore", rationale: "r", status: (o.status ?? "approved") as never, createdAt: 1 } as never);
+    return ctx.db.insert("plannedContents", { ownerId: "owner", instanceId: projectId, planId, contentType: "image", missionType: "make_image", recipeId, publishTargets: ["t1"], title: o.title ?? "T", brief: "b", plannedAt, intent: "explore", rationale: "r", status: (o.status ?? "approved") as never, createdAt: 1 } as never);
   });
 }
 

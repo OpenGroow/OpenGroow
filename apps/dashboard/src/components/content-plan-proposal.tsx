@@ -64,7 +64,7 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
               <StatusBadge tone={content.intent === "explore" ? "info" : "neutral"} label={intentLabel(content.intent)} />
               <Badge variant="tag" size="xs">
                 <Film aria-hidden="true" />
-                {content.kind}
+                {content.contentType}
               </Badge>
               {removed ? <StatusBadge tone="neutral" label="Removed" /> : null}
             </div>

@@ -76,7 +76,7 @@ const planningJob = async () => {
 };
 const reload = (jobId: Id<"jobs">) => t.run((ctx) => ctx.db.get(jobId));
 const owner = () => t.withIdentity(OWNER);
-const video = (overrides: Record<string, unknown> = {}) => ({ kind: "video", quantity: 3, publishTargets: ["social:example"], ...overrides });
+const video = (overrides: Record<string, unknown> = {}) => ({ contentType: "video", quantity: 3, publishTargets: ["social:example"], ...overrides });
 
 describe("provisioning", () => {
   it("creates the Job active, weekly on Monday 06:00 UTC, 7 days, no target", async () => {
@@ -139,9 +139,9 @@ describe("setConfig", () => {
 
   it("stores a valid configuration without touching the recurrence", async () => {
     const before = await planningJob();
-    await save({ planningDays: 30, productionTargets: [video(), video({ kind: "image", quantity: 2, publishTargets: ["blog:example"] })] });
+    await save({ planningDays: 30, productionTargets: [video(), video({ contentType: "image", quantity: 2, publishTargets: ["blog:example"] })] });
     const after = await planningJob();
-    expect(after.config).toEqual({ planningDays: 30, productionTargets: [video(), video({ kind: "image", quantity: 2, publishTargets: ["blog:example"] })] });
+    expect(after.config).toEqual({ planningDays: 30, productionTargets: [video(), video({ contentType: "image", quantity: 2, publishTargets: ["blog:example"] })] });
     expect([after.unit, after.dayOfWeek, after.hour, after.nextRunAt]).toEqual([before.unit, before.dayOfWeek, before.hour, before.nextRunAt]);
   });
 
@@ -149,11 +149,11 @@ describe("setConfig", () => {
     await expect(save({ planningDays })).rejects.toThrow(/planning horizon/);
   });
   it("refuses an unknown format and an unknown Publish target", async () => {
-    await expect(save({ productionTargets: [video({ kind: "podcast" })] })).rejects.toThrow(/Unknown format/);
+    await expect(save({ productionTargets: [video({ contentType: "podcast" })] })).rejects.toThrow(/Unknown format/);
     await expect(save({ productionTargets: [video({ publishTargets: ["nowhere:x"] })] })).rejects.toThrow(/Unknown Publish target/);
   });
   it("refuses a total quantity above 100", async () => {
-    await expect(save({ productionTargets: [video({ quantity: 80 }), video({ kind: "image", quantity: 21 })] })).rejects.toThrow(/100/);
+    await expect(save({ productionTargets: [video({ quantity: 80 }), video({ contentType: "image", quantity: 21 })] })).rejects.toThrow(/100/);
   });
   it("refuses a user who does not own the Project and leaves the configuration unchanged", async () => {
     await expect(save({}, t.withIdentity(OTHER))).rejects.toThrow(/Forbidden/);
@@ -194,7 +194,7 @@ describe("Run Now", () => {
 
   it.each([
     ["a horizon outside 1 to 60", { planningDays: 90, productionTargets: [video()] }, /planning horizon/],
-    ["a total quantity above 100", { planningDays: 7, productionTargets: [video({ quantity: 80 }), video({ kind: "image", quantity: 21, publishTargets: ["social:example"] })] }, /100/],
+    ["a total quantity above 100", { planningDays: 7, productionTargets: [video({ quantity: 80 }), video({ contentType: "image", quantity: 21, publishTargets: ["social:example"] })] }, /100/],
     ["a format listed twice", { planningDays: 7, productionTargets: [video(), video({ quantity: 1 })] }, /listed twice/],
   ])("ends failed with a clear message for a stored configuration with %s, and creates no Run", async (_name, config, message) => {
     await activate(PRODUCER);

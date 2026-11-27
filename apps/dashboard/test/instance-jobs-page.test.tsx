@@ -325,7 +325,7 @@ const planningOptions = { formats: ["image", "video"], publishTargets: ["social:
     });
 
     it("summarizes the configured targets", async () => {
-      await render([planning({ planningDays: 14, productionTargets: [{ kind: "video", quantity: 3, publishTargets: ["social:example"] }] })]);
+      await render([planning({ planningDays: 14, productionTargets: [{ contentType: "video", quantity: 3, publishTargets: ["social:example"] }] })]);
       expect(document.body.textContent).toContain("Plans the next 14 days");
       expect(document.body.textContent).toContain("3 video");
     });
@@ -344,7 +344,7 @@ const planningOptions = { formats: ["image", "video"], publishTargets: ["social:
       expect(mutations["content_planning_jobs.setConfig"]).toHaveBeenCalledWith({
         jobId: "job-1",
         planningDays: 14,
-        productionTargets: [{ kind: "video", quantity: 4, publishTargets: ["social:example"] }],
+        productionTargets: [{ contentType: "video", quantity: 4, publishTargets: ["social:example"] }],
       });
     });
 

@@ -73,7 +73,7 @@ async function plan(fields: { status?: "draft" | "approved" | "rejected"; period
       status: "running", createdAt: now, updatedAt: now,
       contentPlanning: {
         periodStart: "2030-03-05", periodEnd: "2030-03-11",
-        targets: [{ kind: "video", target: 5, existing: 0, remaining: 5, publishTargets: ["social:example"] }], ignored: [],
+        targets: [{ contentType: "video", target: 5, existing: 0, remaining: 5, publishTargets: ["social:example"] }], ignored: [],
       },
     } as never);
     return await ctx.db.insert("contentPlans", {
@@ -86,7 +86,7 @@ async function plan(fields: { status?: "draft" | "approved" | "rejected"; period
 const content = (planId: Id<"contentPlans">, over: Record<string, unknown> = {}) =>
   t.run((ctx) =>
     ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind: "video", missionType: "make_video", recipeId, sourceId,
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType: "video", missionType: "make_video", recipeId, sourceId,
       publishTargets: ["social:example", "blog:example"], title: "A title", brief: "A brief", plannedAt: "2030-03-06", intent: "exploit",
       rationale: "Why", status: "proposed", createdAt: 1, ...over,
     } as never),
@@ -145,7 +145,7 @@ describe("content_plan_edit.update", () => {
   });
 
   it("refuses a Recipe whose Content Type has no Production target in the plan", async () => {
-    const id = await content(await plan(), { missionType: "make_post", kind: "image" });
+    const id = await content(await plan(), { missionType: "make_post", contentType: "image" });
     const post = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "producer-cpe", missionType: "make_post", name: "Post", description: "d" } as never));
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: post })).rejects.toThrow(/Content Type "image" has no Production target/);
   });
@@ -186,7 +186,7 @@ describe("content_plan_edit.remove", () => {
     expect((await row(id))!.status).toBe("rejected");
     const draft = (await owner().query(api.content_plan_review.current, { instanceId: INSTANCE }))!;
     expect(draft.contents.map((c) => c.status).sort()).toEqual(["proposed", "rejected"]);
-    expect(draft.quantities).toEqual([{ kind: "video", count: 1 }]);
+    expect(draft.quantities).toEqual([{ contentType: "video", count: 1 }]);
     expect(draft.distribution).toEqual({ explore: 1, exploit: 0 });
   });
 

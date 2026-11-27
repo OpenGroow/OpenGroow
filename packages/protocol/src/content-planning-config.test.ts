@@ -8,7 +8,7 @@ import {
 } from "./content-planning-config";
 
 const options = { formats: ["video", "image"], publishTargets: ["social:example", "blog:example"] };
-const target = (overrides: Record<string, unknown> = {}) => ({ kind: "video", quantity: 3, publishTargets: ["social:example"], ...overrides });
+const target = (overrides: Record<string, unknown> = {}) => ({ contentType: "video", quantity: 3, publishTargets: ["social:example"], ...overrides });
 const config = (overrides: Record<string, unknown> = {}) => ({ planningDays: 7, productionTargets: [target()], ...overrides });
 
 describe("validateContentPlanningConfig", () => {
@@ -36,7 +36,7 @@ describe("validateContentPlanningConfig", () => {
   });
 
   it("refuses an unknown format", () => {
-    const result = validateContentPlanningConfig(config({ productionTargets: [target({ kind: "podcast" })] }), options);
+    const result = validateContentPlanningConfig(config({ productionTargets: [target({ contentType: "podcast" })] }), options);
     expect(!result.ok && result.errors.join()).toMatch(/format "podcast"/);
   });
 
@@ -54,7 +54,7 @@ describe("validateContentPlanningConfig", () => {
   });
 
   it("refuses a total quantity above 100 and accepts exactly 100", () => {
-    const split = (a: number, b: number) => config({ productionTargets: [target({ quantity: a }), target({ kind: "image", quantity: b })] });
+    const split = (a: number, b: number) => config({ productionTargets: [target({ quantity: a }), target({ contentType: "image", quantity: b })] });
     expect(validateContentPlanningConfig(split(60, 40), options).ok).toBe(true);
     const over = validateContentPlanningConfig(split(60, 41), options);
     expect(!over.ok && over.errors.join()).toMatch(/100/);
@@ -78,9 +78,9 @@ describe("config readers", () => {
 
 describe("usableTargets", () => {
   it("keeps targets whose format and Publish targets still exist and reports what was ignored", () => {
-    const targets = [target(), target({ kind: "article" }), target({ kind: "image", publishTargets: ["social:example", "gone:x"] })];
+    const targets = [target(), target({ contentType: "article" }), target({ contentType: "image", publishTargets: ["social:example", "gone:x"] })];
     const { usable, ignored } = usableTargets(targets, options);
-    expect(usable).toEqual([target(), target({ kind: "image", publishTargets: ["social:example"] })]);
+    expect(usable).toEqual([target(), target({ contentType: "image", publishTargets: ["social:example"] })]);
     expect(ignored).toEqual([expect.stringContaining("article"), expect.stringContaining("gone:x")]);
   });
 

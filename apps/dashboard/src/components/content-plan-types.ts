@@ -4,7 +4,7 @@ export type PublishTargetView = { target: string; uncertain: boolean; unavailabl
 
 export type PlannedContentView = {
   _id: string;
-  kind: string;
+  contentType: string;
   missionType: string;
   title: string;
   brief: string;
@@ -25,7 +25,7 @@ export type DraftPlanView = {
   status: "draft";
   createdAt: number;
   contents: PlannedContentView[];
-  quantities: Array<{ kind: string; count: number }>;
+  quantities: Array<{ contentType: string; count: number }>;
   distribution: { explore: number; exploit: number };
 };
 

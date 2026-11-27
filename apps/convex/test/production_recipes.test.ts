@@ -116,7 +116,7 @@ describe("production_recipes", () => {
         const draft = await plan("draft");
         const approved = await plan("approved");
         const content = (planId: typeof draft, status: "proposed" | "approved" | "rejected", plannedAt: string, title: string) =>
-          db.db.insert("plannedContents", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, planId, kind: "video", missionType: "create_letter_video", recipeId, publishTargets: [], title, brief: "b", plannedAt, intent: "explore", rationale: "r", status, createdAt: 1 });
+          db.db.insert("plannedContents", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, planId, contentType: "video", missionType: "create_letter_video", recipeId, publishTargets: [], title, brief: "b", plannedAt, intent: "explore", rationale: "r", status, createdAt: 1 });
         const missionId = await db.db.insert("missions", {
           ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: TARGET.templateId, type: TARGET.missionType, payload: {}, status: "doing", createdAt: 1, updatedAt: 1,
           recipeSnapshot: { recipeId, recipeName: "Recipe A", version: 1, instructions: "Keep it calm.", constraints: ["No dialogue"] },

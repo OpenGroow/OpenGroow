@@ -1,7 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
-import { countByKind } from "./content_plan_counts.js";
+import { countByContentType, storedContentTypeOf } from "./content_plan_counts.js";
 import { assertRecipeCompatible } from "./mission_recipe.js";
 import { contentTypeOf } from "./planning_reads.js";
 import { parseContentPlanEnvelope, type PlannedItem } from "./content_plan_rules.js";
@@ -37,7 +37,7 @@ export async function pinsOf(ctx: MutationCtx, plan: Doc<"contentPlans">): Promi
   return run?.contentPlanning ? { run, pins: run.contentPlanning } : null;
 }
 
-export type Resolved = { kind: string; publishTargets: string[] };
+export type Resolved = { contentType: string; publishTargets: string[] };
 
 /** Checks one item against the Project; returns what the Core fills in, or the reasons it is refused. */
 export async function resolveItem(
@@ -71,7 +71,7 @@ export async function resolveItem(
   const manifestType = template?.manifest.missionTypes?.find((entry) => entry.type === item.missionType);
   const declaration = publishDeclarationFor(template?.manifest, item.missionType);
   if (!manifestType || !declaration) return { ok: false, errors: [`${at}: Mission type "${item.missionType}" declares no publishing, so it has no Content Type and cannot be planned.`] };
-  const pinned = pins.targets.find((entry) => entry.kind === declaration.kind);
+  const pinned = pins.targets.find((entry) => storedContentTypeOf(entry) === declaration.kind);
   if (!pinned) return { ok: false, errors: [`${at}: Content Type "${declaration.kind}" has no Production target.`] };
 
   const errors: string[] = [];
@@ -95,7 +95,7 @@ export async function resolveItem(
   }
   // A content is never kept without a destination: every pinned channel may have been removed since dispatch.
   if (publishTargets.length === 0) errors.push(`${at}: no Publish target of Content Type "${declaration.kind}" is available any more.`);
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { kind: declaration.kind, publishTargets }, uncertain };
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { contentType: declaration.kind, publishTargets }, uncertain };
 }
 
 /**
@@ -130,9 +130,9 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
     } else errors.push(...outcome.errors);
   }
   if (errors.length === 0) {
-    for (const [kind, count] of countByKind(resolved)) {
-      const remaining = pins.targets.find((entry) => entry.kind === kind)?.remaining ?? 0;
-      if (count > remaining) errors.push(`Content Type "${kind}": ${count} contents proposed but only ${remaining} remain to plan.`);
+    for (const [contentType, count] of countByContentType(resolved)) {
+      const remaining = pins.targets.find((entry) => storedContentTypeOf(entry) === contentType)?.remaining ?? 0;
+      if (count > remaining) errors.push(`Content Type "${contentType}": ${count} contents proposed but only ${remaining} remain to plan.`);
     }
   }
   if (errors.length > 0) return invalid(errors);
@@ -144,7 +144,7 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
   });
   for (const [index, item] of items.entries()) {
     await ctx.db.insert("plannedContents", {
-      ownerId: run.ownerId, instanceId: run.instanceId, planId, kind: resolved[index]!.kind, missionType: item.missionType,
+      ownerId: run.ownerId, instanceId: run.instanceId, planId, contentType: resolved[index]!.contentType, missionType: item.missionType,
       recipeId: ctx.db.normalizeId("productionRecipes", item.recipeId)!,
       ...(item.sourceId !== undefined ? { sourceId: ctx.db.normalizeId("sources", item.sourceId)! } : {}),
       publishTargets: resolved[index]!.publishTargets, title: item.title, brief: item.brief, plannedAt: item.plannedAt,

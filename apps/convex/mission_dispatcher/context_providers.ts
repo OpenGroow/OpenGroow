@@ -310,7 +310,7 @@ function renderStrategicReviewPeriodFromUnknown(data: unknown): string | null {
 export type ContentPlanningTargetsInfo = {
   periodStart: string;
   periodEnd: string;
-  targets: { kind: string; target: number; existing: number; remaining: number; publishTargets: string[] }[];
+  targets: { contentType: string; target: number; existing: number; remaining: number; publishTargets: string[] }[];
   ignored: string[];
 } | null;
 
@@ -330,7 +330,7 @@ export function renderContentPlanningTargetsSection(info: ContentPlanningTargets
     "",
     "| Content Type | Target | Already planned | Remaining | Publish targets |",
     "| --- | --- | --- | --- | --- |",
-    ...info.targets.map((t) => `| ${singleLine(t.kind)} | ${t.target} | ${t.existing} | ${t.remaining} | ${t.publishTargets.map(singleLine).join(", ")} |`),
+    ...info.targets.map((t) => `| ${singleLine(t.contentType)} | ${t.target} | ${t.existing} | ${t.remaining} | ${t.publishTargets.map(singleLine).join(", ")} |`),
     "",
   ];
   if (info.ignored.length > 0) {

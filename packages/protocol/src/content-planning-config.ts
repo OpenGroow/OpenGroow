@@ -8,10 +8,10 @@ export const MAX_PLANNING_DAYS = 60;
 /** The sum of the quantities of all targets; it also bounds one atomic write of a Content Plan. */
 export const MAX_PLANNED_QUANTITY = 100;
 
-export type ProductionTarget = { kind: string; quantity: number; publishTargets: string[] };
+export type ProductionTarget = { contentType: string; quantity: number; publishTargets: string[] };
 export type ContentPlanningConfig = { planningDays: number; productionTargets: ProductionTarget[] };
 
-/** What the Project offers: the `publish.kind` of active Agents' Mission types, and its Publish target keys. */
+/** What the Project offers: the `publish.kind` (the Content Type) of active Agents' Mission types, and its Publish target keys. */
 export type PlanningOptions = { formats: readonly string[]; publishTargets: readonly string[] };
 
 export function isValidPlanningDays(value: unknown): value is number {
@@ -27,9 +27,9 @@ export function planningDaysOf(config: unknown): number {
 }
 
 function readTarget(raw: unknown): ProductionTarget | undefined {
-  if (!isRecord(raw) || typeof raw.kind !== "string" || typeof raw.quantity !== "number" || !Array.isArray(raw.publishTargets)) return undefined;
+  if (!isRecord(raw) || typeof raw.contentType !== "string" || typeof raw.quantity !== "number" || !Array.isArray(raw.publishTargets)) return undefined;
   if (!raw.publishTargets.every((key) => typeof key === "string")) return undefined;
-  return { kind: raw.kind, quantity: raw.quantity, publishTargets: [...new Set(raw.publishTargets as string[])] };
+  return { contentType: raw.contentType, quantity: raw.quantity, publishTargets: [...new Set(raw.publishTargets as string[])] };
 }
 
 /** The well-formed production targets stored on a Job config, as stored (not checked against the Project). */
@@ -59,13 +59,13 @@ export function validateContentPlanningConfig(
         errors.push("Each production target needs a format, a quantity and Publish targets.");
         continue;
       }
-      if (!options.formats.includes(target.kind)) errors.push(`Unknown format "${target.kind}": no active Agent produces it.`);
-      if (seen.has(target.kind)) errors.push(`The format "${target.kind}" is listed twice.`);
-      seen.add(target.kind);
-      if (!Number.isInteger(target.quantity) || target.quantity < 1) errors.push(`The quantity of "${target.kind}" must be a whole number, at least 1.`);
-      if (target.publishTargets.length === 0) errors.push(`Choose at least one Publish target for "${target.kind}".`);
+      if (!options.formats.includes(target.contentType)) errors.push(`Unknown format "${target.contentType}": no active Agent produces it.`);
+      if (seen.has(target.contentType)) errors.push(`The format "${target.contentType}" is listed twice.`);
+      seen.add(target.contentType);
+      if (!Number.isInteger(target.quantity) || target.quantity < 1) errors.push(`The quantity of "${target.contentType}" must be a whole number, at least 1.`);
+      if (target.publishTargets.length === 0) errors.push(`Choose at least one Publish target for "${target.contentType}".`);
       for (const key of target.publishTargets) {
-        if (!options.publishTargets.includes(key)) errors.push(`Unknown Publish target "${key}" for "${target.kind}".`);
+        if (!options.publishTargets.includes(key)) errors.push(`Unknown Publish target "${key}" for "${target.contentType}".`);
       }
       targets.push(target);
     }
@@ -87,13 +87,13 @@ export function usableTargets(
   const usable: ProductionTarget[] = [];
   const ignored: string[] = [];
   for (const target of targets) {
-    if (!options.formats.includes(target.kind)) {
-      ignored.push(`${target.kind}: no active Agent produces this format any more`);
+    if (!options.formats.includes(target.contentType)) {
+      ignored.push(`${target.contentType}: no active Agent produces this format any more`);
       continue;
     }
     const kept = target.publishTargets.filter((key) => options.publishTargets.includes(key));
     const gone = target.publishTargets.filter((key) => !options.publishTargets.includes(key));
-    if (gone.length > 0) ignored.push(`${target.kind}: Publish target ${gone.join(", ")} no longer exists`);
+    if (gone.length > 0) ignored.push(`${target.contentType}: Publish target ${gone.join(", ")} no longer exists`);
     if (kept.length > 0 && target.quantity > 0) usable.push({ ...target, publishTargets: kept });
   }
   return { usable, ignored };

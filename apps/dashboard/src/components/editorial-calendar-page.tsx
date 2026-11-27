@@ -101,7 +101,7 @@ export function EditorialCalendarContent({ instanceId }: { instanceId: string })
                   <Button type="button" variant="outline" aria-pressed={selectedId === item._id} className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left" onClick={() => setSelectedId(item._id)}>
                     <span className="text-sm text-muted-foreground">{formatDay(item.plannedAt)}</span>
                     <span className="font-semibold">{item.title}</span>
-                    <span className="text-sm font-normal text-muted-foreground">{item.kind} · {item.publishTargets.join(", ")}</span>
+                    <span className="text-sm font-normal text-muted-foreground">{item.contentType} · {item.publishTargets.join(", ")}</span>
                   </Button>
                 </li>
               ))}

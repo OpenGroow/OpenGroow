@@ -173,7 +173,7 @@ The Job of the Strategy Agent that proposes what content to produce next, as a *
 
 ### Production target
 
-How many distinct contents of one **Content Type** the user wants within a **Planning period**, and to which **Publish targets** they are meant to go. The Content Type is the kind of Publishable a Mission type produces (video, image, carousel, article). A Production target counts contents, not Publications: one video for two Publish targets counts once.
+How many distinct contents of one **Content Type** the user wants within a **Planning period**, and to which **Publish targets** they are meant to go. The Content Type is the nature of the Publishable a Mission type produces (video, image, carousel, article); it is stored as `contentType` (`kind` only distinguishes creative from operational Mission types). A Production target counts contents, not Publications: one video for two Publish targets counts once.
 
 - _Avoid_: "quota" in the UI, "goal" (that means a business objective).
 

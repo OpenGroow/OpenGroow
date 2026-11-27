@@ -89,11 +89,11 @@ const recipe = (missionType = "make_video", instanceId = INSTANCE) =>
   t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId, templateId: PRODUCER, missionType, name: "R", description: "d" } as never));
 const source = (instanceId = INSTANCE) => t.run((ctx) => ctx.db.insert("sources", { instanceId, ownerId: OWNER.subject, templateId: PRODUCER, sourceId: "s", label: "S", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: NOW, createdAt: NOW, analysis: {} } as never));
 
-const configure = (productionTargets: Array<{ kind: string; quantity: number; publishTargets: string[] }>) =>
+const configure = (productionTargets: Array<{ contentType: string; quantity: number; publishTargets: string[] }>) =>
   owner().mutation(api.content_planning_jobs.setConfig, { jobId, planningDays: 7, productionTargets });
 
 /** A running Run of the Job, with its pins taken as dispatch takes them (period 2030-03-05 to 2030-03-11). */
-async function startRun(targets = [{ kind: "video", quantity: 2, publishTargets: ["social:example"] }]) {
+async function startRun(targets = [{ contentType: "video", quantity: 2, publishTargets: ["social:example"] }]) {
   await configure(targets);
   await owner().mutation(api.jobs.runNow, { jobId });
   await t.mutation(internal.content_planning_jobs.tick, {});
@@ -142,7 +142,7 @@ describe("a valid result", () => {
     expect(plan).toMatchObject({ runId, instanceId: INSTANCE, ownerId: OWNER.subject, status: "draft", rationale: "The plan", periodStart: run!.contentPlanning!.periodStart, periodEnd: run!.contentPlanning!.periodEnd });
     const rows = await contents();
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ planId: plan!._id, kind: "video", missionType: "make_video", status: "proposed", publishTargets: ["social:example"], title: "A title", intent: "exploit" });
+    expect(rows[0]).toMatchObject({ planId: plan!._id, contentType: "video", missionType: "make_video", status: "proposed", publishTargets: ["social:example"], title: "A title", intent: "exploit" });
     expect(rows[1]).toMatchObject({ publishTargets: ["social:example"], intent: "explore", plannedAt: "2030-03-11" });
     expect(await getRun(runId)).toMatchObject({ status: "completed" });
     const job = await getJob();
@@ -168,9 +168,9 @@ describe("a valid result", () => {
   });
 
   it("requires nothing of a Source when the Mission type does not need one, and accepts one of the Project", async () => {
-    const runId = await startRun([{ kind: "carousel", quantity: 1, publishTargets: ["blog:example"] }]);
+    const runId = await startRun([{ contentType: "carousel", quantity: 1, publishTargets: ["blog:example"] }]);
     await complete(runId, { rationale: "r", items: [await item({ missionType: "make_carousel", recipeId: await recipe("make_carousel"), sourceId: await source() })] });
-    expect(await contents()).toMatchObject([{ kind: "carousel", sourceId: expect.any(String) }]);
+    expect(await contents()).toMatchObject([{ contentType: "carousel", sourceId: expect.any(String) }]);
   });
 });
 
@@ -217,7 +217,7 @@ describe("a draft already exists", () => {
 });
 
 describe("an invalid result", () => {
-  const fails = async (envelope: unknown, message: RegExp, targets?: Array<{ kind: string; quantity: number; publishTargets: string[] }>) => {
+  const fails = async (envelope: unknown, message: RegExp, targets?: Array<{ contentType: string; quantity: number; publishTargets: string[] }>) => {
     const runId = await startRun(targets);
     await complete(runId, envelope);
     const run = await getRun(runId);
@@ -279,11 +279,11 @@ describe("an invalid result", () => {
     await fails({ rationale: "r", items: [await item(), await item(), await item()] }, /3 contents proposed but only 2 remain/);
   });
   it("rejects a missing Source where the Mission type needs one, and a Source of another Project", async () => {
-    const targets = [{ kind: "carousel", quantity: 2, publishTargets: ["blog:example"] }];
+    const targets = [{ contentType: "carousel", quantity: 2, publishTargets: ["blog:example"] }];
     await fails({ rationale: "r", items: [await item({ missionType: "make_carousel", recipeId: await recipe("make_carousel") })] }, /needs a Source/, targets);
   });
   it("rejects a Source of another Project", async () => {
-    const targets = [{ kind: "carousel", quantity: 2, publishTargets: ["blog:example"] }];
+    const targets = [{ contentType: "carousel", quantity: 2, publishTargets: ["blog:example"] }];
     await fails({ rationale: "r", items: [await item({ missionType: "make_carousel", recipeId: await recipe("make_carousel"), sourceId: await source(OTHER_INSTANCE) })] }, /Source of this Project/, targets);
   });
   it("rejects a pinned Publish target the Mission type cannot publish to (unsupported)", async () => {
@@ -306,7 +306,7 @@ describe("retries", () => {
     const first = await startRun();
     const pins = (await getRun(first))!.contentPlanning;
     await complete(first, await bad({ title: "" }));
-    await configure([{ kind: "video", quantity: 5, publishTargets: ["blog:example"] }]);
+    await configure([{ contentType: "video", quantity: 5, publishTargets: ["blog:example"] }]);
     const retryId = (await runtime()).inFlightRunId!;
     expect(retryId).not.toBe(first);
     expect(await getRun(first)).toMatchObject({ status: "failed" });

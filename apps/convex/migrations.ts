@@ -13,6 +13,7 @@ import schema from "./schema";
 import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
 import { provisionCurrentTemplate } from "./bundled_recipes";
+import { CONTENT_PLANNING_JOB_TYPE } from "./content_planning_shared";
 import { isTemplateVersionRunnable } from "@opengroow/agent-templates/schema-version";
 
 export const migrations = new Migrations(components.migrations, { schema });
@@ -426,6 +427,58 @@ export const describeHubPackages = migrations.define({
   },
 });
 
+/**
+ * ADR-091: `kind` is reserved for the creative/operational distinction of Mission types; the nature of the content is
+ * `contentType`. Copies `kind` to `contentType` on every Planned Content that has no `contentType` yet and unsets
+ * `kind`, leaving the rest of the row untouched. Idempotent. The transitional `kind` field leaves the schema, and
+ * `contentType` becomes required, once this has run.
+ */
+export const renamePlannedContentKind = migrations.define({
+  table: "plannedContents",
+  migrateOne: async (ctx, content) => {
+    if (content.kind === undefined) return;
+    await ctx.db.patch(content._id, { contentType: content.contentType ?? content.kind, kind: undefined });
+  },
+});
+
+/**
+ * ADR-091: the same rename on the targets a Content Planning Run pinned (`run.contentPlanning.targets[]`); every
+ * other pinned value and the Run's status and history are kept as they are. Idempotent. The transitional `kind`
+ * leaves the schema, and `contentType` becomes required, once this has run.
+ */
+export const renameContentPlanningKindOnRuns = migrations.define({
+  table: "runs",
+  migrateOne: async (ctx, run) => {
+    const pins = "contentPlanning" in run ? run.contentPlanning : undefined;
+    if (!pins || !pins.targets.some((target) => target.kind !== undefined)) return;
+    const targets = pins.targets.map(({ kind, ...target }) => ({ ...target, contentType: target.contentType ?? kind }));
+    await ctx.db.patch(run._id, { contentPlanning: { ...pins, targets } });
+  },
+});
+
+/**
+ * ADR-091: the same rename on the stored configuration of the `content_planning` Jobs
+ * (`config.productionTargets[]`, an untyped value, so the only code that still reads `kind`). The planning horizon
+ * and the targets' other fields are kept. Idempotent. Nothing is left to remove from the schema for this one.
+ */
+export const renameProductionTargetsKindOnJobs = migrations.define({
+  table: "jobs",
+  migrateOne: async (ctx, job) => {
+    if (job.type !== CONTENT_PLANNING_JOB_TYPE) return;
+    const config = job.config as { productionTargets?: unknown } | null | undefined;
+    const list = config?.productionTargets;
+    if (!config || !Array.isArray(list)) return;
+    const legacy = (entry: unknown): entry is Record<string, unknown> => !!entry && typeof entry === "object" && "kind" in entry;
+    if (!list.some(legacy)) return;
+    const productionTargets = list.map((entry) => {
+      if (!legacy(entry)) return entry;
+      const { kind, ...rest } = entry;
+      return { ...rest, contentType: rest.contentType ?? kind };
+    });
+    await ctx.db.patch(job._id, { config: { ...config, productionTargets } });
+  },
+});
+
 const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.deleteEnrichObservationsMissions,
   internal.migrations.cleanEnrichObservationsSchedules,
@@ -448,6 +501,9 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.dropSourceProduction,
   internal.migrations.deleteSourceRoutingJobs,
   internal.migrations.provisionBundledRecipes,
+  internal.migrations.renamePlannedContentKind,
+  internal.migrations.renameContentPlanningKindOnRuns,
+  internal.migrations.renameProductionTargetsKindOnJobs,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run
