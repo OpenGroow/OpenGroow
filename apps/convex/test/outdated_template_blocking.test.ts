@@ -110,7 +110,7 @@ describe("Mission creation and the new Runs of a Mission", () => {
 
     expect(resumed.runId).toBeNull();
     expect(await rows("runs")).toHaveLength(1);
-    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({ status: "failed" });
+    expect(await t.run((ctx) => ctx.db.get(missionId))).toMatchObject({ status: "failed", errorMessage: expect.stringContaining("outdated") });
   });
 
   it("keeps the history readable and a Run already inserted completes normally", async () => {

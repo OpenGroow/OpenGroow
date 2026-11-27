@@ -330,29 +330,6 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
 });
 
 /**
- * ADR-088: a Production Recipe depends on no Creative Family. Removes the field from every recipe; the rest of the
- * recipe and its versions are untouched. Idempotent. The field and its index leave the schema once this has run.
- */
-export const dropRecipeFamily = migrations.define({
-  table: "productionRecipes",
-  migrateOne: async (ctx, recipe) => {
-    if (recipe.creativeFamilyId !== undefined) await ctx.db.patch(recipe._id, { creativeFamilyId: undefined });
-  },
-});
-
-/**
- * Archiving a Production Recipe was replaced by deleting it: a recipe has no status any more. Removes the field, so a
- * recipe archived before is usable (editable, offered to Missions and Content Plans) and deletable like any other.
- * Idempotent. The field leaves the schema once this has run.
- */
-export const dropRecipeStatus = migrations.define({
-  table: "productionRecipes",
-  migrateOne: async (ctx, recipe) => {
-    if (recipe.status !== undefined) await ctx.db.patch(recipe._id, { status: undefined });
-  },
-});
-
-/**
  * ADR-091: existing Projects get the Bundled Recipes of their current Template versions. Idempotent (the one
  * provisioning function): a Project already provisioned, or on a version below schemaVersion 2 (which ships none,
  * and is provisioned when it applies the update), is left as it is.
@@ -462,8 +439,6 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInSources,
   internal.migrations.renameCarouselTemplateIdInRuns,
   internal.migrations.describeHubPackages,
-  internal.migrations.dropRecipeFamily,
-  internal.migrations.dropRecipeStatus,
   internal.migrations.stripRecipeGenerationFamily,
   internal.migrations.dropSourceProduction,
   internal.migrations.deleteSourceRoutingJobs,

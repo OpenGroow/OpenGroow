@@ -90,16 +90,6 @@ describe("production_recipes", () => {
     expect(await t.run((ctx) => ctx.db.query("productionRecipeVersions").collect())).toEqual([]);
   });
 
-  it("edits, offers and deletes a recipe archived before archiving was removed, like any other", async () => {
-    const { t, owner, recipeId } = await setup();
-    await t.run((ctx) => ctx.db.patch(recipeId, { status: "archived" }));
-    expect(await owner.mutation(api.production_recipes.saveVersion, { instanceId: INSTANCE_ID, recipeId, ...content })).toBe(2);
-    await owner.mutation(api.production_recipes.setTarget, { instanceId: INSTANCE_ID, recipeId, ...TARGET });
-    expect((await owner.query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET })).map((r) => r._id)).toEqual([recipeId]);
-    await owner.mutation(api.production_recipes.remove, { instanceId: INSTANCE_ID, recipeId });
-    expect(await owner.query(api.production_recipes.get, { instanceId: INSTANCE_ID, recipeId })).toBeNull();
-  });
-
   it("keeps the proposal that created a deleted recipe marked as created, so it cannot create another", async () => {
     const { t, owner, recipeId } = await setup();
     const runId = await t.run((ctx) =>

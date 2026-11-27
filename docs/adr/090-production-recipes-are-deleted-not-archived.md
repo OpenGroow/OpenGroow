@@ -8,7 +8,7 @@ A Production Recipe could be archived (ADR-083): kept, read-only, offered nowher
 
 ## Decision
 
-- **A recipe has no status.** `archive` and `unarchive` are gone, and so are every check, filter and `archived` flag (dashboard, Internal MCP, analytics, Strategic Memory references). `dropRecipeStatus` removes the field, so a recipe archived before is usable again; the field leaves the schema once it has run.
+- **A recipe has no status.** `archive` and `unarchive` are gone, and so are every check, filter and `archived` flag (dashboard, Internal MCP, analytics, Strategic Memory references). A migration removed the field, so a recipe archived before is usable again, and the field has left the schema.
 - **Deleting a recipe is never refused.** One mutation deletes the recipe, its versions and its Planned Contents not produced yet (the proposals of the draft plan, the approved contents dated today or later), found through `plannedContents.by_recipe_status_plannedAt`. The dashboard first reads their number (`production_recipes.deletionImpact`) and asks for confirmation.
 - **History stays.** Missions keep their Recipe Snapshot and are dispatched, retried and resumed from it, never from the live recipe, so a Mission in progress is not interrupted. Publications stay attributed through the snapshot. Rejected and past Planned Contents stay, showing the recipe as deleted.
 

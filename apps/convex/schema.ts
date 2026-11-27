@@ -789,8 +789,6 @@ export default defineSchema({
   // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
-    // Transitional (ADR-088): a recipe has no Creative Family; removed once `dropRecipeFamily` has run everywhere.
-    creativeFamilyId: v.optional(v.id("creativeFamilies")),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),
@@ -801,10 +799,7 @@ export default defineSchema({
     bundledId: v.optional(v.string()),
     // The Default Recipe of its Mission type: the Template's choice, only on a Bundled Recipe.
     isDefault: v.optional(v.boolean()),
-    // Transitional: a recipe has no status since archiving was replaced by deletion; removed once `dropRecipeStatus` has run everywhere.
-    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
   })
-    .index("by_instance_family", ["instanceId", "creativeFamilyId"])
     // The Create Mission picker: a Project's recipes for one Mission type of one Template.
     .index("by_instance_target", ["instanceId", "templateId", "missionType"]),
   // A Recipe Version: append-only, never patched. An edit inserts the next one.

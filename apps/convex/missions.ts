@@ -54,8 +54,10 @@ async function dispatchRun(
 // A resume comes from a background poll, with nobody to show a refusal to: when the Mission's Template version is
 // outdated (ADR-091) no new Run starts, and the Mission ends as failed instead of waiting forever for a Run.
 async function stopOnOutdatedTemplate(ctx: MutationCtx, mission: Doc<"missions">): Promise<boolean> {
-  if (!(await newRunBlock(ctx, mission.instanceId, mission.templateId, mission.templateVersion))) return false;
-  await ctx.db.patch(mission._id, { status: "failed", updatedAt: Date.now() });
+  const block = await newRunBlock(ctx, mission.instanceId, mission.templateId, mission.templateVersion);
+  if (!block) return false;
+  // The Mission keeps its whole history; only its status and the reason change.
+  await ctx.db.patch(mission._id, { status: "failed", errorMessage: block, updatedAt: Date.now() });
   return true;
 }
 
