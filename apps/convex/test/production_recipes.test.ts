@@ -230,7 +230,7 @@ describe("production_recipes", () => {
     const base = { instanceId: INSTANCE_ID, description: "", ...content };
     await owner.mutation(api.production_recipes.create, { ...base, name: "Other Template", templateId: "@example/video-b", missionType: "create_letter_video" });
     const offered = await owner.query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET });
-    expect(offered).toEqual([{ _id: recipeId, name: "Recipe A", description: "d", latestVersion: 1 }]);
+    expect(offered).toEqual([{ _id: recipeId, name: "Recipe A", description: "d", latestVersion: 1, origin: "custom", isDefault: false }]);
     expect(await owner.query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, templateId: TARGET.templateId, missionType: "create_letter_only_video" })).toEqual([]);
     expect(await t.withIdentity(STRANGER).query(api.production_recipes.listForMissionType, { instanceId: INSTANCE_ID, ...TARGET })).toEqual([]);
   });

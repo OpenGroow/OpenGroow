@@ -4,7 +4,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import type { AgentTemplate } from "@opengroow/agent-templates";
 import { utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { declaresRecipeProvider, validateRecipeTarget } from "./production_recipe_rules.js";
+import { isRecipeTarget, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // Production Recipes (issue #137, ADR-088): a first-class entity of the Project, independent of any Creative
@@ -21,10 +21,10 @@ const contentArgs = {
   constraints: v.array(v.string()),
 };
 
-type RecipeContent = { prompt?: string; instructions: string; constraints: string[] };
+export type RecipeContent = { prompt?: string; instructions: string; constraints: string[] };
 
 /** Trims the content and drops blank constraint lines. */
-function cleanContent(args: RecipeContent): RecipeContent {
+export function cleanContent(args: RecipeContent): RecipeContent {
   const prompt = args.prompt?.trim();
   return {
     ...(prompt ? { prompt } : {}),
@@ -62,7 +62,7 @@ export async function requireValidTarget(ctx: QueryCtx, instanceId: string, temp
   const versions = await installedVersions(ctx, instanceId, templateId);
   if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
   // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
-  const template = versions.find((t) => declaresRecipeProvider(t.manifest, missionType)) ?? versions[versions.length - 1]!;
+  const template = versions.find((t) => isRecipeTarget(t.manifest, missionType)) ?? versions[versions.length - 1]!;
   validateRecipeTarget(template.manifest, missionType);
 }
 
@@ -87,7 +87,7 @@ export async function latestVersion(ctx: QueryCtx, recipeId: Id<"productionRecip
     .first();
 }
 
-async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">, content: RecipeContent) {
+export async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">, content: RecipeContent) {
   const latest = await latestVersion(ctx, recipe._id);
   const version = (latest?.version ?? 0) + 1;
   await ctx.db.insert("productionRecipeVersions", {
@@ -100,8 +100,27 @@ async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">,
   return version;
 }
 
+/** Why a Bundled Recipe cannot be changed in place, or null for a Custom Recipe (ADR-091). */
+function bundledRefusal(recipe: Doc<"productionRecipes">, action: string): string | null {
+  return recipe.bundledId === undefined
+    ? null
+    : `A Bundled Recipe cannot be ${action}: it comes from its Template. Duplicate it to get a Custom Recipe you can change`;
+}
+
+function requireCustom(recipe: Doc<"productionRecipes">, action: string) {
+  const refusal = bundledRefusal(recipe, action);
+  if (refusal) throw new Error(refusal);
+}
+
+/** Where a recipe comes from, and whether it is the Default Recipe of its Mission type. */
+const originOf = (recipe: Doc<"productionRecipes">) => ({
+  origin: recipe.bundledId === undefined ? ("custom" as const) : ("bundled" as const),
+  isDefault: recipe.bundledId !== undefined && recipe.isDefault === true,
+});
+
 function recipeView(recipe: Doc<"productionRecipes">) {
   return {
+    ...originOf(recipe),
     _id: recipe._id,
     createdAt: recipe._creationTime,
     templateId: recipe.templateId,
@@ -169,6 +188,7 @@ export const saveVersion = mutation({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
+    requireCustom(recipe, "edited");
     return await appendVersion(ctx, recipe, cleanContent(args));
   },
 });
@@ -179,9 +199,37 @@ export const setTarget = mutation({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
+    requireCustom(recipe, "retargeted");
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
     await ctx.db.patch(args.recipeId, { templateId: args.templateId, missionType: args.missionType });
     return null;
+  },
+});
+
+/**
+ * Copies the latest version of a recipe into a new, independent Custom Recipe for the same Recipe target. The copy
+ * keeps no link to its source: editing either never changes the other.
+ */
+export const duplicate = mutation({
+  args: { instanceId: v.string(), recipeId: v.id("productionRecipes"), name: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await ownerIdFor(ctx, args.instanceId);
+    const source = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
+    const latest = await latestVersion(ctx, source._id);
+    if (!latest) throw new Error("This Production Recipe has no version to duplicate");
+    await requireValidTarget(ctx, args.instanceId, source.templateId, source.missionType);
+    const name = (args.name ?? `${source.name} (copy)`).trim().replace(/\s+/g, " ");
+    if (name === "") throw new Error("A Production Recipe needs a name");
+    const recipeId = await ctx.db.insert("productionRecipes", {
+      instanceId: args.instanceId,
+      templateId: source.templateId,
+      missionType: source.missionType,
+      name,
+      description: source.description,
+    });
+    const recipe = (await ctx.db.get(recipeId))!;
+    await appendVersion(ctx, recipe, cleanContent(latest));
+    return { recipeId };
   },
 });
 
@@ -222,7 +270,7 @@ export const remove = mutation({
   args: idArgs,
   handler: async (ctx, a) => {
     await ownerIdFor(ctx, a.instanceId);
-    await requireOwnedRecipe(ctx, a.instanceId, a.recipeId);
+    requireCustom(await requireOwnedRecipe(ctx, a.instanceId, a.recipeId), "deleted");
     for (const content of await pendingPlannedContents(ctx, a.recipeId)) await ctx.db.delete(content._id);
     const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", a.recipeId)).collect();
     for (const version of versions) await ctx.db.delete(version._id);
@@ -262,6 +310,7 @@ export const listForMissionType = query({
       .take(RECIPE_LIST_CAP);
     return await Promise.all(
       recipes.map(async (recipe) => ({
+        ...originOf(recipe),
         _id: recipe._id,
         name: recipe.name,
         description: recipe.description,
@@ -321,7 +370,7 @@ export const listTargets = query({
       // Newest version first: a Mission type is offered once, from the newest version declaring the provider.
       for (const template of await installedVersions(ctx, args.instanceId, templateId)) {
         for (const type of template.manifest.missionTypes ?? []) {
-          if (offered.has(type.type) || !declaresRecipeProvider(template.manifest, type.type)) continue;
+          if (offered.has(type.type) || !isRecipeTarget(template.manifest, type.type)) continue;
           offered.add(type.type);
           targets.push({ templateId, templateName: template.manifest.name, missionType: type.type, label: type.label });
         }

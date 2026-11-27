@@ -12,6 +12,7 @@ import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import schema from "./schema";
 import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
+import { provisionCurrentTemplate } from "./bundled_recipes";
 
 export const migrations = new Migrations(components.migrations, { schema });
 
@@ -351,6 +352,18 @@ export const dropRecipeStatus = migrations.define({
   },
 });
 
+/**
+ * ADR-091: existing Projects get the Bundled Recipes of their current Template versions. Idempotent (the one
+ * provisioning function): a Project already provisioned, or on a version below schemaVersion 2 (which ships none,
+ * and is provisioned when it applies the update), is left as it is.
+ */
+export const provisionBundledRecipes = migrations.define({
+  table: "installedTemplates",
+  migrateOne: async (ctx, installed) => {
+    if (installed.current) await provisionCurrentTemplate(ctx, installed.projectId, installed.templateId);
+  },
+});
+
 const RUN_SETTLED = new Set(["completed", "failed", "cancelled"]);
 
 /**
@@ -454,6 +467,7 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.stripRecipeGenerationFamily,
   internal.migrations.dropSourceProduction,
   internal.migrations.deleteSourceRoutingJobs,
+  internal.migrations.provisionBundledRecipes,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

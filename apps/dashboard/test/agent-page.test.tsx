@@ -326,7 +326,7 @@ describe("Agent page", () => {
           templateId: "@opengroow/hello", currentVersion: "1.0.0", availableVersion: "1.1.0", origin: "hub",
           plan: {
             fromVersion: "1.0.0", toVersion: "1.1.0", mcpHosts: { added: [], removed: [], changed: [] }, newSecrets: [], newPlugins: [],
-            newSkills: [], newRequiredFields: [], reactivationFields: [], removedMissionTypes: [], removedMissionTypesInUse: [], requiresAttention: false,
+            newSkills: [], newRequiredFields: [], reactivationFields: [], removedMissionTypes: [], removedMissionTypesInUse: [], recipesBecomingCustom: [], requiresAttention: false,
           },
         }];
         await settings();

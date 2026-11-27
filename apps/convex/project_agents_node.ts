@@ -43,6 +43,7 @@ import {
 import { requireAuthenticatedUser, requireInstanceOwner } from "./project_agents/auth.js";
 import { withInternalMcpToken } from "./internal_mcp/activation.js";
 import { createDefaultSchedules } from "./project_agents/default_schedules.js";
+import { provisionBundledRecipesOf } from "./project_agents/bundled_recipes.js";
 import { resolveMcpServers } from "./project_agents/mcp_servers.js";
 import {
   type ActivationResult,
@@ -255,6 +256,7 @@ async function activateAgent(
       existingSkills: existing?.skills ?? [],
     });
     if (activated.status === "active") {
+      await provisionBundledRecipesOf(ctx, instanceId, templateId);
       await createDefaultSchedules(ctx, { ownerId: user.subject, instanceId, templateId, template, timezone: args.timezone });
     }
     return activated;
