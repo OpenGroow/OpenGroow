@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server.js";
-import { storedContentTypeOf } from "./content_plan_counts.js";
 import { channelLabel } from "./content_plan_review.js";
 import { readOwnerId } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
@@ -36,7 +35,7 @@ export const range = query({
         const found = channelOf(publishers, target);
         return found ? { target, label: channelLabel(found.channel), service: found.channel.channelService, adapter: found.publisher.adapter } : { target, label: target };
       });
-      return { _id, planId, contentType: storedContentTypeOf(row), title, brief, plannedAt, intent, rationale, publishTargets, targets, plan: plans.get(planId) ?? null };
+      return { _id, planId, contentType: row.contentType, title, brief, plannedAt, intent, rationale, publishTargets, targets, plan: plans.get(planId) ?? null };
     });
     // `truncated`: the range holds more contents than are returned, so the calendar must say it shows only part of it.
     return { items, truncated };

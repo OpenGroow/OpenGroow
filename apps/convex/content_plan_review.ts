@@ -4,7 +4,7 @@ import { publishDeclarationFor } from "@opengroow/agent-templates";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { readOwnerId } from "./instance_ownership.js";
-import { storedContentTypeOf, countByContentType } from "./content_plan_counts.js";
+import { countByContentType } from "./content_plan_counts.js";
 import { capabilityOfTarget, channelOf, projectPublishers, type ProjectPublisher, type PublisherChannelEntry } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
@@ -90,7 +90,7 @@ async function contentView(content: Doc<"plannedContents">, publishers: readonly
     }
     const { channel, publisher } = found;
     const identity = { service: channel.channelService, adapter: publisher.adapter, label: channelLabel(channel) };
-    const capability = await capabilityOf(JSON.stringify([target, storedContentTypeOf(content), declaration?.platforms ?? null]));
+    const capability = await capabilityOf(JSON.stringify([target, content.contentType, declaration?.platforms ?? null]));
     publishTargets.push(
       capability.level === "uncertain" ? { target, uncertain: true, reason: capability.reason ?? "", ...identity }
       : capability.level === "unsupported" ? { target, uncertain: false, unsupported: true, reason: capability.reason ?? "", ...identity }
@@ -99,7 +99,7 @@ async function contentView(content: Doc<"plannedContents">, publishers: readonly
   }
   const { _id, missionType, title, brief, plannedAt, intent, rationale, status } = content;
   return {
-    _id, contentType: storedContentTypeOf(content), missionType, title, brief, plannedAt, intent, rationale, status, publishTargets,
+    _id, contentType: content.contentType, missionType, title, brief, plannedAt, intent, rationale, status, publishTargets,
     recipe: recipe ? { id: recipe._id, name: recipe.name } : null,
     source: source ? { id: source._id, label: source.label } : null,
   };

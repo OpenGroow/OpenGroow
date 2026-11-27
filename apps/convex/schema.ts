@@ -168,12 +168,8 @@ const runSharedFields = {
       periodEnd: v.string(),
       targets: v.array(
         v.object({
-          // The Content Type (`publish.kind` of the manifest). Optional only until
-          // `migrations.renameContentPlanningKindOnRuns` has run on every deployment,
-          // then required (phase 2 of the rename).
-          contentType: v.optional(v.string()),
-          // Transitional, removed once `renameContentPlanningKindOnRuns` has run.
-          kind: v.optional(v.string()),
+          // The Content Type (`publish.kind` of the manifest).
+          contentType: v.string(),
           target: v.number(),
           existing: v.number(),
           remaining: v.number(),
@@ -645,11 +641,7 @@ export default defineSchema({
     instanceId: v.string(),
     planId: v.id("contentPlans"),
     // The Content Type (`publish.kind` of the manifest), kept so it survives the uninstall of an Agent.
-    // Optional only until `migrations.renamePlannedContentKind` has run on every deployment,
-    // then required (phase 2 of the rename).
-    contentType: v.optional(v.string()),
-    // Transitional, removed once `renamePlannedContentKind` has run.
-    kind: v.optional(v.string()),
+    contentType: v.string(),
     missionType: v.string(),
     recipeId: v.id("productionRecipes"),
     sourceId: v.optional(v.id("sources")),

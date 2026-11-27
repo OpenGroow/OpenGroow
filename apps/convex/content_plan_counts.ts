@@ -7,20 +7,11 @@ import type { MutationCtx } from "./_generated/server.js";
 /** The most approved contents counted in one transaction; more than this and the count is refused, never truncated. */
 export const MAX_COUNTED_CONTENTS = 4_000;
 
-/**
- * The Content Type of a stored Planned Content or pinned target. Optional in the schema only until the rename
- * migrations have run (`renamePlannedContentKind`, `renameContentPlanningKindOnRuns`), then required.
- */
-export function storedContentTypeOf(row: { contentType?: string }): string {
-  if (row.contentType === undefined) throw new Error("A stored content planning row has no Content Type: run the migrations.");
-  return row.contentType;
-}
-
 /** How many of `items` there are per Content Type. */
-export function countByContentType(items: Iterable<{ contentType?: string }>): Map<string, number> {
+export function countByContentType(items: Iterable<{ contentType: string }>): Map<string, number> {
   const counts = new Map<string, number>();
   for (const item of items) {
-    const contentType = storedContentTypeOf(item);
+    const contentType = item.contentType;
     counts.set(contentType, (counts.get(contentType) ?? 0) + 1);
   }
   return counts;
@@ -34,7 +25,7 @@ export async function approvedCountsByContentType(ctx: MutationCtx, instanceId: 
     .withIndex("by_instance_status_plannedAt", (q) => q.eq("instanceId", instanceId).eq("status", "approved").gte("plannedAt", periodStart).lte("plannedAt", periodEnd));
   for await (const content of approved) {
     if (++total > MAX_COUNTED_CONTENTS) throw new Error(`More than ${MAX_COUNTED_CONTENTS} approved contents in the period ${periodStart} to ${periodEnd}: shorten the Planning period.`);
-    const contentType = storedContentTypeOf(content);
+    const contentType = content.contentType;
     counts.set(contentType, (counts.get(contentType) ?? 0) + 1);
   }
   return counts;

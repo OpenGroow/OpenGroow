@@ -2,7 +2,6 @@ import { SOURCE_PROVIDER } from "@opengroow/agent-templates";
 import { isIsoDate, utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
-import { storedContentTypeOf } from "./content_plan_counts.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // The Internal MCP's read tools for Content Planning (ADR-086, issue #178). Read-only,
@@ -136,7 +135,7 @@ export async function listPlannedContents(ctx: Pick<QueryCtx, "db">, instanceId:
     plannedContents: page.map((p) => ({
       plannedContentId: p._id as string,
       planId: p.planId as string,
-      contentType: storedContentTypeOf(p),
+      contentType: p.contentType,
       missionType: p.missionType,
       recipeId: p.recipeId as string,
       ...(p.sourceId ? { sourceId: p.sourceId as string } : {}),

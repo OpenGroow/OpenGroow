@@ -1,7 +1,7 @@
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
-import { countByContentType, storedContentTypeOf } from "./content_plan_counts.js";
+import { countByContentType } from "./content_plan_counts.js";
 import { assertRecipeCompatible } from "./mission_recipe.js";
 import { contentTypeOf } from "./planning_reads.js";
 import { parseContentPlanEnvelope, type PlannedItem } from "./content_plan_rules.js";
@@ -71,7 +71,7 @@ export async function resolveItem(
   const manifestType = template?.manifest.missionTypes?.find((entry) => entry.type === item.missionType);
   const declaration = publishDeclarationFor(template?.manifest, item.missionType);
   if (!manifestType || !declaration) return { ok: false, errors: [`${at}: Mission type "${item.missionType}" declares no publishing, so it has no Content Type and cannot be planned.`] };
-  const pinned = pins.targets.find((entry) => storedContentTypeOf(entry) === declaration.kind);
+  const pinned = pins.targets.find((entry) => entry.contentType === declaration.kind);
   if (!pinned) return { ok: false, errors: [`${at}: Content Type "${declaration.kind}" has no Production target.`] };
 
   const errors: string[] = [];
@@ -131,7 +131,7 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
   }
   if (errors.length === 0) {
     for (const [contentType, count] of countByContentType(resolved)) {
-      const remaining = pins.targets.find((entry) => storedContentTypeOf(entry) === contentType)?.remaining ?? 0;
+      const remaining = pins.targets.find((entry) => entry.contentType === contentType)?.remaining ?? 0;
       if (count > remaining) errors.push(`Content Type "${contentType}": ${count} contents proposed but only ${remaining} remain to plan.`);
     }
   }

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { remainingOf, utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
-import { approvedCountsByContentType, storedContentTypeOf, countByContentType } from "./content_plan_counts.js";
+import { approvedCountsByContentType, countByContentType } from "./content_plan_counts.js";
 import { contentsOf } from "./content_plan_review.js";
 import { NO_PINS_MESSAGE, pinsOf, resolveItem } from "./content_plans.js";
 import { ownerIdFor } from "./instance_ownership.js";
@@ -67,7 +67,7 @@ export const approve = mutation({
     const overs: string[] = [];
     const retainedByContentType = countByContentType(retained);
     for (const target of pins.targets) {
-      const contentType = storedContentTypeOf(target);
+      const contentType = target.contentType;
       const count = retainedByContentType.get(contentType) ?? 0;
       const remaining = remainingOf(target.target, approved.get(contentType) ?? 0);
       if (count > remaining) overs.push(`Content Type "${contentType}": ${count} contents retained but only ${remaining} remain to plan.`);
