@@ -1,5 +1,6 @@
 import type { JobTypeName } from "@opengroow/agent-templates";
 import { getTemplateRegistry } from "./template_registry.js";
+import { assertNewRunAllowed } from "./template_runnable.js";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
@@ -300,6 +301,7 @@ export const runNow = mutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
     const job = await loadOwnedJob(ctx, args.jobId);
+    await assertNewRunAllowed(ctx, job.instanceId, job.templateId);
     const runId = inFlightRunId(job);
     if (runId) {
       const run = await ctx.db.get(runId);

@@ -5,6 +5,8 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { frequencyV } from "./schedules.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
+import { assertNewRunAllowed } from "./template_runnable.js";
 import { SOURCE_TEMPLATE_ID } from "./source_agent.js";
 import {
   buildSourceScoringRunFile,
@@ -201,6 +203,7 @@ export const tick = internalMutation({
       const manualRun = job.runNowAt !== undefined || manualRunRequested(job);
       const restorePaused = restorePausedAfterManualRun(job);
       if (job.state === "paused" && !manualRun) continue;
+      if (await skipJobOnOutdatedTemplate(ctx, job, now)) continue;
       if (!(await sourceAgentIsActive(ctx, job))) {
         await failQueuedRun(ctx, job, now, restorePaused);
         continue;
@@ -259,7 +262,11 @@ export async function runPass(ctx: MutationCtx, job: Doc<"jobs">, now: number): 
 
 export const runNow = mutation({
   args: { jobId: v.id("jobs") },
-  handler: async (ctx, args) => await runPass(ctx, await loadOwnedJob(ctx, args.jobId), Date.now()),
+  handler: async (ctx, args) => {
+    const job = await loadOwnedJob(ctx, args.jobId);
+    await assertNewRunAllowed(ctx, job.instanceId, job.templateId);
+    return await runPass(ctx, job, Date.now());
+  },
 });
 
 export const listByInstance = query({

@@ -9,6 +9,7 @@ import { indexingOutcomeV } from "./indexing.js";
 import { findLiveRunForMission } from "./runs.js";
 import { currentTemplateVersion, getTemplateRegistry } from "./template_registry.js";
 import { buildRecipeSnapshot, recipeArgV, type RecipeSnapshot } from "./mission_recipe.js";
+import { assertNewRunAllowed, newRunBlock } from "./template_runnable.js";
 
 // Inserts a pending Run for a mission against its active projectAgent. Shared by
 // `create` (initial run) and `rejectMission` (revision run with feedback) so the
@@ -16,12 +17,16 @@ import { buildRecipeSnapshot, recipeArgV, type RecipeSnapshot } from "./mission_
 async function dispatchRun(
   ctx: MutationCtx,
   args: {
-    mission: Pick<Doc<"missions">, "_id" | "instanceId" | "templateId">;
+    mission: Pick<Doc<"missions">, "_id" | "instanceId" | "templateId" | "templateVersion">;
     ownerId: string;
     humanFeedback?: string;
   },
 ): Promise<Id<"runs">> {
   const { mission, ownerId, humanFeedback } = args;
+
+  // The one place a Mission's Run is inserted (create, Run now, retry, revision, resume): an outdated Template
+  // version starts nothing new (ADR-091). The throw rolls the whole mutation back, so a refusal leaves nothing.
+  await assertNewRunAllowed(ctx, mission.instanceId, mission.templateId, mission.templateVersion);
 
   const { openclawAgentName } = await activeProjectAgent(ctx, mission.instanceId, mission.templateId);
 
@@ -44,6 +49,14 @@ async function dispatchRun(
   await ctx.db.patch(runId, { sessionKey: `mega-run-${runId}` });
 
   return runId;
+}
+
+// A resume comes from a background poll, with nobody to show a refusal to: when the Mission's Template version is
+// outdated (ADR-091) no new Run starts, and the Mission ends as failed instead of waiting forever for a Run.
+async function stopOnOutdatedTemplate(ctx: MutationCtx, mission: Doc<"missions">): Promise<boolean> {
+  if (!(await newRunBlock(ctx, mission.instanceId, mission.templateId, mission.templateVersion))) return false;
+  await ctx.db.patch(mission._id, { status: "failed", updatedAt: Date.now() });
+  return true;
 }
 
 // Atomically increments the mission counter for the project and returns the next number.
@@ -88,13 +101,15 @@ export async function insertMissionAndDispatch(
     recipeSnapshot?: RecipeSnapshot;
   },
 ): Promise<{ missionId: Id<"missions">; runId: Id<"runs"> }> {
+  const templateVersion = args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId));
+  await assertNewRunAllowed(ctx, args.instanceId, args.templateId, templateVersion);
   const number = await nextMissionNumber(ctx, args.instanceId);
   const now = Date.now();
   const missionId = await ctx.db.insert("missions", {
     ownerId: args.ownerId,
     instanceId: args.instanceId,
     templateId: args.templateId,
-    templateVersion: args.templateVersion ?? (await currentTemplateVersion(ctx, args.instanceId, args.templateId)),
+    templateVersion,
     ...(args.recipeSnapshot !== undefined ? { recipeSnapshot: args.recipeSnapshot } : {}),
     type: args.type,
     payload: args.payload,
@@ -110,7 +125,7 @@ export async function insertMissionAndDispatch(
   });
 
   const runId = await dispatchRun(ctx, {
-    mission: { _id: missionId, instanceId: args.instanceId, templateId: args.templateId },
+    mission: { _id: missionId, instanceId: args.instanceId, templateId: args.templateId, templateVersion },
     ownerId: args.ownerId,
   });
 
@@ -310,6 +325,7 @@ export const resumeMission = internalMutation({
     // Mission the operator just stopped (or is in the process of stopping),
     // which is exactly the quota burn Stop exists to end.
     if (mission.status === "cancelled" || mission.cancelling === true) return { runId: null };
+    if (await stopOnOutdatedTemplate(ctx, mission)) return { runId: null };
 
     const runId = await dispatchRun(ctx, {
       mission,
@@ -352,6 +368,7 @@ export const resumeMissionAfterRetryableFailure = internalMutation({
     // See resumeMission: never dispatch a new Run for a Mission an operator
     // stopped, or is in the process of stopping (issue #482).
     if (mission.status === "cancelled" || mission.cancelling === true) return { runId: null };
+    if (await stopOnOutdatedTemplate(ctx, mission)) return { runId: null };
 
     const runId = await dispatchRun(ctx, {
       mission,

@@ -11,6 +11,7 @@ import { scheduleUnitV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { assertValidPublishAt } from "./publish_at.js";
+import { newRunBlock } from "./template_runnable.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
 
 export const frequencyV = v.object({
@@ -257,6 +258,29 @@ export const advanceNextRun = internalMutation({
   },
 });
 
+// The Template of a Schedule is outdated (ADR-091): its occurrence passes without a Mission and without an error, and
+// the Schedule keeps its status. Only the next occurrence moves, so it resumes by itself once the Template is updated.
+export const skipOccurrence = internalMutation({
+  args: { scheduleId: v.id("schedules") },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) return;
+    const frequency: Frequency = {
+      unit: schedule.unit,
+      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
+      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
+      hour: schedule.hour,
+      minute: schedule.minute,
+    };
+    await ctx.db.patch(args.scheduleId, { nextRunAt: computeNextRunAt(frequency, schedule.timezone, Date.now()) });
+  },
+});
+
+export const isTemplateOutdated = internalQuery({
+  args: { instanceId: v.string(), templateId: v.string() },
+  handler: async (ctx, args) => (await newRunBlock(ctx, args.instanceId, args.templateId)) !== null,
+});
+
 export const recordError = internalMutation({
   args: { scheduleId: v.id("schedules"), error: v.string() },
   handler: async (ctx, args) => {
@@ -288,6 +312,10 @@ export const tick = internalAction({
     const due = await ctx.runQuery(internal.schedules.listDueActive, { now: Date.now() });
     for (const schedule of due) {
       try {
+        if (await ctx.runQuery(internal.schedules.isTemplateOutdated, { instanceId: schedule.instanceId, templateId: schedule.templateId })) {
+          await ctx.runMutation(internal.schedules.skipOccurrence, { scheduleId: schedule._id });
+          continue;
+        }
         const { missionId } = await ctx.runMutation(internal.missions.createForOwner, {
           ownerId: schedule.ownerId,
           instanceId: schedule.instanceId,

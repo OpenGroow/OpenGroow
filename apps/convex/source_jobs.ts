@@ -9,6 +9,8 @@ import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { listMissionRunsCompletedBetween } from "./runs.js";
 import { templateHasEnrichment } from "./source_enrichment.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
+import { assertNewRunAllowed } from "./template_runnable.js";
 import { runParent, type RunParentRecord } from "./run_parent.js";
 import { jobResultFilePath, jobRunFilePath } from "./source_jobs/job_files.js";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
@@ -274,6 +276,7 @@ export const tick = internalMutation({
       const manualRun = row.runNowAt !== undefined || job.runNowRequestedAt !== undefined;
       const restorePaused = job.runNowRestorePaused === true;
       if (job.state === "paused" && !manualRun) continue;
+      if (await skipJobOnOutdatedTemplate(ctx, row, now)) continue;
       const nextRunAt = computeNextRunAt(frequencyOf(job), job.timezone, now);
 
       if (job.inFlightRunId) {
@@ -809,6 +812,7 @@ export const runNow = mutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
     const job = await loadOwnedJob(ctx, args.jobId);
+    await assertNewRunAllowed(ctx, job.instanceId, job.templateId);
     const sourceJob = asSourceJob(job);
     if (sourceJob.inFlightRunId) {
       const inFlight = await ctx.db.get(sourceJob.inFlightRunId);

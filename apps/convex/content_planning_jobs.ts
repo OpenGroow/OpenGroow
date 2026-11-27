@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
 import { allChannels, projectPublishers } from "./project_publishers.js";
 import { standaloneInFlight } from "./recipe_generation_shared.js";
 import { startRun } from "./content_planning_runs.js";
@@ -181,6 +182,7 @@ export const tick = internalMutation({
     for (const job of due) {
       const manual = job.runNowAt !== undefined;
       if (job.state === "paused" && !manual) continue;
+      if (await skipJobOnOutdatedTemplate(ctx, job, now)) continue;
       // A Standalone Run holds the Agent (ADR-087): postpone without writing, the Job stays due and a Run Now stays queued.
       if (await standaloneInFlight(ctx, job.instanceId, job.templateId)) continue;
       const restorePaused = manual && runtimeOf(job).runNowRestorePaused === true;

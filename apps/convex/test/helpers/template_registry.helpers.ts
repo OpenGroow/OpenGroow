@@ -23,6 +23,7 @@ export function fixtureTemplate(
       category: "test",
       mcpServers: [],
       visibility: "development",
+      schemaVersion: 2,
       ...manifest,
     },
     agentsMd: "# Agents\n",
