@@ -91,7 +91,7 @@ export function TraceTimeline({ events, onSelectTool, onSelectMessage, selectedE
 
 function Lane({ bar, kind, failed }: { bar?: TimelineBar; kind: Kind; failed: boolean }) {
   return (
-    <div className="relative h-10 min-w-0" aria-hidden="true">
+    <div className="relative h-8 min-w-0" aria-hidden="true">
       {GRIDLINES.map((pct) => (
         <span
           key={pct}
@@ -102,7 +102,7 @@ function Lane({ bar, kind, failed }: { bar?: TimelineBar; kind: Kind; failed: bo
       {bar ? (
         <span
           data-testid="trace-bar"
-          className={cn("absolute top-1/2 h-6 -translate-y-1/2 rounded-lg", failed ? "bg-destructive" : KIND_BAR[kind])}
+          className={cn("absolute top-1/2 h-3.5 -translate-y-1/2 rounded-full", failed ? "bg-destructive" : KIND_BAR[kind])}
           style={{ left: `${bar.offsetPct}%`, width: `${bar.widthPct}%` }}
         />
       ) : null}
