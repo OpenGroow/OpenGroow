@@ -33,7 +33,9 @@ vi.mock("@convex/_generated/api", () => ({
     },
     project_agents: { listByInstance: "project_agents.listByInstance" },
     missions: { create: "missions.create" },
+    production_recipes: { list: "production_recipes.list", listForMissionType: "production_recipes.listForMissionType" },
     schedules: {
+      setRecipe: "schedules.setRecipe",
       listByInstance: "schedules.listByInstance",
       create: "schedules.create",
       pause: "schedules.pause",
@@ -501,6 +503,68 @@ describe("InstanceSchedulesContent", () => {
 
     expect(document.body.textContent).not.toContain("Template outdated");
     expect((document.querySelector('button[data-action="run-now"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  describe("Production Recipe (ADR-091)", () => {
+    const creative = (manifest: typeof seoManifest) => ({
+      ...manifest,
+      missionTypes: manifest.missionTypes!.map((t) => ({ ...t, kind: "creative" as const })),
+    });
+    const RECIPES = [
+      { _id: "recipe-punchy", name: "Punchy", isDefault: false, origin: "bundled", latestVersion: 1 },
+      { _id: "recipe-freeform", name: "Freeform", isDefault: true, origin: "bundled", latestVersion: 1 },
+    ];
+    const serve = (schedules: unknown[], offered = RECIPES) =>
+      useQueryMock.mockImplementation((key: string, args: unknown) => {
+        if (key === "schedules.listByInstance") return schedules;
+        if (key === "project_agents.listByInstance") return [{ templateId: "@opengroow/seo", openclawAgentName: "seo", status: "active" }];
+        if (key === "production_recipes.list") return RECIPES;
+        if (key === "production_recipes.listForMissionType") return args === "skip" ? undefined : offered;
+        return undefined;
+      });
+
+    it("preselects the Default Recipe, offers no empty choice, and creates the Schedule with it", async () => {
+      serve([]);
+      const createSchedule = vi.fn().mockResolvedValue({});
+      useMutationMock.mockImplementation((ref: string) => (ref === "schedules.create" ? createSchedule : vi.fn()));
+      await render([creative(seoManifest), socialEngagementManifest]);
+
+      const select = document.querySelector<HTMLSelectElement>('[data-testid="schedule-recipe"]')!;
+      expect(select.value).toBe("recipe-freeform");
+      expect(Array.from(select.options).map((o) => o.value)).toEqual(["recipe-punchy", "recipe-freeform"]);
+      await act(async () => {
+        document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ recipeId: "recipe-freeform" }));
+    });
+
+    it("shows the recipe of a Schedule and runs it now with that recipe", async () => {
+      serve([makeSchedule({ recipeId: "recipe-punchy" })]);
+      const createMission = vi.fn().mockResolvedValue(undefined);
+      useMutationMock.mockImplementation((ref: string) => (ref === "missions.create" ? createMission : vi.fn()));
+      await render([creative(seoManifest), socialEngagementManifest]);
+      expect(document.querySelector('[data-testid="schedule-recipe-name"]')?.textContent).toContain("Punchy");
+      await act(async () => {
+        document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.click();
+      });
+      expect(createMission).toHaveBeenCalledWith(expect.objectContaining({ recipe: { recipeId: "recipe-punchy" } }));
+    });
+
+    it("shows the pause reason, blocks Resume and Run now, and sets a recipe from the picker", async () => {
+      serve([makeSchedule({ status: "paused", pausedReason: "recipe unavailable" })]);
+      const setRecipe = vi.fn().mockResolvedValue(null);
+      useMutationMock.mockImplementation((ref: string) => (ref === "schedules.setRecipe" ? setRecipe : vi.fn()));
+      await render([creative(seoManifest), socialEngagementManifest]);
+      expect(document.body.textContent).toContain("recipe unavailable");
+      expect(document.querySelector<HTMLButtonElement>('button[data-action="resume"]')!.disabled).toBe(true);
+      expect(document.querySelector<HTMLButtonElement>('button[data-action="run-now"]')!.disabled).toBe(true);
+      const picker = document.querySelector<HTMLSelectElement>('[data-testid="schedule-recipe-picker"]')!;
+      await act(async () => {
+        picker.value = "recipe-freeform";
+        picker.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      expect(setRecipe).toHaveBeenCalledWith({ scheduleId: "schedule-1", recipeId: "recipe-freeform" });
+    });
   });
 
   it("reveals a day-of-month control when the monthly unit is selected", async () => {

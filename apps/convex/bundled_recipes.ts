@@ -3,6 +3,8 @@ import { clawPackageToTemplate, isTemplateVersionRunnable, type AgentTemplate } 
 import { internalMutation, type MutationCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 import { appendVersion, cleanContent, latestVersion, type RecipeContent } from "./production_recipes.js";
+import { defaultRecipeOf, pauseForUnavailableRecipe } from "./schedule_recipes.js";
+import { isRecipeTarget } from "./production_recipe_rules.js";
 import { findSnapshot, toClawFiles } from "./template_registry_store.js";
 
 // Provisioning of Bundled Recipes (ADR-091): the one idempotent function that makes a Project's recipes match what
@@ -76,7 +78,39 @@ export async function provisionBundledRecipes(
     await ctx.db.patch(retired._id, { bundledId: undefined, isDefault: undefined });
     result.becameCustom += 1;
   }
+  await settleSchedules(ctx, args.projectId, args.templateId, args.template.manifest);
   return result;
+}
+
+/**
+ * The Schedules of the Template follow its recipes (ADR-091):
+ * - a creative Schedule with no recipe and no pause reason gets the Default Recipe of its Mission type (the backfill);
+ *   one that already has a recipe, or was paused because its recipe went away, is left alone: the Default never
+ *   replaces a method silently;
+ * - a Schedule whose recipe no longer fits (another target, or a Mission type that is no longer creative) is paused
+ *   with the reason "recipe unavailable".
+ */
+async function settleSchedules(ctx: MutationCtx, projectId: string, templateId: string, manifest: AgentTemplate["manifest"]) {
+  const schedules = await ctx.db
+    .query("schedules")
+    .withIndex("by_instance_template", (q) => q.eq("instanceId", projectId).eq("templateId", templateId))
+    .collect();
+  for (const schedule of schedules) {
+    if (!isRecipeTarget(manifest, schedule.type)) {
+      if (schedule.recipeId) await pauseForUnavailableRecipe(ctx, schedule);
+      continue;
+    }
+    if (schedule.recipeId) {
+      const recipe = await ctx.db.get(schedule.recipeId);
+      if (!recipe || recipe.instanceId !== projectId || recipe.templateId !== templateId || recipe.missionType !== schedule.type) {
+        await pauseForUnavailableRecipe(ctx, schedule);
+      }
+      continue;
+    }
+    if (schedule.pausedReason) continue;
+    const fallback = await defaultRecipeOf(ctx, projectId, templateId, schedule.type);
+    if (fallback) await ctx.db.patch(schedule._id, { recipeId: fallback._id, updatedAt: Date.now() });
+  }
 }
 
 /** Provisions from the Template version currently installed in the Project, if any. */

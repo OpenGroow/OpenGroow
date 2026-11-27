@@ -7,11 +7,14 @@ import {
   query,
 } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
+import type { Id } from "./_generated/dataModel.js";
+import { provisionCurrentTemplate } from "./bundled_recipes.js";
 import { scheduleUnitV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { assertValidPublishAt } from "./publish_at.js";
 import { newRunBlock } from "./template_runnable.js";
+import { assertScheduleRunnable, defaultRecipeOf, isCreativeScheduleType, resolveScheduleRecipe } from "./schedule_recipes.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
 
 export const frequencyV = v.object({
@@ -31,6 +34,8 @@ export const create = mutation({
     frequency: frequencyV,
     timezone: v.string(),
     autoPublish: v.optional(v.boolean()),
+    // Required for a creative Mission type (ADR-091): the form preselects the Default Recipe.
+    recipeId: v.optional(v.id("productionRecipes")),
   },
   handler: async (ctx, args) => {
     assertValidPublishAt(args.payload);
@@ -38,6 +43,8 @@ export const create = mutation({
     await assertKnownPublishTargets(ctx, args.instanceId, args.payload);
     await assertPayloadChannelsSupportMissionType(ctx, args);
     await assertPayloadSchedulable(ctx, args.instanceId, args.payload);
+
+    const recipeId = await resolveScheduleRecipe(ctx, args);
 
     const frequency = args.frequency as Frequency;
     const now = Date.now();
@@ -49,6 +56,7 @@ export const create = mutation({
       templateId: args.templateId,
       type: args.type,
       payload: args.payload,
+      ...(recipeId ? { recipeId } : {}),
       ...(args.autoPublish !== undefined ? { autoPublish: args.autoPublish } : {}),
       unit: frequency.unit,
       ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
@@ -84,8 +92,16 @@ export const createDefaults = internalMutation({
       .withIndex("by_instance_template", (q) => q.eq("instanceId", args.instanceId).eq("templateId", args.templateId))
       .collect();
     const now = Date.now();
+    // Make sure the Default Recipes exist: a Default Schedule of a creative type records one explicitly.
+    await provisionCurrentTemplate(ctx, args.instanceId, args.templateId);
     for (const entry of args.defaults) {
       if (existing.some((schedule) => schedule.type === entry.type)) continue;
+      let recipeId: Id<"productionRecipes"> | undefined;
+      if (await isCreativeScheduleType(ctx, args.instanceId, args.templateId, entry.type)) {
+        recipeId = (await defaultRecipeOf(ctx, args.instanceId, args.templateId, entry.type))?._id;
+        // No Default Recipe to record: no creative Schedule is created without one.
+        if (!recipeId) continue;
+      }
       const frequency = entry.frequency as Frequency;
       await ctx.db.insert("schedules", {
         ownerId,
@@ -93,6 +109,7 @@ export const createDefaults = internalMutation({
         templateId: args.templateId,
         type: entry.type,
         payload: entry.payload,
+        ...(recipeId ? { recipeId } : {}),
         unit: frequency.unit,
         ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
         ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
@@ -135,7 +152,23 @@ export const resume = mutation({
     };
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
-    await ctx.db.patch(args.scheduleId, { status: "active", nextRunAt, updatedAt: now });
+    await assertScheduleRunnable(ctx, schedule);
+    // A Mission type that became operational needs no recipe: the stale reason goes with the resume.
+    await ctx.db.patch(args.scheduleId, { status: "active", pausedReason: undefined, nextRunAt, updatedAt: now });
+  },
+});
+
+// Sets the recipe of a Schedule: required to fix a Schedule paused as "recipe unavailable". The reason clears; the
+// Schedule keeps its status, so the user resumes it when ready.
+export const setRecipe = mutation({
+  args: { scheduleId: v.id("schedules"), recipeId: v.id("productionRecipes") },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    const recipeId = await resolveScheduleRecipe(ctx, { ...schedule, recipeId: args.recipeId });
+    await ctx.db.patch(args.scheduleId, { recipeId, pausedReason: undefined, updatedAt: Date.now() });
   },
 });
 
@@ -322,6 +355,8 @@ export const tick = internalAction({
           templateId: schedule.templateId,
           type: schedule.type,
           payload: schedule.payload,
+          // The same validation as the Composer: a creative Mission type without a compatible recipe is refused.
+          ...(schedule.recipeId ? { recipe: { recipeId: schedule.recipeId } } : {}),
           ...(schedule.autoPublish !== undefined ? { autoPublish: schedule.autoPublish } : {}),
         });
         await ctx.runMutation(internal.schedules.advanceNextRun, {

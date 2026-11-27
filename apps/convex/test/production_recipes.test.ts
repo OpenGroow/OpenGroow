@@ -144,7 +144,7 @@ describe("production_recipes", () => {
 
     it("counts the Planned Contents not produced yet that go with the recipe", async () => {
       const { owner, recipeId } = await withPlans();
-      expect(await owner.query(api.production_recipes.deletionImpact, { instanceId: INSTANCE_ID, recipeId })).toEqual({ plannedContents: 2 });
+      expect(await owner.query(api.production_recipes.deletionImpact, { instanceId: INSTANCE_ID, recipeId })).toEqual({ plannedContents: 2, schedules: [] });
       expect(await owner.query(api.production_recipes.deletionImpact, { instanceId: OTHER_INSTANCE_ID, recipeId })).toBeNull();
     });
 

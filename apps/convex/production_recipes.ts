@@ -6,6 +6,7 @@ import { utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { isRecipeTarget, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { pauseForUnavailableRecipe, schedulesUsingRecipe } from "./schedule_recipes.js";
 
 // Production Recipes (issue #137, ADR-088): a first-class entity of the Project, independent of any Creative
 // Family. A recipe is an identity; each save appends an immutable Recipe Version. Every read and write resolves
@@ -202,6 +203,10 @@ export const setTarget = mutation({
     requireCustom(recipe, "retargeted");
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
     await ctx.db.patch(args.recipeId, { templateId: args.templateId, missionType: args.missionType });
+    // A Schedule using it has no compatible recipe any more when the target changed.
+    for (const schedule of await schedulesUsingRecipe(ctx, args.recipeId)) {
+      if (schedule.templateId !== args.templateId || schedule.type !== args.missionType) await pauseForUnavailableRecipe(ctx, schedule);
+    }
     return null;
   },
 });
@@ -257,7 +262,8 @@ export const deletionImpact = query({
   handler: async (ctx, args) => {
     if ((await readOwnerId(ctx, args.instanceId)) === null) return null;
     if (!(await ownedRecipe(ctx, args.instanceId, args.recipeId))) return null;
-    return { plannedContents: (await pendingPlannedContents(ctx, args.recipeId)).length };
+    const schedules = (await schedulesUsingRecipe(ctx, args.recipeId)).map((s) => ({ scheduleId: s._id, type: s.type }));
+    return { plannedContents: (await pendingPlannedContents(ctx, args.recipeId)).length, schedules };
   },
 });
 
@@ -271,6 +277,8 @@ export const remove = mutation({
   handler: async (ctx, a) => {
     await ownerIdFor(ctx, a.instanceId);
     requireCustom(await requireOwnedRecipe(ctx, a.instanceId, a.recipeId), "deleted");
+    // The Schedules using it pause as "recipe unavailable" and cannot resume until a compatible recipe is set.
+    for (const schedule of await schedulesUsingRecipe(ctx, a.recipeId)) await pauseForUnavailableRecipe(ctx, schedule);
     for (const content of await pendingPlannedContents(ctx, a.recipeId)) await ctx.db.delete(content._id);
     const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", a.recipeId)).collect();
     for (const version of versions) await ctx.db.delete(version._id);

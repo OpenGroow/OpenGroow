@@ -699,6 +699,12 @@ export default defineSchema({
     templateId: v.string(),
     type: v.string(),
     payload: v.any(),
+    // The Production Recipe a creative Schedule produces with (ADR-091). Absent for an operational Mission type, and
+    // while the recipe is unavailable (see `pausedReason`).
+    recipeId: v.optional(v.id("productionRecipes")),
+    // Why the Schedule was paused by the system: its recipe was deleted or stopped being compatible. Blocks resuming
+    // until a compatible recipe is set; it is cleared by that change, which never resumes the Schedule.
+    pausedReason: v.optional(v.literal("recipe unavailable")),
     // Default `autoPublish` propagated to every Mission this Schedule creates
     // (issue #330, PRD #326). Same capability restriction as a manually
     // created Mission — see `templateSupportsAutoPublish` in
@@ -721,7 +727,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_instance_template", ["instanceId", "templateId"])
-    .index("by_status_nextRun", ["status", "nextRunAt"]),
+    .index("by_status_nextRun", ["status", "nextRunAt"])
+    .index("by_recipe", ["recipeId"]),
   connectTickets: defineTable({
     ticketId: v.string(),
     instanceId: v.string(),
