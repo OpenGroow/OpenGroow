@@ -5,6 +5,8 @@ import { runToCompletion } from "@convex-dev/migrations";
 import { components, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { insertInstance } from "./instance_fixture";
+import { fixtureTemplate, installTemplateRegistry } from "./helpers/template_registry.helpers";
 
 // ADR-089: Source routing is removed; what it left on Sources and the Jobs it ran as go with it.
 
@@ -13,7 +15,15 @@ const modules = {
   "../migrations.ts": () => import("../migrations.js"),
 };
 
+const syncModules = {
+  "../_generated/api.ts": () => import("../_generated/api.js"),
+  "../instances.ts": () => import("../instances.js"),
+  "../jobs.ts": () => import("../jobs.js"),
+  "../project_agents.ts": () => import("../project_agents.js"),
+};
+
 const INSTANCE = "instance-mig";
+const SYNC_INSTANCE = "instance-sync";
 const OWNER = "owner-mig";
 const NOW = Date.UTC(2030, 2, 4, 10, 0, 0);
 
@@ -83,5 +93,29 @@ describe("migrations.deleteSourceRoutingJobs", () => {
       expect(await ctx.db.get(ids.scoring)).not.toBeNull();
       expect(await ctx.db.get(ids.scoringRun)).not.toBeNull();
     });
+  });
+});
+
+describe("Job sync after the routing removal", () => {
+  it("creates no Job for a Job type with no runner, even when an installed Template version still declares it", async () => {
+    const restore = installTemplateRegistry([SYNC_INSTANCE], [
+      fixtureTemplate("example/source", { jobTypes: [{ type: "source_scoring", agentsMd: "jobs/source-scoring.md" }, { type: "source_routing", agentsMd: "jobs/source-routing.md" }] } as never),
+    ]);
+    try {
+      const t = convexTest(schema, syncModules);
+      await t.run((ctx) =>
+        insertInstance(ctx, {
+          jobId: "provisioning", status: "running", runtimeStatus: "linked", runtimeReady: true,
+          createdAt: new Date(NOW).toISOString(), openclawId: SYNC_INSTANCE, updatedAt: new Date(NOW).toISOString(), userId: OWNER,
+        }),
+      );
+      const activate = () => t.mutation(internal.project_agents.upsert, { instanceId: SYNC_INSTANCE, templateId: "example/source", status: "active", workspaceKey: "ws", openclawAgentName: "source" });
+      await activate();
+      await activate();
+      const types = (await t.run((ctx) => ctx.db.query("jobs").collect())).map((job) => job.type);
+      expect(types).toEqual(["source_scoring"]);
+    } finally {
+      restore();
+    }
   });
 });

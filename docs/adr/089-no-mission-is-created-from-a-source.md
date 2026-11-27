@@ -12,7 +12,7 @@ The Source routing Job (ADR-052, ADR-071, ADR-076) picked the day's best Source,
 - **Sources keep scoring, listing and deletion.** The Sources page keeps its Scored and Other tabs without any production action; a Source's pipeline is Ingestion, Ready, Scored.
 - **What routing wrote on a Source is removed**: `selectedAt`, `producedAt`, `publishedAt`, `productionMissionId`, `routing`, `routeTo`. `produced` and `selected` leave the Internal MCP's Source reads. Missions already created stay as they are.
 - **One-shot migration, no compatibility layer**: `dropSourceProduction` clears those fields and `deleteSourceRoutingJobs` deletes the routing Jobs with their Runs; the fields and the retired migrations that read them leave the schema afterwards.
-- **A Template that still declares the `source_routing` Job type** gets a Job nothing runs: the Source Template drops the declaration and its instructions file.
+- **A Template that still declares the `source_routing` Job type** gets no Job: the Job sync creates a Job only for a Job type that has a runner, so an installed version of the Source Template that still declares it cannot bring the Job back after `deleteSourceRoutingJobs`. The Source Template drops the declaration and its instructions file.
 
 ## Consequences
 

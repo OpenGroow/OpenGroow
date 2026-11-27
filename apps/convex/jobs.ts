@@ -25,6 +25,19 @@ const JOB_DISPLAY_ORDER: Record<string, number> = {
   content_planning: 3,
 };
 
+// The tick that runs each Job type. A Job type absent from here has no runner: the sync creates no Job for it, even
+// when an installed Template version still declares it (ADR-089: `source_routing`).
+const JOB_RUNNERS = {
+  source_ingestion: internal.source_jobs.tick,
+  source_scoring: internal.score_jobs.tick,
+  [STRATEGIC_REVIEW_JOB_TYPE]: internal.strategic_review_jobs.tick,
+  [CONTENT_PLANNING_JOB_TYPE]: internal.content_planning_jobs.tick,
+} as const;
+
+function jobRunnerOf(type: string) {
+  return Object.prototype.hasOwnProperty.call(JOB_RUNNERS, type) ? JOB_RUNNERS[type as keyof typeof JOB_RUNNERS] : undefined;
+}
+
 function ownerSubjectOf(userId: string): string {
   return userId.slice(userId.lastIndexOf("|") + 1);
 }
@@ -142,6 +155,7 @@ export async function syncJobsWithAgentStatus(
   // The Instance id identifies the Project the Template is resolved for.
   const declarations = (await getTemplateRegistry(ctx).resolve(agent.instanceId, agent.templateId))?.manifest.jobTypes ?? [];
   for (const declaration of declarations) {
+    if (!jobRunnerOf(declaration.type)) continue;
     const existing = await findJob(ctx, agent.instanceId, agent.templateId, declaration.type);
     if (existing) {
       if (existing.ownerId !== ownerId) {
@@ -302,17 +316,9 @@ export const runNow = mutation({
       },
       updatedAt: now,
     });
-    if (job.type === "source_ingestion") {
-      await ctx.scheduler.runAfter(0, internal.source_jobs.tick, {});
-    } else if (job.type === "source_scoring") {
-      await ctx.scheduler.runAfter(0, internal.score_jobs.tick, {});
-    } else if (job.type === STRATEGIC_REVIEW_JOB_TYPE) {
-      await ctx.scheduler.runAfter(0, internal.strategic_review_jobs.tick, {});
-    } else if (job.type === CONTENT_PLANNING_JOB_TYPE) {
-      await ctx.scheduler.runAfter(0, internal.content_planning_jobs.tick, {});
-    } else {
-      throw new Error(`Job type ${job.type} has no executor yet`);
-    }
+    const runner = jobRunnerOf(job.type);
+    if (!runner) throw new Error(`Job type ${job.type} has no executor yet`);
+    await ctx.scheduler.runAfter(0, runner, {});
     return { status: "queued" as const };
   },
 });

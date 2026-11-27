@@ -4,5 +4,3 @@ mcpServers: []
 jobTypes:
   - type: source_scoring
     agentsMd: jobs/source-scoring.md
-  - type: source_routing
-    agentsMd: jobs/source-routing.md

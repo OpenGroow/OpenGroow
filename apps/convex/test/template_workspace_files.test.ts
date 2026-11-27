@@ -61,26 +61,26 @@ describe("collectTemplateWorkspaceFiles", () => {
     ).toThrow(/Source "keyword_analysis".*sources\/keyword_analysis\.md/);
   });
 
-  it("materializes explicit scoring and routing Job instruction files", () => {
+  it("materializes explicit scoring and review Job instruction files", () => {
     const files = collectTemplateWorkspaceFiles({
       agentsMd: "# base",
       manifest: manifest({
         jobTypes: [
           { type: "source_ingestion", sourceTypes: ["keyword_analysis"] },
           { type: "source_scoring", agentsMd: "jobs/source-scoring.md" },
-          { type: "source_routing", agentsMd: "jobs/source-routing.md" },
+          { type: "strategic_review", agentsMd: "jobs/strategic-review.md" },
         ],
       }),
       missionAgentsMd: { do_it: "mission body" },
       sourceInstructions: { keyword_analysis: "source body" },
       jobInstructions: {
         source_scoring: "scoring body",
-        source_routing: "routing body",
+        strategic_review: "review body",
       },
     });
 
     expect(files.get("jobs/source-scoring.md")).toBe("scoring body");
-    expect(files.get("jobs/source-routing.md")).toBe("routing body");
+    expect(files.get("jobs/strategic-review.md")).toBe("review body");
   });
 });
 
