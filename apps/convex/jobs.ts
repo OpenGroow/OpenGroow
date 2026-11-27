@@ -7,7 +7,7 @@ import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { ownerOfInstance } from "./projects.js";
-import { frequencyV } from "./schedules.js";
+import { frequencyV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";

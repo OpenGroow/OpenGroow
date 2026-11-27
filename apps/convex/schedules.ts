@@ -9,7 +9,7 @@ import {
 import { internal } from "./_generated/api.js";
 import type { Id } from "./_generated/dataModel.js";
 import { provisionCurrentTemplate } from "./bundled_recipes.js";
-import { scheduleUnitV } from "./validators.js";
+import { frequencyV } from "./validators.js";
 import { computeNextRunAt, frequencyOf } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { createManualMission } from "./missions.js";
@@ -17,14 +17,6 @@ import { assertValidPublishAt } from "./publish_at.js";
 import { assertScheduleRunnable, defaultRecipeOf, resolveScheduleRecipe } from "./schedule_recipes.js";
 import { isCreativeMissionType } from "./mission_recipe.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
-
-export const frequencyV = v.object({
-  unit: scheduleUnitV,
-  dayOfWeek: v.optional(v.number()),
-  dayOfMonth: v.optional(v.number()),
-  hour: v.number(),
-  minute: v.number(),
-});
 
 export const create = mutation({
   args: {
