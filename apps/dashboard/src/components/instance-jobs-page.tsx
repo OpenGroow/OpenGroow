@@ -392,7 +392,7 @@ function PlanningSummary({ config }: { config: unknown }) {
   return (
     <p className="m-0 text-sm text-muted-foreground">
       Plans the next {days} {days === 1 ? "day" : "days"}
-      {targets.length === 0 ? " · No production targets" : ` · ${targets.map((t) => `${t.quantity} ${t.kind}`).join(", ")}`}
+      {targets.length === 0 ? " · No production targets" : ` · ${targets.map((t) => `${t.quantity} ${t.contentType}`).join(", ")}`}
     </p>
   );
 }
@@ -407,24 +407,24 @@ function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanc
   const [days, setDays] = useState(String(planningDaysOf(job.config)));
   const [drafts, setDrafts] = useState<Record<string, TargetDraft>>(() =>
     Object.fromEntries(
-      productionTargetsOf(job.config).map((t) => [t.kind, { enabled: true, quantity: String(t.quantity), publishTargets: t.publishTargets }]),
+      productionTargetsOf(job.config).map((t) => [t.contentType, { enabled: true, quantity: String(t.quantity), publishTargets: t.publishTargets }]),
     ),
   );
   const [errors, setErrors] = useState<string[]>([]);
 
   if (options === undefined) return <p className="m-0 text-sm text-muted-foreground">Loading planning options…</p>;
 
-  const draftOf = (kind: string): TargetDraft => drafts[kind] ?? { enabled: false, quantity: "1", publishTargets: [] };
-  const update = (kind: string, patch: Partial<TargetDraft>) => setDrafts((all) => ({ ...all, [kind]: { ...draftOf(kind), ...patch } }));
+  const draftOf = (contentType: string): TargetDraft => drafts[contentType] ?? { enabled: false, quantity: "1", publishTargets: [] };
+  const update = (contentType: string, patch: Partial<TargetDraft>) => setDrafts((all) => ({ ...all, [contentType]: { ...draftOf(contentType), ...patch } }));
 
   async function save(): Promise<void> {
     if (!options) return;
     const productionTargets: ProductionTarget[] = options.formats
-      .filter((kind) => draftOf(kind).enabled)
-      .map((kind) => ({
-        kind,
-        quantity: draftOf(kind).quantity.trim() === "" ? NaN : Number(draftOf(kind).quantity),
-        publishTargets: draftOf(kind).publishTargets.filter((key) => options.publishTargets.includes(key)),
+      .filter((contentType) => draftOf(contentType).enabled)
+      .map((contentType) => ({
+        contentType,
+        quantity: draftOf(contentType).quantity.trim() === "" ? NaN : Number(draftOf(contentType).quantity),
+        publishTargets: draftOf(contentType).publishTargets.filter((key) => options.publishTargets.includes(key)),
       }));
     const planningDays = days.trim() === "" ? NaN : Number(days);
     const checked = validateContentPlanningConfig({ planningDays, productionTargets }, options);
@@ -460,25 +460,25 @@ function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanc
         <p className="m-0 text-sm text-muted-foreground">No active Agent produces content to publish yet.</p>
       ) : (
         <ul className="m-0 grid list-none gap-3 p-0">
-          {options.formats.map((kind) => {
-            const draft = draftOf(kind);
+          {options.formats.map((contentType) => {
+            const draft = draftOf(contentType);
             return (
-              <li key={kind} className="grid gap-2 rounded-lg border border-border p-3">
+              <li key={contentType} className="grid gap-2 rounded-lg border border-border p-3">
                 <label className="flex items-center gap-2 text-sm font-medium">
-                  <Checkbox data-testid={`format-${kind}`} checked={draft.enabled} onCheckedChange={(checked) => update(kind, { enabled: checked })} />
-                  {kind}
+                  <Checkbox data-testid={`format-${contentType}`} checked={draft.enabled} onCheckedChange={(checked) => update(contentType, { enabled: checked })} />
+                  {contentType}
                 </label>
                 {draft.enabled ? (
                   <div className="flex flex-wrap items-end gap-4">
                     <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
                       Quantity
                       <Input
-                        name={`quantity-${kind}`}
+                        name={`quantity-${contentType}`}
                         type="number"
                         min={1}
                         step={1}
                         value={draft.quantity}
-                        onChange={(e) => update(kind, { quantity: e.target.value })}
+                        onChange={(e) => update(contentType, { quantity: e.target.value })}
                         className="w-24"
                       />
                     </label>
@@ -490,10 +490,10 @@ function PlanningTargetsForm({ job, instanceId, onDone }: { job: JobRow; instanc
                         options.publishTargets.map((key) => (
                           <label key={key} className="flex items-center gap-1.5 text-sm">
                             <Checkbox
-                              data-testid={`target-${kind}-${key}`}
+                              data-testid={`target-${contentType}-${key}`}
                               checked={draft.publishTargets.includes(key)}
                               onCheckedChange={(checked) =>
-                                update(kind, {
+                                update(contentType, {
                                   publishTargets: checked ? [...draft.publishTargets, key] : draft.publishTargets.filter((k) => k !== key),
                                 })
                               }

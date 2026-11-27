@@ -5,7 +5,7 @@ export type CalendarTarget = { target: string; label: string; service?: string; 
 export type CalendarItem = {
   _id: string;
   planId: string;
-  kind: string;
+  contentType: string;
   title: string;
   brief: string;
   plannedAt: string;
@@ -26,4 +26,4 @@ export const shift = ({ year, month }: MonthKey, by: number): MonthKey => {
   return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
 };
 export const monthLabel = ({ year, month }: MonthKey) => new Date(Date.UTC(year, month, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-export const formatLabel = (kind: string) => kind.charAt(0).toUpperCase() + kind.slice(1);
+export const formatLabel = (contentType: string) => contentType.charAt(0).toUpperCase() + contentType.slice(1);

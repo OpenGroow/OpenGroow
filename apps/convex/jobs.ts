@@ -1,12 +1,13 @@
 import type { JobTypeName } from "@opengroow/agent-templates";
 import { getTemplateRegistry } from "./template_registry.js";
+import { assertNewRunAllowed } from "./template_runnable.js";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { ownerOfInstance } from "./projects.js";
-import { frequencyV } from "./schedules.js";
+import { frequencyV } from "./validators.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { DEFAULT_ANALYSIS_DAYS } from "@opengroow/protocol/strategic-review-period";
 import { STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
@@ -300,6 +301,7 @@ export const runNow = mutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
     const job = await loadOwnedJob(ctx, args.jobId);
+    await assertNewRunAllowed(ctx, job.instanceId, job.templateId);
     const runId = inFlightRunId(job);
     if (runId) {
       const run = await ctx.db.get(runId);

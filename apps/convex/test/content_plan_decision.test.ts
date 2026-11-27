@@ -19,7 +19,7 @@ const OWNER = { name: "Owner", email: "o@example.com", tokenIdentifier: "test|ow
 const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|stranger-cpd", subject: "stranger-cpd" };
 const NOW = Date.UTC(2030, 2, 4, 10, 0, 0);
 
-const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, ...extra });
+const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, kind: "creative", ...extra });
 const producer = () => {
   const base = loadFixtureTemplate("strategy-capable");
   return {
@@ -32,7 +32,6 @@ type T = ReturnType<typeof convexTest>;
 let t: T;
 let restoreRegistry: () => void;
 let recipeId: Id<"productionRecipes">;
-let familyId: Id<"creativeFamilies">;
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -47,8 +46,7 @@ beforeEach(async () => {
       targets: [{ target: "social:example", channelService: "instagram" }],
     } as never);
     await ctx.db.insert("projectAgents", { instanceId: INSTANCE, templateId: TEMPLATE, status: "active", workspaceKey: "ws", openclawAgentName: "a", mcpServerKeys: [], createdAt: NOW, updatedAt: NOW } as never);
-    familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "F", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: TEMPLATE, missionType: "make_video", name: "R", description: "d" } as never);
   });
 });
 afterEach(() => {
@@ -69,7 +67,7 @@ async function plan(over: { remaining?: number; target?: number } = {}) {
       jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: "tpl", agentName: "planner", sessionKey: "s", status: "running", createdAt: NOW, updatedAt: NOW,
       contentPlanning: {
         periodStart: "2030-03-05", periodEnd: "2030-03-11",
-        targets: [{ kind: "video", target, existing: 0, remaining: over.remaining ?? target, publishTargets: ["social:example"] }], ignored: [],
+        targets: [{ contentType: "video", target, existing: 0, remaining: over.remaining ?? target, publishTargets: ["social:example"] }], ignored: [],
       },
     } as never);
     return await ctx.db.insert("contentPlans", { ownerId: OWNER.subject, instanceId: INSTANCE, runId, periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "r", status: "draft", createdAt: NOW });
@@ -79,7 +77,7 @@ async function plan(over: { remaining?: number; target?: number } = {}) {
 const content = (planId: Id<"contentPlans">, over: Record<string, unknown> = {}) =>
   t.run((ctx) =>
     ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind: "video", missionType: "make_video", recipeId,
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType: "video", missionType: "make_video", recipeId,
       publishTargets: ["social:example"], title: "T", brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "proposed", createdAt: 1, ...over,
     } as never),
   );
@@ -136,7 +134,7 @@ describe("content_plan_decision.approve", () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < 1_001; i++) {
         await ctx.db.insert("plannedContents", {
-          ownerId: OWNER.subject, instanceId: INSTANCE, planId: earlier, kind: "video", missionType: "make_video", recipeId,
+          ownerId: OWNER.subject, instanceId: INSTANCE, planId: earlier, contentType: "video", missionType: "make_video", recipeId,
           publishTargets: ["social:example"], title: "T", brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "approved", createdAt: 1,
         } as never);
       }

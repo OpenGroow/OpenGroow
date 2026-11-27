@@ -5,7 +5,8 @@ import { assertLocalFolderInstallAllowed } from "./local_folder_gate.js";
 import { internal } from "./_generated/api.js";
 import type { ReconcileOutcome } from "./project_agents_node.js";
 import { gitOriginV } from "./validators.js";
-import { installTemplatePackage, offerTemplateUpdate, packageFilesV, type InstallResult, type PackageFile } from "./template_registry_store.js";
+import { offerTemplateUpdate, packageFilesV, type InstallResult, type PackageFile } from "./template_registry_store.js";
+import { installTemplatePackage } from "./template_install.js";
 
 /**
  * Installation of a Template package without a user identity (#652): the entry

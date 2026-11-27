@@ -44,6 +44,14 @@ A Mission is identified by humans through three elements, distinct from its tech
 
 > On the board, a card displays the `summary` as soon as it exists (mission ≥ `doing`), otherwise the `name`. `name` and `summary` are **two distinct fields**: the `name` (and hence the "Schedule" origin) remains visible even after the Agent has written its `summary`.
 
+### Mission Brief
+
+What the user wants this particular Mission to produce: the specific intention of one production (the topic, the angle, the message). It is the *what* of one content, whereas the **Production Recipe** is the reusable *how*. The two stay separate: the Recipe's instructions are frozen in the Recipe Snapshot and rendered in their own `Production Recipe` section of `context.md`; the Brief comes from the Mission's inputs. A Planned Content carries its own brief. _Avoid_: using it as a synonym of **Mission Payload**.
+
+### Mission Payload
+
+The technical representation of the inputs handed to a Mission (the `payload` of the manifest's `fields`, including the Publish targets). It carries the Mission Brief among other inputs, but is not the Brief: it is data for the Agent and the dispatcher, the Brief is the user's intention.
+
 ### Schedule
 
 Recurrence rule that automatically generates **Missions** at a defined cadence, without user intervention.

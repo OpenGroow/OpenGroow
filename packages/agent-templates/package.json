@@ -25,7 +25,8 @@
     "./hub-package-kinds": "./src/hub-package-kinds.ts",
     "./folder-files": "./src/folder-files.ts",
     "./git-archive": "./src/git-archive.ts",
-    "./pinned-source": "./src/pinned-source.ts"
+    "./pinned-source": "./src/pinned-source.ts",
+    "./schema-version": "./src/schema-version.ts"
   },
   "dependencies": {
     "@opengroow/publisher-sdk": "workspace:*",

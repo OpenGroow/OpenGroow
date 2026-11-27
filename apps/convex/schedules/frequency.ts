@@ -20,6 +20,17 @@ export type Frequency = {
   minute: number; // 0–59
 };
 
+/** The cadence of a stored Schedule or Job row. */
+export function frequencyOf(row: { unit: Frequency["unit"]; dayOfWeek?: number | undefined; dayOfMonth?: number | undefined; hour: number; minute: number }): Frequency {
+  return {
+    unit: row.unit,
+    ...(row.dayOfWeek !== undefined ? { dayOfWeek: row.dayOfWeek } : {}),
+    ...(row.dayOfMonth !== undefined ? { dayOfMonth: row.dayOfMonth } : {}),
+    hour: row.hour,
+    minute: row.minute,
+  };
+}
+
 type LocalParts = {
   year: number;
   month: number; // 1–12

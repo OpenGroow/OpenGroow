@@ -27,6 +27,7 @@ import type {
   AgentBlocker,
   AgentManifest,
   BoundedHttpEffect,
+  BundledRecipeDeclaration,
   ExternalJobPollingContract,
   ExternalJobTerminalStateMap,
   JobTypeDeclaration,
@@ -71,7 +72,7 @@ const LEAF_REQUIREMENT = keySetOf<LeafRequirementField>({
 const GROUP_REQUIREMENT = keySetOf<Extract<RequirementField, { type: "group" }>>({ type: true, label: true, fields: true });
 const SKILL = keySetOf<TemplateSkillDeclaration>({ source: true, spec: true, version: true });
 const MISSION_TYPE = keySetOf<MissionType>({
-  type: true, label: true, description: true, payload: true, agentsMd: true, fields: true, sessionDurationMs: true,
+  type: true, kind: true, recipes: true, label: true, description: true, payload: true, agentsMd: true, fields: true, sessionDurationMs: true,
   review: true, blockers: true, contextProviders: true, publish: true, analytics: true, defaultSchedule: true,
 });
 const PAYLOAD_FIELD = keySetOf<MissionPayloadField>({
@@ -118,8 +119,9 @@ const MACHINE_TOOL_STEP = keySetOf<MachineToolStep>({ label: true, run: true });
 const MACHINE_TOOL_BIN = keySetOf<MachineToolBin>({ name: true, target: true });
 const MACHINE_TOOL_VERSION_CHECK = keySetOf<MachineToolVersionCheck>({ run: true, pattern: true });
 const RUN_CONTEXT = keySetOf<RunContextDeclaration>({ heading: true, lines: true });
+const BUNDLED_RECIPE = keySetOf<BundledRecipeDeclaration>({ id: true, path: true, default: true });
 const MANIFEST = keySetOf<AgentManifest>({
-  id: true, name: true, description: true, category: true, mcpServers: true, contextProviders: true,
+  schemaVersion: true, id: true, name: true, description: true, category: true, mcpServers: true, contextProviders: true,
   requirements: true, skills: true, openclawProfile: true, machinePrerequisites: true, runContext: true, visibility: true, missionTypes: true, exclusiveResources: true, externalJobsByMissionType: true,
   sources: true, jobTypes: true, externalJobsBySource: true, generativeMcpCall: true, activation: true,
   reconfiguration: true, reconfigurable: true, statusCheck: true,
@@ -249,6 +251,7 @@ function checkMissionType(missionType: unknown, path: string): string | undefine
           () => (isObj(field) ? checkOptions(field.options, dot(at, "options")) : undefined),
         ),
       ),
+    () => eachItem(missionType.recipes, dot(path, "recipes"), (recipe, at) => unknownKeyIn(recipe, BUNDLED_RECIPE, at)),
     () => unknownKeyIn(missionType.sessionDurationMs, SESSION_DURATION, dot(path, "sessionDurationMs")),
     () => (missionType.review === undefined ? undefined : checkReview(missionType.review, dot(path, "review"))),
     () => eachItem(missionType.blockers, dot(path, "blockers"), (blocker, at) => unknownKeyIn(blocker, BLOCKER, at)),

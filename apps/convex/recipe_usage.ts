@@ -2,6 +2,7 @@ import type { QueryCtx } from "./_generated/server.js";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { linkedAdapters } from "./analytics_adapters.js";
 import { claimStatus, measurementClaims } from "./analytics_claims.js";
+import { originOf } from "./production_recipes.js";
 import { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 
 // The Production Recipe catalog with its usage history (ADR-084, issue #158), read through the
@@ -26,6 +27,10 @@ export type RecipeCatalog = {
     description: string;
     missionType: string;
     templateId: string;
+    /** Bundled: shipped by its Template, read-only. Custom: written in the Project. */
+    origin: "bundled" | "custom";
+    /** The Default Recipe of its Mission type (always a Bundled Recipe). */
+    isDefault: boolean;
     usage: Usage;
     /** Absent (unknown) when the Missions read was incomplete and none was seen. */
     neverUsedEver?: boolean;
@@ -124,6 +129,7 @@ export async function recipeCatalog(
         description: recipe.description,
         missionType: recipe.missionType,
         templateId: recipe.templateId,
+        ...originOf(recipe),
         usage: u,
         ...(neverUsedEver !== undefined ? { neverUsedEver } : {}),
         ...(neverPublishedEver !== undefined ? { neverPublishedEver } : {}),

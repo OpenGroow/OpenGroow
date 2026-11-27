@@ -10,7 +10,7 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** A planned content inside a day cell: title on up to two lines, then its format and intent. */
 function DayChip({ item, selected, onSelect }: { item: CalendarItem; selected: boolean; onSelect: (id: string) => void }) {
-  const Icon = formatIcon(item.kind);
+  const Icon = formatIcon(item.contentType);
   return (
     <Button
       type="button"
@@ -23,7 +23,7 @@ function DayChip({ item, selected, onSelect }: { item: CalendarItem; selected: b
       <span className="flex min-w-0 max-w-full flex-nowrap gap-1 [&>*]:min-w-0 [&>*]:gap-1 [&>*]:px-1.5">
         <Badge variant="tag" size="xs">
           <Icon aria-hidden="true" />
-          {formatLabel(item.kind)}
+          {formatLabel(item.contentType)}
         </Badge>
       </span>
     </Button>

@@ -38,6 +38,7 @@ const emptyPlan: UpdatePlan = {
   reactivationFields: [],
   removedMissionTypes: [],
   removedMissionTypesInUse: [],
+  recipesBecomingCustom: [],
   requiresAttention: false,
 };
 
@@ -126,6 +127,17 @@ describe("TemplateUpdatesPanel", () => {
 
     await click(button("Apply update"));
     expect(applyUpdateMock).toHaveBeenCalledWith({ projectId: "proj", templateId: "@alice/seo", version: "2.0.0" });
+  });
+
+  it("lists the Bundled Recipes that become Custom Recipes before the user confirms", async () => {
+    useQueryMock.mockReturnValue([
+      offer({ recipesBecomingCustom: [{ missionType: "write_post", id: "punchy", name: "Punchy" }], requiresAttention: true }),
+    ]);
+    await render();
+    await click(button("Review update"));
+    const dialog = document.querySelector('[role="dialog"]')!.textContent ?? "";
+    expect(dialog).toContain("Custom Recipes");
+    expect(dialog).toContain("Punchy (write_post)");
   });
 
   it("cancelling leaves the update unapplied", async () => {

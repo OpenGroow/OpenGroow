@@ -72,7 +72,7 @@ mcpServers:
 
 - Validation and installation refuse a `url`, `headers`, another transport, an unknown or duplicated tool, an empty list, and any other server next to it (the Agent token is written as the Authorization header of every declared server).
 - OpenGroow derives the URL from the deployment (`CONVEX_SITE_URL`, so it follows the published Convex site port) and generates the Agent token at each activation. The token only works while the Agent has a Run `running`, only for its own Project, and only for the declared tools. It never reaches the model.
-- Tools: `list_mission_types` (the Mission types the Project can activate, with descriptions, `kind`, `platforms` and `sourceRequired`; `list_production_recipes` also carries `kind` and `sourceRequired`), `get_analytics_summary` (`days?` or `from?`/`to?`, `platform?`: Publications aggregated by adapter, platform, format and Mission type; `groupBy?` `recipe` with `recipeId?` groups them by Production Recipe instead, through each Mission's Recipe Snapshot, with `unattributed`, `scanLimited` and `partial`), `list_publications` (`days?` or `from?`/`to?`, `platform?`, `recipeId?`, `limit?`: each Publication with its Run, age, attribution (recipe, version, or `unattributed`), latest measurements and a status `data`, `no_data` or `unavailable`; `truncated`, `partial` and `unattributed` say what was cut or missed), `list_recent_missions` (`limit?`: Missions with status and outcome), `get_brand_core` and `list_production_recipes` (`days?`: the Project's Production Recipes with their Recipe usage by step, over the lifetime and the period, including recipes never published; `neverUsedEver` and `neverPublishedEver` are absent when the read was incomplete, `partial` and `truncated` say so) `list_sources` (`status?`, `produced?`, `limit?`: Sources with Replication Score and sub-scores, summary, Creative Family, selected and produced flags; not selected or produced first), `list_planned_contents` (`from?`/`to?` as `YYYY-MM-DD`, at most 92 days, `status?`, `limit?`: the editorial calendar) `list_generation_sources` (`produced?`, `minReplicationScore?`, `sort?` `recent` or `score`, `limit?` max 25, `cursor?`), `get_source` and `get_production_recipe` (Recipe Generation, ADR-087, ADR-088: `list_generation_sources` and `get_source` work only while a generation runs for the Agent and read only the ready, non-excluded Sources the owner gave it; `list_sources` is refused then; `list_mission_types` also carries `acceptsRecipe`) and `get_strategic_memory` (the latest Strategic Memory with its period, references and date, or `exists: false`; never the Performance Report). The catalog is `apps/convex/internal_mcp/catalog.ts`; to add a tool, add its name to `INTERNAL_MCP_TOOL_NAMES` (`packages/agent-templates/src/internal-mcp.ts`) and its definition to the catalog.
+- Tools: `list_mission_types` (the Mission types the Project can activate, with descriptions, `contentType` (the nature of the content: video, image, carousel, article, or null when the type declares no publishing and cannot be planned), `platforms`, `sourceRequired` and `creative`; `list_production_recipes` also carries `contentType` and `sourceRequired`, and each recipe its `origin` (`bundled` or `custom`) and `isDefault`; `kind` only ever means creative or operational), `get_analytics_summary` (`days?` or `from?`/`to?`, `platform?`: Publications aggregated by adapter, platform, format and Mission type; `groupBy?` `recipe` with `recipeId?` groups them by Production Recipe instead, through each Mission's Recipe Snapshot, with `unattributed`, `scanLimited` and `partial`), `list_publications` (`days?` or `from?`/`to?`, `platform?`, `recipeId?`, `limit?`: each Publication with its Run, age, attribution (recipe, version, or `unattributed`), latest measurements and a status `data`, `no_data` or `unavailable`; `truncated`, `partial` and `unattributed` say what was cut or missed), `list_recent_missions` (`limit?`: Missions with status and outcome), `get_brand_core` and `list_production_recipes` (`days?`: the Project's Production Recipes with their Recipe usage by step, over the lifetime and the period, including recipes never published; `neverUsedEver` and `neverPublishedEver` are absent when the read was incomplete, `partial` and `truncated` say so) `list_sources` (`status?`, `produced?`, `limit?`: Sources with Replication Score and sub-scores, summary, Creative Family, selected and produced flags; not selected or produced first), `list_planned_contents` (`from?`/`to?` as `YYYY-MM-DD`, at most 92 days, `status?`, `limit?`: the editorial calendar, each entry with its `contentType`) `list_generation_sources` (`produced?`, `minReplicationScore?`, `sort?` `recent` or `score`, `limit?` max 25, `cursor?`), `get_source` and `get_production_recipe` (Recipe Generation, ADR-087, ADR-088: `list_generation_sources` and `get_source` work only while a generation runs for the Agent and read only the ready, non-excluded Sources the owner gave it; `list_sources` is refused then; `list_mission_types` also carries `creative`) and `get_strategic_memory` (the latest Strategic Memory with its period, references and date, or `exists: false`; never the Performance Report). The catalog is `apps/convex/internal_mcp/catalog.ts`; to add a tool, add its name to `INTERNAL_MCP_TOOL_NAMES` (`packages/agent-templates/src/internal-mcp.ts`) and its definition to the catalog.
 
 ## Source platform: logo, dedupe key and thumbnail (ADR-077)
 
@@ -132,7 +132,56 @@ Only the forms check `fields`; the backend does not. A Mission created another w
 
 A `select` field is a good fit for a small option (a platform, a tone). When the variants do not share the same fields or the same creative instructions (a video with a hook and one without, where "Text on the Hook" means nothing for the second), declare **one Mission type per variant** instead of a `format` field. Fields cannot depend on each other's value, and a Production Recipe is written for one Mission type of one Template: it has no way to say "only for this format".
 
-Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. To offer Production Recipes on a type, list `production-recipe` in its `contextProviders`; the Create Mission form then shows a "Production Recipe" choice, hidden while the Project has no active recipe for that type.
+Each type has its own `agentsMd`, so an Agent only reads the instructions of the variant it runs. Write the review contract, External Jobs and generative MCP call once in a `missionContract` section of `manifest.source.json`: they are copied into every Mission type that does not declare its own. A creative Mission type (`kind: creative`) always runs with a Production Recipe: the server refuses a Mission of it without an explicit compatible recipe, the Create Mission form preselects the Default Recipe, and the recipe is rendered in the Mission context as its own `Production Recipe` section, apart from the Mission Brief. No provider declaration is needed (the old `production-recipe` name is only tolerated in stored manifests of outdated versions).
+
+## Mission type kind and Bundled Recipes (ADR-091)
+
+The profile is `schemaVersion: 2`, for every Template (a Source or Strategy Template, with no Mission types, only changes its `schemaVersion`). Every Mission type declares `kind`, with no default and no third value:
+
+- `creative`: produces content, so a Production Recipe is required to create a Mission of it. It ships its own **Bundled Recipes**.
+- `operational`: anything else (engaging, linking). It declares no `recipes`.
+
+`kind` is independent of `publish`: a creative Mission type that declares no `publish` stays creative (it just cannot be planned).
+
+```yaml
+schemaVersion: 2
+missionTypes:
+  - type: create_article
+    kind: creative
+    agentsMd: create_article.md
+    label: Create article
+    payload: '{"keyword":""}'
+    recipes:
+      - id: freeform                      # unique within the Mission type
+        path: recipes/create_article/freeform.yml
+        default: true                     # exactly one Default Recipe
+      - id: how-to
+        path: recipes/create_article/how-to.yml
+  - type: internal_linking
+    kind: operational
+    agentsMd: internal_linking.md
+    label: Internal linking
+    payload: '{}'
+```
+
+Each recipe is a YAML file under `recipes/` at the package root (not under `workspace/`: the files are read by OpenGroow and never copied to the Agent's workspace, the Agent reads only the recipe chosen for a Mission). `path` is relative to the package root, must start with `recipes/` and end with `.yml`. A file holds exactly these keys:
+
+```yaml
+name: Freeform                  # required
+description: Neutral recipe that follows the Mission Brief.   # required
+prompt: Open with a surprising fact.   # optional
+instructions: Write what the Mission Brief asks for.          # required
+constraints:                    # required, may be []
+  - No more than 120 words
+```
+
+The Default Recipe should be neutral and follow the Mission Brief, so that a user can create freeform content without choosing a recipe. The same folder, git, hub and link installs carry `recipes/` since a package is installed whole.
+
+`pnpm template:validate <folder>` (and the `groowhub-cli` in a hub's CI) refuses, with the Mission type and recipe named: a missing or invalid `kind`, a creative type with no `recipes`, no or two defaults, a duplicate id, a missing or unsafe recipe file (outside `recipes/`, `..`, absolute, another extension) or an invalid one, and a `recipes` declaration on an operational type. Fixtures: `packages/agent-templates/src/__fixtures__/claw/studio` (a valid v2 package) and `legacy` (a stored v1).
+
+### Outdated versions
+
+A Template version stored under `schemaVersion: 1` is **outdated**. It is still read from its stored files (Missions, Artifacts, Publications and Recipe Snapshots keep their history; `kind` and `recipes` are not valid in it), but nothing new may start from it until the Project updates the Template. Whether a version is outdated is derived, never stored: `isTemplateVersionRunnable(manifest)` and `profileSchemaVersionOf(manifest)` from `@opengroow/agent-templates` read the `schemaVersion` the reader records on the manifest (absent means 1). `template:validate` refuses to publish a version 1 package. A deployment that does not know a `schemaVersion` refuses the version at install and update, leaving the current version untouched; this is why the Template releases can be prepared before the product is deployed.
 
 ## A default Schedule
 

@@ -12,6 +12,8 @@ import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import schema from "./schema";
 import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
+import { provisionCurrentTemplate } from "./bundled_recipes";
+import { isTemplateVersionRunnable } from "@opengroow/agent-templates/schema-version";
 
 export const migrations = new Migrations(components.migrations, { schema });
 
@@ -329,25 +331,18 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
 });
 
 /**
- * ADR-088: a Production Recipe depends on no Creative Family. Removes the field from every recipe; the rest of the
- * recipe and its versions are untouched. Idempotent. The field and its index leave the schema once this has run.
+ * ADR-091: existing Projects get the Bundled Recipes of their current Template versions. Idempotent (the one
+ * provisioning function): a Project already provisioned, or on a version below schemaVersion 2 (which ships none,
+ * and is provisioned when it applies the update), is left as it is.
  */
-export const dropRecipeFamily = migrations.define({
-  table: "productionRecipes",
-  migrateOne: async (ctx, recipe) => {
-    if (recipe.creativeFamilyId !== undefined) await ctx.db.patch(recipe._id, { creativeFamilyId: undefined });
-  },
-});
-
-/**
- * Archiving a Production Recipe was replaced by deleting it: a recipe has no status any more. Removes the field, so a
- * recipe archived before is usable (editable, offered to Missions and Content Plans) and deletable like any other.
- * Idempotent. The field leaves the schema once this has run.
- */
-export const dropRecipeStatus = migrations.define({
-  table: "productionRecipes",
-  migrateOne: async (ctx, recipe) => {
-    if (recipe.status !== undefined) await ctx.db.patch(recipe._id, { status: undefined });
+export const provisionBundledRecipes = migrations.define({
+  table: "installedTemplates",
+  // Each runnable row parses a whole package: keep the batches small.
+  batchSize: 10,
+  migrateOne: async (ctx, installed) => {
+    // An outdated version ships no recipes: decided from the stored manifest, before any package file is read.
+    if (!installed.current || !isTemplateVersionRunnable(installed.manifest)) return;
+    await provisionCurrentTemplate(ctx, installed.projectId, installed.templateId);
   },
 });
 
@@ -449,11 +444,10 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInSources,
   internal.migrations.renameCarouselTemplateIdInRuns,
   internal.migrations.describeHubPackages,
-  internal.migrations.dropRecipeFamily,
-  internal.migrations.dropRecipeStatus,
   internal.migrations.stripRecipeGenerationFamily,
   internal.migrations.dropSourceProduction,
   internal.migrations.deleteSourceRoutingJobs,
+  internal.migrations.provisionBundledRecipes,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

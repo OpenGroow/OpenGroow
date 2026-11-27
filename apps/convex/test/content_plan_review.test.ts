@@ -79,7 +79,7 @@ async function plan(fields: { status?: "draft" | "approved" | "rejected"; create
 const content = (planId: Id<"contentPlans">, over: Record<string, unknown> = {}) =>
   t.run((ctx) =>
     ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind: "video", missionType: "make_video", recipeId, sourceId,
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType: "video", missionType: "make_video", recipeId, sourceId,
       publishTargets: ["social:example"], title: "A title", brief: "A brief", plannedAt: "2030-03-06", intent: "exploit",
       rationale: "Why", status: "proposed", createdAt: 1, ...over,
     } as never),
@@ -101,11 +101,11 @@ describe("content_plan_review.current", () => {
     expect(draft).not.toHaveProperty("ownerId");
     expect(draft.contents.map((c) => c.title)).toEqual(["Sooner", "Later"]);
     expect(draft.contents[0]).toMatchObject({
-      kind: "video", intent: "explore", brief: "A brief", rationale: "Why",
+      contentType: "video", intent: "explore", brief: "A brief", rationale: "Why",
       recipe: { id: recipeId, name: "Reel recipe" }, source: { id: sourceId, label: "Article 1" },
     });
     expect(draft.contents[0]).not.toHaveProperty("ownerId");
-    expect(draft.quantities).toEqual([{ kind: "video", count: 2 }]);
+    expect(draft.quantities).toEqual([{ contentType: "video", count: 2 }]);
     expect(draft.distribution).toEqual({ explore: 1, exploit: 1 });
   });
 

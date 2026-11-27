@@ -39,9 +39,9 @@ useTemplateRegistry(
     fixtureTemplate(PLANNER, {
       mcpServers: [internalServer(TOOLS)],
       missionTypes: [
-        { type: "make_image", label: "Make image", agentsMd: "a.md", publish: { kind: "image", platforms: ["instagram"] }, contextProviders: ["observation-production-source"] },
-        { type: "write_article", label: "Write article", agentsMd: "b.md", publish: { kind: "article" } },
-        { type: "internal_note", label: "Note", agentsMd: "c.md" },
+        { type: "make_image", label: "Make image", agentsMd: "a.md", kind: "creative", publish: { kind: "image", platforms: ["instagram"] }, contextProviders: ["observation-production-source"] },
+        { type: "write_article", label: "Write article", agentsMd: "b.md", kind: "creative", publish: { kind: "article" } },
+        { type: "internal_note", label: "Note", agentsMd: "c.md", kind: "creative" },
       ],
     } as never),
     fixtureTemplate(LIMITED, { mcpServers: [internalServer(["get_brand_core"])] }),
@@ -84,7 +84,7 @@ async function family(projectId: string, name: string) {
   return t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: projectId, slug: name.toLowerCase(), name, description: "d" }));
 }
 async function recipe(projectId: string, creativeFamilyId: Id<"creativeFamilies">, name: string, missionType: string, templateId = PLANNER) {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d" }));
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, templateId, missionType, name, description: "d" }));
 }
 async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; scoring?: Record<string, number>; producedAt?: number; selectedAt?: number; creativeFamilyId?: Id<"creativeFamilies">; summary?: string } = {}) {
   return t.run((ctx) =>
@@ -99,22 +99,46 @@ async function source(projectId: string, label: string, o: { status?: string; ca
 async function planned(projectId: string, recipeId: Id<"productionRecipes">, plannedAt: string, o: { status?: string; title?: string } = {}) {
   return t.run(async (ctx) => {
     const planId = await ctx.db.insert("contentPlans", { ownerId: "owner", instanceId: projectId, runId: (await ctx.db.query("runs").first())!._id, periodStart: "2026-12-01", periodEnd: "2026-12-31", rationale: "r", status: "approved", createdAt: 1 } as never);
-    return ctx.db.insert("plannedContents", { ownerId: "owner", instanceId: projectId, planId, kind: "image", missionType: "make_image", recipeId, publishTargets: ["t1"], title: o.title ?? "T", brief: "b", plannedAt, intent: "explore", rationale: "r", status: (o.status ?? "approved") as never, createdAt: 1 } as never);
+    return ctx.db.insert("plannedContents", { ownerId: "owner", instanceId: projectId, planId, contentType: "image", missionType: "make_image", recipeId, publishTargets: ["t1"], title: o.title ?? "T", brief: "b", plannedAt, intent: "explore", rationale: "r", status: (o.status ?? "approved") as never, createdAt: 1 } as never);
   });
 }
 
 describe("list_mission_types and list_production_recipes: format and Source requirement", () => {
-  it("returns kind, platforms and sourceRequired per Mission type", async () => {
+  it("returns contentType, platforms and sourceRequired per Mission type", async () => {
     const token = await seedProject(PROJECT_A);
     const types = await call(token, "list_mission_types");
     expect(types).toEqual([
-      expect.objectContaining({ type: "internal_note", kind: null, platforms: [], sourceRequired: false }),
-      expect.objectContaining({ type: "make_image", label: "Make image", kind: "image", platforms: ["instagram"], sourceRequired: true }),
-      expect.objectContaining({ type: "write_article", kind: "article", platforms: [], sourceRequired: false }),
+      expect.objectContaining({ type: "internal_note", contentType: null, creative: true, platforms: [], sourceRequired: false }),
+      expect.objectContaining({ type: "make_image", label: "Make image", contentType: "image", platforms: ["instagram"], sourceRequired: true }),
+      expect.objectContaining({ type: "write_article", contentType: "article", platforms: [], sourceRequired: false }),
     ]);
   });
 
-  it("returns kind and sourceRequired per recipe, keeping the existing fields", async () => {
+  it("never returns the old kind as a Content Type, on a Mission type or a recipe", async () => {
+    const token = await seedProject(PROJECT_A);
+    const f = await family(PROJECT_A, "F");
+    await recipe(PROJECT_A, f, "Image recipe", "make_image");
+    const types = await call(token, "list_mission_types");
+    const out = await call(token, "list_production_recipes");
+    for (const entry of [...types, ...out.recipes]) expect(entry).not.toHaveProperty("kind");
+  });
+
+  it("returns the origin and Default of each recipe: a Bundled Recipe is bundled, the Default is marked, a Custom Recipe is custom", async () => {
+    const token = await seedProject(PROJECT_A);
+    const f = await family(PROJECT_A, "F");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: PLANNER, missionType: "make_image", name: "Default one", description: "d", bundledId: "freeform", isDefault: true } as never);
+      await ctx.db.insert("productionRecipes", { instanceId: PROJECT_A, templateId: PLANNER, missionType: "make_image", name: "Other bundled", description: "d", bundledId: "other" } as never);
+    });
+    await recipe(PROJECT_A, f, "Mine", "make_image");
+    const out = await call(token, "list_production_recipes");
+    const by = (name: string) => out.recipes.find((r: { name: string }) => r.name === name);
+    expect(by("Default one")).toMatchObject({ origin: "bundled", isDefault: true });
+    expect(by("Other bundled")).toMatchObject({ origin: "bundled", isDefault: false });
+    expect(by("Mine")).toMatchObject({ origin: "custom", isDefault: false });
+  });
+
+  it("returns contentType and sourceRequired per recipe, keeping the existing fields", async () => {
     const token = await seedProject(PROJECT_A);
     const f = await family(PROJECT_A, "F");
     await recipe(PROJECT_A, f, "Image recipe", "make_image");
@@ -122,9 +146,9 @@ describe("list_mission_types and list_production_recipes: format and Source requ
     await recipe(PROJECT_A, f, "Orphan", "gone_type", "example/uninstalled");
     const out = await call(token, "list_production_recipes");
     const by = (name: string) => out.recipes.find((r: { name: string }) => r.name === name);
-    expect(by("Image recipe")).toMatchObject({ kind: "image", sourceRequired: true, missionType: "make_image" });
-    expect(by("Article recipe")).toMatchObject({ kind: "article", sourceRequired: false });
-    expect(by("Orphan")).toMatchObject({ kind: null, sourceRequired: false });
+    expect(by("Image recipe")).toMatchObject({ contentType: "image", sourceRequired: true, missionType: "make_image" });
+    expect(by("Article recipe")).toMatchObject({ contentType: "article", sourceRequired: false });
+    expect(by("Orphan")).toMatchObject({ contentType: null, sourceRequired: false });
     expect(out).toHaveProperty("total", 3);
   });
 });
@@ -193,7 +217,7 @@ describe("list_planned_contents", () => {
     const out = await call(token, "list_planned_contents", { from: "2026-12-01", to: "2026-12-31" });
     expect(out.plannedContents.map((p: { title: string }) => p.title)).toEqual(["early", "late"]);
     expect(out.plannedContents[0]).toEqual({
-      plannedContentId: early, planId: expect.any(String), kind: "image", missionType: "make_image", recipeId: r, publishTargets: ["t1"],
+      plannedContentId: early, planId: expect.any(String), contentType: "image", missionType: "make_image", recipeId: r, publishTargets: ["t1"],
       title: "early", brief: "b", plannedAt: "2026-12-05", intent: "explore", rationale: "r", status: "approved", createdAt: 1,
     });
     expect(late).toBeTruthy();

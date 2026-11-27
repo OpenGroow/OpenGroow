@@ -18,8 +18,8 @@ const LONG_BRIEF = 280;
  * The media of a content. `thumbnailUrl` is for when a Mission has produced a media: nothing feeds it yet, so the
  * neutral placeholder with the format icon is what shows today.
  */
-export function ContentThumbnail({ kind, thumbnailUrl }: { kind: string; thumbnailUrl?: string }) {
-  const Icon = formatIcon(kind);
+export function ContentThumbnail({ contentType, thumbnailUrl }: { contentType: string; thumbnailUrl?: string }) {
+  const Icon = formatIcon(contentType);
   if (thumbnailUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={thumbnailUrl} alt="" className="aspect-video w-full rounded-xl border object-cover" />;
@@ -59,18 +59,18 @@ function Brief({ brief }: { brief: string }) {
 }
 
 export function Details({ item, instanceId }: { item: CalendarItem; instanceId: string }) {
-  const Icon = formatIcon(item.kind);
+  const Icon = formatIcon(item.contentType);
   const targets: CalendarTarget[] = item.targets ?? item.publishTargets.map((target) => ({ target, label: target }));
   return (
     <section aria-label="Content details" className="min-w-0">
       <Card className="grid min-w-0 gap-6 bg-gradient-to-br from-primary/10 via-card to-card p-5 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)]">
         <div className="grid min-w-0 content-start gap-4">
-          <ContentThumbnail kind={item.kind} />
+          <ContentThumbnail contentType={item.contentType} />
           <h3 className="m-0 break-words text-2xl font-semibold">{item.title}</h3>
           <div className="grid gap-2">
             <Row icon={<CalendarDays aria-hidden="true" />} label="">{formatDay(item.plannedAt)}</Row>
             <Row icon={<Shapes aria-hidden="true" />} label="Type:">
-              <Badge variant="tag" size="xs"><Icon aria-hidden="true" />{formatLabel(item.kind)}</Badge>
+              <Badge variant="tag" size="xs"><Icon aria-hidden="true" />{formatLabel(item.contentType)}</Badge>
             </Row>
             <Row icon={<Target aria-hidden="true" />} label="Intent:">
               <StatusBadge tone={item.intent === "explore" ? "info" : "neutral"} label={intentLabel(item.intent)} />

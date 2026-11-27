@@ -77,7 +77,7 @@ A Publication whose Mission was created with a **Recipe Snapshot**. Its Producti
 
 ### Unattributed Publication
 
-A Publication whose Mission has no Recipe Snapshot (created without a recipe, by a Schedule, from a Source's pipeline, or before recipes existed). It stays in the general analytics, is reported as unattributed, and contributes to no recipe aggregate. No attribution is invented for it.
+A Publication whose Mission has no Recipe Snapshot: one created before Recipe-first Production (ADR-091), or one of a Mission of an operational Mission type. Every Publication of a creative Mission created since is attributed, because its Mission always has a snapshot. It stays in the general analytics, is reported as unattributed, and contributes to no recipe aggregate. No attribution is invented for it.
 
 ### Postiz translation (V1)
 

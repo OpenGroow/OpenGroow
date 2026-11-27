@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "id": "@opengroow/seo",
   "name": "SEO Agent",
   "description": "A specialised marketing agent for search engine optimisation: site audits, SERP analysis, keyword research, article generation, and image generation.",
@@ -139,7 +140,9 @@
     }
   ],
   "generativeMcpCall": {
-    "create_article": { "toolName": "generate_article" }
+    "create_article": {
+      "toolName": "generate_article"
+    }
   },
   "externalJobsByMissionType": {
     "create_article": {

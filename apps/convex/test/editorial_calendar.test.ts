@@ -52,7 +52,7 @@ async function plan(periodStart: string, periodEnd: string, instanceId = INSTANC
 const content = (planId: Id<"contentPlans">, over: Record<string, unknown> = {}) =>
   t.run((ctx) =>
     ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind: "video", missionType: "make_video", recipeId,
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType: "video", missionType: "make_video", recipeId,
       publishTargets: ["social:example"], title: "A title", brief: "A brief", plannedAt: "2030-03-06", intent: "exploit",
       rationale: "Why", status: "approved", createdAt: 1, ...over,
     } as never),
@@ -71,7 +71,7 @@ describe("editorial_calendar.range", () => {
     const days = await owner().query(api.editorial_calendar.range, range);
     expect(days.truncated).toBe(false);
     expect(days.items.map((c) => c.title)).toEqual(["Sooner", "Later"]);
-    expect(days.items[0]).toMatchObject({ planId: b, plan: { periodStart: "2030-03-11", periodEnd: "2030-03-17" }, kind: "video", publishTargets: ["social:example"], brief: "A brief" });
+    expect(days.items[0]).toMatchObject({ planId: b, plan: { periodStart: "2030-03-11", periodEnd: "2030-03-17" }, contentType: "video", publishTargets: ["social:example"], brief: "A brief" });
     expect(days.items[0]).not.toHaveProperty("ownerId");
   });
 
@@ -108,7 +108,7 @@ describe("editorial_calendar.range", () => {
     await t.run(async (ctx) => {
       for (let i = 0; i < 501; i++) {
         await ctx.db.insert("plannedContents", {
-          ownerId: OWNER.subject, instanceId: INSTANCE, planId: a, kind: "video", missionType: "make_video", recipeId,
+          ownerId: OWNER.subject, instanceId: INSTANCE, planId: a, contentType: "video", missionType: "make_video", recipeId,
           publishTargets: ["social:example"], title: `T${i}`, brief: "B", plannedAt: "2030-03-06", intent: "exploit", rationale: "W", status: "approved", createdAt: 1,
         } as never);
       }

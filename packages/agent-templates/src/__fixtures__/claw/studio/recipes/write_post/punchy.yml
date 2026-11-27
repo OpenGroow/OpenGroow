@@ -1,0 +1,7 @@
+name: Punchy
+description: Short sentences and a strong opening line.
+prompt: Open with the most surprising fact.
+instructions: Keep sentences under fifteen words and end with a question.
+constraints:
+  - No more than 120 words
+  - No emoji

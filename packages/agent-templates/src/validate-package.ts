@@ -6,6 +6,7 @@
  * CLI that Template repositories run in CI, never the package entrypoint.
  */
 import { clawPackageToTemplate } from "./claw-package.js";
+import { CURRENT_PROFILE_SCHEMA_VERSION, isTemplateVersionRunnable, profileSchemaVersionOf } from "./schema-version.js";
 import { readPackageFolder, type PackageFile } from "./package-folder.js";
 
 export type PackageValidation =
@@ -32,6 +33,12 @@ export function validatePackage(files: readonly PackageFile[], options: { tag?: 
   const id = converted.template.manifest.id;
 
   const errors: string[] = [];
+  // The reader still reads version 1 (stored versions keep their history), but nothing new is published under it.
+  if (!isTemplateVersionRunnable(converted.template.manifest)) {
+    errors.push(
+      `profiles/opengroow.yml: schemaVersion ${profileSchemaVersionOf(converted.template.manifest)} is outdated: publish under schemaVersion ${CURRENT_PROFILE_SCHEMA_VERSION} (kind on every Mission type, Bundled Recipes for the creative ones)`,
+    );
+  }
   const version = readVersion(files.find((f) => f.path === "package.json")?.content);
   if (version === undefined || !SEMVER.test(version)) {
     errors.push('package.json "version" must be a semver version like 1.2.3');

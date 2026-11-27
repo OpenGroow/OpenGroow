@@ -29,7 +29,7 @@ const OWNER = { name: "Owner", email: "owner@example.com", tokenIdentifier: "tes
 const NOW = Date.UTC(2030, 2, 4, 10, 0, 0);
 const SUCCESS = { status: "success" as const, summary: "Content Plan received" };
 
-const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, ...extra });
+const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, kind: "creative", ...extra });
 const producer = () => {
   const base = loadFixtureTemplate(TEMPLATE);
   return {
@@ -41,7 +41,7 @@ const producer = () => {
         mission("make_post", { publish: { kind: "image" } }),
         mission("make_carousel", { publish: { kind: "carousel" }, contextProviders: ["observation-production-source"] }),
         mission("make_tiktok", { publish: { kind: "video", platforms: ["tiktok"] } }),
-        mission("research"),
+        mission("research", { kind: "operational" }),
       ],
     },
   } as unknown as ReturnType<typeof loadFixtureTemplate>;
@@ -76,7 +76,7 @@ beforeEach(async () => {
     familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "F", description: "d" });
   });
   jobId = (await t.run((ctx) => ctx.db.query("jobs").collect())).find((job) => job.type === "content_planning")!._id;
-  await owner().mutation(api.content_planning_jobs.setConfig, { jobId, planningDays: 7, productionTargets: [{ kind: "video", quantity: 3, publishTargets: ["social:example"] }] });
+  await owner().mutation(api.content_planning_jobs.setConfig, { jobId, planningDays: 7, productionTargets: [{ contentType: "video", quantity: 3, publishTargets: ["social:example"] }] });
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -85,7 +85,7 @@ afterEach(() => {
 
 const DAY = 86_400_000;
 const recipe = () =>
-  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never));
+  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never));
 const getJob = () => t.run((ctx) => ctx.db.get(jobId));
 const runs = () => t.run((ctx) => ctx.db.query("runs").collect());
 const contents = () => t.run((ctx) => ctx.db.query("plannedContents").collect());

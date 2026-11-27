@@ -11,6 +11,7 @@ import { requireValidTarget } from "./production_recipes.js";
 import { buildRecipeGenerationRunFile } from "./recipe_generation_run_file.js";
 import { parseRecipeResult } from "./recipe_proposal.js";
 import type { RunResult } from "./run_result.js";
+import { assertNewRunAllowed, newRunBlock } from "./template_runnable.js";
 import {
   MAX_GENERATION_SOURCES,
   isReadableSource,
@@ -107,6 +108,7 @@ export const generateRecipe = mutation({
     if (!idea && sourceIds.length === 0) throw new Error("A Recipe Generation needs a free idea or at least one Source that is ready.");
     const agent = await eligibleAgent(ctx, args.instanceId);
     if (!agent) throw new Error("No active Agent of this Project declares the tools a Recipe Generation needs.");
+    await assertNewRunAllowed(ctx, args.instanceId, agent.templateId);
     if (await runInFlight(ctx, args.instanceId, agent.templateId)) throw new Error("Agent busy: it is working on another Run, try again when it is done.");
     const now = Date.now();
     const input = { idea, sourceIds, instructions };
@@ -158,6 +160,14 @@ export async function failRecipeGenerationRun(ctx: MutationCtx, run: Doc<"runs">
   if (!("recipeGeneration" in run) || !run.recipeGeneration) return;
   const pin = run.recipeGeneration;
   if (!reasons || pin.tryCount >= MAX_RECIPE_GENERATION_TRIES) {
+    await scheduleGenerationFilesCleanup(ctx, run);
+    return;
+  }
+  // ADR-091: the next try is a new Run, refused on an outdated Template; this try is the last one and says why.
+  const block = await newRunBlock(ctx, run.instanceId, run.templateId);
+  if (block) {
+    const settled = await ctx.db.get(run._id);
+    await ctx.db.patch(run._id, { errorMessage: settled?.errorMessage ? `${settled.errorMessage} Not retried: ${block}` : block });
     await scheduleGenerationFilesCleanup(ctx, run);
     return;
   }

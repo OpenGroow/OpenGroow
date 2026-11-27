@@ -29,13 +29,13 @@ export const range = query({
       return [id, plan && plan.instanceId === args.instanceId ? { periodStart: plan.periodStart, periodEnd: plan.periodEnd } : null] as const;
     }));
     const items = rows.map((row) => {
-      const { _id, planId, kind, title, brief, plannedAt, intent, rationale, publishTargets } = row;
+      const { _id, planId, title, brief, plannedAt, intent, rationale, publishTargets } = row;
       // `targets`: each publish target resolved for display (same label rule as the Content Plans page).
       const targets = publishTargets.map((target) => {
         const found = channelOf(publishers, target);
         return found ? { target, label: channelLabel(found.channel), service: found.channel.channelService, adapter: found.publisher.adapter } : { target, label: target };
       });
-      return { _id, planId, kind, title, brief, plannedAt, intent, rationale, publishTargets, targets, plan: plans.get(planId) ?? null };
+      return { _id, planId, contentType: row.contentType, title, brief, plannedAt, intent, rationale, publishTargets, targets, plan: plans.get(planId) ?? null };
     });
     // `truncated`: the range holds more contents than are returned, so the calendar must say it shows only part of it.
     return { items, truncated };

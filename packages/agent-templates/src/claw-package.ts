@@ -22,8 +22,11 @@
  *   the manifest references (Mission types, Sources, Jobs), at the same
  *   relative path the manifest declares.
  * - `profiles/opengroow.yml` — the rest of the manifest, as JSON-compatible YAML,
- *   plus `schemaVersion`. Validated by `validateManifest`, so unknown keys are
- *   refused (#644). Its `openclawProfile` carries what OpenClaw's native
+ *   plus `schemaVersion` (2 today; 1 is still read for stored versions and is
+ *   outdated, ADR-091). Validated by `validateManifest`, so unknown keys are
+ *   refused (#644). A creative Mission type's Bundled Recipes are the YAML
+ *   files it lists under `recipes/`, read into `AgentTemplate.recipes` and
+ *   never copied to the workspace. Its `openclawProfile` carries what OpenClaw's native
  *   profile cannot (`execNode`).
  * - `profiles/openclaw.yml` — optional NATIVE OpenClaw agent profile
  *   (`schemaVersion: 1`, `agent.tools.deny`), merged into the Template's
@@ -42,6 +45,8 @@
  */
 
 import { type Document, isAlias, isMap, isNode, isScalar, parse, parseDocument, visit } from "yaml";
+import { readBundledRecipes } from "./bundled-recipes";
+import { SUPPORTED_PROFILE_SCHEMA_VERSIONS } from "./schema-version";
 import { expandManifestSource, type ManifestSource } from "./expand-manifest-source";
 import { validateManifest } from "./index";
 import { collectTemplatePlugins } from "./template-plugins";
@@ -54,16 +59,6 @@ export type ClawPackageResult =
   | { ok: true; template: AgentTemplate }
   | { ok: false; reason: string };
 
-/** The profile schema version this deployment writes and reads. */
-export const CURRENT_PROFILE_SCHEMA_VERSION = 1;
-/**
- * Schema versions this deployment reads. The policy is the current one and the
- * previous one (N and N-1), but version 1 is the first: the first breaking
- * change (version 2) must add version 1's read path here.
- */
-export const SUPPORTED_PROFILE_SCHEMA_VERSIONS: readonly number[] = [
-  CURRENT_PROFILE_SCHEMA_VERSION,
-];
 /** Maximum size of `profiles/opengroow.yml`, per the OpenClaw profile rules. */
 export const MAX_PROFILE_BYTES = 256 * 1024;
 
@@ -310,9 +305,10 @@ export function clawPackageToTemplate(files: ClawPackageFiles): ClawPackageResul
 
   const profile = readProfile(files[PROFILE_PATH]);
   if (!profile.ok) return profile;
-  const { schemaVersion, ...rest } = profile.value;
-  const versionProblem = checkSchemaVersion(schemaVersion);
+  const { schemaVersion: declaredVersion, ...rest } = profile.value;
+  const versionProblem = checkSchemaVersion(declaredVersion);
   if (versionProblem) return fail(versionProblem);
+  const schemaVersion = declaredVersion as number;
   for (const key of ["id", "name", "description", "skills"]) {
     if (key in rest) {
       const home = key === "id" ? `the "name" of ${PACKAGE_JSON_PATH}` : CLAW_PATH;
@@ -341,10 +337,15 @@ export function clawPackageToTemplate(files: ClawPackageFiles): ClawPackageResul
     name: identity.value.name,
     description: identity.value.description,
     ...expanded,
+    schemaVersion,
     ...(skills.value.length > 0 ? { skills: skills.value } : {}),
   });
   if (!validation.ok) return fail(`${PROFILE_PATH}: ${validation.reason}`);
   const { manifest } = validation;
+
+  // Version 2 ships its Bundled Recipes in `recipes/`; the files are read here and never reach the workspace.
+  const recipes = schemaVersion === 1 ? undefined : readBundledRecipes(manifest.missionTypes ?? [], files);
+  if (recipes && !recipes.ok) return fail(`${PROFILE_PATH}: ${recipes.reason}`);
 
   const agentsMd = files[AGENTS_PATH];
   if (agentsMd === undefined) return fail(`${AGENTS_PATH} is missing`);
@@ -366,6 +367,7 @@ export function clawPackageToTemplate(files: ClawPackageFiles): ClawPackageResul
       manifest,
       agentsMd,
       ...(plugins.plugins.length > 0 ? { plugins: plugins.plugins } : {}),
+      ...(recipes && recipes.value.length > 0 ? { recipes: recipes.value } : {}),
       ...(missionAgentsMd.value ? { missionAgentsMd: missionAgentsMd.value } : {}),
       ...(sourceInstructions.value ? { sourceInstructions: sourceInstructions.value } : {}),
       ...(jobInstructions.value ? { jobInstructions: jobInstructions.value } : {}),

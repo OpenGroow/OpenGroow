@@ -1,4 +1,4 @@
-schemaVersion: 1
+schemaVersion: 2
 category: marketing
 mcpServers:
   - name: article-mcp
@@ -23,6 +23,11 @@ statusCheck:
   mcpTool: get_project_status
 missionTypes:
   - type: create_article
+    kind: creative
+    recipes:
+      - id: freeform
+        path: recipes/create_article/freeform.yml
+        default: true
     agentsMd: create_article.md
     label: Create article
     payload: '{"keyword":""}'
@@ -73,6 +78,7 @@ missionTypes:
         label: Keyword batch pending human validation
         resolutionKind: link
   - type: internal_linking
+    kind: operational
     agentsMd: internal_linking.md
     label: Internal linking
     payload: '{"since":""}'

@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "id": "sources-fixture",
   "name": "Sources fixture",
   "description": "Test fixture: a Template declaring three Sources, one with enrichment and one with a platform.",

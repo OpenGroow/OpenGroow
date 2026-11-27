@@ -8,7 +8,7 @@ import { createInMemoryTemplateRegistry } from "@opengroow/agent-templates/regis
 import { setTemplateRegistryForTests } from "../template_registry";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate } from "./helpers/template_registry.helpers";
-import { appendContextProviders, renderProductionRecipeSection } from "../mission_dispatcher/context_providers";
+import { renderProductionRecipeSection } from "../mission_dispatcher/context_providers";
 
 const modules = {
   "../_generated/api.ts": () => import("../_generated/api.js"),
@@ -37,19 +37,19 @@ const TEMPLATE_ID = "@example/video";
 const OWNER = { name: "Owner", email: "o@example.com", tokenIdentifier: "test|owner-mr", subject: "owner-mr" };
 const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|stranger-mr", subject: "stranger-mr" };
 
-const missionType = (providers: string[]) => ({
+const missionType = (kind: "creative" | "operational") => ({
   type: "create_letter_video",
+  kind,
   label: "Letter video",
-  contextProviders: providers,
   fields: [
     { key: "format", label: "Format", type: "select", options: [{ value: "hook", label: "Hook" }, { value: "letter", label: "Letter" }] },
   ],
 });
 
-/** 1.0.0 is current and has no provider; 2.0.0 is staged and declares it. */
-function templateVersion(label: string, providers: string[]): AgentTemplate {
+/** 1.0.0 is current and operational for this type; 2.0.0 is staged and creative. */
+function templateVersion(label: string, kind: "creative" | "operational"): AgentTemplate {
   return {
-    ...fixtureTemplate(TEMPLATE_ID, { missionTypes: [missionType(providers)] } as never),
+    ...fixtureTemplate(TEMPLATE_ID, { missionTypes: [missionType(kind)] } as never),
     agentsMd: `# Base ${label}\n`,
     missionAgentsMd: { create_letter_video: `# Mission ${label}\n` },
   };
@@ -59,8 +59,8 @@ beforeEach(() => {
   setTemplateRegistryForTests(
     createInMemoryTemplateRegistry(
       [INSTANCE, OTHER_INSTANCE].flatMap((projectId) => [
-        { projectId, version: "1.0.0", template: templateVersion("v1", []) },
-        { projectId, version: "2.0.0", template: templateVersion("v2", ["production-recipe"]) },
+        { projectId, version: "1.0.0", template: templateVersion("v1", "operational") },
+        { projectId, version: "2.0.0", template: templateVersion("v2", "creative") },
       ]),
     ),
   );
@@ -155,11 +155,34 @@ describe("missions.create with a recipe", () => {
     ).rejects.toThrow(/not written for/);
   });
 
-  it("refuses a pinned version that does not declare the provider", async () => {
-    const { recipe, create } = await setup();
+  it("refuses a Mission type that is not creative in the pinned Template version", async () => {
+    const { t, recipe, create } = await setup();
     const recipeId = await recipe();
-    // No templateVersion: the Mission pins the current 1.0.0.
-    await expect(create({ recipe: { recipeId } })).rejects.toThrow(/production-recipe/);
+    // No templateVersion: the Mission pins the current 1.0.0, where the type is operational.
+    await expect(create({ recipe: { recipeId } })).rejects.toThrow(/not creative/);
+    expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
+  });
+
+  it("refuses a creative Mission without a recipe and creates nothing", async () => {
+    const { t, create } = await setup();
+    await expect(create({ templateVersion: "2.0.0" })).rejects.toThrow(/requires a Production Recipe/);
+    expect(await t.run((ctx) => ctx.db.query("missions").collect())).toHaveLength(0);
+    expect(await t.run((ctx) => ctx.db.query("runs").collect())).toHaveLength(0);
+  });
+
+  it("never picks or provisions a recipe: with no recipe at all the refusal is the same", async () => {
+    const { t, create } = await setup();
+    await expect(create({ templateVersion: "2.0.0" })).rejects.toThrow(/requires a Production Recipe/);
+    expect(await t.run((ctx) => ctx.db.query("productionRecipes").collect())).toHaveLength(0);
+  });
+
+  it("refuses the internal Schedule path without a recipe like the public one", async () => {
+    const { t } = await setup();
+    await expect(
+      t.mutation(internal.missions.createForOwner, {
+        ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload: { format: "hook" },
+      } as never),
+    ).resolves.toBeDefined(); // pinned to the current 1.0.0 where the type is operational: unchanged
   });
 
   it("refuses a deleted recipe", async () => {
@@ -185,8 +208,9 @@ describe("missions.create with a recipe", () => {
 
 describe("missions.create templateVersion", () => {
   it("pins a staged installed version and dispatches on it", async () => {
-    const { t, create } = await setup();
-    const { missionId, runId } = await create({ templateVersion: "2.0.0" });
+    const { t, create, recipe } = await setup();
+    const recipeId = await recipe();
+    const { missionId, runId } = await create({ templateVersion: "2.0.0", recipe: { recipeId } });
     expect((await t.run((ctx) => ctx.db.get(missionId)))?.templateVersion).toBe("2.0.0");
     await t.action(internal.mission_dispatcher_node.dispatchPendingRuns, {});
     const files = await t.run(async (ctx) => {
@@ -242,9 +266,9 @@ describe("Recipe Snapshot in context.md", () => {
     expect(section(await dispatched(t, retry))).toBe(section(first));
   });
 
-  it("leaves a Mission without a recipe unchanged", async () => {
+  it("renders no recipe section for an operational Mission", async () => {
     const { t, create } = await setup();
-    const { runId } = await create({ templateVersion: "2.0.0" });
+    const { runId } = await create({});
     await t.action(internal.mission_dispatcher_node.dispatchPendingRuns, {});
     expect(await dispatched(t, runId)).not.toContain("Production Recipe");
   });
@@ -274,7 +298,6 @@ describe("renderProductionRecipeSection", () => {
   it("omits the prompt subsection without a prompt and renders nothing without a snapshot", () => {
     expect(renderProductionRecipeSection({ ...snapshot, prompt: undefined })).not.toContain("Prompt (verbatim)");
     expect(renderProductionRecipeSection(null)).toBeNull();
-    expect(appendContextProviders("base", ["production-recipe"], { "production-recipe": null })).toBe("base");
   });
   it("keeps a prompt containing backticks verbatim", () => {
     const md = renderProductionRecipeSection({ ...snapshot, prompt: "use ``` fences" })!;

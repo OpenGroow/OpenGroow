@@ -4,10 +4,11 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { ownerIdsFor, requireOwnedRow } from "./instance_ownership.js";
 import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
 import { getTemplateRegistry } from "./template_registry.js";
+import { skipJobOnOutdatedTemplate } from "./jobs_outdated.js";
 import { allChannels, projectPublishers } from "./project_publishers.js";
 import { standaloneInFlight } from "./recipe_generation_shared.js";
 import { startRun } from "./content_planning_runs.js";
-import { approvedCountsByKind } from "./content_plan_counts.js";
+import { approvedCountsByContentType } from "./content_plan_counts.js";
 import { CONTENT_PLANNING_JOB_TYPE, runtimeOf, type ContentPlanningPins, type Runtime } from "./content_planning_shared.js";
 import { planningPeriodOf, remainingOf } from "@opengroow/protocol/content-planning-pins";
 import {
@@ -83,7 +84,7 @@ export const setConfig = mutation({
   args: {
     jobId: v.id("jobs"),
     planningDays: v.number(),
-    productionTargets: v.array(v.object({ kind: v.string(), quantity: v.number(), publishTargets: v.array(v.string()) })),
+    productionTargets: v.array(v.object({ contentType: v.string(), quantity: v.number(), publishTargets: v.array(v.string()) })),
   },
   handler: async (ctx, args) => {
     const job = await loadOwnedJob(ctx, args.jobId);
@@ -134,7 +135,7 @@ function invalidStoredConfig(config: unknown): string | null {
   const stored = config === undefined || config === null ? defaultContentPlanningConfig() : config;
   const targets = productionTargetsOf(stored);
   const checked = validateContentPlanningConfig(stored, {
-    formats: targets.map((target) => target.kind),
+    formats: targets.map((target) => target.contentType),
     publishTargets: targets.flatMap((target) => target.publishTargets),
   });
   return checked.ok ? null : `The stored configuration is invalid: ${checked.errors.join(" ")}`;
@@ -150,19 +151,19 @@ async function hasRunInFlight(ctx: MutationCtx, job: Doc<"jobs">): Promise<boole
 async function pinsFor(
   ctx: MutationCtx,
   job: Doc<"jobs">,
-  usable: readonly { kind: string; quantity: number; publishTargets: string[] }[],
+  usable: readonly { contentType: string; quantity: number; publishTargets: string[] }[],
   ignored: readonly string[],
   now: number,
 ): Promise<ContentPlanningPins> {
   const { periodStart, periodEnd } = planningPeriodOf(now, planningDaysOf(job.config));
   // Approved Planned Contents of the period, from any plan; Missions and Publications outside plans never count.
-  const approved = await approvedCountsByKind(ctx, job.instanceId, periodStart, periodEnd);
+  const approved = await approvedCountsByContentType(ctx, job.instanceId, periodStart, periodEnd);
   return {
     periodStart,
     periodEnd,
     targets: usable.map((entry) => {
-      const existing = approved.get(entry.kind) ?? 0;
-      return { kind: entry.kind, target: entry.quantity, existing, remaining: remainingOf(entry.quantity, existing), publishTargets: entry.publishTargets };
+      const existing = approved.get(entry.contentType) ?? 0;
+      return { contentType: entry.contentType, target: entry.quantity, existing, remaining: remainingOf(entry.quantity, existing), publishTargets: entry.publishTargets };
     }),
     ignored: [...ignored],
   };
@@ -181,6 +182,7 @@ export const tick = internalMutation({
     for (const job of due) {
       const manual = job.runNowAt !== undefined;
       if (job.state === "paused" && !manual) continue;
+      if (await skipJobOnOutdatedTemplate(ctx, job, now)) continue;
       // A Standalone Run holds the Agent (ADR-087): postpone without writing, the Job stays due and a Run Now stays queued.
       if (await standaloneInFlight(ctx, job.instanceId, job.templateId)) continue;
       const restorePaused = manual && runtimeOf(job).runNowRestorePaused === true;

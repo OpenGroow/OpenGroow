@@ -7,19 +7,16 @@ import {
   query,
 } from "./_generated/server.js";
 import { internal } from "./_generated/api.js";
-import { scheduleUnitV } from "./validators.js";
-import { computeNextRunAt, type Frequency } from "./schedules/frequency.js";
+import type { Id } from "./_generated/dataModel.js";
+import { frequencyV } from "./validators.js";
+import { computeNextRunAt, frequencyOf } from "./schedules/frequency.js";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
+import { createManualMission, insertMissionAndDispatch } from "./missions.js";
+import { newRunBlock } from "./template_runnable.js";
 import { assertValidPublishAt } from "./publish_at.js";
+import { assertScheduleRunnable, defaultRecipeOf, resolveScheduleRecipe } from "./schedule_recipes.js";
+import { isCreativeMissionType } from "./mission_recipe.js";
 import { assertKnownPublishTargets, assertPayloadChannelsSupportMissionType, assertPayloadSchedulable } from "./publication_targets.js";
-
-export const frequencyV = v.object({
-  unit: scheduleUnitV,
-  dayOfWeek: v.optional(v.number()),
-  dayOfMonth: v.optional(v.number()),
-  hour: v.number(),
-  minute: v.number(),
-});
 
 export const create = mutation({
   args: {
@@ -30,6 +27,8 @@ export const create = mutation({
     frequency: frequencyV,
     timezone: v.string(),
     autoPublish: v.optional(v.boolean()),
+    // Required for a creative Mission type (ADR-091): the form preselects the Default Recipe.
+    recipeId: v.optional(v.id("productionRecipes")),
   },
   handler: async (ctx, args) => {
     assertValidPublishAt(args.payload);
@@ -38,7 +37,9 @@ export const create = mutation({
     await assertPayloadChannelsSupportMissionType(ctx, args);
     await assertPayloadSchedulable(ctx, args.instanceId, args.payload);
 
-    const frequency = args.frequency as Frequency;
+    const recipeId = await resolveScheduleRecipe(ctx, args);
+
+    const frequency = frequencyOf(args.frequency);
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, args.timezone, now);
 
@@ -48,12 +49,9 @@ export const create = mutation({
       templateId: args.templateId,
       type: args.type,
       payload: args.payload,
+      ...(recipeId ? { recipeId } : {}),
       ...(args.autoPublish !== undefined ? { autoPublish: args.autoPublish } : {}),
-      unit: frequency.unit,
-      ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
-      ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
-      hour: frequency.hour,
-      minute: frequency.minute,
+      ...frequency,
       timezone: args.timezone,
       status: "active",
       nextRunAt,
@@ -83,20 +81,36 @@ export const createDefaults = internalMutation({
       .withIndex("by_instance_template", (q) => q.eq("instanceId", args.instanceId).eq("templateId", args.templateId))
       .collect();
     const now = Date.now();
+    // Resolve every recipe first: a creative Default Schedule records its Default Recipe explicitly. Agent activation
+    // provisions the Bundled Recipes just before calling this, and provisioning guarantees one (the package validator
+    // requires exactly one), so a missing one is an integrity problem (recipes not provisioned, Template outdated):
+    // fail with nothing created rather than skip it silently. The caller (Agent activation) records the error without
+    // failing the activation, and the next activation retries.
+    const pending: { entry: (typeof args.defaults)[number]; recipeId: Id<"productionRecipes"> | undefined }[] = [];
+    const missing: string[] = [];
     for (const entry of args.defaults) {
       if (existing.some((schedule) => schedule.type === entry.type)) continue;
-      const frequency = entry.frequency as Frequency;
+      if (!(await isCreativeMissionType(ctx, args.instanceId, args.templateId, entry.type))) {
+        pending.push({ entry, recipeId: undefined });
+        continue;
+      }
+      const recipe = await defaultRecipeOf(ctx, args.instanceId, args.templateId, entry.type);
+      if (recipe) pending.push({ entry, recipeId: recipe._id });
+      else missing.push(entry.type);
+    }
+    if (missing.length > 0) {
+      throw new Error(`Default Schedules of ${args.templateId} not created: no Default Recipe for the creative Mission type(s) ${missing.join(", ")}`);
+    }
+    for (const { entry, recipeId } of pending) {
+      const frequency = frequencyOf(entry.frequency);
       await ctx.db.insert("schedules", {
         ownerId,
         instanceId: args.instanceId,
         templateId: args.templateId,
         type: entry.type,
         payload: entry.payload,
-        unit: frequency.unit,
-        ...(frequency.dayOfWeek !== undefined ? { dayOfWeek: frequency.dayOfWeek } : {}),
-        ...(frequency.dayOfMonth !== undefined ? { dayOfMonth: frequency.dayOfMonth } : {}),
-        hour: frequency.hour,
-        minute: frequency.minute,
+        ...(recipeId ? { recipeId } : {}),
+        ...frequency,
         timezone: args.timezone,
         status: "active",
         nextRunAt: computeNextRunAt(frequency, args.timezone, now),
@@ -125,16 +139,26 @@ export const resume = mutation({
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
+    const frequency = frequencyOf(schedule);
     const now = Date.now();
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
-    await ctx.db.patch(args.scheduleId, { status: "active", nextRunAt, updatedAt: now });
+    await assertScheduleRunnable(ctx, schedule);
+    // A Mission type that became operational needs no recipe: the stale reason goes with the resume.
+    await ctx.db.patch(args.scheduleId, { status: "active", pausedReason: undefined, nextRunAt, updatedAt: now });
+  },
+});
+
+// Sets the recipe of a Schedule: required to fix a Schedule paused as "recipe unavailable". The reason clears; the
+// Schedule keeps its status, so the user resumes it when ready.
+export const setRecipe = mutation({
+  args: { scheduleId: v.id("schedules"), recipeId: v.id("productionRecipes") },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    const recipeId = await resolveScheduleRecipe(ctx, { ...schedule, recipeId: args.recipeId });
+    await ctx.db.patch(args.scheduleId, { recipeId, pausedReason: undefined, updatedAt: Date.now() });
   },
 });
 
@@ -146,7 +170,7 @@ export const updateFrequency = mutation({
     if (!schedule) throw new Error("Forbidden");
     const ownerId = await ownerIdFor(ctx, schedule.instanceId);
     if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
-    const frequency = args.frequency as Frequency;
+    const frequency = frequencyOf(args.frequency);
     const now = Date.now();
     await ctx.db.patch(args.scheduleId, {
       unit: frequency.unit,
@@ -191,6 +215,24 @@ export const setAutoPublish = mutation({
   },
 });
 
+// "Run now": a Mission from the Schedule's own type, payload and recipe, through the same validation as the tick and
+// the Composer. The recipe is read here, never taken from the client.
+export const runNow = mutation({
+  args: { scheduleId: v.id("schedules") },
+  handler: async (ctx, args) => {
+    const schedule = await ctx.db.get(args.scheduleId);
+    if (!schedule) throw new Error("Forbidden");
+    const ownerId = await ownerIdFor(ctx, schedule.instanceId);
+    if (schedule.ownerId !== ownerId) throw new Error("Forbidden");
+    return await createManualMission(
+      ctx,
+      ownerId,
+      { instanceId: schedule.instanceId, templateId: schedule.templateId, type: schedule.type, payload: schedule.payload },
+      schedule.recipeId ? { recipeId: schedule.recipeId } : undefined,
+    );
+  },
+});
+
 export const remove = mutation({
   args: { scheduleId: v.id("schedules") },
   handler: async (ctx, args) => {
@@ -231,29 +273,34 @@ export const listDueActive = internalQuery({
   },
 });
 
-export const advanceNextRun = internalMutation({
-  args: { scheduleId: v.id("schedules"), lastMissionId: v.optional(v.id("missions")) },
+/**
+ * One due occurrence of a Schedule, in one transaction: its Mission is created and its next occurrence advanced. When
+ * its Template is outdated (ADR-091) the occurrence passes without a Mission and without an error, and the Schedule
+ * keeps its status: only the next occurrence moves, so it resumes by itself once the Template is updated. A refused
+ * Mission throws, writing nothing; the tick records the error.
+ */
+export const fireOccurrence = internalMutation({
+  args: { scheduleId: v.id("schedules") },
   handler: async (ctx, args) => {
     const schedule = await ctx.db.get(args.scheduleId);
     if (!schedule) return;
-
     const now = Date.now();
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
-    const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
-
-    await ctx.db.patch(args.scheduleId, {
-      nextRunAt,
-      lastRunAt: now,
-      lastError: undefined,
-      ...(args.lastMissionId !== undefined ? { lastMissionId: args.lastMissionId } : {}),
-      updatedAt: now,
+    const nextRunAt = computeNextRunAt(frequencyOf(schedule), schedule.timezone, now);
+    if (await newRunBlock(ctx, schedule.instanceId, schedule.templateId)) {
+      await ctx.db.patch(schedule._id, { nextRunAt });
+      return;
+    }
+    const { missionId } = await insertMissionAndDispatch(ctx, {
+      ownerId: schedule.ownerId,
+      instanceId: schedule.instanceId,
+      templateId: schedule.templateId,
+      type: schedule.type,
+      payload: schedule.payload,
+      // The same validation as the Composer: a creative Mission type without a compatible recipe is refused.
+      ...(schedule.recipeId ? { recipe: { recipeId: schedule.recipeId } } : {}),
+      ...(schedule.autoPublish !== undefined ? { autoPublish: schedule.autoPublish } : {}),
     });
+    await ctx.db.patch(schedule._id, { nextRunAt, lastRunAt: now, lastError: undefined, lastMissionId: missionId, updatedAt: now });
   },
 });
 
@@ -264,13 +311,7 @@ export const recordError = internalMutation({
     if (!schedule) return;
 
     const now = Date.now();
-    const frequency: Frequency = {
-      unit: schedule.unit,
-      ...(schedule.dayOfWeek !== undefined ? { dayOfWeek: schedule.dayOfWeek } : {}),
-      ...(schedule.dayOfMonth !== undefined ? { dayOfMonth: schedule.dayOfMonth } : {}),
-      hour: schedule.hour,
-      minute: schedule.minute,
-    };
+    const frequency = frequencyOf(schedule);
     const nextRunAt = computeNextRunAt(frequency, schedule.timezone, now);
 
     await ctx.db.patch(args.scheduleId, {
@@ -288,18 +329,7 @@ export const tick = internalAction({
     const due = await ctx.runQuery(internal.schedules.listDueActive, { now: Date.now() });
     for (const schedule of due) {
       try {
-        const { missionId } = await ctx.runMutation(internal.missions.createForOwner, {
-          ownerId: schedule.ownerId,
-          instanceId: schedule.instanceId,
-          templateId: schedule.templateId,
-          type: schedule.type,
-          payload: schedule.payload,
-          ...(schedule.autoPublish !== undefined ? { autoPublish: schedule.autoPublish } : {}),
-        });
-        await ctx.runMutation(internal.schedules.advanceNextRun, {
-          scheduleId: schedule._id,
-          lastMissionId: missionId,
-        });
+        await ctx.runMutation(internal.schedules.fireOccurrence, { scheduleId: schedule._id });
       } catch (err) {
         await ctx.runMutation(internal.schedules.recordError, {
           scheduleId: schedule._id,

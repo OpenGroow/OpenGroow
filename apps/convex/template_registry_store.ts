@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import { clawPackageToTemplate, outboundUrlProblem, scopeReservationProblem, type ClawPackageFiles } from "@opengroow/agent-templates";
 import type { ProjectId } from "@opengroow/agent-templates/registry";
+import {
+  CURRENT_PROFILE_SCHEMA_VERSION,
+  isTemplateVersionRunnable,
+  profileSchemaVersionOf,
+} from "@opengroow/agent-templates/schema-version";
 import type { AgentManifest } from "@opengroow/agent-templates/types";
 import { buildUpdatePlan, isNewerVersion, type UpdatePlan } from "@opengroow/agent-templates/update-plan";
 import type { MutationCtx, QueryCtx } from "./_generated/server.js";
@@ -158,19 +163,17 @@ export async function validatePackage(files: readonly PackageFile[]): Promise<Va
   const converted = clawPackageToTemplate(clawFiles);
   if (!converted.ok) throw new ConvexError(converted.reason);
   const manifest: AgentManifest = converted.template.manifest;
+  // ADR-091: version 1 is read only for the versions already stored (resolve), never accepted as a new package.
+  if (!isTemplateVersionRunnable(manifest)) {
+    throw new ConvexError(
+      `${manifest.id} declares profile schemaVersion ${profileSchemaVersionOf(manifest)}, which is outdated: update it to schemaVersion ${CURRENT_PROFILE_SCHEMA_VERSION} ("schemaVersion: ${CURRENT_PROFILE_SCHEMA_VERSION}" in profiles/opengroow.yml, a kind on every Mission type and the recipes of each creative one) and install it again`,
+    );
+  }
   return { version: readPackageVersion(clawFiles), manifest, templateId: manifest.id, digest: await computePackageDigest(files) };
 }
 
 export type InstallResult = { templateId: string; version: string; digest: string };
 
-/**
- * Validates a package through the Claw adapter (strict manifest validation),
- * then stores its snapshot in the Project's registry: a new version becomes
- * the current one; reinstalling an existing version is a no-op when the
- * digest matches and refused otherwise (versions are immutable, #651), except
- * that a linked folder's same-version snapshot is replaced (#653). Nothing is
- * written when the package is refused (the adapter's reason is the message).
- */
 /**
  * Hosted deployment only (#670): the shared backend calls the MCP URLs a
  * package declares, so none may target a private, loopback or reserved address.
@@ -201,7 +204,16 @@ function assertScopeReservation(manifest: AgentManifest, origin: Doc<"installedT
   if (problem) throw new ConvexError(problem);
 }
 
-export async function installTemplatePackage(
+/**
+ * Validates a package through the Claw adapter (strict manifest validation),
+ * then stores its snapshot in the Project's registry: a new version becomes
+ * the current one; reinstalling an existing version is a no-op when the
+ * digest matches and refused otherwise (versions are immutable, #651), except
+ * that a linked folder's same-version snapshot is replaced (#653). Nothing is
+ * written when the package is refused (the adapter's reason is the message).
+ * Storage only: installing also provisions recipes, see `template_install.ts`.
+ */
+export async function storeInstalledPackage(
   ctx: MutationCtx,
   args: {
     projectId: ProjectId;
@@ -384,7 +396,7 @@ async function deleteStaged(ctx: MutationCtx, projectId: ProjectId, templateId: 
  * Offers a newer version of an installed Template to the Project (#669). The
  * package is validated like an install and stored beside the current version,
  * but nothing resolves it: the Project keeps running its current version, and
- * Missions keep pinning it, until the user confirms with `applyStagedUpdate`.
+ * Missions keep pinning it, until the user confirms with `applyStagedUpdate` (template_install.ts).
  * A later offer replaces the previous one.
  */
 export async function offerTemplateUpdate(
@@ -435,8 +447,11 @@ export async function offerTemplateUpdate(
   return { templateId, version, digest };
 }
 
-/** Makes the offered version the Project's current one. Missions already created keep their pinned version. */
-export async function applyStagedUpdate(
+/**
+ * Makes the offered version the Project's current one. Missions already created keep their pinned version. Storage
+ * only: applying an update also provisions recipes, see `template_install.ts`.
+ */
+export async function promoteStagedVersion(
   ctx: MutationCtx,
   projectId: ProjectId,
   templateId: string,
@@ -461,9 +476,14 @@ export type TemplateUpdateOffer = {
   plan: UpdatePlan;
 };
 
-async function pluginIdsOf(ctx: RegistryDbCtx, doc: Doc<"installedTemplates">): Promise<string[]> {
+async function updateSideOf(ctx: RegistryDbCtx, doc: Doc<"installedTemplates">) {
   const converted = clawPackageToTemplate(toClawFiles(await fileDocsOf(ctx, doc._id)));
-  return converted.ok ? (converted.template.plugins ?? []).map((plugin) => plugin.id) : [];
+  return {
+    version: doc.version,
+    manifest: doc.manifest as AgentManifest,
+    pluginIds: converted.ok ? (converted.template.plugins ?? []).map((plugin) => plugin.id) : [],
+    recipes: converted.ok ? (converted.template.recipes ?? []).map(({ missionType, id, name }) => ({ missionType, id, name })) : [],
+  };
 }
 
 /** The updates offered to the Project, each with its plan against the current version. */
@@ -487,8 +507,8 @@ export async function listUpdateOffers(ctx: RegistryDbCtx, projectId: ProjectId)
       .withIndex("by_instance_template", (q) => q.eq("instanceId", projectId).eq("templateId", staged.templateId))
       .collect();
     const plan = buildUpdatePlan(
-      { version: current.version, manifest: current.manifest as AgentManifest, pluginIds: await pluginIdsOf(ctx, current) },
-      { version: staged.version, manifest: staged.manifest as AgentManifest, pluginIds: await pluginIdsOf(ctx, staged) },
+      await updateSideOf(ctx, current),
+      await updateSideOf(ctx, staged),
       schedules.map((schedule) => schedule.type),
     );
     offers.push({

@@ -69,7 +69,7 @@ const owner = () => t.withIdentity(OWNER);
 const planningJob = async () => (await t.run((ctx) => ctx.db.query("jobs").collect())).find((job) => job.type === "content_planning")!;
 const reload = (jobId: Id<"jobs">) => t.run((ctx) => ctx.db.get(jobId));
 const runs = () => t.run((ctx) => ctx.db.query("runs").collect());
-const target = (kind: string, quantity: number, publishTargets = ["social:example"]) => ({ kind, quantity, publishTargets });
+const target = (contentType: string, quantity: number, publishTargets = ["social:example"]) => ({ contentType, quantity, publishTargets });
 const configure = async (productionTargets: ReturnType<typeof target>[], planningDays = 7) => {
   const job = await planningJob();
   await owner().mutation(api.content_planning_jobs.setConfig, { jobId: job._id, planningDays, productionTargets });
@@ -87,12 +87,12 @@ const seedPlan = (status: "draft" | "approved" | "rejected") =>
     const runId = await ctx.db.insert("runs", { jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, agentName: "a", sessionKey: "s", status: "completed", createdAt: NOW, updatedAt: NOW } as never);
     return ctx.db.insert("contentPlans", { ownerId: OWNER.subject, instanceId: INSTANCE, runId, periodStart: "2030-03-05", periodEnd: "2030-03-11", rationale: "r", status, createdAt: NOW });
   });
-const seedContent = (planId: Id<"contentPlans">, kind: string, plannedAt: string, status: "proposed" | "approved" | "rejected") =>
+const seedContent = (planId: Id<"contentPlans">, contentType: string, plannedAt: string, status: "proposed" | "approved" | "rejected") =>
   t.run(async (ctx) => {
-    const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: `f-${plannedAt}-${kind}-${status}`, name: "F", description: "d" });
-    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never);
+    const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: `f-${plannedAt}-${contentType}-${status}`, name: "F", description: "d" });
+    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never);
     return ctx.db.insert("plannedContents", {
-      ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind, missionType: "make_video", recipeId, publishTargets: ["social:example"],
+      ownerId: OWNER.subject, instanceId: INSTANCE, planId, contentType, missionType: "make_video", recipeId, publishTargets: ["social:example"],
       title: "T", brief: "B", plannedAt, intent: "explore", rationale: "r", status, createdAt: NOW,
     });
   });
@@ -153,8 +153,8 @@ describe("Run with pins", () => {
       periodStart: "2030-03-05",
       periodEnd: "2030-03-11",
       targets: [
-        { kind: "video", target: 5, existing: 2, remaining: 3, publishTargets: ["social:example", "blog:example"] },
-        { kind: "image", target: 2, existing: 1, remaining: 1, publishTargets: ["blog:example"] },
+        { contentType: "video", target: 5, existing: 2, remaining: 3, publishTargets: ["social:example", "blog:example"] },
+        { contentType: "image", target: 2, existing: 1, remaining: 1, publishTargets: ["blog:example"] },
       ],
       ignored: [],
     });
@@ -169,7 +169,7 @@ describe("Run with pins", () => {
     await seedContent(await seedPlan("approved"), "video", "2030-03-06", "approved");
     await tickNow(jobId);
     const run = (await runs()).find((r) => r.contentPlanning !== undefined)!;
-    expect(run.contentPlanning!.targets.map((x: { kind: string; remaining: number }) => [x.kind, x.remaining])).toEqual([["video", 0], ["image", 2]]);
+    expect(run.contentPlanning!.targets.map((x: { contentType: string; remaining: number }) => [x.contentType, x.remaining])).toEqual([["video", 0], ["image", 2]]);
   });
 
   it("uses the pinned period length, and a later config edit never changes the Run", async () => {
@@ -218,7 +218,7 @@ describe("Run with pins", () => {
 describe("run.md", () => {
   const pins = {
     periodStart: "2030-03-05", periodEnd: "2030-03-11",
-    targets: [{ kind: "video", target: 5, existing: 2, remaining: 3, publishTargets: ["social:example"] }],
+    targets: [{ contentType: "video", target: 5, existing: 2, remaining: 3, publishTargets: ["social:example"] }],
     ignored: ["image: no longer produced"],
   };
   it("shows the period, per-format quantities and destinations, and what was ignored", () => {

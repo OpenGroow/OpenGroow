@@ -112,6 +112,14 @@ export const scheduleUnitV = v.union(
   v.literal("monthly")
 );
 
+export const frequencyV = v.object({
+  unit: scheduleUnitV,
+  dayOfWeek: v.optional(v.number()),
+  dayOfMonth: v.optional(v.number()),
+  hour: v.number(),
+  minute: v.number(),
+});
+
 // Agent Skills (issue #222): a skill is an OpenClaw skill installed inside an
 // Agent's workspace. MVP source support is ClawHub only.
 export const agentSkillSourceV = v.union(v.literal("clawhub"));

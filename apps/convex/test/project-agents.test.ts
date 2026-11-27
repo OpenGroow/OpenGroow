@@ -1458,7 +1458,7 @@ describe("activateProjectAgent", () => {
     await seedInstance(t);
     const reporter = fixtureTemplate(REPORTER_ID, {
       visibility: "production",
-      missionTypes: [{ type: "report", label: "Report", payload: "{}", agentsMd: "report.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
+      missionTypes: [{ type: "report", kind: "operational", label: "Report", payload: "{}", agentsMd: "report.md", defaultSchedule: { unit: "weekly", dayOfWeek: 1, hour: 8, minute: 0 } }],
     });
     reporter.missionAgentsMd = { report: "# Report\n" };
     const restore = installTemplateRegistry([INSTANCE_ID], [reporter]);

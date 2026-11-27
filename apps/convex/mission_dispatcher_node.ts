@@ -17,6 +17,8 @@ import {
   appendContextProviders,
   CONTEXT_PROVIDER_RENDERERS,
   CONTEXT_PROVIDERS_REQUIRING_CONFIG,
+  LEGACY_RECIPE_PROVIDER,
+  renderProductionRecipeSection,
   VALID_CONTEXT_PROVIDER_NAMES,
 } from "./mission_dispatcher/context_providers.js";
 import { getTemplateRegistry, resolveMissionTemplate, runTemplateVersion } from "./template_registry.js";
@@ -35,7 +37,6 @@ import { buildContentPlanningRunFile } from "./content_planning_dispatch.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
 import { runOutputsFilePath } from "./mission_dispatcher/reconciliation.js";
 import { resolveMissionTypeBlockerCodes, resolveMissionTypePublish } from "./mission_dispatcher/blocker_codes.js";
-import { RECIPE_PROVIDER } from "./production_recipe_rules.js";
 import { enqueueCommandMutation } from "./mission_dispatcher/enqueue_command.js";
 import {
   pollExternalJobRun,
@@ -454,7 +455,7 @@ export const dispatchPendingRuns = internalAction({
 
         if (contextProviders && contextProviders.length > 0) {
           for (const name of contextProviders) {
-            if (!VALID_CONTEXT_PROVIDER_NAMES.has(name)) {
+            if (name !== LEGACY_RECIPE_PROVIDER && !VALID_CONTEXT_PROVIDER_NAMES.has(name)) {
               throw new Error(
                 `Unknown context provider "${name}" in template "${template?.manifest.id}". ` +
                 `Valid providers: ${[...VALID_CONTEXT_PROVIDER_NAMES].join(", ")}`,
@@ -490,9 +491,6 @@ export const dispatchPendingRuns = internalAction({
                 payload: mission.payload as Record<string, unknown> | undefined,
               };
             }
-            if (name === RECIPE_PROVIDER) {
-              providerData[name] = mission.recipeSnapshot ?? null;
-            }
             if (name === SOURCE_PROVIDER) {
               const observationId = sourceIdFromPayload(mission.payload);
               providerData[name] = observationId
@@ -505,6 +503,10 @@ export const dispatchPendingRuns = internalAction({
           }
           contextMd = appendContextProviders(contextMd, contextProviders, providerData);
         }
+
+        // The Recipe Snapshot of a creative Mission is always rendered, separate from the Mission Brief (ADR-091).
+        const recipeSection = renderProductionRecipeSection(mission.recipeSnapshot ?? null);
+        if (recipeSection) contextMd += "\n" + recipeSection;
 
         const contextPath = `missions/${mission._id}/context.md`;
         const runPath = `missions/${mission._id}/runs/${run._id}.md`;

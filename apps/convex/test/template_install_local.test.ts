@@ -1,3 +1,4 @@
+import { recipeFor } from "./helpers/mission_recipe.helpers";
 import { insertInstance } from "./instance_fixture";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FunctionArgs } from "convex/server";
@@ -61,6 +62,8 @@ const modules = {
   "../instances.ts": () => import("../instances.js"),
   "../instances_node.ts": () => import("../instances_node.js"),
   "../missions.ts": () => import("../missions.js"),
+  "../production_recipes.ts": () => import("../production_recipes.js"),
+  "../bundled_recipes.ts": () => import("../bundled_recipes.js"),
   "../missions_node.ts": () => import("../missions_node.js"),
   "../runs.ts": () => import("../runs.js"),
   "../project_agents.ts": () => import("../project_agents.js"),
@@ -291,6 +294,7 @@ describe("Template installed from a local folder, Instance reconciled from the r
       templateId: "@acme/seo",
       type: "create_article",
       payload: { keyword: "octopus" },
+      recipe: await recipeFor(as, PROJECT, "@acme/seo", "create_article"),
       name: "Folder-installed SEO mission",
     });
 

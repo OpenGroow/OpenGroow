@@ -1,0 +1,20 @@
+schemaVersion: 2
+category: marketing
+mcpServers: []
+missionTypes:
+  - type: write_post
+    kind: creative
+    agentsMd: write_post.md
+    label: Write a post
+    payload: '{"topic":""}'
+    recipes:
+      - id: freeform
+        path: recipes/write_post/freeform.yml
+        default: true
+      - id: punchy
+        path: recipes/write_post/punchy.yml
+  - type: moderate
+    kind: operational
+    agentsMd: moderate.md
+    label: Moderate comments
+    payload: '{}'

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { hubPackageTables } from "./hub_packages_schema.js";
 import { publisherTables } from "./publisher_schema.js";
 import { analyticsTables } from "./analytics_schema.js";
+import { RECIPE_UNAVAILABLE } from "./schedule_reasons.js";
 import {
   commandStatusV,
   jobOutcomeV,
@@ -167,7 +168,8 @@ const runSharedFields = {
       periodEnd: v.string(),
       targets: v.array(
         v.object({
-          kind: v.string(),
+          // The Content Type (`publish.kind` of the manifest).
+          contentType: v.string(),
           target: v.number(),
           existing: v.number(),
           remaining: v.number(),
@@ -415,8 +417,8 @@ export default defineSchema({
     templateVersion: v.optional(v.string()),
     // The Recipe Snapshot (issue #137, ADR-083): what the Production Recipe
     // resolved to at creation, written once and never recomputed. The
-    // `production-recipe` context provider renders it for every Run. Absent
-    // for a Mission created without a recipe.
+    // dispatcher renders it for every Run of a creative Mission (ADR-091).
+    // Absent on operational Missions and on Missions created before ADR-091.
     recipeSnapshot: v.optional(
       v.object({
         recipeId: v.id("productionRecipes"),
@@ -638,8 +640,8 @@ export default defineSchema({
     ownerId: v.string(),
     instanceId: v.string(),
     planId: v.id("contentPlans"),
-    // The format (`publish.kind`), kept so it survives the uninstall of an Agent.
-    kind: v.string(),
+    // The Content Type (`publish.kind` of the manifest), kept so it survives the uninstall of an Agent.
+    contentType: v.string(),
     missionType: v.string(),
     recipeId: v.id("productionRecipes"),
     sourceId: v.optional(v.id("sources")),
@@ -699,6 +701,12 @@ export default defineSchema({
     templateId: v.string(),
     type: v.string(),
     payload: v.any(),
+    // The Production Recipe a creative Schedule produces with (ADR-091). Absent for an operational Mission type, and
+    // while the recipe is unavailable (see `pausedReason`).
+    recipeId: v.optional(v.id("productionRecipes")),
+    // Why the Schedule was paused by the system: its recipe was deleted or stopped being compatible. Blocks resuming
+    // until a compatible recipe is set; it is cleared by that change, which never resumes the Schedule.
+    pausedReason: v.optional(v.literal(RECIPE_UNAVAILABLE)),
     // Default `autoPublish` propagated to every Mission this Schedule creates
     // (issue #330, PRD #326). Same capability restriction as a manually
     // created Mission — see `templateSupportsAutoPublish` in
@@ -721,7 +729,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_instance_template", ["instanceId", "templateId"])
-    .index("by_status_nextRun", ["status", "nextRunAt"]),
+    .index("by_status_nextRun", ["status", "nextRunAt"])
+    .index("by_recipe", ["recipeId"]),
   connectTickets: defineTable({
     ticketId: v.string(),
     instanceId: v.string(),
@@ -781,16 +790,17 @@ export default defineSchema({
   // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
-    // Transitional (ADR-088): a recipe has no Creative Family; removed once `dropRecipeFamily` has run everywhere.
-    creativeFamilyId: v.optional(v.id("creativeFamilies")),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),
     description: v.string(),
-    // Transitional: a recipe has no status since archiving was replaced by deletion; removed once `dropRecipeStatus` has run everywhere.
-    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
+    // Bundled Recipe (ADR-091): the manifest id of the recipe a Template ships. Absent means a Custom Recipe. A
+    // Bundled Recipe's identity is (Project, Template, Mission type, bundledId); both fields are cleared when a new
+    // Template version no longer ships it, which turns it into a Custom Recipe.
+    bundledId: v.optional(v.string()),
+    // The Default Recipe of its Mission type: the Template's choice, only on a Bundled Recipe.
+    isDefault: v.optional(v.boolean()),
   })
-    .index("by_instance_family", ["instanceId", "creativeFamilyId"])
     // The Create Mission picker: a Project's recipes for one Mission type of one Template.
     .index("by_instance_target", ["instanceId", "templateId", "missionType"]),
   // A Recipe Version: append-only, never patched. An edit inserts the next one.

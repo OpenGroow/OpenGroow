@@ -21,6 +21,8 @@ From the OpenGroow checkout, `pnpm publisher:pack <folder> --out ../groowhub/dis
 
 The CLI is a bundle of `packages/agent-templates` (`validate-package.ts`, `hub-index.ts`, ...) and `packages/publisher-sdk` (manifest and capabilities readers) taken at publication time. A package that uses a field added after that version is rejected as an unknown key: publish a new version with each change to a manifest reader, and pin the version in the hub CI. `esbuild` is the only runtime dependency (used by `pack`).
 
+**0.10.0**: Template profile `schemaVersion: 2` (ADR-091). `validate template` requires `kind` (`creative` or `operational`) on every Mission type and, for a creative one, `recipes` (Bundled Recipes: files under `recipes/`, exactly one `default: true`); it refuses a `schemaVersion: 1` package. Move every Template of a hub to `schemaVersion: 2` when pinning this version.
+
 It replaces `@opengroow/template-validator` (last version 0.2.2, deprecated): `package` became `validate template`.
 
 ## Publishing

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { remainingOf, utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
-import { approvedCountsByKind, countByKind } from "./content_plan_counts.js";
+import { approvedCountsByContentType, countByContentType } from "./content_plan_counts.js";
 import { contentsOf } from "./content_plan_review.js";
 import { NO_PINS_MESSAGE, pinsOf, resolveItem } from "./content_plans.js";
 import { ownerIdFor } from "./instance_ownership.js";
@@ -63,13 +63,14 @@ export const approve = mutation({
     if (errors.length > 0) return refuse("invalid", errors.join(" "));
 
     // Existing quantity now: approved contents of the period, from any plan (this one is still a draft).
-    const approved = await approvedCountsByKind(ctx, plan.instanceId, plan.periodStart, plan.periodEnd);
+    const approved = await approvedCountsByContentType(ctx, plan.instanceId, plan.periodStart, plan.periodEnd);
     const overs: string[] = [];
-    const retainedByKind = countByKind(retained);
+    const retainedByContentType = countByContentType(retained);
     for (const target of pins.targets) {
-      const count = retainedByKind.get(target.kind) ?? 0;
-      const remaining = remainingOf(target.target, approved.get(target.kind) ?? 0);
-      if (count > remaining) overs.push(`Format "${target.kind}": ${count} contents retained but only ${remaining} remain to plan.`);
+      const contentType = target.contentType;
+      const count = retainedByContentType.get(contentType) ?? 0;
+      const remaining = remainingOf(target.target, approved.get(contentType) ?? 0);
+      if (count > remaining) overs.push(`Content Type "${contentType}": ${count} contents retained but only ${remaining} remain to plan.`);
     }
     if (overs.length > 0) return refuse("over_quota", overs.join(" "));
 

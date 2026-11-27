@@ -7,12 +7,15 @@ import type { Id } from "@convex/_generated/dataModel";
 import { MissionPayloadEditor } from "./mission-payload-editor";
 import { ScheduleCadenceEditor } from "./schedule-cadence-editor";
 import { PublishChannelPicker } from "./publish-channel-picker";
+import { RecipeField, useRecipeChoice } from "./production-recipe-select";
+import { RunNowButton, ScheduleRecipePicker } from "./schedule-row-controls";
 import {
   AUTO_PUBLISH_SCHEDULE_HINT,
   AutoPublishToggle,
   supportsAutoPublish,
 } from "./auto-publish-toggle";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
+import { OUTDATED_SCHEDULE_LABEL, OUTDATED_TEMPLATE_REASON, isTemplateOutdated } from "@/src/components/outdated-template-notice";
 import {
   missionTypesForManifest,
   validateMissionPayload,
@@ -32,7 +35,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { extractConvexErrorMessage } from "@/src/lib/convex-error";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge } from "@/components/opengroow/status-badge";
 import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
@@ -115,34 +117,6 @@ const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", 
 
 const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
 
-/** Creates a Mission from the Schedule now: shows it is running and says why when it is refused. */
-function RunNowButton({ run }: { run: () => Promise<unknown> }) {
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleClick() {
-    setRunning(true);
-    setError(null);
-    try {
-      await run();
-    } catch (err) {
-      setError(extractConvexErrorMessage(err, "Failed to run the Schedule now."));
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <>
-      <Button variant="outline" className="rounded-full" data-action="run-now" loading={running} onClick={() => { void handleClick(); }}>
-        <Play />
-        Run now
-      </Button>
-      {error ? <span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
-    </>
-  );
-}
-
 export function InstanceSchedulesPage({ params }: Props) {
   const { instanceId } = use(params);
   return <InstanceSchedulesContent instanceId={decodeURIComponent(instanceId)} />;
@@ -157,7 +131,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const resumeSchedule = useMutation(api.schedules.resume);
   const removeSchedule = useMutation(api.schedules.remove);
   const updateSchedulePayload = useMutation(api.schedules.updatePayload);
-  const createMission = useMutation(api.missions.create);
+  const runScheduleNow = useMutation(api.schedules.runNow);
   const updateScheduleFrequency = useMutation(api.schedules.updateFrequency);
   const setScheduleAutoPublish = useMutation(api.schedules.setAutoPublish);
 
@@ -199,6 +173,17 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
   const autoPublishAllowed = supportsAutoPublish(manifests, effectiveTemplateId, type);
   const publishDecl = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.publish;
   const declaresPublish = publishDecl !== undefined;
+  // A creative Mission type needs a recipe (ADR-091): the Default is preselected, there is no fallback to another one.
+  const isCreative = effectiveManifest?.missionTypes?.find((t) => t.type === type.trim())?.kind === "creative";
+  const [createOpen, setCreateOpen] = useState(false);
+  const { offeredRecipes, chosenRecipeId, setRecipeId, recipeMissing } = useRecipeChoice({
+    instanceId,
+    templateId: effectiveTemplateId,
+    type: type.trim(),
+    isCreative,
+    enabled: createOpen,
+  });
+  const recipeNames = new Map((useQuery(api.production_recipes.list, { instanceId }) ?? []).map((r) => [r._id, r.name]));
 
   useEffect(() => {
     const [firstType] = missionTypes;
@@ -212,11 +197,11 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
     // A new template may not support autoPublish for its default mission
     // type — reset rather than carry a stale toggle across templates.
     setAutoPublish(false);
+    setRecipeId("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveTemplateId, hiddenKey, declaredKey]);
 
   const [submitting, setSubmitting] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -239,6 +224,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
     }
     if (!type.trim()) {
       setError("Type is required.");
+      return;
+    }
+    if (recipeMissing) {
+      setError("This Mission type needs a Production Recipe: choose one.");
       return;
     }
     const payloadError = validateMissionPayload({
@@ -271,6 +260,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
         frequency,
         timezone,
         ...(autoPublishAllowed && autoPublish ? { autoPublish: true } : {}),
+        ...(chosenRecipeId ? { recipeId: chosenRecipeId } : {}),
       });
       setCreateOpen(false);
     } catch (err) {
@@ -403,6 +393,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                     const next = e.target.value;
                     setType(next);
                     setRawPayloadMode(false);
+                    setRecipeId("");
                     const option = missionTypes.find((t) => t.type === next);
                     if (option) setPayloadText(option.payload);
                   }}
@@ -423,6 +414,10 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                 />
               )}
             </label>
+
+            {isCreative ? (
+              <RecipeField recipes={offeredRecipes} value={chosenRecipeId} onChange={setRecipeId} testId="schedule-recipe" />
+            ) : null}
 
             {autoPublishAllowed && !declaresPublish && (
               <AutoPublishToggle
@@ -620,6 +615,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               const open = openFamilies[family.key] ?? index === 0;
               const familyTone = FAMILY_TONES[index % FAMILY_TONES.length];
               const manifest = manifests.find((m) => m.id === family.templateId);
+              const templateOutdated = isTemplateOutdated(manifest);
               const agentName = manifest?.name ?? family.templateId;
               const typeLabel =
                 (manifest
@@ -683,23 +679,37 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                   />
                                   {paused ? "Paused" : "Active"}
                                 </span>
+                                {templateOutdated ? (
+                                  <StatusBadge tone="warning" label={OUTDATED_SCHEDULE_LABEL} />
+                                ) : null}
+                                {schedule.recipeId ? (
+                                  <span className="text-sm text-muted-foreground" data-testid="schedule-recipe-name">
+                                    Recipe: {recipeNames.get(schedule.recipeId) ?? "..."}
+                                  </span>
+                                ) : null}
+                                {schedule.pausedReason ? (
+                                  <>
+                                    <StatusBadge tone="warning" label={`Paused: ${schedule.pausedReason}`} />
+                                    <ScheduleRecipePicker instanceId={instanceId} schedule={schedule} />
+                                  </>
+                                ) : null}
 
                                 <div className="ml-auto flex items-center gap-2">
                                   <RunNowButton
-                                    run={() =>
-                                      createMission({
-                                        instanceId,
-                                        templateId: schedule.templateId,
-                                        type: schedule.type,
-                                        payload: schedule.payload,
-                                      })
-                                    }
+                                    {...(templateOutdated
+                                      ? { blockedReason: OUTDATED_TEMPLATE_REASON }
+                                      : schedule.pausedReason
+                                        ? { blockedReason: "Recipe unavailable: choose a compatible recipe first." }
+                                        : {})}
+                                    run={() => runScheduleNow({ scheduleId: schedule._id })}
                                   />
                                   {paused ? (
                                     <Button
                                       variant="outline"
                                       className="rounded-full"
                                       data-action="resume"
+                                      disabled={schedule.pausedReason !== undefined}
+                                      title={schedule.pausedReason ? "Choose a compatible recipe before resuming" : undefined}
                                       onClick={() => { void resumeSchedule({ scheduleId: schedule._id }); }}
                                     >
                                       <Play />

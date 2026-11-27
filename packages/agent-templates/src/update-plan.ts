@@ -14,7 +14,11 @@ export type UpdatePlanSide = {
   manifest: AgentManifest;
   /** Ids of the OpenClaw plugins the version ships (`plugins/<id>/`). */
   pluginIds: string[];
+  /** The Bundled Recipes the version ships (schemaVersion 2); absent for a version that ships none. */
+  recipes?: UpdatePlanRecipe[];
 };
+
+export type UpdatePlanRecipe = { missionType: string; id: string; name: string };
 
 export type UpdatePlanField = { key: string; label: string };
 
@@ -37,6 +41,8 @@ export type UpdatePlan = {
   removedMissionTypes: string[];
   /** Removed Mission types a Schedule still creates Missions of, with how many Schedules. */
   removedMissionTypesInUse: { type: string; schedules: number }[];
+  /** Bundled Recipes the new version no longer ships: they stay in the Project as Custom Recipes (ADR-091). */
+  recipesBecomingCustom: UpdatePlanRecipe[];
   /** Whether anything the user should read before confirming changes. */
   requiresAttention: boolean;
 };
@@ -99,12 +105,16 @@ export function buildUpdatePlan(from: UpdatePlanSide, to: UpdatePlanSide, schedu
     reactivationFields: newFields.filter((field) => field.immutable === true && oldFields.get(field.key)?.immutable !== true).map(asField),
     removedMissionTypes,
     removedMissionTypesInUse,
+    recipesBecomingCustom: (from.recipes ?? []).filter(
+      (before) => !(to.recipes ?? []).some((after) => after.missionType === before.missionType && after.id === before.id),
+    ),
   };
   const requiresAttention =
     plan.mcpHosts.added.length + plan.mcpHosts.removed.length + plan.mcpHosts.changed.length > 0 ||
     plan.newSecrets.length + plan.newPlugins.length + plan.newSkills.length > 0 ||
     plan.newRequiredFields.length + plan.reactivationFields.length > 0 ||
-    plan.removedMissionTypes.length > 0;
+    plan.removedMissionTypes.length > 0 ||
+    plan.recipesBecomingCustom.length > 0;
   return { ...plan, requiresAttention };
 }
 
