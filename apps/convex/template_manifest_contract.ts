@@ -23,5 +23,6 @@ export {
   hasRetryableStatusCheck,
   resolveLabelTokens,
 } from "@opengroow/agent-templates/requirements";
+export { isTemplateVersionRunnable } from "@opengroow/agent-templates/schema-version";
 export { templateSupportsAutoPublish } from "@opengroow/agent-templates/review-contract";
 export { filesFromFolder, type FolderEntry } from "@opengroow/agent-templates/folder-files";

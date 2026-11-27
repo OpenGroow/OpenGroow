@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { NoProviderNotice } from "@/src/components/no-provider-notice";
+import { OutdatedTemplateNotice, isTemplateOutdated } from "@/src/components/outdated-template-notice";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +81,8 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
 
   const effectiveTemplateId = templateId || activeAgents[0]?.templateId || "";
   const effectiveManifest = manifests.find((m) => m.id === effectiveTemplateId);
+  // An outdated Template starts nothing new (ADR-091): the form says why and cannot be submitted.
+  const templateOutdated = isTemplateOutdated(effectiveManifest);
   const hiddenMissionTypes = activeAgents.find((a) => a.templateId === effectiveTemplateId)?.hiddenMissionTypes;
   const declaredMissionTypes = effectiveManifest ? missionTypesForManifest(effectiveManifest) : [];
   const missionTypes = visibleMissionTypes(declaredMissionTypes, hiddenMissionTypes);
@@ -269,6 +272,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
           </p>
         ) : (
           <form onSubmit={(e) => { void handleSubmit(e); }} className="grid gap-4">
+            {templateOutdated ? <OutdatedTemplateNotice names={[effectiveManifest?.name ?? effectiveTemplateId]} /> : null}
             <div className="grid gap-4 md:grid-cols-2">
             <label className="grid gap-1.5">
               <span className="text-sm font-semibold text-muted-foreground">
@@ -389,7 +393,7 @@ export function InstanceMissionsContent({ instanceId }: { instanceId: string }) 
               size="lg"
               type="submit"
               loading={submitting}
-              disabled={allTypesHidden}
+              disabled={allTypesHidden || templateOutdated}
               className="w-fit justify-self-end"
             >
               <Sparkles />

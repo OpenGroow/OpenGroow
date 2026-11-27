@@ -294,6 +294,31 @@ describe("Agent page", () => {
         expect(document.body.textContent).toContain("Up to date");
       });
 
+      it("says an outdated version must be updated before anything new runs, next to the update on offer", async () => {
+        serveProjectManifests([{ ...manifestOf("hello"), schemaVersion: 1 }]);
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        offers = [{
+          templateId: "@opengroow/hello", currentVersion: "1.0.0", availableVersion: "2.0.0", origin: "hub",
+          plan: {
+            fromVersion: "1.0.0", toVersion: "2.0.0", mcpHosts: { added: [], removed: [], changed: [] }, newSecrets: [], newPlugins: [],
+            newSkills: [], newRequiredFields: [], reactivationFields: [], removedMissionTypes: [], removedMissionTypesInUse: [], requiresAttention: false,
+          },
+        }];
+        await settings();
+        expect(document.querySelector('[data-testid="outdated-template-notice"]')?.textContent).toMatch(/outdated.*update/i);
+        expect(document.body.textContent).toContain("Outdated");
+        expect(document.body.textContent).toContain("2.0.0 available");
+        expect(button("Review update")).toBeDefined();
+      });
+
+      it("shows no outdated state for a current version", async () => {
+        agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
+        installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];
+        await settings();
+        expect(document.querySelector('[data-testid="outdated-template-notice"]')).toBeNull();
+      });
+
       it("offers a newer version for review, with its update plan", async () => {
         agents({ templateId: "@opengroow/hello", status: "active", workspaceKey: "ws-hello" });
         installs = [{ templateId: "@opengroow/hello", version: "1.0.0", origin: "hub" }];

@@ -13,6 +13,7 @@ import {
   supportsAutoPublish,
 } from "./auto-publish-toggle";
 import { useProjectManifests } from "@/src/hooks/use-project-manifests";
+import { OUTDATED_SCHEDULE_LABEL, OUTDATED_TEMPLATE_REASON, isTemplateOutdated } from "@/src/components/outdated-template-notice";
 import {
   missionTypesForManifest,
   validateMissionPayload,
@@ -116,7 +117,7 @@ const UNIT_LABELS: Record<string, string> = { daily: "Daily", weekly: "Weekly", 
 const UNIT_ORDER: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
 
 /** Creates a Mission from the Schedule now: shows it is running and says why when it is refused. */
-function RunNowButton({ run }: { run: () => Promise<unknown> }) {
+function RunNowButton({ run, blockedReason }: { run: () => Promise<unknown>; blockedReason?: string }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,11 +135,20 @@ function RunNowButton({ run }: { run: () => Promise<unknown> }) {
 
   return (
     <>
-      <Button variant="outline" className="rounded-full" data-action="run-now" loading={running} onClick={() => { void handleClick(); }}>
+      <Button
+        variant="outline"
+        className="rounded-full"
+        data-action="run-now"
+        loading={running}
+        disabled={blockedReason !== undefined}
+        title={blockedReason}
+        onClick={() => { void handleClick(); }}
+      >
         <Play />
         Run now
       </Button>
-      {error ? <span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
+      {blockedReason ? <span className="sr-only" data-testid="run-now-blocked">{blockedReason}</span> : null}
+      {error ?<span role="alert" className="text-xs text-destructive" data-testid="run-now-error">{error}</span> : null}
     </>
   );
 }
@@ -620,6 +630,7 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
               const open = openFamilies[family.key] ?? index === 0;
               const familyTone = FAMILY_TONES[index % FAMILY_TONES.length];
               const manifest = manifests.find((m) => m.id === family.templateId);
+              const templateOutdated = isTemplateOutdated(manifest);
               const agentName = manifest?.name ?? family.templateId;
               const typeLabel =
                 (manifest
@@ -683,9 +694,13 @@ export function InstanceSchedulesContent({ instanceId }: { instanceId: string })
                                   />
                                   {paused ? "Paused" : "Active"}
                                 </span>
+                                {templateOutdated ? (
+                                  <StatusBadge tone="warning" label={OUTDATED_SCHEDULE_LABEL} />
+                                ) : null}
 
                                 <div className="ml-auto flex items-center gap-2">
                                   <RunNowButton
+                                    {...(templateOutdated ? { blockedReason: OUTDATED_TEMPLATE_REASON } : {})}
                                     run={() =>
                                       createMission({
                                         instanceId,
