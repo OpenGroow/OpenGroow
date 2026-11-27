@@ -214,6 +214,7 @@ import type * as template_runnable from "../template_runnable.js";
 import type * as test_analytics_fixture from "../test/analytics_fixture.js";
 import type * as test_demo_analytics_v2_reference_src_index from "../test/demo_analytics_v2_reference/src/index.js";
 import type * as test_helpers_observation_source from "../test/helpers/observation_source.js";
+import type * as test_helpers_outdated_version from "../test/helpers/outdated_version.js";
 import type * as test_instance_fixture from "../test/instance_fixture.js";
 import type * as test_postiz_analytics_reference_src_index from "../test/postiz_analytics_reference/src/index.js";
 import type * as test_postiz_analytics_reference_src_postiz_analytics from "../test/postiz_analytics_reference/src/postiz_analytics.js";
@@ -439,6 +440,7 @@ declare const fullApi: ApiFromModules<{
   "test/analytics_fixture": typeof test_analytics_fixture;
   "test/demo_analytics_v2_reference/src/index": typeof test_demo_analytics_v2_reference_src_index;
   "test/helpers/observation_source": typeof test_helpers_observation_source;
+  "test/helpers/outdated_version": typeof test_helpers_outdated_version;
   "test/instance_fixture": typeof test_instance_fixture;
   "test/postiz_analytics_reference/src/index": typeof test_postiz_analytics_reference_src_index;
   "test/postiz_analytics_reference/src/postiz_analytics": typeof test_postiz_analytics_reference_src_postiz_analytics;
