@@ -5,7 +5,8 @@ import schema from "../schema";
 import type { Id } from "../_generated/dataModel";
 import { insertInstance } from "./instance_fixture";
 import { fixtureTemplate, installTemplateRegistry } from "./helpers/template_registry.helpers";
-import { installTemplatePackage, offerTemplateUpdate, applyStagedUpdate } from "../template_registry_store";
+import { offerTemplateUpdate } from "../template_registry_store";
+import { installTemplatePackage, applyStagedUpdate } from "../template_install";
 import { readClawPackageFixture, withFile, type PackageFile } from "../../../packages/agent-templates/src/__fixtures__/claw-package";
 
 // Schedules carry their Production Recipe (ADR-091): required for a creative Mission type, used by the tick, backfilled

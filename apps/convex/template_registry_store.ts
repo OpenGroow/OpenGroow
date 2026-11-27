@@ -12,7 +12,6 @@ import type { MutationCtx, QueryCtx } from "./_generated/server.js";
 import type { Doc } from "./_generated/dataModel.js";
 import type { McpUrlOverrides } from "./mcp_url_override.js";
 import { env } from "./env.js";
-import { provisionCurrentTemplate } from "./bundled_recipes.js";
 
 /** The version legacy Missions were pinned to when Templates were compiled in (#674); never a real installed version. */
 
@@ -176,14 +175,6 @@ export async function validatePackage(files: readonly PackageFile[]): Promise<Va
 export type InstallResult = { templateId: string; version: string; digest: string };
 
 /**
- * Validates a package through the Claw adapter (strict manifest validation),
- * then stores its snapshot in the Project's registry: a new version becomes
- * the current one; reinstalling an existing version is a no-op when the
- * digest matches and refused otherwise (versions are immutable, #651), except
- * that a linked folder's same-version snapshot is replaced (#653). Nothing is
- * written when the package is refused (the adapter's reason is the message).
- */
-/**
  * Hosted deployment only (#670): the shared backend calls the MCP URLs a
  * package declares, so none may target a private, loopback or reserved address.
  * A self-hosted deployment's operator owns the network and is not restricted.
@@ -213,25 +204,16 @@ function assertScopeReservation(manifest: AgentManifest, origin: Doc<"installedT
   if (problem) throw new ConvexError(problem);
 }
 
-export async function installTemplatePackage(
-  ctx: MutationCtx,
-  args: {
-    projectId: ProjectId;
-    files: readonly PackageFile[];
-    origin: Doc<"installedTemplates">["origin"];
-    gitOrigin?: Doc<"installedTemplates">["gitOrigin"];
-    installedBy?: string;
-  },
-): Promise<InstallResult> {
-  const installed = await storeInstalledPackage(ctx, args);
-  // Every install path provisions the Bundled Recipes of the Template, a reinstall included (ADR-091); the call is
-  // idempotent. Only a version that is the current one provisions: an older stored version is not what the Project runs.
-  const current = await findCurrentVersion(ctx, args.projectId, installed.templateId);
-  if (current === installed.version) await provisionCurrentTemplate(ctx, args.projectId, installed.templateId);
-  return installed;
-}
-
-async function storeInstalledPackage(
+/**
+ * Validates a package through the Claw adapter (strict manifest validation),
+ * then stores its snapshot in the Project's registry: a new version becomes
+ * the current one; reinstalling an existing version is a no-op when the
+ * digest matches and refused otherwise (versions are immutable, #651), except
+ * that a linked folder's same-version snapshot is replaced (#653). Nothing is
+ * written when the package is refused (the adapter's reason is the message).
+ * Storage only: installing also provisions recipes, see `template_install.ts`.
+ */
+export async function storeInstalledPackage(
   ctx: MutationCtx,
   args: {
     projectId: ProjectId;
@@ -414,7 +396,7 @@ async function deleteStaged(ctx: MutationCtx, projectId: ProjectId, templateId: 
  * Offers a newer version of an installed Template to the Project (#669). The
  * package is validated like an install and stored beside the current version,
  * but nothing resolves it: the Project keeps running its current version, and
- * Missions keep pinning it, until the user confirms with `applyStagedUpdate`.
+ * Missions keep pinning it, until the user confirms with `applyStagedUpdate` (template_install.ts).
  * A later offer replaces the previous one.
  */
 export async function offerTemplateUpdate(
@@ -465,8 +447,11 @@ export async function offerTemplateUpdate(
   return { templateId, version, digest };
 }
 
-/** Makes the offered version the Project's current one. Missions already created keep their pinned version. */
-export async function applyStagedUpdate(
+/**
+ * Makes the offered version the Project's current one. Missions already created keep their pinned version. Storage
+ * only: applying an update also provisions recipes, see `template_install.ts`.
+ */
+export async function promoteStagedVersion(
   ctx: MutationCtx,
   projectId: ProjectId,
   templateId: string,
@@ -481,8 +466,6 @@ export async function applyStagedUpdate(
     .take(10);
   await demoteCurrentExcept(ctx, currents, staged._id);
   await ctx.db.patch(staged._id, { current: true, staged: false, installedAt: Date.now() });
-  // The new version's Bundled Recipes: added, updated, or turned into Custom Recipes when it no longer ships them.
-  await provisionCurrentTemplate(ctx, projectId, templateId);
 }
 
 export type TemplateUpdateOffer = {

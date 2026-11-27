@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { isRecipeTarget } from "./production_recipe_rules.js";
-import { latestVersion, ownedRecipe } from "./production_recipes.js";
+import { latestVersion, ownedRecipe } from "./production_recipe_reads.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
 // The recipe argument of `missions.create` and the Recipe Snapshot it produces

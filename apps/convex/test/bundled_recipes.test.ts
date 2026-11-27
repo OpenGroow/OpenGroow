@@ -6,7 +6,8 @@ import { api, components, internal } from "../_generated/api";
 import schema from "../schema";
 import { insertInstance } from "./instance_fixture";
 import { storeOutdatedVersion } from "./helpers/outdated_version";
-import { installTemplatePackage, offerTemplateUpdate, applyStagedUpdate, listUpdateOffers } from "../template_registry_store";
+import { offerTemplateUpdate, listUpdateOffers } from "../template_registry_store";
+import { installTemplatePackage, applyStagedUpdate } from "../template_install";
 import {
   readClawPackageFixture,
   withFile,

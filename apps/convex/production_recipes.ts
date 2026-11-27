@@ -7,6 +7,7 @@ import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
 import { isRecipeTarget, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { pauseForUnavailableRecipe, schedulesUsingRecipe } from "./schedule_recipes.js";
+import { latestVersion, ownedRecipe } from "./production_recipe_reads.js";
 
 // Production Recipes (issue #137, ADR-088): a first-class entity of the Project, independent of any Creative
 // Family. A recipe is an identity; each save appends an immutable Recipe Version. Every read and write resolves
@@ -67,25 +68,10 @@ export async function requireValidTarget(ctx: QueryCtx, instanceId: string, temp
   validateRecipeTarget(template.manifest, missionType);
 }
 
-/** A recipe of the caller's Instance, or null (another Instance's recipe is "not found"). */
-export async function ownedRecipe(ctx: QueryCtx, instanceId: string, recipeId: Id<"productionRecipes">) {
-  const recipe = await ctx.db.get(recipeId);
-  return recipe && recipe.instanceId === instanceId ? recipe : null;
-}
-
 async function requireOwnedRecipe(ctx: QueryCtx, instanceId: string, recipeId: Id<"productionRecipes">) {
   const recipe = await ownedRecipe(ctx, instanceId, recipeId);
   if (!recipe) throw new Error("Production Recipe not found");
   return recipe;
-}
-
-/** The newest version of a recipe, or null. */
-export async function latestVersion(ctx: QueryCtx, recipeId: Id<"productionRecipes">) {
-  return await ctx.db
-    .query("productionRecipeVersions")
-    .withIndex("by_recipe_version", (q) => q.eq("recipeId", recipeId))
-    .order("desc")
-    .first();
 }
 
 export async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">, content: RecipeContent) {

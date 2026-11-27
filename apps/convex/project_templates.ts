@@ -9,11 +9,10 @@ import { canReadInstance } from "./project_agents.js";
 import { assertLocalFolderInstallAllowed } from "./local_folder_gate.js";
 import { getTemplateRegistry } from "./template_registry.js";
 import { internal } from "./_generated/api.js";
+import { applyStagedUpdate, installTemplatePackage } from "./template_install.js";
 import {
-  applyStagedUpdate,
   findSnapshot,
   listUpdateOffers,
-  installTemplatePackage,
   listCurrentInstalls,
   listCurrentSnapshots,
   listVersionUsage,

@@ -2,7 +2,7 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import type { QueryCtx } from "./_generated/server.js";
 import { boundedLimit } from "./planning_reads.js";
 import { MAX_GENERATION_SOURCES, isReadableSource, runningGenerationRun } from "./recipe_generation_shared.js";
-import { latestVersion } from "./production_recipes.js";
+import { latestVersion } from "./production_recipe_reads.js";
 
 // The Internal MCP's reads for a Recipe Generation (ADR-087, ticket #190). Read-only. The
 // pinned Creative Family comes from the Agent's running Standalone Run, never from arguments.

@@ -3,7 +3,8 @@ import { convexTest } from "convex-test";
 import { isTemplateVersionRunnable } from "@opengroow/agent-templates";
 import schema from "../schema";
 import { getTemplateRegistry } from "../template_registry";
-import { installTemplatePackage, offerTemplateUpdate } from "../template_registry_store";
+import { offerTemplateUpdate } from "../template_registry_store";
+import { installTemplatePackage } from "../template_install";
 import { storeOutdatedVersion } from "./helpers/outdated_version";
 import { collectTemplateWorkspaceFiles } from "../project_agents/template_workspace_files";
 import {
