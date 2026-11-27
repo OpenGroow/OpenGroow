@@ -5,10 +5,12 @@ import {
 } from "@convex-dev/migrations";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { enqueueCommand } from "./commands";
 import { RUNTIME_WORKSPACE_FILE_DELETE_BATCH } from "@opengroow/protocol";
 import schema from "./schema";
+import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
 
 export const migrations = new Migrations(components.migrations, { schema });
@@ -63,6 +65,22 @@ export const cleanEnrichObservationsSchedules = migrations.define({
   },
 });
 
+/** Deletes Runs, `take` at a time as `nextRuns` hands them over, with their reconcile events. */
+async function deleteRunsWithEvents(ctx: MutationCtx, nextRuns: (take: number) => Promise<Doc<"runs">[]>): Promise<void> {
+  for (;;) {
+    const runs = await nextRuns(100);
+    if (runs.length === 0) return;
+    for (const run of runs) {
+      for (;;) {
+        const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
+        if (events.length === 0) break;
+        for (const event of events) await ctx.db.delete(event._id);
+      }
+      await ctx.db.delete(run._id);
+    }
+  }
+}
+
 const RETIRED_SOURCE_MISSION_TYPES = new Set([
   "score",
   "routing",
@@ -96,18 +114,7 @@ export const deleteLegacySourceMissions = migrations.define({
   table: "missions",
   migrateOne: async (ctx, mission) => {
     if (!RETIRED_SOURCE_MISSION_TYPES.has(mission.type)) return;
-    for (;;) {
-      const runs = await ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(100);
-      if (runs.length === 0) break;
-      for (const run of runs) {
-        for (;;) {
-          const events = await ctx.db.query("runReconcileEvents").withIndex("by_run_created", (q) => q.eq("runId", run._id)).take(100);
-          if (events.length === 0) break;
-          for (const event of events) await ctx.db.delete(event._id);
-        }
-        await ctx.db.delete(run._id);
-      }
-    }
+    await deleteRunsWithEvents(ctx, (take) => ctx.db.query("runs").withIndex("by_mission", (q) => q.eq("missionId", mission._id)).take(take));
     await ctx.db.delete(mission._id);
   },
 });
@@ -322,6 +329,87 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
 });
 
 /**
+ * ADR-088: a Production Recipe depends on no Creative Family. Removes the field from every recipe; the rest of the
+ * recipe and its versions are untouched. Idempotent. The field and its index leave the schema once this has run.
+ */
+export const dropRecipeFamily = migrations.define({
+  table: "productionRecipes",
+  migrateOne: async (ctx, recipe) => {
+    if (recipe.creativeFamilyId !== undefined) await ctx.db.patch(recipe._id, { creativeFamilyId: undefined });
+  },
+});
+
+/**
+ * Archiving a Production Recipe was replaced by deleting it: a recipe has no status any more. Removes the field, so a
+ * recipe archived before is usable (editable, offered to Missions and Content Plans) and deletable like any other.
+ * Idempotent. The field leaves the schema once this has run.
+ */
+export const dropRecipeStatus = migrations.define({
+  table: "productionRecipes",
+  migrateOne: async (ctx, recipe) => {
+    if (recipe.status !== undefined) await ctx.db.patch(recipe._id, { status: undefined });
+  },
+});
+
+const RUN_SETTLED = new Set(["completed", "failed", "cancelled"]);
+
+/**
+ * ADR-088: a Recipe Generation Run is pinned to its input (an idea and Sources), not to a Creative Family. A Run
+ * still in flight (or about to be retried from) keeps working: the family it was pinned to is resolved into its
+ * readable Sources, newest first, at most 25. A settled Run keeps its result and gets no Sources: the inspiration of
+ * past generations is not rebuilt. Idempotent: a pin without `familyId` that already has `sourceIds` is left alone.
+ */
+export const stripRecipeGenerationFamily = migrations.define({
+  table: "runs",
+  migrateOne: async (ctx, run) => {
+    if (!("recipeGeneration" in run) || !run.recipeGeneration) return;
+    const { familyId, sourceIds, ...rest } = run.recipeGeneration;
+    if (familyId === undefined && sourceIds !== undefined) return;
+    let pinned = sourceIds ?? [];
+    if (familyId !== undefined && !RUN_SETTLED.has(run.status)) {
+      const rows = await ctx.db
+        .query("sources")
+        .withIndex("by_instance_owner_creativeFamily_createdAt", (q) => q.eq("instanceId", run.instanceId).eq("ownerId", run.ownerId).eq("creativeFamilyId", familyId))
+        .order("desc")
+        .take(500);
+      pinned = rows.filter(isReadableSource).slice(0, MAX_GENERATION_SOURCES).map((source) => source._id);
+    }
+    await ctx.db.patch(run._id, { recipeGeneration: { ...rest, sourceIds: pinned } });
+  },
+});
+
+/**
+ * ADR-089: Source routing is gone, and with it everything a Source carried to be produced: the day's pick, its
+ * routing decision, the producer chosen by hand and the production pointers. Clears them from every Source; the
+ * Missions that were created stay as they are. Idempotent. The fields leave the schema once this has run.
+ */
+export const dropSourceProduction = migrations.define({
+  table: "sources",
+  migrateOne: async (ctx, source) => {
+    if (
+      source.selectedAt === undefined && source.producedAt === undefined && source.publishedAt === undefined &&
+      source.productionMissionId === undefined && source.routing === undefined && source.routeTo === undefined
+    ) return;
+    await ctx.db.patch(source._id, {
+      selectedAt: undefined, producedAt: undefined, publishedAt: undefined, productionMissionId: undefined, routing: undefined, routeTo: undefined,
+    });
+  },
+});
+
+/**
+ * ADR-089: deletes the `source_routing` Jobs (one per Source Agent) with their Runs and those Runs' reconcile
+ * events, since no code runs or reads them any more. Missions are untouched. Idempotent.
+ */
+export const deleteSourceRoutingJobs = migrations.define({
+  table: "jobs",
+  migrateOne: async (ctx, job) => {
+    if (job.type !== "source_routing") return;
+    await deleteRunsWithEvents(ctx, (take) => ctx.db.query("runs").withIndex("by_job", (q) => q.eq("jobId", job._id)).take(take));
+    await ctx.db.delete(job._id);
+  },
+});
+
+/**
  * ADR-072: a Publisher package is looked up by `provides` (its adapter id),
  * from its `meta`. Packages installed before either field existed have
  * neither, and would read as not installed: both are derived again from the
@@ -361,6 +449,11 @@ const PENDING_MIGRATIONS: MigrationFunctionReference[] = [
   internal.migrations.renameCarouselTemplateIdInSources,
   internal.migrations.renameCarouselTemplateIdInRuns,
   internal.migrations.describeHubPackages,
+  internal.migrations.dropRecipeFamily,
+  internal.migrations.dropRecipeStatus,
+  internal.migrations.stripRecipeGenerationFamily,
+  internal.migrations.dropSourceProduction,
+  internal.migrations.deleteSourceRoutingJobs,
 ];
 
 // `migrations.runSerially` (mutation-only) just schedules batches to run

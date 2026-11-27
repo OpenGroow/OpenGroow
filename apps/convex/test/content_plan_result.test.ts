@@ -84,8 +84,8 @@ afterEach(() => {
 });
 
 const owner = () => t.withIdentity(OWNER);
-const recipe = (missionType = "make_video", status: "active" | "archived" = "active", instanceId = INSTANCE) =>
-  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId, creativeFamilyId: familyId, templateId: PRODUCER, missionType, name: "R", description: "d", status } as never));
+const recipe = (missionType = "make_video", instanceId = INSTANCE) =>
+  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId, creativeFamilyId: familyId, templateId: PRODUCER, missionType, name: "R", description: "d" } as never));
 const source = (instanceId = INSTANCE) => t.run((ctx) => ctx.db.insert("sources", { instanceId, ownerId: OWNER.subject, templateId: PRODUCER, sourceId: "s", label: "S", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: NOW, createdAt: NOW, analysis: {} } as never));
 
 const configure = (productionTargets: Array<{ kind: string; quantity: number; publishTargets: string[] }>) =>
@@ -239,13 +239,15 @@ describe("an invalid result", () => {
     expect(await plans()).toHaveLength(0);
   });
   it("rejects a Recipe of another Project", async () => {
-    await fails({ rationale: "r", items: [await item({ recipeId: await recipe("make_video", "active", OTHER_INSTANCE) })] }, /items\[0\].*Recipe of this Project/);
+    await fails({ rationale: "r", items: [await item({ recipeId: await recipe("make_video", OTHER_INSTANCE) })] }, /items\[0\].*Recipe of this Project/);
   });
   it("rejects an unknown Recipe", async () => {
     await fails({ rationale: "r", items: [await item({ recipeId: "nope" })] }, /items\[0\].*Recipe of this Project/);
   });
-  it("rejects an archived Recipe", async () => {
-    await fails({ rationale: "r", items: [await item({ recipeId: await recipe("make_video", "archived") })] }, /archived/);
+  it("rejects a deleted Recipe", async () => {
+    const deleted = await recipe();
+    await t.run((ctx) => ctx.db.delete(deleted));
+    await fails({ rationale: "r", items: [await item({ recipeId: deleted })] }, /items\[0\].*Recipe of this Project/);
   });
   it("rejects a Recipe written for another Mission type", async () => {
     await fails({ rationale: "r", items: [await item({ missionType: "make_post" })] }, /Mission type "make_video"/);

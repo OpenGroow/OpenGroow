@@ -13,10 +13,11 @@ import { exclusiveResourcesProblem } from "./exclusive-resources";
 import { validateRunContext } from "./run-context";
 
 /**
- * Maximum length (in characters) of a Mission type `description`. The Source
- * Agent's routing reads these descriptions as data to pick a producer, so they
- * are bounded to keep a Template from smuggling long prompt-injection payloads
- * into routing. 500 fits a few sentences describing the deliverable.
+ * Maximum length (in characters) of a Mission type `description`. Agents read
+ * these descriptions as data (Content Planning and Recipe Generation choose a
+ * Mission type from them), so they are bounded to keep a Template from
+ * smuggling long prompt-injection payloads. 500 fits a few sentences
+ * describing the deliverable.
  */
 export const MAX_MISSION_TYPE_DESCRIPTION_LENGTH = 500;
 
@@ -509,7 +510,7 @@ export function validateManifest(raw: unknown): { ok: true; manifest: AgentManif
     if (validatedMissionTypes.some((entry) => entry.description === undefined) && exceedsMissionTypeDescriptionLimit(m.description)) {
       return {
         ok: false,
-        reason: `'description' exceeds ${MAX_MISSION_TYPE_DESCRIPTION_LENGTH} characters but is the routing description of a Mission type without its own description`,
+        reason: `'description' exceeds ${MAX_MISSION_TYPE_DESCRIPTION_LENGTH} characters but is the description of a Mission type without its own description`,
       };
     }
     if (
@@ -1091,7 +1092,7 @@ export function isTemplateVisible(
 
 /**
  * The system Source Agent's Template id (ADR-052): every Project activates it
- * once and Source scoring/routing dispatch onto it. The one Template id the
+ * once and Source scoring dispatch onto it. The one Template id the
  * platform itself depends on, declared here (not in Convex, which a CI guard
  * keeps free of Template ids, #663) next to the rules reserving the
  * `@opengroow` scope.

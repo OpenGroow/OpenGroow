@@ -73,6 +73,14 @@ Attempt to execute a Mission by an Agent. The Run is the technical concept of an
 | `failed`       | Terminal failure                                                                                                                     |
 | `cancelled`    | An operator stopped the Mission (cf. Mission status `cancelled`): the agent process was killed on the Instance. Terminal, and never re-polled — reconciliation only ever selects `dispatching`/`running`/`awaiting_job`, so a late exec result can no longer re-decide this Run's fate |
 
+
+### Standalone Run
+
+A Run that belongs to neither a Mission nor a **Job**: one execution of an Agent started by a user action, with the inputs pinned on the Run when it starts. It goes through the same dispatch, reconciliation, timeout and failure handling as any Run. Its first use is **Recipe Generation**.
+
+- **A Standalone Run holds its Agent**: while one is in flight, no other Run starts for that Agent on demand, and the Agent's scheduled Jobs wait for it (they are postponed, not skipped).
+- _Avoid_: "ad hoc Job" (it has no recurrence and no `jobs` row), "task".
+
 ### Blocker
 
 A human-action condition declared by an Agent Template that can stop one of its Missions outside OpenGroow's own review flow. Each Template owns its blocker vocabulary and resolution kind; the Run carries the concrete blocker and its runtime message, while the dashboard renders all blockers through one generic Blocked surface. _Avoid_: treating a Template-specific blocker as a generic failure or as a `needs_human_review` decision.

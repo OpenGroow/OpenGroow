@@ -47,7 +47,6 @@ import {
   Ellipsis,
   Pause,
   Play,
-  Route,
   ScrollText,
   TimerReset,
   Workflow,
@@ -215,7 +214,6 @@ export function InstanceJobsContent({ instanceId }: { instanceId: string }) {
 const JOB_ICONS: Record<string, { icon: LucideIcon; tone: string }> = {
   source_ingestion: { icon: Download, tone: "bg-tone-violet-soft text-tone-violet" },
   source_scoring: { icon: ChartColumn, tone: "bg-tone-blue-soft text-tone-blue" },
-  source_routing: { icon: Route, tone: "bg-tone-cyan-soft text-tone-cyan" },
 };
 const FALLBACK_ICON = { icon: Workflow, tone: "bg-tone-slate-soft text-tone-slate" };
 
@@ -257,7 +255,6 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
   const pauseJob = useMutation(api.jobs.pause);
   const resumeJob = useMutation(api.jobs.resume);
   const runNowJob = useMutation(api.jobs.runNow);
-  const setReviewMode = useMutation(api.source_routing.setReviewMode);
   const [editing, setEditing] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState(false);
   const [editingTargets, setEditingTargets] = useState(false);
@@ -270,17 +267,6 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
       await (job.state === "active" ? pauseJob({ jobId }) : resumeJob({ jobId }));
     } catch (error: unknown) {
       window.alert(extractConvexErrorMessage(error, "Failed to update the job."));
-    }
-  }
-
-  // Source routing only (ADR-076): wait for approval on the Sources page
-  // instead of creating the production Mission right away.
-  const reviewRouting = job.type === "source_routing" && (job.config as { reviewRouting?: boolean } | undefined)?.reviewRouting === true;
-  async function toggleReview(): Promise<void> {
-    try {
-      await setReviewMode({ jobId: job._id as Id<"jobs">, review: !reviewRouting });
-    } catch (error: unknown) {
-      window.alert(extractConvexErrorMessage(error, "Failed to update the routing mode."));
     }
   }
 
@@ -339,11 +325,6 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                 </p>
               ) : null}
               {planning ? <PlanningSummary config={job.config} /> : null}
-              {reviewRouting ? (
-                <p className="m-0 text-sm text-muted-foreground">
-                  Each routing choice waits on the Sources page until you press Produce.
-                </p>
-              ) : null}
               <Outcome job={job} />
             </div>
           </div>
@@ -375,12 +356,6 @@ function JobRowItem({ job, instanceId }: { job: JobRow; instanceId: string }) {
                   <DropdownMenuItem onClick={() => setEditingTargets((open) => !open)}>
                     <Layers />
                     Edit planning targets
-                  </DropdownMenuItem>
-                ) : null}
-                {job.type === "source_routing" ? (
-                  <DropdownMenuItem onClick={() => void toggleReview()}>
-                    <Route />
-                    {reviewRouting ? "Stop requiring approval" : "Require approval before production"}
                   </DropdownMenuItem>
                 ) : null}
                 {job.workspaceKey !== undefined && job.latestRunId !== undefined ? (

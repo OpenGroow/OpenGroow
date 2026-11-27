@@ -15,7 +15,7 @@ export type PersistResult =
 
 const reject = (reason: Extract<PersistResult, { ok: false }>["reason"], message: string): PersistResult => ({ ok: false, reason, message });
 
-const REFERENCE_TABLES = { familyIds: "creativeFamilies", recipeIds: "productionRecipes", publicationIds: "publications" } as const;
+const REFERENCE_TABLES = { recipeIds: "productionRecipes", publicationIds: "publications" } as const;
 
 /** The latest persisted Review of a Project, the current Strategic Memory. */
 export async function latestOf(ctx: QueryCtx, instanceId: string): Promise<Doc<"strategicReviews"> | null> {
@@ -34,7 +34,7 @@ async function reviewOf(ctx: QueryCtx, instanceId: string, reviewId: Id<"strateg
  */
 export type StrategicMemoryReading =
   | { exists: false; message: string }
-  | { exists: true; reviewId: Id<"strategicReviews">; periodStart: number; periodEnd: number; memory: string; references: Doc<"strategicReviews">["references"]; createdAt: number };
+  | { exists: true; reviewId: Id<"strategicReviews">; periodStart: number; periodEnd: number; memory: string; references: Omit<Doc<"strategicReviews">["references"], "familyIds">; createdAt: number };
 
 /** The pins of the strategic_review Run this Agent is running, if it has one (the token carries no Run). */
 async function pinsOfRunningStrategicReview(ctx: QueryCtx, instanceId: string, templateId: string): Promise<NonNullable<Doc<"runs">["strategicReview"]> | undefined> {
@@ -62,7 +62,7 @@ export async function readStrategicMemory(ctx: QueryCtx, scope: { instanceId: st
   // A Run pinned without a base reads no memory.
   const review = pins ? (pins.baseReviewId ? await reviewOf(ctx, scope.instanceId, pins.baseReviewId) : null) : await latestOf(ctx, scope.instanceId);
   if (!review) return { exists: false, message: "No Strategic Review exists for this Project yet: there is no Strategic Memory." };
-  return { exists: true, reviewId: review._id, periodStart: review.periodStart, periodEnd: review.periodEnd, memory: review.consolidatedMemory, references: review.references, createdAt: review.createdAt };
+  return { exists: true, reviewId: review._id, periodStart: review.periodStart, periodEnd: review.periodEnd, memory: review.consolidatedMemory, references: { recipeIds: review.references.recipeIds, publicationIds: review.references.publicationIds }, createdAt: review.createdAt };
 }
 
 /** The ids that do not resolve to an entity of this Project, unless the base already held them. */
@@ -145,7 +145,6 @@ export async function persistStrategicReview(ctx: MutationCtx, args: PersistArgs
     report,
     consolidatedMemory,
     references: {
-      familyIds: refs.familyIds as Id<"creativeFamilies">[],
       recipeIds: refs.recipeIds as Id<"productionRecipes">[],
       publicationIds: refs.publicationIds as Id<"publications">[],
     },

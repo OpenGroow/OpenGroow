@@ -70,9 +70,9 @@ const JOB_1 = {
 };
 
 const GENERIC_JOB = {
-  _id: "job-routing-1",
-  jobType: "source_routing",
-  agentName: "Source routing",
+  _id: "job-review-1",
+  jobType: "strategic_review",
+  agentName: "Strategy Agent",
   lastOutcome: "succeeded",
   lastRunAt: 4000,
 };
@@ -386,13 +386,13 @@ describe("WorkspaceLogsPage", () => {
         found: true,
         turns: [],
         runId: "job-run-1",
-        parent: { kind: "job", jobId: "job-routing-1" },
+        parent: { kind: "job", jobId: "job-review-1" },
       })
       .mockResolvedValueOnce({
         found: true,
-        turns: [{ kind: "message", role: "assistant", text: "routing transcript" }],
+        turns: [{ kind: "message", role: "assistant", text: "review transcript" }],
         runId: "job-run-1",
-        parent: { kind: "job", jobId: "job-routing-1" },
+        parent: { kind: "job", jobId: "job-review-1" },
       });
     useQueryMock.mockImplementation((query: string, args: unknown) => {
       if (query === "workspace_logs.listMissionsForWorkspace") return args === "skip" ? undefined : [MISSION_1];
@@ -413,6 +413,6 @@ describe("WorkspaceLogsPage", () => {
       workspaceKey: "ws-hello",
       runId: "job-run-1",
     });
-    expect(document.body.textContent).toContain("routing transcript");
+    expect(document.body.textContent).toContain("review transcript");
   });
 });

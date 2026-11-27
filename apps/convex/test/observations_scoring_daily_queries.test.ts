@@ -78,7 +78,6 @@ type ObservationOverrides = Partial<{
   capturedAt: number;
   enrichmentStatus: ObservationFixture["enrichmentStatus"];
   excluded: boolean;
-  selectedAt: number;
   viewCount: number;
   likeCount: number;
   commentCount: number;
@@ -110,7 +109,6 @@ async function insertObservation(
       createdAt: Date.now(),
       enrichmentStatus: overrides.enrichmentStatus ?? "completed",
       excluded: overrides.excluded ?? false,
-      selectedAt: overrides.selectedAt,
       viewCount: overrides.viewCount,
       likeCount: overrides.likeCount,
       commentCount: overrides.commentCount,
@@ -164,12 +162,6 @@ describe("observations_scoring_daily.scoreEligibleForInstance", () => {
       rawEngagementScore: 50,
       excluded: true,
     });
-    // Ineligible: already selected.
-    const selectedId = await insertObservation(t, missionId, runId, {
-      postUrl: "https://www.instagram.com/reel/selected/",
-      rawEngagementScore: 50,
-      selectedAt: now,
-    });
     // Ineligible: outside the lookback window.
     const staleId = await insertObservation(t, missionId, runId, {
       postUrl: "https://www.instagram.com/reel/stale/",
@@ -220,14 +212,12 @@ describe("observations_scoring_daily.scoreEligibleForInstance", () => {
     const untouched = await t.run(async (ctx) => {
       return {
         excluded: await ctx.db.get(excludedId),
-        selected: await ctx.db.get(selectedId),
         stale: await ctx.db.get(staleId),
         pending: await ctx.db.get(pendingId),
       };
     });
     expect(untouched.excluded?.scoring?.engagementScore).toBeUndefined();
     expect(untouched.excluded?.scoring?.replicationScore).toBeUndefined();
-    expect(untouched.selected?.scoring?.engagementScore).toBeUndefined();
     expect(untouched.stale?.scoring?.engagementScore).toBeUndefined();
     expect(untouched.pending?.scoring?.engagementScore).toBeUndefined();
   });

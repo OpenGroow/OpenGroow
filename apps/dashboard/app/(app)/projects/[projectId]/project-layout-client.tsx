@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Bot,
   CalendarClock,
+  ChefHat,
   LayoutDashboard,
   LayoutGrid,
   Library,
@@ -69,6 +70,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: "sources", label: "Sources", icon: Library },
       { id: "library", label: "Creative Library", icon: LibraryBig },
+      { id: "recipes", label: "Recipes", icon: ChefHat },
     ],
   },
   {

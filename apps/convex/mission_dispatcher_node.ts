@@ -26,11 +26,10 @@ import {
   runMaxMsFromSessionBudget,
 } from "./mission_dispatcher/session_budget.js";
 import { errorMessage } from "./mission_dispatcher/error_message.js";
-import { jobRunFilePath } from "./source_jobs/job_files.js";
+import { jobRunFilePath, standaloneRunFilePath } from "./source_jobs/job_files.js";
 import { buildSourceJobRunFile } from "./source_jobs/source_job_context.js";
 import { pollSourceEnrichmentRun } from "./source_jobs/enrichment_poll_node.js";
 import { buildSourceScoringRunFile } from "./source_scoring.js";
-import { buildSourceRoutingRunFile } from "./source_routing.js";
 import { buildStrategicReviewRunFile } from "./strategic_review_jobs.js";
 import { buildContentPlanningRunFile } from "./content_planning_dispatch.js";
 import { parentMissionId, type RunParent } from "./run_parent.js";
@@ -120,12 +119,13 @@ export const pollExternalJobs = internalAction({
       const opts = { timedOut: isTimedOut(r.dispatchedAt, maxMs), maxMs };
       // A Source ingestion Job execution's handoff is an enrichment of a Source (#533):
       // same polling engine, different meaning for a terminal state.
+      // A Recipe Generation never hands off to an External Job.
+      if (r.parent.kind === "standalone") continue;
       const isSourceIngestion = r.parent.kind === "job"
         && await ctx.runQuery(internal.source_jobs.isSourceIngestionRun, { runId: r._id });
       if (isSourceIngestion) await pollSourceEnrichmentRun(ctx, r, opts);
       else if (r.parent.kind === "job"
         && (await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: r._id })
-          || await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: r._id })
           || await ctx.runQuery(internal.strategic_review_jobs.isStrategicReviewRun, { runId: r._id })
           || await ctx.runQuery(internal.content_planning_dispatch.isContentPlanningRun, { runId: r._id }))) continue;
       else await pollExternalJobRun(ctx, r, opts, registry);
@@ -157,6 +157,7 @@ function loggedDecision(decision: ReconcileDecision) {
   }
   if (decision.type === "persistStrategicReview") return { type: "persistStrategicReview" as const };
   if (decision.type === "persistContentPlan") return { type: "persistContentPlan" as const };
+  if (decision.type === "persistRecipeProposal") return { type: "persistRecipeProposal" as const };
   if (decision.type === "markAwaitingJob") return { type: "markAwaitingJob" as const, job: decision.job };
   return decision;
 }
@@ -210,9 +211,9 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
       parent: state.parent,
       sourceIngestion: state.sourceIngestion === true,
       sourceScoring: state.sourceScoring === true,
-      sourceRouting: state.sourceRouting === true,
       strategicReview: state.strategicReview === true,
       contentPlanning: state.contentPlanning === true,
+      recipeGeneration: state.recipeGeneration === true,
       runId: state.runId,
       missionType: state.missionType,
       blockerCodes: await resolveMissionTypeBlockerCodes(
@@ -261,6 +262,13 @@ async function reconcileRun(ctx: ActionCtx, run: ReconcileRun, now: number): Pro
         runId: state.runId,
         result: { status: "success", summary: "Content Plan result received" },
         contentPlanEnvelope: decision.envelope,
+      });
+      return;
+    case "persistRecipeProposal":
+      await ctx.runMutation(internal.runs.markCompleted, {
+        runId: state.runId,
+        result: { status: "success", summary: "Recipe Generation result received" },
+        recipeProposalEnvelope: decision.envelope,
       });
       return;
     case "markFailed": {
@@ -334,6 +342,11 @@ export const dispatchPendingRuns = internalAction({
       const claimed = await ctx.runMutation(internal.runs.claimNextPending, {});
       if (!claimed) return;
 
+      if (claimed.parent.kind === "standalone") {
+        await dispatchRecipeGenerationRun(ctx, claimed.runId, claimed.parent);
+        continue;
+      }
+
       if (claimed.parent.kind === "job"
         && await ctx.runQuery(internal.source_jobs.isSourceIngestionRun, { runId: claimed.runId })) {
         if (await dispatchSourceJobRun(ctx, claimed.runId, claimed.parent)) continue;
@@ -342,11 +355,6 @@ export const dispatchPendingRuns = internalAction({
       if (claimed.parent.kind === "job"
         && await ctx.runQuery(internal.score_jobs.isSourceScoringRun, { runId: claimed.runId })) {
         if (await dispatchSourceScoringRun(ctx, claimed.runId, claimed.parent)) continue;
-      }
-
-      if (claimed.parent.kind === "job"
-        && await ctx.runQuery(internal.source_routing.isSourceRoutingRun, { runId: claimed.runId })) {
-        if (await dispatchSourceRoutingRun(ctx, claimed.runId, claimed.parent)) continue;
       }
 
       if (claimed.parent.kind === "job"
@@ -703,57 +711,6 @@ async function dispatchSourceScoringRun(
   return true;
 }
 
-/** Dispatch a Source routing Job Run to the Source Agent. */
-async function dispatchSourceRoutingRun(
-  ctx: ActionCtx,
-  runId: Id<"runs">,
-  parent: Extract<RunParent, { kind: "job" }>,
-): Promise<boolean> {
-  const inputs = await ctx.runQuery(internal.source_routing.loadDispatchInputs, { runId });
-  if (!inputs) return false;
-  try {
-    const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
-    const runMd = buildSourceRoutingRunFile({ source: inputs.source, candidates: inputs.candidates, feedback: inputs.feedback });
-    const runPath = jobRunFilePath(parent.jobId);
-    const outputsPath = runOutputsFilePath(parent, runId);
-    const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
-    const execResult = await ctx.runMutation(enqueueCommandMutation, {
-      instanceId: inputs.instanceId,
-      type: RUNTIME_OPENCLAW_EXEC,
-      payload: {
-        commandText: buildOpenClawExecCommandText({
-          agentName: inputs.run.agentName,
-          sessionKey: inputs.run.sessionKey,
-          runFilePath: runPath,
-          outputsFilePath: outputsPath,
-          timeoutMs: execTimeoutMs,
-        }),
-        timeoutMs: execTimeoutMs,
-        workspaceKey: inputs.workspaceKey,
-        filesToWrite: [
-          { filePath: runPath, content: runMd },
-          ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
-          ...(template?.jobInstructions?.source_routing
-            ? [{ filePath: "jobs/source-routing.md", content: template.jobInstructions.source_routing }]
-            : []),
-        ],
-        runFilePath: runPath,
-        outputsFilePath: outputsPath,
-        requiredMcpServers: requiredMcpServers(template),
-      },
-    });
-    await ctx.runMutation(internal.runs.markRunning, {
-      runId,
-      dispatchCommandId: execResult.commandId,
-      agentsMdSnapshot: template?.agentsMd,
-      contextMdSnapshot: runMd,
-    });
-  } catch (err) {
-    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_failed", message: errorMessage(err) });
-  }
-  return true;
-}
-
 type JobRunInputs = { instanceId: string; templateId: string; workspaceKey: string; run: { agentName: string; sessionKey: string } };
 
 /**
@@ -764,19 +721,19 @@ type JobRunInputs = { instanceId: string; templateId: string; workspaceKey: stri
 async function dispatchJobRun<I extends JobRunInputs>(
   ctx: ActionCtx,
   runId: Id<"runs">,
-  parent: Extract<RunParent, { kind: "job" }>,
+  parent: Exclude<RunParent, { kind: "mission" }>,
   inputs: I | null,
   buildRunFile: (inputs: I) => string,
-  instructions: { type: "strategic_review" | "content_planning"; filePath: string },
+  instructions?: { type: "strategic_review" | "content_planning"; filePath: string },
 ): Promise<boolean> {
   if (!inputs) return false;
   try {
     const template = await getTemplateRegistry(ctx).resolve(inputs.instanceId, inputs.templateId);
     const runMd = buildRunFile(inputs);
-    const runPath = jobRunFilePath(parent.jobId);
+    const runPath = parent.kind === "standalone" ? standaloneRunFilePath(parent.runId) : jobRunFilePath(parent.jobId);
     const outputsPath = runOutputsFilePath(parent, runId);
     const execTimeoutMs = runMaxMsFromSessionBudget(undefined);
-    const jobInstructions = template?.jobInstructions?.[instructions.type];
+    const jobInstructions = instructions ? template?.jobInstructions?.[instructions.type] : undefined;
     const execResult = await ctx.runMutation(enqueueCommandMutation, {
       instanceId: inputs.instanceId,
       type: RUNTIME_OPENCLAW_EXEC,
@@ -793,7 +750,7 @@ async function dispatchJobRun<I extends JobRunInputs>(
         filesToWrite: [
           { filePath: runPath, content: runMd },
           ...(template ? [{ filePath: "AGENTS.md", content: template.agentsMd }] : []),
-          ...(jobInstructions ? [{ filePath: instructions.filePath, content: jobInstructions }] : []),
+          ...(jobInstructions && instructions ? [{ filePath: instructions.filePath, content: jobInstructions }] : []),
         ],
         runFilePath: runPath,
         outputsFilePath: outputsPath,
@@ -822,4 +779,12 @@ async function dispatchStrategicReviewRun(ctx: ActionCtx, runId: Id<"runs">, par
 async function dispatchContentPlanningRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "job" }>): Promise<boolean> {
   const inputs = await ctx.runQuery(internal.content_planning_dispatch.loadDispatchInputs, { runId });
   return dispatchJobRun(ctx, runId, parent, inputs, (loaded) => buildContentPlanningRunFile(loaded.pins, loaded.feedback), { type: "content_planning", filePath: "jobs/content-planning.md" });
+}
+
+/** Dispatch a Recipe Generation Run (ADR-087): its instructions are written by OpenGroow in the run file, not by the Template. */
+async function dispatchRecipeGenerationRun(ctx: ActionCtx, runId: Id<"runs">, parent: Extract<RunParent, { kind: "standalone" }>): Promise<void> {
+  const inputs = await ctx.runQuery(internal.recipe_generation.loadDispatchInputs, { runId });
+  if (!(await dispatchJobRun(ctx, runId, parent, inputs, (loaded) => loaded.runFile))) {
+    await ctx.runMutation(internal.runs.markFailed, { runId, code: "dispatch_inputs_missing", message: "the Agent that runs this Recipe Generation is not set up in the Project" });
+  }
 }

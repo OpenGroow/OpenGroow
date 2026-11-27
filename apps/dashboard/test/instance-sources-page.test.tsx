@@ -15,6 +15,7 @@ const useQueryMock = vi.fn();
 const usePaginatedQueryMock = vi.fn();
 const removeManyMock = vi.fn();
 
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryMock(...args),
   usePaginatedQuery: (...args: unknown[]) => usePaginatedQueryMock(...args),
@@ -24,7 +25,6 @@ vi.mock("convex/react", () => ({
 vi.mock("@convex/_generated/api", () => ({
   api: {
     sources: { listByInstance: "sources.listByInstance", listFamilies: "sources.listFamilies", removeMany: "sources.removeMany", counts: "sources.counts" },
-    source_routing: { listTargets: "source_routing.listTargets", setRouteTarget: "source_routing.setRouteTarget", forceProduction: "source_routing.forceProduction" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
   },
@@ -81,10 +81,10 @@ describe("InstanceSourcesContent", () => {
 
   async function render(
     results: Array<ReturnType<typeof makeSource>>,
-    { status = "Exhausted", families, tab = "other", targets = [], counts }: { status?: string; families?: string[]; tab?: "other" | "ready"; targets?: unknown[]; counts?: unknown } = {},
+    { status = "Exhausted", families, tab = "other", counts }: { status?: string; families?: string[]; tab?: "other" | "ready"; counts?: unknown } = {},
   ) {
     const familyList = families ?? [...new Set(results.map((r) => r.family as string))].sort();
-    useQueryMock.mockImplementation((key: string) => (key === "source_routing.listTargets" ? targets : key === "sources.counts" ? counts : key === "source_platforms.forInstance" ? PLATFORMS : familyList));
+    useQueryMock.mockImplementation((key: string) => (key === "sources.counts" ? counts : key === "source_platforms.forInstance" ? PLATFORMS : familyList));
     usePaginatedQueryMock.mockReturnValue({ results, status, loadMore });
     await act(async () => {
       root.render(<InstanceSourcesContent instanceId="instance-1" />);
@@ -232,51 +232,23 @@ describe("InstanceSourcesContent", () => {
     expect(loadMore).toHaveBeenCalledWith(50);
   });
 
-  it("lists only the pipeline states that are not on the Scored tab or the Missions board", async () => {
+  it("lists on the Other tab only the Sources that are not Scored", async () => {
     await render([
       makeSource({ _id: "a", status: "processing" }),
       makeSource({ _id: "b", status: "ready" }),
       makeSource({ _id: "c", status: "ready", scoring: { productFit: 0.75 } }),
-      makeSource({ _id: "d", status: "ready", scoring: { productFit: 0.75 }, selectedAt: 1 }),
-      makeSource({
-        _id: "e",
-        status: "ready",
-        scoring: { productFit: 0.75 },
-        selectedAt: 1,
-        productionMissionId: "mission-1",
-      }),
-      makeSource({
-        _id: "f",
-        status: "ready",
-        scoring: { productFit: 0.75 },
-        selectedAt: 1,
-        productionMissionId: "mission-1",
-        producedAt: 2,
-      }),
-      makeSource({
-        _id: "g",
-        status: "ready",
-        scoring: { productFit: 0.75 },
-        selectedAt: 1,
-        productionMissionId: "mission-1",
-        producedAt: 2,
-        publishedAt: 3,
-      }),
       makeSource({ _id: "h", status: "failed" }),
       makeSource({ _id: "i", status: "unavailable" }),
       makeSource({ _id: "j", status: "ready", excluded: true }),
     ]);
     // The rows only: the Scored tab label is on the page too.
     const text = Array.from(document.querySelectorAll("ul li")).map((row) => row.textContent).join(" ");
-    // "Scored" is the Scored tab's stage and the production stages live on the
-    // Missions board: none of them is listed here.
-    for (const label of ["Scored", "Routed", "In production", "Produced", "Published"]) {
-      expect(text).not.toContain(label);
-    }
+    expect(text).not.toContain("Scored");
     for (const label of ["Ingestion", "Ready", "Failed", "Unavailable", "Excluded"]) {
       expect(text).toContain(label);
     }
   });
+
   describe("select mode", () => {
     const rows = () => [
       makeSource({ _id: "src-1", marketing: { summary: "first" } }),
@@ -342,27 +314,22 @@ describe("InstanceSourcesContent", () => {
 
   describe("Ready tab", () => {
     const scored = { productFit: 0.9, replicability: 0.9, creativeStrength: 0.9 };
-    const targets = [
-      { templateId: "@opengroow/social-engagement", agentName: "social", missionType: "create_reel", label: "Create reel", description: "" },
-      { templateId: "@opengroow/content-creator", agentName: "content", missionType: "create_image", label: "Create image", description: "" },
-    ];
     const reel = (overrides: Partial<Record<string, unknown>> = {}) =>
       makeSource({ _id: "s-reel", sourceId: "instagram-reel", family: "social-video", marketing: { summary: "A Christmas reel" }, analysis: { creativeFeatures: { mediaType: "video" } }, scoring: { ...scored, replicationScore: 0.92 }, ...overrides });
 
-    // The last native select of a row is "Routed to" (the two before it are the sort and the agent filter).
-    const routedToSelect = () => Array.from(document.querySelectorAll("[aria-label='Ready sources'] li select")).at(-1) as HTMLSelectElement;
-
-    it("lists the scored Sources by score with their format and a Produce button", async () => {
+    it("lists the scored Sources by score with their format, and no production action", async () => {
       await render(
         [reel(), makeSource({ _id: "s-low", marketing: { summary: "Lower" }, scoring: { ...scored, replicationScore: 0.5 } }), makeSource({ _id: "s-new", marketing: { summary: "Not scored yet" } })],
-        { tab: "ready", targets },
+        { tab: "ready" },
       );
       const rows = Array.from(document.body.querySelectorAll("[aria-label='Ready sources'] li"));
       expect(rows).toHaveLength(2);
       expect(rows[0]!.textContent).toContain("A Christmas reel");
       expect(rows[0]!.textContent).toContain("Instagram Reel");
       expect(rows[0]!.textContent).toContain("Score 92");
-      expect(rows[0]!.textContent).toContain("Produce");
+      expect(rows[0]!.textContent).not.toContain("Produce");
+      expect(rows[0]!.textContent).not.toContain("Routed to");
+      expect(rows[0]!.querySelector("select")).toBeNull();
       expect(document.body.textContent).not.toContain("Not scored yet");
     });
 
@@ -374,7 +341,7 @@ describe("InstanceSourcesContent", () => {
           reel({ _id: "s-img", marketing: { summary: "img" }, analysis: { creativeFeatures: { mediaType: "image" } } }),
           reel({ _id: "s-other", sourceId: "keyword", label: "Search keyword", marketing: { summary: "kw" }, analysis: {} }),
         ],
-        { tab: "ready", targets },
+        { tab: "ready" },
       );
       const badge = (title: string) => document.querySelector(`[aria-label='Ready sources'] [title='${title}']`)!;
       // Instagram video: the logo is an image, the media an icon, and the words are for screen readers only.
@@ -388,40 +355,25 @@ describe("InstanceSourcesContent", () => {
       expect(Array.from(document.querySelectorAll("[aria-label='Ready sources'] li")).some((row) => row.textContent?.includes("Search keyword"))).toBe(true);
     });
 
-    it("cuts a long title to 100 characters below lg, and keeps the whole title for desktop", async () => {
+    it("shows the Sources as a gallery of cards, a long title clamped by the layout and complete in its tooltip", async () => {
       const long = "A Christmas gift reel for a wife. ".repeat(10).trim();
-      await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready", targets });
-      const links = Array.from(document.querySelectorAll("[aria-label='Ready sources'] li a"));
-      const cut = links.find((link) => link.getAttribute("title") === long)!;
-      expect(cut.querySelector(".lg\\:hidden")!.textContent).toBe(`${long.slice(0, 100).trimEnd()}…`);
-      expect(cut.querySelector(".hidden")!.textContent).toBe(long);
-      expect(links.find((link) => link.getAttribute("title") === "Short title")!.querySelector(".lg\\:hidden")!.textContent).toBe("Short title");
+      await render([reel({ marketing: { summary: long } }), reel({ _id: "s-short", marketing: { summary: "Short title" } })], { tab: "ready" });
+      const gallery = document.querySelector("[aria-label='Ready sources'] ul")!;
+      expect(gallery.className).toContain("grid-cols");
+      expect(gallery.querySelectorAll(":scope > li")).toHaveLength(2);
+      const link = Array.from(gallery.querySelectorAll("li a")).find((a) => a.getAttribute("title") === long)!;
+      expect(link.className).toContain("line-clamp-2");
+      expect(link.textContent).toBe(long);
     });
 
-    it("leaves out Sources already picked for production", async () => {
-      await render([reel(), makeSource({ _id: "s-picked", marketing: { summary: "Picked" }, scoring: scored, selectedAt: 1 })], { tab: "ready", targets });
-      expect(document.body.textContent).not.toContain("Picked");
-    });
-
-    it("saves the producer chosen in Routed to, and Produce calls forceProduction", async () => {
-      await render([reel()], { tab: "ready", targets });
-      const select = routedToSelect();
-      expect(select.value).toBe("auto");
-      const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
-      await act(async () => {
-        setValue.call(select, "@opengroow/content-creator::create_image");
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel", target: { templateId: "@opengroow/content-creator", missionType: "create_image" } });
-
-      removeManyMock.mockClear();
-      const produce = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent?.includes("Produce"))!;
-      await act(async () => { produce.click(); });
-      expect(removeManyMock).toHaveBeenCalledWith({ sourceId: "s-reel" });
+    it("shows the status, Agent and date of a Source on the Other tab's cards", async () => {
+      await render([makeSource({ _id: "a", status: "failed" })], { tab: "other" });
+      const card = document.querySelector("ul li")!;
+      expect(card.textContent).toContain("Failed");
     });
 
     it("uses the same Select mode as All to delete several Ready Sources", async () => {
-      await render([reel(), reel({ _id: "s-two", marketing: { summary: "Second" } })], { tab: "ready", targets });
+      await render([reel(), reel({ _id: "s-two", marketing: { summary: "Second" } })], { tab: "ready" });
       removeManyMock.mockClear(); // every mutation shares this mock, including the thumbnail request
       const button = (name: string, scope: ParentNode = document.body) => Array.from(scope.querySelectorAll("button")).find((b) => b.textContent?.trim().startsWith(name))!;
       expect(document.querySelectorAll("[role='checkbox']")).toHaveLength(0);
@@ -438,7 +390,7 @@ describe("InstanceSourcesContent", () => {
 
     it("shows a broken image for a Source whose thumbnail was tried and never came, the glyph while it is still waiting", async () => {
       removeManyMock.mockResolvedValue(undefined);
-      await render([reel({ thumbnailTriedAt: 1, thumbnailUrl: null }), reel({ _id: "s-wait", marketing: { summary: "Waiting" } })], { tab: "ready", targets });
+      await render([reel({ thumbnailTriedAt: 1, thumbnailUrl: null }), reel({ _id: "s-wait", marketing: { summary: "Waiting" } })], { tab: "ready" });
       expect(document.querySelectorAll("[data-testid='broken-thumbnail']")).toHaveLength(1);
       expect(document.querySelectorAll("[aria-label='Ready sources'] li")).toHaveLength(2);
     });
@@ -447,14 +399,14 @@ describe("InstanceSourcesContent", () => {
       removeManyMock.mockResolvedValue(undefined);
       await render(
         [reel({ thumbnailUrl: "https://storage.example/thumb.jpg", thumbnailTriedAt: 1 }), reel({ _id: "s-none", marketing: { summary: "No image yet" } })],
-        { tab: "ready", targets },
+        { tab: "ready" },
       );
       expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/thumb.jpg");
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["s-none"] });
     });
 
     it("puts Load more on the right of the Scored tab", async () => {
-      await render([reel()], { tab: "ready", targets, status: "CanLoadMore" });
+      await render([reel()], { tab: "ready", status: "CanLoadMore" });
       const button = Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Load more")!;
       expect(button.parentElement!.className).toContain("justify-end");
     });
@@ -464,11 +416,6 @@ describe("InstanceSourcesContent", () => {
       await render([makeSource({ _id: "a-img", thumbnailUrl: "https://storage.example/a.jpg", thumbnailTriedAt: 1 }), makeSource({ _id: "a-none" })], { tab: "other" });
       expect(document.querySelector("img")?.getAttribute("src")).toBe("https://storage.example/a.jpg");
       expect(removeManyMock).toHaveBeenCalledWith({ instanceId: "instance-1", sourceIds: ["a-none"] });
-    });
-
-    it("preselects the router's proposal", async () => {
-      await render([reel({ routing: { state: "proposed", templateId: "@opengroow/social-engagement", missionType: "create_reel", rationale: "Fits" } })], { tab: "ready", targets });
-      expect(routedToSelect().value).toBe("@opengroow/social-engagement::create_reel");
     });
   });
 });

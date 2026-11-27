@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { BookOpen, CalendarDays, ChevronDown, ChevronUp, FileText, Film, Layers, Link2, Send, Sparkles } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronUp, FileText, Film, Link2, Send, Sparkles } from "lucide-react";
 import { PlatformLogo } from "@/src/components/platform-logo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,9 +74,6 @@ export function PlannedContentCard({ content, period, readOnly = false }: { cont
           <dl className="m-0 grid min-w-0 content-start gap-2 text-sm">
             <Detail icon={<BookOpen aria-hidden="true" />} label="Recipe">
               {content.recipe?.name ?? "Deleted"}
-            </Detail>
-            <Detail icon={<Layers aria-hidden="true" />} label="Creative Family">
-              {content.creativeFamily?.name ?? "Deleted"}
             </Detail>
             {content.source ? (
               <Detail icon={<Link2 aria-hidden="true" />} label="Source">

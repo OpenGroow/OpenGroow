@@ -3,14 +3,12 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import { readAttributed, type AttributedGroup } from "./analytics_attributed.js";
 
 // Performance by Production Recipe (ADR-084): a Publication is attributed through its Mission's Recipe
-// Snapshot, never through the live recipe, so editing, renaming or archiving a recipe does not move history.
+// Snapshot, never through the live recipe, so editing, renaming or deleting a recipe does not move history.
 
 export type RecipePerformance = Omit<AttributedGroup, "members"> & {
   recipeId: string;
   /** The name at the time of the Missions (from the snapshots), not the current one. */
   recipeName: string;
-  /** The recipe is archived now. Its Publications stay attributed to it. */
-  archived: boolean;
   /** Publications per recipe version used, oldest version first, each with its last publication date. */
   versions: Array<{ version: number; publications: number; lastPublishedAt: number }>;
 };
@@ -32,20 +30,18 @@ export async function summarizeByRecipe(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number; claimKeyOf?: (mission: Doc<"missions">) => string | undefined } = {},
+  options: { scanLimit?: number; platform?: string; recipeId?: string; now?: number } = {},
 ): Promise<RecipeSummary> {
   const read = await readAttributed(ctx, instanceId, window, {
     keyOf: (mission) => mission.recipeSnapshot?.recipeId,
     // A recipe id of another Project (or no id at all) matches no snapshot of this one.
     keep: options.recipeId === undefined ? undefined : (key) => key === options.recipeId,
-    claimKeyOf: options.claimKeyOf,
     scanLimit: options.scanLimit,
     platform: options.platform,
     now: options.now,
   });
   const recipes: RecipePerformance[] = [];
   for (const [recipeId, { members, ...group }] of read.groups) {
-    const recipe = await ctx.db.get(recipeId as Id<"productionRecipes">);
     const newest = members.reduce((a, m) => (m.publishedAt > a.publishedAt ? m : a));
     const versions = new Map<number, { publications: number; lastPublishedAt: number }>();
     for (const { mission, publishedAt } of members) {
@@ -58,7 +54,6 @@ export async function summarizeByRecipe(
     recipes.push({
       recipeId,
       recipeName: newest.mission.recipeSnapshot!.recipeName,
-      archived: recipe?.status === "archived",
       ...group,
       versions: [...versions.entries()].sort(([a], [b]) => a - b).map(([version, v]) => ({ version, ...v })),
     });

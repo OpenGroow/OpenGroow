@@ -12,21 +12,18 @@ A **Source** is one dated, machine-written record of something an Agent saw in t
 - **Normalized by a Source ingestion Job, against a schema OpenGroow owns**: the common schema is defined once by OpenGroow and validated on every write, with errors handed back to the writing Agent so it can correct itself. An optional `raw` (verbatim capture, 64 KB cap) may accompany it, and `runId`/`sourceJobId` provenance is set by OpenGroow from the Source ingestion Job execution in flight, never by the Agent. `sourceJobId` points to the generic `jobs` row whose type is `source_ingestion`. Scoring is the opposite: never written by an Agent, always computed by OpenGroow with the same rules for every origin, so a score means the same thing whichever Agent produced the Source.
 - **Append-only**: a Source is always a new dated record — the same Reel seen twice, or a keyword collected weekly, yields several Sources. The one exception is a re-read: an entry with the same origin and capture time as an existing Source of the Agent (a batch read again after a failed execution) is not written twice. A natural key linking a series may come later.
 - **Enrichment is optional** and belongs to the origin: only some (e.g. a Reel needing transcript and frames) have one. A Source without enrichment is `ready` as soon as it is written, provided its marketing representation is usable (see **Source Agent**) — a Source with an empty/unusable marketing representation is not eligible for scoring even once `ready`.
-- **Pipeline status is derived, not stored**: no single field names "where a Source is." The dashboard computes a stepper (Ingestion → Ready → Scored → Routed → In production → Produced → Published, with Failed/Unavailable/Excluded as terminal states) from `status`, `scoring`, `selectedAt`, `productionMissionId`, `producedAt`, and `publishedAt` — all of which already exist and would otherwise desync from a stored summary field.
-- **One Source per post** (ADR-076): ingestion keeps one Source per post and Agent. A post is identified by `originKey` (`source_origin.ts`), which ignores tracking parameters and the variants of a post's path as its Template's Platform declares them (on Instagram, `/p/` vs `/reel/`), so the same post shared on another day is not scored and routed twice. The older Source stays. Sources ingested before this rule have no `originKey` and are not matched.
-- **Selection lifecycle** (ADR-051): once scored (see **Source Agent**), a Source becomes eligible for the Replication Score ranking. `selectedAt` is set when it is picked as an Instance's winner and the Source routing Job begins handling it; this permanently removes it from future rankings. `producedAt`/`publishedAt` record, best-effort, that content was actually produced/published from it.
-- **Routing decision** (ADR-076): the Source routing Job's choice is kept on the Source (`routing`: target, payload, rationale, eligible candidates, `proposed`/`approved`). With the Job's `reviewRouting` flag on it stays `proposed`: the Source shows it as **Routed to** in the **Scored** tab of the Sources page until **Produce** creates the Mission (in "To do"). The user can pick another producer by hand (`routeTo`), in which case Produce runs the router for that producer only.
-- **Production (ADR-052, ADR-051)**: the Source routing Job invokes the **Source Agent** for the selected Source. The Agent chooses a type-specific production Mission from the active Templates, and OpenGroow's dispatcher creates that user-facing Mission. `productionMissionId` points directly to the production Mission under human review. Job executions and their logs are not Missions and do not appear in the Mission Kanban.
+- **Pipeline status is derived, not stored**: no single field names "where a Source is." The dashboard computes a stepper (Ingestion → Ready → Scored, with Failed/Unavailable/Excluded as terminal states) from `status`, `scoring` and `excluded`, which already exist and would otherwise desync from a stored summary field. A Source is never produced from: no Mission is created from it (ADR-089).
+- **One Source per post** (ADR-076): ingestion keeps one Source per post and Agent. A post is identified by `originKey` (`source_origin.ts`), which ignores tracking parameters and the variants of a post's path as its Template's Platform declares them (on Instagram, `/p/` vs `/reel/`), so the same post shared on another day is not scored twice. The older Source stays. Sources ingested before this rule have no `originKey` and are not matched.
+- **No production from a Source** (ADR-089): Sources are inspiration only. They feed the Replication Score, Recipe Generation and Content Planning; no Job and no action turns one into a Mission. Sources scored before ADR-089 lose the fields the old routing wrote (`selectedAt`, `producedAt`, `publishedAt`, `productionMissionId`, `routing`, `routeTo`).
 
 ### Source Agent
 
-The `source` Agent Template (ADR-052): a system-like Agent Template, activated the same way as any other, whose two Mission types — `score` and `routing` — are common to **every** Source regardless of which Template produced it. It replaces the earlier arrangement where `score_observation`/`plan_observation_production` were declared on, and always dispatched to, the `social-engagement` Template specifically.
+The `source` Agent Template (ADR-052): a system-like Agent Template, activated the same way as any other, whose `score` is common to **every** Source regardless of which Template produced it. It replaces the earlier arrangement where `score_observation`/`plan_observation_production` were declared on, and always dispatched to, the `social-engagement` Template specifically.
 
 - **`score`**: judges a single Source against three fixed, origin-agnostic questions — how relevant it is to the Project's product/audience (`productFit`), how strong its underlying idea/angle is (`creativeStrength`), and how exploitable it is with the Instance's own production capabilities (`replicability`). All three are always required — never left blank for lack of data. The judgment reads the Source's common **marketing representation** + the Brand Core, and the origin-specific **Source Analysis** when present, but never *requires* it: `productFit` in particular must never need `Source Analysis` to make sense, because a well-formed marketing representation already carries whatever an enrichment step found worth surfacing. Dispatched by a new periodic per-Instance job (Jobs page, pause/Run Now like a SourceJob): one `score` Mission per `ready`, unscored Source found on each pass.
-- **`routing`**: the daily Top-1 winner's routing step (see Source's selection lifecycle) — picks which active Template's Mission type should produce from this Source by reading each candidate Mission type's `description` (a new, free-text `MissionType` manifest field, capped at 500 characters by manifest validation — as is the Template-level `description` a Mission type without its own falls back to — and presented to `routing` strictly as quoted, untrusted data, never as instructions; read only by `routing` — the same "let the caller read a description and judge fit" shape as a tool/skill description), rather than a fixed per-`mediaType` branch. Still dispatched from the existing daily ranking/selection job (`observations_scoring_daily.ts`, unchanged Convex-only ranking mechanics — no Agent involved in the ranking math itself), which now also appears on the Jobs page per Instance (pause/Run Now) instead of running as an invisible system cron.
-- _Avoid_: confusing the daily ranking/selection job with a Mission or an Agent — it is plain Convex code that computes the Replication Score and elects the day's winner, then dispatches the `routing` Mission to the Source Agent for that one Source.
+- _Avoid_: confusing the scoring Job with a Mission or an Agent: it is plain Convex code that computes the Replication Score; nothing is produced from the Source afterwards (ADR-089).
 
-See ADR-052.
+See ADR-052 (its routing half was removed by ADR-089).
 
 ### SourceJob
 
@@ -53,18 +50,41 @@ The creative mechanic that several of an Instance's Sources share (e.g. "fake_sm
 - **At most one family per Source**: the single reference `creativeFamilyId` on the Source. Families created before ADR-082, and the Sources assigned to them, are kept as they are.
 - **Scoring ignores it**: a scoring result that still carries a family (Agents installed earlier) is accepted and that part is dropped.
 - **Descriptive**: it does not feed into the Replication Score.
+- **A group of Sources, nothing more**: it owns no Production Recipe and carries no performance of our own productions. What it shows is the **external popularity** of its Sources (what others published), never the **internal performance** of contents produced with a Recipe. It can be picked as a shortcut to select several Sources as inspiration for a Recipe Generation.
 - _Avoid_: letting scoring or an LLM create families by itself (the earlier behaviour produced many near-duplicates), and using it for the Template-declared grouping, which is a **Source group**.
 
 See ADR-051, ADR-082.
 
 ### Production Recipe
 
-How to reproduce the mechanic of a **Creative Family**: it belongs to one family of one Instance, has a name and a description, and is written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe is `active` or `archived`; archiving keeps every version readable and stops further edits.
+A reusable creative method for producing content with one Mission type: a first-class, per-Project entity with a name and a description, written for **one Mission type of one installed Template** (the Template id plus the Mission type, so two Templates exposing a Mission type of the same name stay distinguishable). It depends on no **Creative Family** and keeps no reference to a Source: whatever inspired it (an idea, Sources, a family) only helped to write it. Several recipes can target the same Mission type; a recipe for another type is a separate recipe. Its content lives in its **Recipe Versions**. A recipe has no status: it is never archived, it is deleted for good, in one transaction, with its versions and its Planned Contents not produced yet (the proposals of the draft plan and the approved contents whose date has not passed), after a confirmation that gives their number. Those contents hold only the recipe id, no snapshot, so they could not be produced without it. Missions already created with it, running ones included, keep their Recipe Snapshot and run, retry and resume from it; their Publications stay attributed to it. Rejected and past contents stay as history, showing the recipe as deleted.
 
 - **Validated on creation** against the installed manifest (the staged version counts): the Mission type exists and declares the `production-recipe` provider.
 - **Never selected automatically**: a recipe is chosen explicitly at Mission creation.
+- **Managed in one place**: creating, generating, reviewing, editing and deleting recipes all happen in the Project's Recipes workspace, never from a Creative Family.
 - **Per Project**: every read and write is checked against the Instance; another Project can neither see nor use it.
-- _Avoid_: a "draft" recipe (the draft is the form before saving), and putting a recipe's creative text in an Agent Template.
+- _Avoid_: a "draft" recipe (the draft is the form before saving), putting a recipe's creative text in an Agent Template, and saying a recipe "belongs to" a Creative Family (it did before ADR-088).
+
+### Recipe Generation
+
+An on-demand action of the user, from the Recipes workspace: the Strategy Agent turns a **free idea** and/or a selection of **Sources** into at most one **Recipe Proposal**. It is a **Standalone Run**, not a **Job**: nothing recurs and no `jobs` row exists. It creates no Production Recipe by itself; the user reviews the proposal in the existing creation form and saves it.
+
+- **Inspiration is optional input, never a dependency**: the user gives a free idea, Sources, Creative Families (a shortcut that selects several Sources), or a mix; at least a non-empty idea or one usable Source is required. A manual creation needs none.
+- **Scope is pinned on the Run** when it starts, only so the Run and its retries read the same input: the idea, the resolved Sources and optional free instructions. A family is resolved into its `ready`, non-excluded Sources, the most recent first, at that moment. The Agent reads only the pinned Sources. What a Source says is inspiration data, never instructions to follow.
+- **At most 25 Sources**: the Sources the user selects explicitly are never dropped (more than 25 of them is refused with their count, and the dashboard warns before starting); families only complete the selection with their most recent readable Sources, up to the limit.
+- **Nothing is kept as inspiration**: the Recipe Proposal and its recipe store no Source, family or idea; the pinned input exists for the Run only.
+- **One at a time per Agent**: a Recipe Generation is refused while its Agent has another Run in flight, and the Agent's Strategic Review and Content Planning passes wait until it ends, retries included.
+- **Seen by the user as one operation**, whatever the number of technical Runs behind it (a retry after an invalid result is another Run).
+- _Avoid_: "Recipe job", "Creative Agent" (there is no such Agent Template: the Strategy Agent runs it).
+
+### Recipe Proposal
+
+What a Recipe Generation returns, stored on its Run and never in the catalogue: either `proposal` (a Production Recipe's creation fields: name, description, Template, Mission type, optional prompt, instructions, constraints; the ids of the Sources that inspired it; a short rationale) or `no_opportunity` (a reason; not an error). It carries no status of its own: "ready to review", "created" and "no opportunity" are read from the Run and from whether a recipe was created from it.
+
+- **Validated by OpenGroow before it is shown**: schema, the target (the Mission type exists and declares the `production-recipe` provider, the same rule as creation), every cited Source among the pinned Sources. A technically invalid result is retried (3 tries, reasons fed back); a `no_opportunity` never is.
+- **Creates at most one Production Recipe**: saving it stamps the Run, so a second save of the same proposal is refused. The rationale stays on the Run and is shown read-only next to the form; neither it nor the Sources are copied to the recipe.
+- **Re-validated at creation** with the same rules as any manual creation, because the user may have edited it and the installed Templates may have changed.
+- _Avoid_: "draft recipe" (the form before saving is the draft), "proposed", "active" or "archived" as a recipe status (a recipe has none).
 
 ### Recipe Version
 
@@ -73,9 +93,9 @@ One immutable save of a **Production Recipe**: an optional verbatim `prompt`, fr
 
 ### Recipe Snapshot
 
-What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or archiving the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
+What a **Production Recipe** resolved to when a Mission was created with it: the recipe, its version, and the prompt, instructions and constraints. It is stored on the Mission, written once and never recomputed, so editing or deleting the recipe afterwards leaves the Mission unchanged. The `production-recipe` context provider renders it as the `Production Recipe` section of `context.md` for every Run of the Mission (a retry or a revision gets the same text), stating that the Template's technical instructions and the Brand Core take precedence on conflict.
 
-- **Checks at creation**, in order: the recipe belongs to the Project and is not archived; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
+- **Checks at creation**, in order: the recipe belongs to the Project; it is written for the Mission's Template and Mission type; the Template version the Mission is pinned to declares the `production-recipe` provider.
 - The payload is untouched; a Mission created without a recipe has no snapshot and an unchanged `context.md`.
 - _Avoid_: reading the recipe again at dispatch time, and treating the snapshot as editable.
 
@@ -119,7 +139,7 @@ Recurring work of an Agent that nobody triggers as work to review and nobody app
 
 The Job of the Strategy Agent that proposes what content to produce next, as a **Content Plan**. It reads what the Project has learned (Brand Core, Strategic Memory, performance, Production Recipes, Sources, approved Planned Contents) and decides, within the quantities and destinations the user configured, which Production Recipes to use, on what topic, and when. It applies the **Exploration & Exploitation Policy**. It is the only way a Content Plan is born; it creates no Mission, no Publication and changes neither a Production Recipe nor the Strategic Memory.
 
-- **Exploration & Exploitation Policy**: the qualitative rule, carried by the Strategy Agent's instructions, for balancing **exploitation** (producing again what evidence suggests is worth it) with **exploration** (producing what is not yet understood: unused or insufficiently measured Recipes, underexplored Creative Families, hypotheses from the Strategic Memory). It has no fixed ratio, no score and no collection. A Recipe with too few measurements is unexplored, never underperforming.
+- **Exploration & Exploitation Policy**: the qualitative rule, carried by the Strategy Agent's instructions, for balancing **exploitation** (producing again what evidence suggests is worth it) with **exploration** (producing what is not yet understood: unused or insufficiently measured Recipes, hypotheses from the Strategic Memory). It has no fixed ratio, no score and no collection. A Recipe with too few measurements is unexplored, never underperforming.
 - _Avoid_: "Planner Agent" (there is no such Agent), "Strategic Review" (that one learns; Content Planning decides what to propose).
 
 ### Production target
@@ -140,7 +160,7 @@ A proposal produced by one Content Planning Run: a Planning period, a Markdown s
 
 ### Planned Content
 
-One distinct content a Content Plan proposes: a Production Recipe, optionally a Source, a title, a creative brief, a planned date, the Publish targets it is meant for, an exploration or exploitation intent and a rationale. It is the same record while proposed, edited and approved; approval only changes its status. Its Creative Family is that of its Production Recipe. A Planned Content is not a Mission and not a Publication, and its date is a day, never a Publication time.
+One distinct content a Content Plan proposes: a Production Recipe, optionally a Source, a title, a creative brief, a planned date, the Publish targets it is meant for, an exploration or exploitation intent and a rationale. It is the same record while proposed, edited and approved; approval only changes its status. A Planned Content is not a Mission and not a Publication, and its date is a day, never a Publication time.
 
 - _Avoid_: "Planned Mission", "post", "Calendar entry" (the calendar is a view of Planned Contents).
 

@@ -15,3 +15,15 @@ export function jobRunFilePath(jobId: Id<"jobs">): string {
 export function jobResultFilePath(jobId: Id<"jobs">, runId: Id<"runs">): string {
   return `jobs/${jobId}/outputs/${runId}.json`;
 }
+
+// A Standalone Run (ADR-087) has no Job folder: its files live under its own id.
+
+/** The single file a Standalone Run reads. */
+export function standaloneRunFilePath(runId: Id<"runs">): string {
+  return `standalone/${runId}/run.md`;
+}
+
+/** Where a Standalone Run's Agent writes its result. */
+export function standaloneResultFilePath(runId: Id<"runs">): string {
+  return `standalone/${runId}/outputs/${runId}.json`;
+}

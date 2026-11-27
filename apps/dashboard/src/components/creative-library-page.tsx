@@ -7,7 +7,7 @@ import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { SearchField } from "@/components/opengroow/filter-bar";
 import { PageHeader } from "@/components/opengroow/page-header";
-import { CheckSquare, Ellipsis, Plus } from "lucide-react";
+import { CheckSquare, Ellipsis, Images, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SourceThumbnail, useThumbnailRequests, type VisualSource } from "@/src/components/source-visuals";
 import { NewFamilyDialog } from "@/src/components/creative-family-actions";
 import { MergeFamiliesDialog } from "@/src/components/merge-family-dialog";
-import { isActiveFamily, sourceCountLabel } from "@/src/lib/creative-library";
+import { isActiveFamily, sourceCountLabel, sourceCountValue } from "@/src/lib/creative-library";
 
 // The Project's Creative Families (ADR-082): a list the user curates, each with
 // the mechanic its Sources share. Read-only here; built from the Sources page blocks.
@@ -119,7 +119,7 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
           {visible.length === 0 ? (
             <p className="text-sm text-muted-foreground">No Creative Families match this search.</p>
           ) : (
-            <ul className="grid gap-3">
+            <ul className="grid gap-5 sm:grid-cols-2">
               {visible.map((family) => (
                 <FamilyRowItem
                   key={family._id}
@@ -145,6 +145,30 @@ export function CreativeLibraryContent({ instanceId }: { instanceId: string }) {
   );
 }
 
+/** The three most recent Sources as a mosaic: one large tile on the left, two stacked on the right. */
+function FamilyMosaic({ family }: { family: FamilyRow }) {
+  const [main, top, bottom] = family.recentSources;
+  const tile = (source: VisualSource | undefined, className = "") =>
+    source ? (
+      <div className={`overflow-hidden ${className}`}>
+        <SourceThumbnail source={source} className="size-full rounded-none" />
+      </div>
+    ) : (
+      <div aria-hidden="true" className={`bg-muted ${className}`} />
+    );
+  return (
+    <div className="relative grid aspect-[16/10] grid-cols-[2fr_1fr] grid-rows-2 gap-0.5 overflow-hidden rounded-2xl bg-border">
+      {tile(main, "row-span-2")}
+      {tile(top)}
+      {tile(bottom)}
+      <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+        <Images aria-hidden="true" className="size-3.5" />
+        {sourceCountValue(family)}
+      </span>
+    </div>
+  );
+}
+
 function FamilyRowItem({
   family,
   instanceId,
@@ -156,32 +180,28 @@ function FamilyRowItem({
 }) {
   return (
     <li>
-      <Card className="relative flex flex-col gap-4 px-5 py-4 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring lg:flex-row lg:items-center">
+      <Card className="relative flex flex-col gap-3 p-2 transition-colors hover:bg-surface-raised has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring">
+        <FamilyMosaic family={family} />
         {selection ? (
           <Checkbox
-            className="relative z-10"
+            className="absolute left-4 top-4 z-10 bg-background"
             aria-label={`Select ${family.name}`}
             checked={selection.checked}
             onCheckedChange={selection.onToggle}
           />
         ) : null}
-        <div className="grid min-w-0 flex-1 gap-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              data-family-name
-              href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(family._id)}`}
-              className="max-w-full truncate text-base font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
-            >
-              {family.name}
-            </Link>
-          </div>
-          <p className="m-0 line-clamp-2 text-sm text-muted-foreground">{family.description}</p>
-        </div>
-        <span className="text-sm text-foreground tabular-nums lg:w-28">{sourceCountLabel(family)}</span>
-        <div className="flex gap-2 lg:w-44">
-          {family.recentSources.map((source) => (
-            <SourceThumbnail key={source._id} source={source} className="size-12" />
-          ))}
+        <div className="grid min-w-0 gap-0.5 px-3 pb-3">
+          <Link
+            data-family-name
+            href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(family._id)}`}
+            className="max-w-full truncate text-lg font-semibold text-foreground outline-none after:absolute after:inset-0 after:content-['']"
+          >
+            {family.name}
+          </Link>
+          <p className="m-0 truncate text-sm text-muted-foreground">
+            {sourceCountLabel(family)}
+            {family.description ? ` · ${family.description}` : ""}
+          </p>
         </div>
       </Card>
     </li>

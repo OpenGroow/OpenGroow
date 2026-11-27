@@ -90,7 +90,7 @@ const seedPlan = (status: "draft" | "approved" | "rejected") =>
 const seedContent = (planId: Id<"contentPlans">, kind: string, plannedAt: string, status: "proposed" | "approved" | "rejected") =>
   t.run(async (ctx) => {
     const creativeFamilyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: `f-${plannedAt}-${kind}-${status}`, name: "F", description: "d" });
-    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d", status: "active" } as never);
+    const recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never);
     return ctx.db.insert("plannedContents", {
       ownerId: OWNER.subject, instanceId: INSTANCE, planId, kind, missionType: "make_video", recipeId, publishTargets: ["social:example"],
       title: "T", brief: "B", plannedAt, intent: "explore", rationale: "r", status, createdAt: NOW,

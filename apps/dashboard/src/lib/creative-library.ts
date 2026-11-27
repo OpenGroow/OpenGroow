@@ -1,9 +1,13 @@
 // Display rules of the Creative Library (ADR-082).
 
-/** "5 Sources", "1 Source", "100+ Sources" when the server capped the count. */
+/** "5", "100+" when the server capped the count. */
+export function sourceCountValue(family: { sourceCount: number; sourceCountCapped: boolean }): string {
+  return family.sourceCountCapped ? `${family.sourceCount}+` : `${family.sourceCount}`;
+}
+
+/** "5 sources", "1 source", "100+ sources" when the server capped the count. */
 export function sourceCountLabel(family: { sourceCount: number; sourceCountCapped: boolean }): string {
-  const value = family.sourceCountCapped ? `${family.sourceCount}+` : `${family.sourceCount}`;
-  return `${value} ${family.sourceCount === 1 && !family.sourceCountCapped ? "Source" : "Sources"}`;
+  return `${sourceCountValue(family)} ${family.sourceCount === 1 && !family.sourceCountCapped ? "source" : "sources"}`;
 }
 
 const METRICS = [

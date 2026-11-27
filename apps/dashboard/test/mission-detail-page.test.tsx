@@ -28,9 +28,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
-}));
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock({ push: (url) => routerPushMock(url), replace: (url) => routerReplaceMock(url) }));
 
 vi.mock("convex/react", () => ({
   useQuery: (...args: unknown[]) => useQueryWithTemplates(useQueryMock)(...args),
@@ -440,7 +438,7 @@ describe("MissionDetailContent", () => {
     expect(history).toContain("Completed");
   });
 
-  it("styles a run as a card: title and status, View logs / View prompt as outlined pills, dated rows, summary", async () => {
+  it("styles a run as a card: title and status, View prompt / View logs as outlined pills, dated rows, summary", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.get") return BASE_MISSION;
       if (key === "runs.listByMission") return [BASE_RUN];
@@ -452,7 +450,7 @@ describe("MissionDetailContent", () => {
     const row = document.querySelector('[data-testid="run-row"]')!;
     expect(row.textContent).toContain("Create Article #3");
     const pills = Array.from(row.querySelectorAll("a")).map((a) => a.textContent);
-    expect(pills).toEqual(["View logs", "View trace", "View prompt"]);
+    expect(pills).toEqual(["View prompt", "View logs", "View trace"]);
     expect(row.querySelectorAll("svg").length).toBeGreaterThanOrEqual(4);
     expect(row.textContent).toContain("Started");
     expect(row.textContent).toContain("Completed");

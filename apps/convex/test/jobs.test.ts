@@ -71,7 +71,6 @@ describe("generic Jobs", () => {
     expect(await rows(t)).toMatchObject([
       { type: "source_ingestion", state: "active", unit: "daily", hour: 6, minute: 0, timezone: "UTC", config: {}, runtime: {} },
       { type: "source_scoring", state: "active", unit: "daily", hour: 6, minute: 0, timezone: "UTC", config: {}, runtime: {} },
-      { type: "source_routing", state: "active", unit: "daily", hour: 6, minute: 0, timezone: "UTC", config: {}, runtime: {} },
     ]);
   });
 
@@ -80,10 +79,10 @@ describe("generic Jobs", () => {
     await seedInstance(t);
     await activate(t);
     const first = await rows(t);
-    expect(first).toHaveLength(3);
+    expect(first).toHaveLength(2);
 
     await activate(t);
-    expect(await rows(t)).toHaveLength(3);
+    expect(await rows(t)).toHaveLength(2);
     await activate(t, "inactive");
     expect((await rows(t)).every((job) => job.state === "paused")).toBe(true);
     await activate(t);
@@ -163,7 +162,6 @@ describe("generic Jobs", () => {
     expect(result).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "source_ingestion", label: "Social source ingestion", running: false, workspaceKey: "workspace-jobs" }),
       expect.objectContaining({ type: "source_scoring", label: "Source scoring", running: true, workspaceKey: "workspace-jobs" }),
-      expect.objectContaining({ type: "source_routing", label: "Source routing", running: false, workspaceKey: "workspace-jobs" }),
     ]));
     expect(JSON.stringify(result)).not.toContain("hidden-session-key");
   });
@@ -186,7 +184,6 @@ describe("generic Jobs", () => {
     expect(result.map((job) => job.type)).toEqual([
       "source_ingestion",
       "source_scoring",
-      "source_routing",
     ]);
   });
 

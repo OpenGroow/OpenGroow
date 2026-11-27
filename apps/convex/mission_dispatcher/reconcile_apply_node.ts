@@ -10,9 +10,9 @@ export type ReconcileRun = {
   parent: RunParent;
   sourceIngestion?: boolean;
   sourceScoring?: boolean;
-  sourceRouting?: boolean;
   strategicReview?: boolean;
   contentPlanning?: boolean;
+  recipeGeneration?: boolean;
   ownerId: string;
   missionType: string;
   missionPayload?: unknown;

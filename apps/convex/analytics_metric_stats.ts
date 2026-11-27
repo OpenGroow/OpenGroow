@@ -1,7 +1,7 @@
 import type { AnalyticsAdapterMeta } from "@opengroow/publisher-sdk";
 
 // Per-metric statistics over the latest readings of several Publications (ADR-084). Pure: shared by every
-// attributed grouping (recipe, family). A metric nobody reports is absent from the result, never zero.
+// attributed grouping (by recipe). A metric nobody reports is absent from the result, never zero.
 
 type Metrics = Record<string, number>;
 type Declared = AnalyticsAdapterMeta["metrics"];

@@ -8,8 +8,6 @@ import { publicationsInWindow, SCAN_LIMIT } from "./analytics_window.js";
 // Internal MCP. Computed on read from Missions, Runs and Publications; nothing is stored. Marketing
 // performance stays on the Analytics page, usage stays here.
 
-const MAX_FAMILIES = 200;
-const MAX_RECIPES_PER_FAMILY = 100;
 const MAX_RECIPES = 300;
 const RUNS_PER_MISSION = 100;
 const MISSION_STATUSES = ["todo", "doing", "blocked", "to_validate", "approved", "done", "failed", "cancelled"] as const;
@@ -28,8 +26,6 @@ export type RecipeCatalog = {
     description: string;
     missionType: string;
     templateId: string;
-    archived: boolean;
-    creativeFamily: { id: string; name: string; archived: boolean };
     usage: Usage;
     /** Absent (unknown) when the Missions read was incomplete and none was seen. */
     neverUsedEver?: boolean;
@@ -37,7 +33,7 @@ export type RecipeCatalog = {
     neverPublishedEver?: boolean;
   }>;
   total: number;
-  /** The list was cut at its size limit (or the Project has more families or recipes than were read). */
+  /** The list was cut at its size limit (or the Project has more recipes than were read). */
   truncated: boolean;
   missionsScanLimited: boolean;
   publicationsScanLimited: boolean;
@@ -60,15 +56,10 @@ export async function recipeCatalog(
   const scanLimit = options.scanLimit ?? SCAN_LIMIT;
   const inPeriod = (at: number) => at >= window.from && at <= window.to;
 
-  const families = await ctx.db.query("creativeFamilies").withIndex("by_instance", (q) => q.eq("instanceId", instanceId)).take(MAX_FAMILIES);
-  const recipes: Doc<"productionRecipes">[] = [];
-  let recipesCut = families.length >= MAX_FAMILIES;
-  for (const family of families) {
-    const rows = await ctx.db.query("productionRecipes").withIndex("by_instance_family", (q) => q.eq("instanceId", instanceId).eq("creativeFamilyId", family._id)).take(MAX_RECIPES_PER_FAMILY);
-    if (rows.length >= MAX_RECIPES_PER_FAMILY) recipesCut = true;
-    recipes.push(...rows);
-  }
-  const familyOf = new Map(families.map((f) => [f._id, f]));
+  // One more than the limit: it tells whether the Project has more recipes than are listed.
+  const rows = await ctx.db.query("productionRecipes").withIndex("by_instance_target", (q) => q.eq("instanceId", instanceId)).take(MAX_RECIPES + 1);
+  const recipesCut = rows.length > MAX_RECIPES;
+  const recipes = rows.slice(0, MAX_RECIPES);
   const usage = new Map<Id<"productionRecipes">, Usage>(recipes.map((r) => [r._id, { lifetime: empty(), period: empty() }]));
   const bump = (recipeId: Id<"productionRecipes">, step: keyof Counts, at: number, last?: "lastMissionAt" | "lastAttemptAt" | "lastPublicationAt") => {
     const u = usage.get(recipeId);
@@ -121,7 +112,6 @@ export async function recipeCatalog(
 
   const entries = recipes
     .map((recipe) => {
-      const family = familyOf.get(recipe.creativeFamilyId)!;
       const u = usage.get(recipe._id)!;
       const used = u.lifetime.missions > 0 || u.lifetime.productionAttempts > 0;
       const published = u.lifetime.publications > 0;
@@ -134,14 +124,12 @@ export async function recipeCatalog(
         description: recipe.description,
         missionType: recipe.missionType,
         templateId: recipe.templateId,
-        archived: recipe.status === "archived",
-        creativeFamily: { id: family._id as string, name: family.name, archived: family.status === "archived" },
         usage: u,
         ...(neverUsedEver !== undefined ? { neverUsedEver } : {}),
         ...(neverPublishedEver !== undefined ? { neverPublishedEver } : {}),
       };
     })
-    .sort((a, b) => a.creativeFamily.name.localeCompare(b.creativeFamily.name) || a.name.localeCompare(b.name) || a.recipeId.localeCompare(b.recipeId));
+    .sort((a, b) => a.name.localeCompare(b.name) || a.recipeId.localeCompare(b.recipeId));
   return {
     from: window.from,
     to: window.to,

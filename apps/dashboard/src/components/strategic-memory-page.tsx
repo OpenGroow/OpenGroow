@@ -28,8 +28,7 @@ type Review = {
 };
 
 type ReviewReferences = {
-  families: Array<{ id: string; name: string | null; archived: boolean }>;
-  recipes: Array<{ id: string; name: string | null; archived: boolean; familyId: string | null }>;
+  recipes: Array<{ id: string; name: string | null }>;
   publications: Array<{ id: string; target: string | null; missionId: string | null }>;
 };
 
@@ -145,19 +144,16 @@ function ReviewDetail({ instanceId, review }: { instanceId: string; review: Revi
 function References({ instanceId, references }: { instanceId: string; references: ReviewReferences }) {
   const base = `/projects/${encodeURIComponent(instanceId)}`;
   const enc = encodeURIComponent;
-  const items: Array<{ key: string; label: string | null; href: string | null; archived: boolean }> = [
-    ...references.families.map((f) => ({ key: `f-${f.id}`, label: f.name, href: f.name ? `${base}/library/${enc(f.id)}` : null, archived: f.archived })),
+  const items: Array<{ key: string; label: string | null; href: string | null }> = [
     ...references.recipes.map((r) => ({
       key: `r-${r.id}`,
       label: r.name,
-      href: r.name && r.familyId ? `${base}/library/${enc(r.familyId)}/recipes/${enc(r.id)}` : null,
-      archived: r.archived,
+      href: r.name ? `${base}/recipes/${enc(r.id)}` : null,
     })),
     ...references.publications.map((p) => ({
       key: `p-${p.id}`,
       label: p.target ? `Publication ${p.target}` : null,
       href: p.missionId ? `${base}/missions/${enc(p.missionId)}` : null,
-      archived: false,
     })),
   ];
   if (items.length === 0) return null;
@@ -174,7 +170,6 @@ function References({ instanceId, references }: { instanceId: string; references
             ) : (
               <span className="text-muted-foreground">{item.label ?? "Deleted"}</span>
             )}
-            {item.archived ? <StatusBadge tone="neutral" label="Archived" /> : null}
           </li>
         ))}
       </ul>

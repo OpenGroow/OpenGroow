@@ -1,14 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Copy } from "lucide-react";
+import { CircleCheck, CircleHelp, CircleX, Copy, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toolCallStatus } from "@/components/opengroow/mission-status";
 import { formatDurationMs } from "@/src/lib/trace/format-trace";
 import type { TraceMessageEvent, TraceToolEvent } from "@/src/lib/trace/normalize-trace";
-
-const TABS = ["Input", "Output", "Metadata"] as const;
-type Tab = (typeof TABS)[number];
 
 /** JSON for objects, raw text for strings; undefined when there is no payload. */
 export function formatPayload(value: unknown): string | undefined {
@@ -70,42 +67,71 @@ function MetadataPanel({ event }: { event: TraceToolEvent }) {
   );
 }
 
-/** Right-side inspector of one Tool Call: full Input, Output and Metadata. */
-export function ToolInspector({ event }: { event: TraceToolEvent }) {
-  const [tab, setTab] = React.useState<Tab>("Input");
+function StatusIcon({ status }: { status: TraceToolEvent["status"] }) {
+  const { label } = toolCallStatus(status);
+  if (status === "completed") return <CircleCheck aria-label={label} className="size-5 shrink-0 text-tone-green" />;
+  if (status === "failed") return <CircleX aria-label={label} className="size-5 shrink-0 text-destructive" />;
+  if (status === "running") return <LoaderCircle aria-label={label} className="size-5 shrink-0 animate-spin text-muted-foreground" />;
+  return <CircleHelp aria-label={label} className="size-5 shrink-0 text-muted-foreground" />;
+}
+
+/** One call: its Input, then its Output, with the metadata below. */
+function CallDetail({ event }: { event: TraceToolEvent }) {
   return (
-    <aside
-      className="grid min-w-0 content-start gap-3 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
-      data-testid="tool-inspector"
-      aria-label="Inspector"
-    >
-      <h2 className="m-0 text-sm text-muted-foreground">Inspector</h2>
-      <div className="grid min-w-0 gap-1">
-        <p className="m-0 truncate text-sm font-semibold text-foreground">{event.name}</p>
-        {event.server ? <p className="m-0 truncate text-sm text-muted-foreground">{event.server}</p> : null}
-      </div>
+    <div className="grid min-w-0 gap-4">
       {event.status === "failed" && event.error ? (
         <p className="m-0 break-words rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{event.error}</p>
       ) : null}
-      <div role="tablist" className="flex gap-1">
-        {TABS.map((t) => (
-          <Button
-            key={t}
-            type="button"
-            role="tab"
-            variant={tab === t ? "secondary" : "ghost"}
-            size="sm"
-            className="rounded-full"
-            aria-selected={tab === t}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </Button>
-        ))}
+      <section aria-label="Input" className="grid min-w-0 gap-2">
+        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Input</h3>
+        <PayloadPanel label="Input" text={formatPayload(event.input)} />
+      </section>
+      <section aria-label="Output" className="grid min-w-0 gap-2">
+        <h3 className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Output</h3>
+        <PayloadPanel label="Output" text={formatPayload(event.output)} />
+      </section>
+      <details className="grid gap-2">
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-muted-foreground">Metadata</summary>
+        <div className="pt-2">
+          <MetadataPanel event={event} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/**
+ * Inspector of one Tool Call, or of a group of parallel calls of the same tool: each call with its Input then its
+ * Output, so a call and its result are read together.
+ */
+export function ToolInspector({ event }: { event: TraceToolEvent }) {
+  const calls = event.calls;
+  return (
+    <aside
+      className="grid min-w-0 content-start gap-4 rounded-xl bg-card p-4 ring-1 ring-inset ring-border"
+      data-testid="tool-inspector"
+      aria-label="Inspector"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="grid min-w-0 gap-0.5">
+          <p className="m-0 truncate text-base font-semibold text-foreground">{calls ? `${event.name} ×${calls.length}` : event.name}</p>
+          {event.server ? <p className="m-0 truncate text-sm text-muted-foreground">{event.server}</p> : null}
+        </div>
+        <StatusIcon status={event.status} />
       </div>
-      {tab === "Input" ? <PayloadPanel label="Input" text={formatPayload(event.input)} /> : null}
-      {tab === "Output" ? <PayloadPanel label="Output" text={formatPayload(event.output)} /> : null}
-      {tab === "Metadata" ? <MetadataPanel event={event} /> : null}
+      {calls ? (
+        calls.map((call, index) => (
+          <section key={call.id} aria-label={`Call ${index + 1}`} className="grid min-w-0 gap-3 border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="m-0 text-sm font-semibold text-foreground">{`Call ${index + 1}`}</h3>
+              <StatusIcon status={call.status} />
+            </div>
+            <CallDetail event={call} />
+          </section>
+        ))
+      ) : (
+        <CallDetail event={event} />
+      )}
     </aside>
   );
 }

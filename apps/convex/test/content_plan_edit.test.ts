@@ -52,7 +52,7 @@ beforeEach(async () => {
     } as never);
     await ctx.db.insert("projectAgents", { instanceId: INSTANCE, templateId: "producer-cpe", status: "active", mcpServerKeys: [], createdAt: 1, updatedAt: 1 });
     familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "Reaction", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Reel recipe", description: "d" } as never);
     sourceId = await ctx.db.insert("sources", { instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "producer-cpe", sourceId: "s", label: "Article 1", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: 1, createdAt: 1, analysis: {} } as never);
   });
 });
@@ -118,28 +118,27 @@ describe("content_plan_edit.update", () => {
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: pastId, plannedAt: "2020-06-01" })).rejects.toThrow(/past/);
   });
 
-  it("changes the Recipe to another active Recipe of the same Mission type only", async () => {
+  it("changes the Recipe to another Recipe of the same Mission type only", async () => {
     const id = await content(await plan());
     const other = await t.run(async (ctx) => ({
-      same: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Other", description: "d", status: "active" } as never),
-      archived: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Old", description: "d", status: "archived" } as never),
-      otherType: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_tiktok", name: "Tok", description: "d", status: "active" } as never),
-      foreign: await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "F", description: "d", status: "active" } as never),
+      same: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Other", description: "d" } as never),
+      archivedBefore: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "Old", description: "d", status: "archived" } as never),
+      otherType: await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_tiktok", name: "Tok", description: "d" } as never),
+      foreign: await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_video", name: "F", description: "d" } as never),
     }));
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: other.otherType })).rejects.toThrow(/Mission type/);
-    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: other.archived })).rejects.toThrow(/archived/);
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: other.foreign })).rejects.toThrow(/Recipe of this Project/);
     expect((await row(id))!.recipeId).toBe(recipeId);
     await owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: other.same });
     expect((await row(id))!.recipeId).toBe(other.same);
     const options = await owner().query(api.content_plan_edit.recipeOptions, { contentId: id });
-    expect(options.map((o) => o.name).sort()).toEqual(["Other", "Reel recipe"]);
+    expect(options.map((o) => o.name).sort()).toEqual(["Old", "Other", "Reel recipe"]);
     expect(await stranger().query(api.content_plan_edit.recipeOptions, { contentId: id })).toEqual([]);
   });
 
   it("applies the persistence rules to a new Recipe: a Mission type that needs a Source keeps requiring one", async () => {
     const id = await content(await plan(), { missionType: "make_sourced", sourceId: undefined });
-    const sourced = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_sourced", name: "Sourced", description: "d", status: "active" } as never));
+    const sourced = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_sourced", name: "Sourced", description: "d" } as never));
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: sourced })).rejects.toThrow(/needs a Source/);
     const withSource = await content(await plan(), { missionType: "make_sourced", sourceId });
     await owner().mutation(api.content_plan_edit.update, { contentId: withSource, recipeId: sourced });
@@ -148,7 +147,7 @@ describe("content_plan_edit.update", () => {
 
   it("refuses a Recipe whose format has no production target in the plan", async () => {
     const id = await content(await plan(), { missionType: "make_post", kind: "image" });
-    const post = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_post", name: "Post", description: "d", status: "active" } as never));
+    const post = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpe", missionType: "make_post", name: "Post", description: "d" } as never));
     await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: post })).rejects.toThrow(/no production target/);
   });
 

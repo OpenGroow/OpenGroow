@@ -37,7 +37,6 @@ vi.mock("@convex/_generated/api", () => ({
     },
     strategic_review_jobs: { setAnalysisDays: "strategic_review_jobs.setAnalysisDays" },
     content_planning_jobs: { setConfig: "content_planning_jobs.setConfig", options: "content_planning_jobs.options" },
-    source_routing: { setReviewMode: "source_routing.setReviewMode" },
   },
 }));
 

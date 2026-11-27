@@ -8,7 +8,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { LogsStatePanel } from "@/src/components/workspace-logs-state-panel";
 import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
 import { runDurationMs } from "@/src/lib/trace/format-trace";
-import { isTerminalRunStatus, normalizeTrace, summarizeTrace, type TraceMessageEvent, type TraceToolEvent } from "@/src/lib/trace/normalize-trace";
+import { groupParallelCalls, isTerminalRunStatus, normalizeTrace, summarizeTrace, type TraceMessageEvent, type TraceToolEvent } from "@/src/lib/trace/normalize-trace";
 import { MessageInspector, ToolInspector } from "./tool-inspector";
 import { TraceSummary } from "./trace-summary";
 import { TraceTimeline } from "./trace-timeline";
@@ -66,7 +66,9 @@ export function RunTraceView({
   }
 
   const turns = transcript.found ? transcript.turns : [];
-  const events = normalizeTrace(turns, { id: run._id, status: run.status, mcpJob: run.mcpJob });
+  const calls = normalizeTrace(turns, { id: run._id, status: run.status, mcpJob: run.mcpJob });
+  // Parallel calls of one tool are one row; the summary still counts every call.
+  const events = groupParallelCalls(calls);
   const selectedTool = events.find((e): e is TraceToolEvent => e.type === "tool" && e.id === selectedEventId);
   const selectedMessage = events.find(
     (e): e is TraceMessageEvent => e.type !== "tool" && e.id === selectedEventId,
@@ -82,7 +84,7 @@ export function RunTraceView({
       <TraceSummary
         runStatus={run.status}
         runDurationMs={runDurationMs(run, isTerminalRunStatus(run.status))}
-        {...summarizeTrace(events)}
+        {...summarizeTrace(calls)}
         footer={
           run.status === "awaiting_job" ? (
             <p className="m-0 text-sm text-muted-foreground" data-testid="trace-awaiting-job">

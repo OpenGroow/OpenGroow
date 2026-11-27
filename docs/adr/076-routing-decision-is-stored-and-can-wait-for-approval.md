@@ -1,6 +1,6 @@
 # ADR-076: The routing decision is stored on the Source and can wait for human approval
 
-**Status:** Proposed
+**Status:** Superseded by ADR-089
 
 ### Context
 

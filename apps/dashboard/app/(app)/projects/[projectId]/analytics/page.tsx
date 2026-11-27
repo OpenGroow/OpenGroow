@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useAction, useQuery } from "convex/react";
@@ -20,7 +21,7 @@ import { FilterChips, SearchField } from "@/components/opengroow/filter-bar";
 import { StatTile } from "@/components/opengroow/stat-tile";
 import { StatusBadge, type StatusTone } from "@/components/opengroow/status-badge";
 import { PlatformLogo, platformName } from "@/src/components/platform-logo";
-import { FamilyGroups, RecipeGroups, type FamilyGroup, type RecipeGroup } from "@/src/components/analytics-groups";
+import { RecipeGroups, type RecipeGroup } from "@/src/components/analytics-groups";
 import { SourceThumbnail } from "@/src/components/source-visuals";
 import {
   DEFAULT_COLUMNS,
@@ -69,8 +70,8 @@ const STATES: Record<AnalyticsRow["state"], { label: string; tone: StatusTone }>
 /** The same words always have the same colour: "No data yet" is the info tone, whether the reading found nothing or none was taken yet. */
 const stateTone = (row: AnalyticsRow): StatusTone => (stateLabel(row) === NO_DATA_LABEL ? STATES.no_data.tone : STATES[row.state].tone);
 const stateLabel = (row: AnalyticsRow) => (row.state === "waiting" && currentReadings(row).length === 0 ? NO_DATA_LABEL : STATES[row.state].label);
-/** Where a Publication comes from: its recipe and version, and the family of the recipe; "Unattributed" when no recipe produced it. */
-const originOf = (row: AnalyticsRow) => (row.attribution ? `${row.attribution.recipeName} v${row.attribution.version}${row.attribution.familyName ? ` · ${row.attribution.familyName}` : ""}` : null);
+/** Where a Publication comes from: its recipe and version; "Unattributed" when no recipe produced it. */
+const originOf = (row: AnalyticsRow) => (row.attribution ? `${row.attribution.recipeName} v${row.attribution.version}` : null);
 function Origin({ row }: { row: AnalyticsRow }) {
   const origin = originOf(row);
   return origin ? <span className="truncate text-sm text-muted-foreground">{origin}</span> : <Badge variant="outline" className="w-fit">Unattributed</Badge>;
@@ -244,11 +245,10 @@ function PostRow({ row, columns, selected, onSelect }: { row: AnalyticsRow; colu
 }
 
 type Sort = "top" | "recent";
-type View = "publications" | "recipes" | "families";
+type View = "publications" | "recipes";
 const VIEWS: Array<{ view: View; label: string }> = [
   { view: "publications", label: "Publications" },
   { view: "recipes", label: "Recipes" },
-  { view: "families", label: "Families" },
 ];
 const DAY_MS = 24 * 60 * 60_000;
 const PERIODS = [
@@ -353,9 +353,8 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const [adapterId, setAdapterId] = useState<string | null>(null);
   const current = adapters?.find((a) => a.adapter === adapterId) ?? adapters?.[0];
   const unavailable = useQuery(api.analytics.unavailableForProject, instanceId ? { instanceId } : "skip") ?? [];
-  const [view, setView] = useState<View>("publications");
+  const [view, setView] = useUrlTab<View>(["publications", "recipes"], "publications", "view");
   const [days, setDays] = useState(365);
-  const [familyId, setFamilyId] = useState("all");
   const [recipeId, setRecipeId] = useState("all");
   const [platform, setPlatform] = useState("all");
   // The period starts at a fixed instant while the page is open on it, so the reads are stable.
@@ -363,22 +362,16 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
   const rows = useQuery(
     api.analytics.listForProject,
     instanceId
-      ? { instanceId, from, ...(current ? { adapter: current.adapter } : {}), ...(familyId !== "all" ? { familyId } : {}), ...(recipeId !== "all" ? { recipeId } : {}) }
+      ? { instanceId, from, ...(current ? { adapter: current.adapter } : {}), ...(recipeId !== "all" ? { recipeId } : {}) }
       : "skip",
   );
-  // Recipes and families that produced Publications of the period: the filters' choices and the two views.
+  // Recipes that produced Publications of the period: the filter's choices and the Recipes view.
   const summaryArgs = instanceId ? { instanceId, days, ...(platform !== "all" ? { platform } : {}) } : "skip";
   const recipeSummary = useQuery(api.analytics_summary.summaryForProject, summaryArgs === "skip" ? "skip" : { ...summaryArgs, groupBy: "recipe" as const });
-  const familySummary = useQuery(api.analytics_summary.summaryForProject, summaryArgs === "skip" ? "skip" : { ...summaryArgs, groupBy: "family" as const });
   const recipeGroups = (recipeSummary && "recipes" in recipeSummary ? recipeSummary.recipes : []) as RecipeGroup[];
-  const familyGroups = (familySummary && "families" in familySummary ? familySummary.families : []) as FamilyGroup[];
-  const recipesOfFamily = new Set(familyGroups.find((f) => f.familyId === familyId)?.recipes.map((r) => r.recipeId));
-  const familiesOfRecipe = new Set(familyGroups.filter((f) => f.recipes.some((r) => r.recipeId === recipeId)).map((f) => f.familyId));
-  const shownRecipes = recipeGroups.filter((r) => (recipeId === "all" || r.recipeId === recipeId) && (familyId === "all" || recipesOfFamily.has(r.recipeId)));
-  const shownFamilies = familyGroups.filter((f) => (familyId === "all" || f.familyId === familyId) && (recipeId === "all" || familiesOfRecipe.has(f.familyId)));
-  function showPublications(next: { recipeId?: string; familyId?: string }) {
-    setRecipeId(next.recipeId ?? "all");
-    setFamilyId(next.familyId ?? "all");
+  const shownRecipes = recipeGroups.filter((r) => recipeId === "all" || r.recipeId === recipeId);
+  function showPublications(id: string) {
+    setRecipeId(id);
     setView("publications");
   }
   // Why the list is empty is only worked out when it is.
@@ -402,7 +395,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
       return next;
     });
 
-  const narrowed = days !== 365 || familyId !== "all" || recipeId !== "all";
+  const narrowed = days !== 365 || recipeId !== "all";
   const all = rows ?? [];
   const totals = totalsOf(declaration, all);
   const best = bestPost(declaration, all);
@@ -469,14 +462,6 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
                 </option>
               ))}
             </NativeSelect>
-            <NativeSelect aria-label="Filter by family" className="h-11 sm:w-44" value={familyId} onChange={(e) => setFamilyId(e.target.value)}>
-              <option value="all">All families</option>
-              {familyGroups.map((f) => (
-                <option key={f.familyId} value={f.familyId}>
-                  {f.familyName}
-                </option>
-              ))}
-            </NativeSelect>
             <NativeSelect aria-label="Filter by recipe" className="h-11 sm:w-44" value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
               <option value="all">All recipes</option>
               {recipeGroups.map((r) => (
@@ -487,21 +472,17 @@ export default function AnalyticsPage({ params }: { params: Promise<{ projectId:
             </NativeSelect>
           </div>
 
-          {view === "recipes" || view === "families" ? (
+          {view === "recipes" ? (
             <>
-              {(view === "recipes" ? shownRecipes : shownFamilies).length === 0 || !current ? (
+              {shownRecipes.length === 0 || !current ? (
                 <p className="text-sm text-muted-foreground">No Publication matches these filters.</p>
-              ) : view === "recipes" ? (
-                <RecipeGroups groups={shownRecipes} adapterId={current.adapter} metrics={declaration.metrics} onShowPublications={(id) => showPublications({ recipeId: id })} />
               ) : (
-                <FamilyGroups groups={shownFamilies} adapterId={current.adapter} metrics={declaration.metrics} onShowPublications={(id) => showPublications({ familyId: id })} />
+                <RecipeGroups groups={shownRecipes} adapterId={current.adapter} metrics={declaration.metrics} onShowPublications={showPublications} />
               )}
-              {(view === "recipes" ? recipeSummary : familySummary)?.unattributed ? (
-                <p className="text-sm text-muted-foreground">
-                  {(view === "recipes" ? recipeSummary : familySummary)?.unattributed} Unattributed Publications are in no {view === "recipes" ? "recipe" : "family"}.
-                </p>
+              {recipeSummary?.unattributed ? (
+                <p className="text-sm text-muted-foreground">{recipeSummary.unattributed} Unattributed Publications are in no recipe.</p>
               ) : null}
-              {(view === "recipes" ? recipeSummary : familySummary)?.partial ? (
+              {recipeSummary?.partial ? (
                 <p className="text-sm text-muted-foreground">Only the most recent Publications were read: these figures are partial.</p>
               ) : null}
             </>

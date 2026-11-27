@@ -9,7 +9,7 @@ import {
 } from "../run_result.js";
 import { MAX_RETRYABLE_JOB_FAILURES } from "./external_job_polling.js";
 import type { RunParent } from "../run_parent.js";
-import { jobResultFilePath } from "../source_jobs/job_files.js";
+import { jobResultFilePath, standaloneResultFilePath } from "../source_jobs/job_files.js";
 import { sourceRunResultSchema } from "../source_jobs/source_run_result.js";
 
 /**
@@ -87,6 +87,8 @@ export type ReconcileDecision =
   // A Content Planning Job's result file (#176): validated and persisted by Convex while the Run completes.
   // The plan is data, never logged (only that an envelope arrived).
   | { type: "persistContentPlan"; envelope: unknown }
+  // A Recipe Generation's result file (ADR-087): validated and stored by Convex while the Run completes.
+  | { type: "persistRecipeProposal"; envelope: unknown }
   // A Source ingestion Job's success (#564): the Sources of its result file are ingested
   // by Convex while the Run completes. They never enter the decision log.
   | { type: "ingestSources"; result: { status: "success"; summary: string }; sources: unknown[] }
@@ -111,11 +113,11 @@ export type ReconcileDecision =
  */
 function decideInvalidOutput(
   message: string,
-  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; sourceRouting?: boolean; strategicReview?: boolean; contentPlanning?: boolean },
+  ctx: { retryableFailureCount: number; parent: RunParent; sourceIngestion?: boolean; sourceScoring?: boolean; strategicReview?: boolean; contentPlanning?: boolean; recipeGeneration?: boolean },
 ): ReconcileDecision {
   // A Job has no Mission to resume: the failure is settled on the Job,
   // which resumes its own execution with the error (bounded, #567).
-  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.sourceRouting === true || ctx.strategicReview === true || ctx.contentPlanning === true) {
+  if (ctx.sourceIngestion === true || ctx.sourceScoring === true || ctx.strategicReview === true || ctx.contentPlanning === true || ctx.recipeGeneration === true) {
     return { type: "markFailed", code: "file_invalid", message, retryWithFeedback: true };
   }
   const decision = decideBoundedRetry(
@@ -220,6 +222,7 @@ export function validatePublishableKind(
  */
 export function runOutputsFilePath(parent: RunParent, runId: Id<"runs">): string {
   if (parent.kind === "mission") return `missions/${parent.missionId}/outputs/${runId}.json`;
+  if (parent.kind === "standalone") return standaloneResultFilePath(parent.runId);
   return jobResultFilePath(parent.jobId, runId);
 }
 
@@ -241,9 +244,9 @@ export function decideReconciliation(
     parent: RunParent;
     sourceIngestion?: boolean;
     sourceScoring?: boolean;
-    sourceRouting?: boolean;
     strategicReview?: boolean;
     contentPlanning?: boolean;
+    recipeGeneration?: boolean;
     runId: Id<"runs">;
     missionType: string;
     blockerCodes?: readonly string[];
@@ -402,6 +405,9 @@ export function decideReconciliation(
   // A Content Planning result is the envelope itself; Convex validates it where it persists it.
   if (ctx.contentPlanning === true) return { type: "persistContentPlan", envelope: parsed };
 
+  // A Recipe Generation's result is the envelope itself; Convex validates it where it stores it.
+  if (ctx.recipeGeneration === true) return { type: "persistRecipeProposal", envelope: parsed };
+
   // A Source ingestion Job's result has its own type.
   if (ctx.sourceIngestion === true) {
     const sourceResult = sourceRunResultSchema.safeParse(parsed);
@@ -444,11 +450,8 @@ export function decideReconciliation(
   // instead of polling it to completion. Park the run in `awaiting_job`;
   // the separate External Job polling loop takes it from here (issue #138).
   if (validation.data.status === "in_progress") {
-    if (ctx.sourceScoring === true || ctx.sourceRouting === true) {
-      return decideInvalidOutput(
-        `status "in_progress" is not supported for ${ctx.sourceRouting === true ? "Source routing" : "Source scoring"} Job Runs`,
-        ctx,
-      );
+    if (ctx.sourceScoring === true) {
+      return decideInvalidOutput('status "in_progress" is not supported for Source scoring Job Runs', ctx);
     }
     // A Mission type that fetches its media from the MCP when the job ends
     // (`publish.resource`) needs the Agent's text part now: nobody runs the

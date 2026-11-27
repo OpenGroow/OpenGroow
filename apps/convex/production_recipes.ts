@@ -1,18 +1,17 @@
-import { v, type Infer } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel.js";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server.js";
-import { isActiveFamily, requireOwnedFamily } from "./creative_families.js";
 import type { AgentTemplate } from "@opengroow/agent-templates";
+import { utcDateOf } from "@opengroow/protocol/content-planning-pins";
 import { ownerIdFor, readOwnerId } from "./instance_ownership.js";
-import { type recipeStatusV } from "./production_validators.js";
 import { declaresRecipeProvider, validateRecipeTarget } from "./production_recipe_rules.js";
 import { getTemplateRegistry } from "./template_registry.js";
 
-// Production Recipes under a Creative Family (issue #137). A recipe is an
-// identity; each save appends an immutable Recipe Version. Every read and
-// write resolves ownership through the Instance.
+// Production Recipes (issue #137, ADR-088): a first-class entity of the Project, independent of any Creative
+// Family. A recipe is an identity; each save appends an immutable Recipe Version. Every read and write resolves
+// ownership through the Instance.
 
-/** The most recipes listed under one family, and versions listed for one recipe. */
+/** The most recipes listed for a Project, and versions listed for one recipe. */
 export const RECIPE_LIST_CAP = 200;
 export const VERSION_LIST_CAP = 200;
 
@@ -55,8 +54,11 @@ async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: 
   return templates;
 }
 
-/** Throws unless an installed version of the Template has this Mission type and it declares the provider. */
-async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
+/**
+ * Throws unless an installed version of the Template has this Mission type and it declares the provider.
+ * The one target rule, shared by Recipe creation and Recipe Generation.
+ */
+export async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
   const versions = await installedVersions(ctx, instanceId, templateId);
   if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
   // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
@@ -101,12 +103,11 @@ async function appendVersion(ctx: MutationCtx, recipe: Doc<"productionRecipes">,
 function recipeView(recipe: Doc<"productionRecipes">) {
   return {
     _id: recipe._id,
-    creativeFamilyId: recipe.creativeFamilyId,
+    createdAt: recipe._creationTime,
     templateId: recipe.templateId,
     missionType: recipe.missionType,
     name: recipe.name,
     description: recipe.description,
-    status: recipe.status,
   };
 }
 
@@ -120,36 +121,44 @@ function versionView(version: Doc<"productionRecipeVersions">) {
   };
 }
 
-/** Creates a recipe under an active family with its version 1. */
+/** The Run holding a Recipe Proposal of this Project that has created no Recipe yet, or throws. */
+async function requireOpenProposal(ctx: QueryCtx, instanceId: string, runId: Id<"runs">) {
+  const run = await ctx.db.get(runId);
+  if (!run || run.instanceId !== instanceId || !("recipeGeneration" in run)) throw new Error("Recipe Proposal not found");
+  if (!run.recipeProposal || typeof run.recipeProposal !== "object" || !("proposal" in run.recipeProposal)) throw new Error("This generation holds no Recipe Proposal");
+  if (run.recipeId) throw new Error("A Production Recipe was already created from this Recipe Proposal");
+  return run;
+}
+
+/** Creates a recipe with its version 1. */
 export const create = mutation({
   args: {
     instanceId: v.string(),
-    familyId: v.id("creativeFamilies"),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),
     description: v.string(),
     ...contentArgs,
+    // Set when saving a Recipe Proposal (ADR-087): ties the creation to its Run, at most once.
+    proposalRunId: v.optional(v.id("runs")),
   },
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
-    const family = await requireOwnedFamily(ctx, args.instanceId, args.familyId);
-    if (!isActiveFamily(family)) throw new Error("Cannot add a Production Recipe to an archived Creative Family");
     const name = args.name.trim().replace(/\s+/g, " ");
     if (name === "") throw new Error("A Production Recipe needs a name");
     const content = cleanContent(args);
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
+    const proposalRun = args.proposalRunId ? await requireOpenProposal(ctx, args.instanceId, args.proposalRunId) : null;
     const recipeId = await ctx.db.insert("productionRecipes", {
       instanceId: args.instanceId,
-      creativeFamilyId: args.familyId,
       templateId: args.templateId,
       missionType: args.missionType,
       name,
       description: args.description.trim(),
-      status: "active",
     });
     const recipe = (await ctx.db.get(recipeId))!;
     const version = await appendVersion(ctx, recipe, content);
+    if (proposalRun) await ctx.db.patch(proposalRun._id, { recipeId });
     return { recipeId, version };
   },
 });
@@ -160,7 +169,6 @@ export const saveVersion = mutation({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
-    if (recipe.status === "archived") throw new Error("An archived Production Recipe cannot be edited");
     return await appendVersion(ctx, recipe, cleanContent(args));
   },
 });
@@ -171,41 +179,66 @@ export const setTarget = mutation({
   handler: async (ctx, args) => {
     await ownerIdFor(ctx, args.instanceId);
     const recipe = await requireOwnedRecipe(ctx, args.instanceId, args.recipeId);
-    if (recipe.status === "archived") throw new Error("An archived Production Recipe cannot be edited");
     await requireValidTarget(ctx, args.instanceId, args.templateId, args.missionType);
     await ctx.db.patch(args.recipeId, { templateId: args.templateId, missionType: args.missionType });
     return null;
   },
 });
 
-async function setStatus(ctx: MutationCtx, instanceId: string, recipeId: Id<"productionRecipes">, status: Infer<typeof recipeStatusV>) {
-  await ownerIdFor(ctx, instanceId);
-  const recipe = await requireOwnedRecipe(ctx, instanceId, recipeId);
-  if (recipe.status !== status) await ctx.db.patch(recipeId, { status });
-  return null;
-}
-
 const idArgs = { instanceId: v.string(), recipeId: v.id("productionRecipes") };
 
-/** Archives a recipe; its versions stay readable. */
-export const archive = mutation({
+/**
+ * The Planned Contents not produced yet that use a recipe: a proposal of the draft plan, or an approved content whose
+ * date has not passed. They hold only the recipe id, no Recipe Snapshot (the snapshot is taken when a Mission is
+ * created), so they go with the recipe. A rejected content, or one dated in the past, stays as history.
+ */
+async function pendingPlannedContents(ctx: QueryCtx, recipeId: Id<"productionRecipes">) {
+  const [proposed, approved] = await Promise.all([
+    ctx.db.query("plannedContents").withIndex("by_recipe_status_plannedAt", (q) => q.eq("recipeId", recipeId).eq("status", "proposed")).collect(),
+    ctx.db
+      .query("plannedContents")
+      .withIndex("by_recipe_status_plannedAt", (q) => q.eq("recipeId", recipeId).eq("status", "approved").gte("plannedAt", utcDateOf(Date.now())))
+      .collect(),
+  ]);
+  return [...proposed, ...approved];
+}
+
+/** What deleting a recipe also deletes, for the confirmation: the number of its Planned Contents not produced yet. */
+export const deletionImpact = query({
   args: idArgs,
-  handler: async (ctx, a) => await setStatus(ctx, a.instanceId, a.recipeId, "archived"),
+  handler: async (ctx, args) => {
+    if ((await readOwnerId(ctx, args.instanceId)) === null) return null;
+    if (!(await ownedRecipe(ctx, args.instanceId, args.recipeId))) return null;
+    return { plannedContents: (await pendingPlannedContents(ctx, args.recipeId)).length };
+  },
 });
 
-export const unarchive = mutation({
+/**
+ * Deletes a recipe, its versions and its Planned Contents not produced yet, in one transaction. Missions made with it
+ * keep their Recipe Snapshot: they run, retry and resume from it, and their Publications stay attributed. The Recipe
+ * Proposal that created it stays marked as created (it cannot create a second one).
+ */
+export const remove = mutation({
   args: idArgs,
-  handler: async (ctx, a) => await setStatus(ctx, a.instanceId, a.recipeId, "active"),
+  handler: async (ctx, a) => {
+    await ownerIdFor(ctx, a.instanceId);
+    await requireOwnedRecipe(ctx, a.instanceId, a.recipeId);
+    for (const content of await pendingPlannedContents(ctx, a.recipeId)) await ctx.db.delete(content._id);
+    const versions = await ctx.db.query("productionRecipeVersions").withIndex("by_recipe_version", (q) => q.eq("recipeId", a.recipeId)).collect();
+    for (const version of versions) await ctx.db.delete(version._id);
+    await ctx.db.delete(a.recipeId);
+    return null;
+  },
 });
 
-/** A family's recipes (archived included) with their latest version number. */
+/** The Project's recipes with their latest version number. */
 export const list = query({
-  args: { instanceId: v.string(), familyId: v.id("creativeFamilies") },
+  args: { instanceId: v.string() },
   handler: async (ctx, args) => {
     if ((await readOwnerId(ctx, args.instanceId)) === null) return [];
     const recipes = await ctx.db
       .query("productionRecipes")
-      .withIndex("by_instance_family", (q) => q.eq("instanceId", args.instanceId).eq("creativeFamilyId", args.familyId))
+      .withIndex("by_instance_target", (q) => q.eq("instanceId", args.instanceId))
       .take(RECIPE_LIST_CAP);
     return await Promise.all(
       recipes.map(async (recipe) => ({ ...recipeView(recipe), latestVersion: (await latestVersion(ctx, recipe._id))?.version ?? 0 })),
@@ -214,9 +247,8 @@ export const list = query({
 });
 
 /**
- * The active recipes written for one Mission type of one Template: what the
- * Create Mission form offers. Archived recipes are never offered (a Mission
- * cannot be created with one), and nothing is chosen automatically.
+ * The recipes written for one Mission type of one Template: what the Create
+ * Mission form offers. Nothing is chosen automatically.
  */
 export const listForMissionType = query({
   args: { instanceId: v.string(), templateId: v.string(), missionType: v.string() },
@@ -228,9 +260,8 @@ export const listForMissionType = query({
         q.eq("instanceId", args.instanceId).eq("templateId", args.templateId).eq("missionType", args.missionType),
       )
       .take(RECIPE_LIST_CAP);
-    const active = recipes.filter((recipe) => recipe.status === "active");
     return await Promise.all(
-      active.map(async (recipe) => ({
+      recipes.map(async (recipe) => ({
         _id: recipe._id,
         name: recipe.name,
         description: recipe.description,

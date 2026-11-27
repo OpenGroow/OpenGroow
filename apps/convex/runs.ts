@@ -6,7 +6,7 @@ import { runResultV } from "./run_result.js";
 import { settleSourceJobRun } from "./source_jobs.js";
 import { ingestAndDecideOutcome, ingestHandoff } from "./source_jobs/ingest_sources.js";
 import { failScoringRun, settleScoringRun } from "./score_jobs.js";
-import { failRoutingRun, settleRoutingRun } from "./source_routing.js";
+import { failRecipeGenerationRun, settleRecipeGenerationRun } from "./recipe_generation.js";
 import { failContentPlanningRun, settleContentPlanningRun } from "./content_planning_runs.js";
 import { CONTENT_PLANNING_JOB_TYPE } from "./content_planning_shared.js";
 import { failStrategicReviewRun, settleStrategicReviewRun, STRATEGIC_REVIEW_JOB_TYPE } from "./strategic_review_jobs.js";
@@ -262,7 +262,7 @@ export const markCompleted = internalMutation({
   // `sources`: the Sources of a SourceJob execution's result file (#564),
   // ingested here so a cancelled Run (early return below) inserts nothing.
   // `strategicReviewEnvelope`: the result file of a strategic_review Run (#168), persisted here.
-  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())), strategicReviewEnvelope: v.optional(v.any()), contentPlanEnvelope: v.optional(v.any()) },
+  args: { runId: v.id("runs"), result: runResultV, sources: v.optional(v.array(v.any())), strategicReviewEnvelope: v.optional(v.any()), contentPlanEnvelope: v.optional(v.any()), recipeProposalEnvelope: v.optional(v.any()) },
   handler: async (ctx, args): Promise<{ applied: boolean }> => {
     const run = await ctx.db.get(args.runId);
     if (!run) throw new Error(`Run not found: ${args.runId}`);
@@ -275,12 +275,18 @@ export const markCompleted = internalMutation({
     // recorded.
     if (run.status === "cancelled") return { applied: false };
     // A Content Planning completion repeated for a Run already settled changes nothing.
-    if ((run.status === "completed" || run.status === "failed") && run.contentPlanning !== undefined) return { applied: false };
+    if ((run.status === "completed" || run.status === "failed") && (run.contentPlanning !== undefined || "recipeGeneration" in run)) return { applied: false };
     if (run.status !== "running" && run.status !== "awaiting_job") {
       throw new Error(`illegal transition: markCompleted from status ${run.status}`);
     }
     const now = Date.now();
     const parent = runParent(run);
+
+    // A Recipe Generation's result is validated and stored as a Recipe Proposal (or no opportunity).
+    if (parent.kind === "standalone") {
+      await settleRecipeGenerationRun(ctx, run, args.result, args.recipeProposalEnvelope);
+      return { applied: true };
+    }
 
     // A Strategic Review's result is validated and persisted with the pins taken at dispatch.
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
@@ -306,12 +312,6 @@ export const markCompleted = internalMutation({
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
       await ctx.db.patch(args.runId, { status: "completed", result: args.result, completedAt: now, updatedAt: now });
       await settleScoringRun(ctx, { ...run, jobId: parent.jobId }, args.result);
-      return { applied: true };
-    }
-
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await ctx.db.patch(args.runId, { status: "completed", result: args.result, completedAt: now, updatedAt: now });
-      await settleRoutingRun(ctx, { ...run, jobId: parent.jobId }, args.result);
       return { applied: true };
     }
 
@@ -456,12 +456,12 @@ export const markFailed = internalMutation({
       updatedAt: now,
     });
     const parent = runParent(run);
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
-      await failScoringRun(ctx, { ...run, jobId: parent.jobId }, errorMessage, args.retryWithFeedback === true);
+    if (parent.kind === "standalone") {
+      await failRecipeGenerationRun(ctx, run, args.retryWithFeedback ? [args.message] : undefined);
       return { applied: true };
     }
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await failRoutingRun(ctx, { ...run, jobId: parent.jobId }, errorMessage, args.retryWithFeedback === true);
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
+      await failScoringRun(ctx, { ...run, jobId: parent.jobId }, errorMessage, args.retryWithFeedback === true);
       return { applied: true };
     }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {
@@ -536,12 +536,13 @@ export const markCancelled = internalMutation({
       updatedAt: now,
     });
     const parent = runParent(run);
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
-      await failScoringRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
+    // A cancelled Recipe Generation creates nothing and is never retried.
+    if (parent.kind === "standalone") {
+      await failRecipeGenerationRun(ctx, run);
       return;
     }
-    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_routing") {
-      await failRoutingRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
+    if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === "source_scoring") {
+      await failScoringRun(ctx, { ...run, jobId: parent.jobId }, "cancelled", false);
       return;
     }
     if (parent.kind === "job" && (await ctx.db.get(parent.jobId))?.type === STRATEGIC_REVIEW_JOB_TYPE) {

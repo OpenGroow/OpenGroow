@@ -2,10 +2,11 @@
 
 import { use, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { ArrowLeft, Play, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Play, Check, Copy, FileText, History, Layers, Pencil, ShieldCheck, Trash2, type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/opengroow/page-header";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -13,15 +14,15 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { ProductionRecipeFormDialog } from "@/src/components/production-recipe-form-dialog";
 import { extractConvexErrorMessage } from "@/src/lib/convex-error";
-import { recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
+import { recipeDeletionMessage, recipeTargetLabel, type RecipeTarget, type RecipeVersionContent } from "@/src/lib/production-recipe-form";
 
-// One Production Recipe (issue #143): its content, version history, edit
-// (saves a new version), archive, and the Mission type it is written for.
+// One Production Recipe (issue #143, ADR-088): its content, version history, edit
+// (saves a new version), delete, and the Mission type it is written for.
 
 type Version = RecipeVersionContent & { version: number; createdAt: number };
-type RecipeDetail = { _id: string; creativeFamilyId: string; templateId: string; missionType: string; name: string; description: string; status: "active" | "archived"; latest: Version | null };
+type RecipeDetail = { _id: string; templateId: string; missionType: string; name: string; description: string; latest: Version | null };
 
-type Props = { params: Promise<{ projectId: string; familyId: string; recipeId: string }> };
+type Props = { params: Promise<{ projectId: string; recipeId: string }> };
 
 export function ProductionRecipePage({ params }: Props) {
   const { projectId, recipeId } = use(params);
@@ -35,8 +36,9 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
   const targets = useQuery(api.production_recipes.listTargets, { instanceId }) as RecipeTarget[] | undefined;
   const saveVersion = useMutation(api.production_recipes.saveVersion);
   const setTarget = useMutation(api.production_recipes.setTarget);
-  const archive = useMutation(api.production_recipes.archive);
-  const unarchive = useMutation(api.production_recipes.unarchive);
+  const removeRecipe = useMutation(api.production_recipes.remove);
+  const convex = useConvex();
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,6 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
       </div>
     );
   }
-  const archived = recipe.status === "archived";
   const shown = (selected !== null ? versions?.find((v) => v.version === selected) : undefined) ?? recipe.latest;
   // The recipe's own type stays listed even when no installed Template offers it any more.
   const offered = targets ?? [];
@@ -58,12 +59,15 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     : [...offered, { templateId: recipe.templateId, templateName: recipe.templateId, missionType: recipe.missionType, label: recipe.missionType }];
   const viewingOld = shown !== null && recipe.latest !== null && shown.version !== recipe.latest.version;
 
-  async function toggleArchive() {
+  async function handleDelete() {
     setError(null);
     try {
-      await (archived ? unarchive : archive)({ instanceId, recipeId: id });
+      const impact = await convex.query(api.production_recipes.deletionImpact, { instanceId, recipeId: id });
+      if (!window.confirm(recipeDeletionMessage(impact?.plannedContents ?? 0))) return;
+      await removeRecipe({ instanceId, recipeId: id });
+      router.replace(`/projects/${encodeURIComponent(instanceId)}/recipes`);
     } catch (e) {
-      setError(extractConvexErrorMessage(e, "Could not update the recipe."));
+      setError(extractConvexErrorMessage(e, "Could not delete the recipe."));
     }
   }
 
@@ -71,25 +75,26 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
     <div className="grid gap-8">
       <div className="grid gap-4">
         <Link
-          href={`/projects/${encodeURIComponent(instanceId)}/library/${encodeURIComponent(recipe.creativeFamilyId)}`}
+          href={`/projects/${encodeURIComponent(instanceId)}/recipes`}
           className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          Creative Family
+          Recipes
         </Link>
         <PageHeader
           title={recipe.name}
           description={recipe.description}
           action={
             <div className="flex items-center gap-3">
-              {!archived && recipe.latest ? (
+              {recipe.latest ? (
                 <Button type="button" variant="outline" onClick={() => setEditing(true)}>
                   <Pencil className="size-4" />
                   Edit
                 </Button>
               ) : null}
-              <Button type="button" variant="outline" onClick={toggleArchive}>
-                {archived ? "Unarchive" : "Archive"}
+              <Button type="button" variant="outline" onClick={handleDelete}>
+                <Trash2 className="size-4" />
+                Delete
               </Button>
             </div>
           }
@@ -100,7 +105,6 @@ export function ProductionRecipeContent({ instanceId, recipeId }: { instanceId: 
       <ContentCard icon={Play} title="Mission type">
         <NativeSelect
           aria-label="Mission type"
-          disabled={archived}
           value={String(options.findIndex((t) => t.templateId === recipe.templateId && t.missionType === recipe.missionType))}
           onChange={async (e) => {
             const target = options[Number(e.target.value)];

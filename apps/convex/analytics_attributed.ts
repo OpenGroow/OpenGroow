@@ -68,13 +68,12 @@ export async function readAttributed(
   ctx: Pick<QueryCtx, "db">,
   instanceId: string,
   window: { from: number; to: number },
-  options: { keyOf: (mission: Doc<"missions">) => string | undefined; /** Which group claims a shared page, when it is not the grouping read (a family's recipes agree with their family). */
-    claimKeyOf?: (mission: Doc<"missions">) => string | undefined;
+  options: { keyOf: (mission: Doc<"missions">) => string | undefined;
     keep?: (key: string) => boolean; scanLimit?: number; platform?: string; now?: number },
 ): Promise<AttributedRead> {
   const now = options.now ?? Date.now();
   const { inWindow, installed, scanLimited, oldestScannedCreatedAt } = await publicationsInWindow(ctx, instanceId, window, options.scanLimit ?? SCAN_LIMIT, options.platform);
-  const claims = measurementClaims(inWindow, installed, (item) => (options.claimKeyOf ?? options.keyOf)(item.mission));
+  const claims = measurementClaims(inWindow, installed, (item) => options.keyOf(item.mission));
   let unattributed = 0;
   const accs = new Map<string, Acc>();
   for (const { publication, mission, series, publishedAt, found, platform } of inWindow) {

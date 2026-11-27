@@ -15,6 +15,7 @@ const createMock = vi.fn();
 const updateMock = vi.fn();
 const otherMutation = vi.fn();
 
+vi.mock("next/navigation", async () => (await import("./fixtures/url-navigation")).navigationMock());
 vi.mock("convex/react", () => ({
   useQuery: (key: string) =>
     key === "creative_families.list"
@@ -38,6 +39,8 @@ vi.mock("@convex/_generated/api", () => ({
     production_recipes: { list: "production_recipes.list", create: "production_recipes.create", listTargets: "production_recipes.listTargets" },
     source_thumbnails: { request: "source_thumbnails.request" },
     source_platforms: { forInstance: "source_platforms.forInstance" },
+    recipe_generation: { generateRecipe: "recipe_generation.generateRecipe" },
+    recipe_generation_views: { listGenerations: "recipe_generation_views.listGenerations" },
   },
 }));
 

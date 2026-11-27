@@ -30,7 +30,7 @@ describe("scopeReservationProblem (the @opengroow scope is reserved to the offic
     );
   });
 
-  it.each(["source_ingestion", "source_scoring", "source_routing"])(
+  it.each(["source_ingestion", "source_scoring"])(
     "refuses a non-@opengroow package declaring the reserved Job type %s",
     (type) => {
       expect(scopeReservationProblem(pkg("@alice/x", { jobTypes: [{ type }] }), "git")).toMatch(

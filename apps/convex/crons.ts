@@ -59,14 +59,6 @@ crons.interval(
   internal.instances_node.runWhatsAppLinkWatchdogTick,
 );
 
-// Source routing Job (issue #598): Convex ranks and thresholds Sources, then
-// the Source Agent proposes only the production Mission type to create.
-crons.interval(
-  "source-routing-job-tick",
-  { minutes: 1 },
-  internal.source_routing.tick,
-);
-
 // Scheduled Publications (ADR-069): asks the Publisher whether the posts that
 // reached their date are published. Polling, no webhook.
 crons.interval(

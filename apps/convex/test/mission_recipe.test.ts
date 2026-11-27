@@ -93,21 +93,19 @@ async function setup() {
       });
     }
   });
-  const familyId = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "s", name: "F", description: "d" } as never));
-  const otherFamily = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: OTHER_INSTANCE, slug: "s", name: "F", description: "d" } as never));
   const owner = t.withIdentity(OWNER);
   const stranger = t.withIdentity(STRANGER);
 
-  async function recipe(instanceId = INSTANCE, family: Id<"creativeFamilies"> = familyId, as = owner) {
+  async function recipe(instanceId = INSTANCE, as = owner) {
     const { recipeId } = await as.mutation(api.production_recipes.create, {
-      instanceId, familyId: family, templateId: TEMPLATE_ID, missionType: "create_letter_video", name: "Reaction", description: "",
+      instanceId, templateId: TEMPLATE_ID, missionType: "create_letter_video", name: "Reaction", description: "",
       prompt: "A close-up, calm face.", instructions: "Write a calm hook.", constraints: ["No dialogue"],
     });
     return recipeId;
   }
   const create = (extra: Record<string, unknown>, payload: unknown = { format: "hook" }) =>
     owner.mutation(api.missions.create, { instanceId: INSTANCE, templateId: TEMPLATE_ID, type: "create_letter_video", payload, ...extra } as never);
-  return { t, owner, stranger, recipe, create, otherFamily };
+  return { t, owner, stranger, recipe, create };
 }
 
 describe("missions.create with a recipe", () => {
@@ -164,11 +162,11 @@ describe("missions.create with a recipe", () => {
     await expect(create({ recipe: { recipeId } })).rejects.toThrow(/production-recipe/);
   });
 
-  it("refuses an archived recipe", async () => {
-    const { owner, recipe, create } = await setup();
+  it("refuses a deleted recipe", async () => {
+    const { t, recipe, create } = await setup();
     const recipeId = await recipe();
-    await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
-    await expect(create({ templateVersion: "2.0.0", recipe: { recipeId } })).rejects.toThrow(/archived/);
+    await t.run((ctx) => ctx.db.delete(recipeId));
+    await expect(create({ templateVersion: "2.0.0", recipe: { recipeId } })).rejects.toThrow(/not found/);
   });
 
   it("refuses an unknown version", async () => {
@@ -233,7 +231,7 @@ describe("Recipe Snapshot in context.md", () => {
     await owner.mutation(api.production_recipes.saveVersion, {
       instanceId: INSTANCE, recipeId, prompt: "Changed", instructions: "Changed", constraints: [],
     });
-    await owner.mutation(api.production_recipes.archive, { instanceId: INSTANCE, recipeId });
+    await owner.mutation(api.production_recipes.remove, { instanceId: INSTANCE, recipeId });
     await t.run((ctx) => ctx.db.patch(runId, { status: "failed" }));
     const retry = await t.run((ctx) => ctx.db.insert("runs", {
       missionId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE_ID, agentName: "video",
@@ -267,6 +265,11 @@ describe("renderProductionRecipeSection", () => {
     expect(md).toContain("## Constraints\n\n- No dialogue\n- Calm");
     expect(md).not.toContain("## Variables");
     expect(md).toMatch(/technical instructions[\s\S]*Brand Core[\s\S]*take precedence/);
+  });
+  it("tells the Agent to fill every placeholder of the prompt and never send one unresolved", () => {
+    const md = renderProductionRecipeSection({ ...snapshot, prompt: "A {PERSON} smiling." })!;
+    expect(md).toMatch(/unchanged[\s\S]*every `\{PLACEHOLDER\}`[\s\S]*Never leave an unresolved/);
+    expect(md).toContain("A {PERSON} smiling.");
   });
   it("omits the prompt subsection without a prompt and renders nothing without a snapshot", () => {
     expect(renderProductionRecipeSection({ ...snapshot, prompt: undefined })).not.toContain("Prompt (verbatim)");

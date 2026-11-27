@@ -83,10 +83,13 @@ export const listRecent = query({
     const items = await Promise.all(
       page.map(async (run) => {
         const parent = runParent(run);
+        // A Standalone Run (ADR-087) has no Mission or Job to name it.
         const name =
           parent.kind === "mission"
             ? ((await ctx.db.get(parent.missionId))?.type ?? null)
-            : ((await ctx.db.get(parent.jobId))?.type ?? null);
+            : parent.kind === "job"
+              ? ((await ctx.db.get(parent.jobId))?.type ?? null)
+              : null;
         return {
           runId: run._id,
           kind: parent.kind,

@@ -102,7 +102,7 @@ function Lane({ bar, kind, failed }: { bar?: TimelineBar; kind: Kind; failed: bo
       {bar ? (
         <span
           data-testid="trace-bar"
-          className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-full", failed ? "bg-destructive" : KIND_BAR[kind])}
+          className={cn("absolute top-1/2 h-3.5 -translate-y-1/2 rounded-full", failed ? "bg-destructive" : KIND_BAR[kind])}
           style={{ left: `${bar.offsetPct}%`, width: `${bar.widthPct}%` }}
         />
       ) : null}
@@ -179,13 +179,15 @@ function ToolRow({
   const duration = formatDurationMs(event.observedDurationMs);
   const outputPreview = failed ? previewPayload(event.error, 120) : undefined;
   const main = kind === "mcp" ? event.server! : (fileTarget(event.input) ?? event.name);
+  const count = event.calls?.length;
   const frame = cn("rounded-lg px-3 py-1", selected ? "bg-muted" : "hover:bg-muted/50");
   const body = (
     <>
       <div className="grid min-w-0 gap-0.5">
         <Label kind={kind} small={event.name} main={main} />
-        {badge || failed || event.status === "running" || duration ? (
+        {badge || count || failed || event.status === "running" || duration ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2 pl-5 text-xs text-muted-foreground">
+            {count ? <span data-testid="parallel-calls" className="rounded-full bg-muted px-2 py-0.5 font-semibold tabular-nums text-foreground">{`×${count}`}</span> : null}
             {badge}
             {event.status === "completed" ? null : (
               <span data-testid="tool-status">

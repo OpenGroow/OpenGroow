@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlTab } from "@/src/lib/use-url-tab";
 import Link from "next/link";
 import { use, useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -153,6 +154,16 @@ function RunRow({
               size="sm"
               className="rounded-full"
               nativeButton={false}
+              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "prompt")} />}
+            >
+              <Code />
+              View prompt
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              nativeButton={false}
               render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "logs")} />}
             >
               <FileText />
@@ -167,16 +178,6 @@ function RunRow({
             >
               <ListTree />
               View trace
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-full"
-              nativeButton={false}
-              render={<Link href={missionRunHref(instanceId, run.missionId, run._id, "prompt")} />}
-            >
-              <Code />
-              View prompt
             </Button>
           </>
         )}
@@ -236,7 +237,7 @@ export function MissionDetailContent({
   const cancelMission = useAction(api.missions_node.cancelMission);
   const [isRetrying, setIsRetrying] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [tab, setTab] = useState<"overview" | "runs">("overview");
+  const [tab, setTab] = useUrlTab<"overview" | "runs">(["overview", "runs"], "overview");
 
   async function handleDelete(): Promise<void> {
     const confirmed = window.confirm("Permanently delete this mission and all its runs?");

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
@@ -16,13 +16,10 @@ import { formatSourceDate } from "@/src/components/source-status-pill";
 import { FormatBadge, SourceThumbnail, useSourcePlatforms, useThumbnailRequests, type SourcePlatform } from "@/src/components/source-visuals";
 import { useSelection } from "@/src/hooks/use-selection";
 import { isActiveFamily, metricsOf, postUrlOf, sourceTitle } from "@/src/lib/creative-library";
-import { cn } from "@/lib/utils";
 import { isWebUrl } from "@/src/lib/web-url";
-import { FamilyRecipes } from "@/src/components/family-recipes";
 import { AddSourceButton, useRemoveSources } from "@/src/components/creative-family-source-actions";
 
-// One Creative Family (ADR-082): its mechanic, its statistics over external
-// views, and its Sources.
+// One Creative Family (ADR-082, ADR-088): a group of Sources, with its statistics over external views.
 
 const PAGE_SIZE = 25;
 // Matches the server's `STATS_SOURCE_CAP` (`creative_families.stats`).
@@ -44,12 +41,6 @@ type FamilySource = {
   thumbnailTriedAt?: number;
 };
 
-const TABS = [
-  { key: "sources", label: "Sources" },
-  { key: "recipes", label: "Recipes" },
-] as const;
-type FamilyTab = (typeof TABS)[number]["key"];
-
 const number = (value: number): string => new Intl.NumberFormat("en-US").format(value);
 /** A figure the server could not compute is unknown, never zero. */
 const figure = (value: number | null): string => (value === null ? "Unknown" : number(value));
@@ -70,7 +61,6 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
     { instanceId, familyId: id },
     { initialNumItems: PAGE_SIZE },
   ) as { results: FamilySource[]; status: string; loadMore: (numItems: number) => void };
-  const [tab, setTab] = useState<FamilyTab>("sources");
   const { selecting, selected, start: startSelecting, stop: stopSelecting, toggle } = useSelection();
   const { removeMany, error: removeError, pending: removing } = useRemoveSources(instanceId);
   const platformFor = useSourcePlatforms(instanceId);
@@ -87,7 +77,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
   }
   const hasMore = status === "CanLoadMore" || status === "LoadingMore";
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
       <div className="grid gap-4">
         <BackLink instanceId={instanceId} />
         <PageHeader
@@ -105,9 +95,11 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
                   </Button>
                 </>
               ) : isActiveFamily(family) ? (
-                <AddSourceButton instanceId={instanceId} familyId={familyId} />
+                <>
+                  <AddSourceButton instanceId={instanceId} familyId={familyId} />
+                </>
               ) : null}
-              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={() => { setTab("sources"); startSelecting(); }} />
+              <FamilyMoreMenu instanceId={instanceId} family={family} archived={!isActiveFamily(family)} onSelect={startSelecting} />
             </div>
           }
         />
@@ -117,27 +109,7 @@ export function CreativeFamilyContent({ instanceId, familyId }: { instanceId: st
 
       {stats ? <Statistics stats={stats} /> : null}
 
-      <div role="tablist" aria-label="Creative Family" className="flex gap-6 border-b border-border">
-        {TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={cn(
-              "-mb-px border-b-2 px-1 pb-3 text-base font-semibold transition-colors",
-              tab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "recipes" ? <FamilyRecipes instanceId={instanceId} familyId={familyId} canCreate={isActiveFamily(family)} /> : null}
-
-      <section aria-label="Family Sources" hidden={tab !== "sources"} className="grid gap-3">
+      <section aria-label="Family Sources" className="grid gap-3">
         {status === "LoadingFirstPage" ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : results.length === 0 ? (

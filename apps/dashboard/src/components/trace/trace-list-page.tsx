@@ -142,7 +142,7 @@ function TraceRunRows({
               className="grid gap-2 rounded-xl px-5 py-4 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center sm:gap-4"
             >
               <span className="min-w-0 truncate font-medium text-foreground">
-                {run.name ? titleCase(run.name) : run.kind === "mission" ? "Mission" : "Job"}
+                {run.name ? titleCase(run.name) : run.kind === "mission" ? "Mission" : run.kind === "job" ? "Job" : "Recipe generation"}
               </span>
               <span className="min-w-0 truncate text-sm text-muted-foreground">{run.agentName}</span>
               <span className="min-w-0 truncate text-sm text-muted-foreground">{run.projectName ?? "Project"}</span>

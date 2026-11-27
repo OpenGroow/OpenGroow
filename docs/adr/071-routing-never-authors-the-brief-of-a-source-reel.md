@@ -1,6 +1,6 @@
 # ADR-071: `routing` never authors the brief of a Source reel; the producing Agent reads the Source through `observationId`
 
-**Status:** Accepted
+**Status:** Superseded by ADR-089
 
 ### Context
 

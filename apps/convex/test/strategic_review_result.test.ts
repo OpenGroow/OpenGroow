@@ -48,7 +48,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const envelope = (over: Record<string, unknown> = {}) => ({ report: "Report", consolidatedMemory: "Memory", references: { familyIds: [], recipeIds: [], publicationIds: [] }, ...over });
+const envelope = (over: Record<string, unknown> = {}) => ({ report: "Report", consolidatedMemory: "Memory", references: { recipeIds: [], publicationIds: [] }, ...over });
 
 const insertJob = () =>
   t.run((ctx) => ctx.db.insert("jobs", {
@@ -108,7 +108,7 @@ describe("strategic_review Run result: persistence", () => {
       [envelope({ report: "a".repeat(STRATEGIC_REVIEW_LIMITS.reportChars + 1) }), /characters/],
       [envelope({ report: "  " }), /report/],
       ["not an envelope", /object/],
-      [envelope({ references: { familyIds: ["not-an-id"] } }), /not-an-id/],
+      [envelope({ references: { recipeIds: ["not-an-id"] } }), /not-an-id/],
     ];
     for (const [bad, reason] of cases) {
       const runId = await startRun(await insertJob());
@@ -147,7 +147,7 @@ describe("strategic_review Run result: memory conflict", () => {
       const run = await ctx.db.insert("runs", { jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: TEMPLATE, agentName: "a", sessionKey: "other", status: "completed", createdAt: NOW, updatedAt: NOW });
       return await ctx.db.insert("strategicReviews", {
         ownerId: OWNER.subject, instanceId: INSTANCE, runId: run, periodStart: 1, periodEnd: 2, report: "r", consolidatedMemory: "newer",
-        references: { familyIds: [], recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt: NOW + 1,
+        references: { recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt: NOW + 1,
       });
     });
     await complete(slow, envelope());
@@ -187,7 +187,7 @@ describe("strategic_review Run result: get_strategic_memory", () => {
       const run = await ctx.db.insert("runs", { jobId, ownerId: OWNER.subject, instanceId: INSTANCE, templateId: "x", agentName: "a", sessionKey: `s-${createdAt}`, status: "completed", createdAt, updatedAt: createdAt });
       return await ctx.db.insert("strategicReviews", {
         ownerId: OWNER.subject, instanceId: INSTANCE, runId: run, periodStart: 1, periodEnd: 2, report: "r", consolidatedMemory: memory,
-        references: { familyIds: [], recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt,
+        references: { recipeIds: [], publicationIds: [] }, memoryChanged: true, createdAt,
       });
     });
   const read = () => t.run((ctx) => readStrategicMemory(ctx, { instanceId: INSTANCE, templateId: TEMPLATE }));
@@ -234,7 +234,7 @@ describe("strategic_review Run result: reconciliation", () => {
   const ctx = { parent: { kind: "job", jobId: "j1" as Id<"jobs"> } as never, strategicReview: true, runId: "run1" as Id<"runs">, missionType: "", retryableFailureCount: 0 };
 
   it("hands the result file's envelope over as it is, to be validated at persistence", () => {
-    const body = envelope({ references: { familyIds: ["x"] } });
+    const body = envelope({ references: { recipeIds: ["x"] } });
     expect(decideReconciliation(snapshot(JSON.stringify(body)), ctx)).toEqual({ type: "persistStrategicReview", envelope: body });
   });
 

@@ -240,6 +240,20 @@ describe("control-socket workspace helpers", () => {
     expect(isAllowedDeletableWorkspaceFilePath("skills/foo/SKILL.md")).toBe(false);
   });
 
+  it("gives a Standalone Run the same file rules as a SourceJob", () => {
+    const result = "standalone/run1/outputs/run1.json";
+    const runFile = "standalone/run1/run.md";
+    expect(isAllowedReadableWorkspaceFilePath(result)).toBe(true);
+    expect(isAllowedWorkspaceFilePath(result)).toBe(false);
+    expect(isAllowedWorkspaceFilePath(runFile)).toBe(true);
+    expect(isAllowedDeletableWorkspaceFilePath(result)).toBe(true);
+    expect(isAllowedDeletableWorkspaceFilePath(runFile)).toBe(true);
+    for (const bad of ["standalone/run1/secrets.json", "standalone/run1/outputs/nested/x.json", "standalone/../AGENTS.md", "standalone/outputs/x.json"]) {
+      expect(isAllowedReadableWorkspaceFilePath(bad)).toBe(false);
+      expect(isAllowedWorkspaceFilePath(bad)).toBe(false);
+    }
+  });
+
   it("refuses traversal and any other path under jobs/, and the old runs/ results", () => {
     for (const bad of [
       "jobs/job1/secrets.json",

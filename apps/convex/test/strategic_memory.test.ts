@@ -37,7 +37,7 @@ afterEach(() => restoreRegistry());
 const owner = () => t.withIdentity(OWNER);
 const stranger = () => t.withIdentity(STRANGER);
 
-type Refs = { familyIds?: Id<"creativeFamilies">[]; recipeIds?: Id<"productionRecipes">[]; publicationIds?: Id<"publications">[] };
+type Refs = { recipeIds?: Id<"productionRecipes">[]; publicationIds?: Id<"publications">[] };
 
 async function review(instanceId: string, fields: { createdAt: number; memory?: string; memoryChanged?: boolean; refs?: Refs }) {
   return await t.run(async (ctx) => {
@@ -53,7 +53,7 @@ async function review(instanceId: string, fields: { createdAt: number; memory?: 
     return await ctx.db.insert("strategicReviews", {
       ownerId: OWNER.subject, instanceId, runId, periodStart: 1_000, periodEnd: 2_000,
       report: `Report ${fields.createdAt}`, consolidatedMemory: fields.memory ?? `Memory ${fields.createdAt}`,
-      references: { familyIds: [], recipeIds: [], publicationIds: [], ...fields.refs },
+      references: { recipeIds: [], publicationIds: [], ...fields.refs },
       memoryChanged: fields.memoryChanged ?? true, createdAt: fields.createdAt,
     });
   });
@@ -107,42 +107,41 @@ describe("strategic_memory.history", () => {
 });
 
 describe("strategic_memory.references", () => {
-  it("resolves families, recipes and publications, archived ones included, and flags deleted ones", async () => {
-    const { families, recipe, publication, gone } = await t.run(async (ctx) => {
+  it("resolves recipes and publications, and flags deleted ones", async () => {
+    const { recipe, publication, gone } = await t.run(async (ctx) => {
       const now = Date.now();
-      const active = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "a", name: "Active family", description: "d" });
-      const archived = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "b", name: "Old family", description: "d", status: "archived" });
-      const gone = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "c", name: "Deleted", description: "d" });
+      const recipe = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d" });
+      const gone = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Deleted", description: "d" });
       await ctx.db.delete(gone);
-      const recipe = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE_ID, creativeFamilyId: active, templateId: "tpl", missionType: "make_reel", name: "Recipe", description: "d", status: "archived" } as never);
       const missionId = await ctx.db.insert("missions", { ownerId: OWNER.subject, instanceId: INSTANCE_ID, templateId: "tpl", type: "make_reel", payload: {}, status: "done", createdAt: now, updatedAt: now });
       const publication = await ctx.db.insert("publications", { missionId, instanceId: INSTANCE_ID, target: "instagram:me", status: "published", createdAt: now, updatedAt: now });
-      return { families: [active, archived], recipe, publication, gone };
+      return { recipe, publication, gone };
     });
-    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { familyIds: [...families, gone], recipeIds: [recipe], publicationIds: [publication] } });
+    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { recipeIds: [recipe, gone], publicationIds: [publication] } });
     const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
-    expect(refs?.families).toEqual([
-      expect.objectContaining({ id: families[0], name: "Active family", archived: false }),
-      expect.objectContaining({ id: families[1], name: "Old family", archived: true }),
-      expect.objectContaining({ id: gone, name: null }),
-    ]);
-    expect(refs?.recipes).toEqual([expect.objectContaining({ id: recipe, name: "Recipe", archived: true, familyId: families[0] })]);
+    expect(refs?.recipes).toEqual([expect.objectContaining({ id: recipe, name: "Recipe" }), expect.objectContaining({ id: gone, name: null })]);
     expect(refs?.publications).toEqual([expect.objectContaining({ id: publication, target: "instagram:me" })]);
+  });
+
+  it("keeps a Review written before ADR-088 readable, and shows no family for it", async () => {
+    const family = await t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: INSTANCE_ID, slug: "a", name: "Old family", description: "d" }));
+    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { familyIds: [family] } as never });
+    const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
+    expect(refs).toEqual({ recipes: [], publications: [] });
+    expect((await t.run((ctx) => ctx.db.get(id)))?.references.familyIds).toEqual([family]);
   });
 
   it("never resolves an entity of another Project referenced by a review", async () => {
     const foreign = await t.run(async (ctx) => {
       const now = Date.now();
-      const family = await ctx.db.insert("creativeFamilies", { instanceId: OTHER_INSTANCE_ID, slug: "x", name: "Foreign family", description: "d" });
-      const recipe = await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE_ID, creativeFamilyId: family, templateId: "tpl", missionType: "make_reel", name: "Foreign recipe", description: "d", status: "active" } as never);
+      const recipe = await ctx.db.insert("productionRecipes", { instanceId: OTHER_INSTANCE_ID, templateId: "tpl", missionType: "make_reel", name: "Foreign recipe", description: "d" });
       const missionId = await ctx.db.insert("missions", { ownerId: STRANGER.subject, instanceId: OTHER_INSTANCE_ID, templateId: "tpl", type: "make_reel", payload: {}, status: "done", createdAt: now, updatedAt: now });
       const publication = await ctx.db.insert("publications", { missionId, instanceId: OTHER_INSTANCE_ID, target: "instagram:other", status: "published", createdAt: now, updatedAt: now });
-      return { family, recipe, publication };
+      return { recipe, publication };
     });
-    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { familyIds: [foreign.family], recipeIds: [foreign.recipe], publicationIds: [foreign.publication] } });
+    const id = await review(INSTANCE_ID, { createdAt: 10, refs: { recipeIds: [foreign.recipe], publicationIds: [foreign.publication] } });
     const refs = await owner().query(api.strategic_memory.references, { instanceId: INSTANCE_ID, reviewId: id });
-    expect(refs?.families).toEqual([{ id: foreign.family, name: null, archived: false }]);
-    expect(refs?.recipes).toEqual([{ id: foreign.recipe, name: null, archived: false, familyId: null }]);
+    expect(refs?.recipes).toEqual([{ id: foreign.recipe, name: null }]);
     expect(refs?.publications).toEqual([{ id: foreign.publication, target: null, missionId: null }]);
   });
 

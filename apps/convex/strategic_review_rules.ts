@@ -7,11 +7,11 @@ export const STRATEGIC_REVIEW_LIMITS = {
   reportChars: 40_000,
   /** Characters of the Strategic Memory. */
   memoryChars: 16_000,
-  /** References of each type (families, recipes, Publications). */
+  /** References of each type (recipes, Publications). */
   referencesPerType: 200,
 } as const;
 
-export const REFERENCE_KEYS = ["familyIds", "recipeIds", "publicationIds"] as const;
+export const REFERENCE_KEYS = ["recipeIds", "publicationIds"] as const;
 export type ReferenceKey = (typeof REFERENCE_KEYS)[number];
 
 /** Raw (not yet checked against the database) reference ids, deduplicated. */

@@ -169,7 +169,7 @@ export const COUNT_CAP = 5000;
  * counts), not the number loaded so far. Convex has no `count()`, so each status
  * is read through its index, at most `COUNT_CAP` rows; `capped` says a status
  * had more. `scored` and `other` are the two tabs (the Scored stage, and what is
- * neither Scored nor picked for production).
+ not scored yet or failed).
  */
 export const counts = query({
   args: { instanceId: v.string() },
@@ -189,7 +189,7 @@ export const counts = query({
         out.total += 1;
         const analysed = status === "ready" && source.excluded !== true && source.scoring !== undefined;
         if (!analysed) out.other += 1;
-        else if (source.selectedAt === undefined) out.scored += 1;
+        else out.scored += 1;
       }
     }
     return out;

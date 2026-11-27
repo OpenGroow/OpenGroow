@@ -84,14 +84,14 @@ async function family(projectId: string, name: string) {
   return t.run((ctx) => ctx.db.insert("creativeFamilies", { instanceId: projectId, slug: name.toLowerCase(), name, description: "d" }));
 }
 async function recipe(projectId: string, creativeFamilyId: Id<"creativeFamilies">, name: string, missionType: string, templateId = PLANNER) {
-  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d", status: "active" }));
+  return t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: projectId, creativeFamilyId, templateId, missionType, name, description: "d" }));
 }
 async function source(projectId: string, label: string, o: { status?: string; capturedAt?: number; scoring?: Record<string, number>; producedAt?: number; selectedAt?: number; creativeFamilyId?: Id<"creativeFamilies">; summary?: string } = {}) {
   return t.run((ctx) =>
     ctx.db.insert("sources", {
       instanceId: projectId, ownerId: "owner", templateId: "example/source", sourceId: "post", label, family: "fam", status: (o.status ?? "ready") as never,
       origin: "https://example.com/p", capturedAt: o.capturedAt ?? 1000, createdAt: o.capturedAt ?? 1000, marketing: o.summary ? { summary: o.summary } : {}, analysis: { big: "payload" },
-      ...(o.scoring ? { scoring: o.scoring } : {}), ...(o.producedAt ? { producedAt: o.producedAt } : {}), ...(o.selectedAt ? { selectedAt: o.selectedAt } : {}),
+      ...(o.scoring ? { scoring: o.scoring } : {}),
       ...(o.creativeFamilyId ? { creativeFamilyId: o.creativeFamilyId } : {}),
     } as never),
   );
@@ -122,7 +122,7 @@ describe("list_mission_types and list_production_recipes: format and Source requ
     await recipe(PROJECT_A, f, "Orphan", "gone_type", "example/uninstalled");
     const out = await call(token, "list_production_recipes");
     const by = (name: string) => out.recipes.find((r: { name: string }) => r.name === name);
-    expect(by("Image recipe")).toMatchObject({ kind: "image", sourceRequired: true, missionType: "make_image", archived: false });
+    expect(by("Image recipe")).toMatchObject({ kind: "image", sourceRequired: true, missionType: "make_image" });
     expect(by("Article recipe")).toMatchObject({ kind: "article", sourceRequired: false });
     expect(by("Orphan")).toMatchObject({ kind: null, sourceRequired: false });
     expect(out).toHaveProperty("total", 3);
@@ -139,31 +139,30 @@ describe("list_sources", () => {
       {
         sourceId: id, label: "Post one", origin: "https://example.com/p", status: "ready", capturedAt: 1000,
         replicationScore: 0.8, scores: { productFit: 0.9, replicability: 0.7, creativeStrength: 0.6 },
-        summary: "A short summary", creativeFamily: { id: f, name: "Hooks" }, selected: false, produced: false,
+        summary: "A short summary", creativeFamily: { id: f, name: "Hooks" },
       },
     ]);
     expect(out.truncated).toBe(false);
     expect(JSON.stringify(out)).not.toContain("payload");
   });
 
-  it("serves not selected, not produced Sources first, then the best score", async () => {
+  it("serves the best Replication Score first, then the newest", async () => {
     const token = await seedProject(PROJECT_A);
-    await source(PROJECT_A, "produced", { scoring: { replicationScore: 0.99 }, producedAt: 5, capturedAt: 10 });
     await source(PROJECT_A, "low", { scoring: { replicationScore: 0.2 }, capturedAt: 20 });
-    await source(PROJECT_A, "selected", { scoring: { replicationScore: 0.95 }, selectedAt: 5, capturedAt: 30 });
-    await source(PROJECT_A, "high", { scoring: { replicationScore: 0.7 }, capturedAt: 40 });
+    await source(PROJECT_A, "high", { scoring: { replicationScore: 0.7 }, capturedAt: 10 });
+    await source(PROJECT_A, "high newer", { scoring: { replicationScore: 0.7 }, capturedAt: 30 });
     const out = await call(token, "list_sources");
-    expect(out.sources.map((s: { label: string }) => s.label)).toEqual(["high", "low", "produced", "selected"]);
+    expect(out.sources.map((s: { label: string }) => s.label)).toEqual(["high newer", "high", "low"]);
+    expect(out.sources[0]).not.toHaveProperty("produced");
+    expect(out.sources[0]).not.toHaveProperty("selected");
   });
 
-  it("filters by status (ready by default) and by produced", async () => {
+  it("filters by status (ready by default)", async () => {
     const token = await seedProject(PROJECT_A);
     await source(PROJECT_A, "ready one");
     await source(PROJECT_A, "failed one", { status: "failed" });
-    await source(PROJECT_A, "done one", { producedAt: 5 });
-    expect((await call(token, "list_sources")).sources.map((s: { label: string }) => s.label).sort()).toEqual(["done one", "ready one"]);
+    expect((await call(token, "list_sources")).sources.map((s: { label: string }) => s.label)).toEqual(["ready one"]);
     expect((await call(token, "list_sources", { status: "failed" })).sources.map((s: { label: string }) => s.label)).toEqual(["failed one"]);
-    expect((await call(token, "list_sources", { produced: false })).sources.map((s: { label: string }) => s.label)).toEqual(["ready one"]);
     await expect(call(token, "list_sources", { status: "bogus" })).rejects.toThrow(/status/);
   });
 

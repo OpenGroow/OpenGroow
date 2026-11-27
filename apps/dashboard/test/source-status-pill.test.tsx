@@ -27,16 +27,14 @@ describe("SourcePipelinePill", () => {
   };
 
   const SCORED = { status: "ready" as const, scoring: { productFit: 0.7 } };
-  const IN_PRODUCTION = { ...SCORED, selectedAt: 1, productionMissionId: "mission-1" };
 
-  it("gives Scored and In production different colours, so they can be told apart", async () => {
+  it("tells Ingestion, Ready and Scored apart, and has no production stage any more", async () => {
     const scored = await pillOf(SCORED);
     expect(scored.textContent).toBe("Scored");
-    const scoredClass = scored.className;
-    const inProduction = await pillOf(IN_PRODUCTION);
-    expect(inProduction.textContent).toBe("In production");
-    expect(inProduction.className).not.toBe(scoredClass);
-    expect(inProduction.className).toContain("border-brand-cyan");
-    expect(scoredClass).toContain("border-tone-blue");
+    expect(scored.className).toContain("border-tone-blue");
+    expect((await pillOf({ status: "ready" })).textContent).toBe("Ready");
+    expect((await pillOf({ status: "processing" })).textContent).toBe("Ingestion");
+    // A Source that still carries the old production fields is simply Scored.
+    expect((await pillOf({ ...SCORED, selectedAt: 1, productionMissionId: "mission-1" } as never)).textContent).toBe("Scored");
   });
 });

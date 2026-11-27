@@ -66,6 +66,8 @@ export const reconcileDecisionLogV = v.union(
   v.object({ type: v.literal("persistStrategicReview") }),
   // Only the fact: the Content Plan is data, not a decision (#176).
   v.object({ type: v.literal("persistContentPlan") }),
+  // Only the fact: the Recipe Proposal is data, not a decision (ADR-087).
+  v.object({ type: v.literal("persistRecipeProposal") }),
   v.object({
     type: v.literal("markResumed"),
     intermediateResult: v.record(v.string(), v.any()),

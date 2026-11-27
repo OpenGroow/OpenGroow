@@ -563,7 +563,7 @@ async function seedSourceJob(
 
 async function seedGenericJob(
   t: ReturnType<typeof convexTest>,
-  type: "source_ingestion" | "source_scoring" | "source_routing",
+  type: "source_ingestion" | "source_scoring",
 ): Promise<Id<"jobs">> {
   const now = Date.now();
   return await t.run((ctx) => ctx.db.insert("jobs", {
@@ -612,7 +612,6 @@ describe("workspace_logs.listJobsForWorkspace", () => {
     await seedProjectAgent(t);
     await seedGenericJob(t, "source_ingestion");
     await seedGenericJob(t, "source_scoring");
-    await seedGenericJob(t, "source_routing");
 
     const result = await t.withIdentity(OWNER).query(api.workspace_logs.listJobsForWorkspace, {
       instanceId: INSTANCE_ID,
@@ -622,12 +621,10 @@ describe("workspace_logs.listJobsForWorkspace", () => {
     expect(result.map((job) => job.agentName)).toEqual([
       "Social source ingestion",
       "Source scoring",
-      "Source routing",
     ]);
     expect(result.map((job) => job.jobType)).toEqual([
       "source_ingestion",
       "source_scoring",
-      "source_routing",
     ]);
   });
 

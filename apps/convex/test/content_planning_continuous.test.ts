@@ -85,7 +85,7 @@ afterEach(() => {
 
 const DAY = 86_400_000;
 const recipe = () =>
-  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d", status: "active" } as never));
+  t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: PRODUCER, missionType: "make_video", name: "R", description: "d" } as never));
 const getJob = () => t.run((ctx) => ctx.db.get(jobId));
 const runs = () => t.run((ctx) => ctx.db.query("runs").collect());
 const contents = () => t.run((ctx) => ctx.db.query("plannedContents").collect());

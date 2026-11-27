@@ -44,6 +44,7 @@ vi.mock("@convex/_generated/api", () => ({
       listActiveByInstance: "missions.listActiveByInstance",
       listDoneByInstance: "missions.listDoneByInstance",
       create: "missions.create",
+      deleteMission: "missions.deleteMission",
     },
     production_recipes: {
       listForMissionType: "production_recipes.listForMissionType",
@@ -120,6 +121,38 @@ describe("InstanceMissionsContent — mission list", () => {
       },
     };
   }
+
+  it("deletes the selected missions in one go, and keeps selected the ones the server refused", async () => {
+    const deleteMission = vi.fn(async ({ missionId }: { missionId: string }) => {
+      if (missionId === "m-c") throw new Error("Cannot delete a mission while its run is in flight on the Project");
+    });
+    useMutationMock.mockReturnValue(deleteMission);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    const mission = (id: string) => ({ ...makeMission({ status: "todo" }), _id: id });
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "missions.listActiveByInstance") return [mission("m-a"), mission("m-b"), mission("m-c")];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+    await render();
+    const press = async (label: string) => {
+      const button = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith(label));
+      await act(async () => button?.click());
+    };
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')?.click();
+    });
+    await press("Select");
+    // In selection mode a click on a card toggles it.
+    for (const id of ["m-a", "m-c"]) {
+      await act(async () => document.querySelector<HTMLAnchorElement>(`a[href$="/missions/${id}"]`)?.click());
+    }
+    await press("Delete");
+    expect(deleteMission).toHaveBeenCalledTimes(2);
+    expect(alert).toHaveBeenCalledWith(expect.stringContaining("1 of 2"));
+    expect(document.body.textContent).toContain("1 selected");
+  });
 
   it("titles the page Missions and never says 'Instance'", async () => {
     useQueryMock.mockImplementation((key: string) => {

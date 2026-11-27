@@ -8,12 +8,15 @@ import type { Id } from "./_generated/dataModel";
  */
 export type RunParent =
   | { kind: "mission"; missionId: Id<"missions"> }
-  | { kind: "job"; jobId: Id<"jobs"> };
+  | { kind: "job"; jobId: Id<"jobs"> }
+  // A Standalone Run (ADR-087): neither, carried by its `recipeGeneration` pin.
+  | { kind: "standalone"; runId: Id<"runs"> };
 
 export type RunParentRecord = {
   _id: Id<"runs">;
   missionId?: unknown;
   jobId?: unknown;
+  recipeGeneration?: unknown;
 };
 
 /** The Mission id of a Mission's Run; undefined for a Job's Run. */
@@ -30,6 +33,12 @@ export function runParent(
   // cover a row that predates it or a hand-built value.
   if (missionId && jobId) {
     throw new Error(`Run ${run._id} is attached to both a Mission and a Job`);
+  }
+  if (run.recipeGeneration) {
+    if (missionId || jobId) {
+      throw new Error(`Run ${run._id} is a Standalone Run but is attached to both a Mission or a Job and a pin`);
+    }
+    return { kind: "standalone", runId: run._id };
   }
   if (missionId) return { kind: "mission", missionId };
   if (jobId) return { kind: "job", jobId };

@@ -23,9 +23,8 @@ import { engagementCountsOf, scoreOf } from "./sources_social.js";
 // peers and computes a `replicationScore` from that rank plus the fixed
 // rubric scores written at deep-enrichment completion (issue #486). This
 // module writes those scores onto Observation rows and nothing else: the
-// ranking maths lives in `observations_ranking.ts`, and the generic
-// `source_routing` Job owns what to do with the day's winner. This module only
-// computes and persists scores.
+// ranking maths lives in `observations_ranking.ts`. This module only computes
+// and persists scores: nothing is produced from the day's winner (ADR-089).
 //
 // Mirrors the shape of `insights.consolidate`/`consolidateAll` used before
 // their removal (issue #485): an `internalAction` fan-out over every
@@ -84,7 +83,6 @@ function toScorable(source: Doc<"sources">, now: number): ScorableObservation | 
     // Pre-#486 rows carry no `excluded` at all — schema.ts: readers must
     // treat `undefined` as "not excluded".
     source.excluded === true ||
-    source.selectedAt !== undefined ||
     source.capturedAt < now - OBSERVATION_LOOKBACK_DAYS * 24 * 60 * 60 * 1000 ||
     // A future-dated `capturedAt` (clock skew, bad client data) must not pass
     // the lookback check on its lower bound alone — cap it at `now` too.
@@ -271,9 +269,7 @@ export const scoreEligibleForInstance = internalAction({
       ),
     );
 
-    // Production is created by the generic source_routing Job after its Agent
-    // Run proposes a validated target. Scoring only returns the winner here;
-    // it never creates a technical routing Mission.
+    // Scoring only returns the winner; it creates no Mission (ADR-089).
     return pickTopEligible(
       scores.map((score) => ({ id: score.observationId, replicationScore: score.replicationScore })),
     )?.id;

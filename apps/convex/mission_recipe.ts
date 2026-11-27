@@ -23,7 +23,7 @@ export type RecipeArg = {
 export type RecipeSnapshot = NonNullable<Doc<"missions">["recipeSnapshot"]>;
 
 /**
- * Checks, in order: the recipe belongs to the Project and is not archived; it is
+ * Checks, in order: the recipe belongs to the Project; it is
  * written for this Template and Mission type; the pinned Template version
  * declares the provider. Then copies the version into a snapshot.
  */
@@ -41,7 +41,6 @@ export async function buildRecipeSnapshot(
   const { recipe: arg } = args;
   const recipe = await ownedRecipe(ctx, args.instanceId, arg.recipeId);
   if (!recipe) throw new Error("Production Recipe not found");
-  if (recipe.status === "archived") throw new Error("This Production Recipe is archived");
   if (recipe.templateId !== args.templateId || recipe.missionType !== args.type) {
     throw new Error(`This Production Recipe is not written for Mission type "${args.type}" of ${args.templateId}`);
   }

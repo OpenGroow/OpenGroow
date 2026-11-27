@@ -23,9 +23,7 @@ import { artifactV, runResultV } from "./run_result.js";
 import { indexingOutcomeV } from "./indexing.js";
 import { reconcileDecisionLogV } from "./mission_dispatcher/decision_log.js";
 import { sourceMarketingV, sourceStatusV } from "./source_schema.js";
-import { routingDecisionV } from "./source_routing_decision.js";
 import { sourceJobOutcomeV, sourceJobStateV } from "./validators.js";
-import { recipeStatusV } from "./production_validators.js";
 
 // Job/provisioning metadata produced by the remote control-plane
 // InstanceProvisioner (docs/CONTROL_PLANE.md). `jobId` remains the table's
@@ -512,7 +510,8 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"]),
   runs: defineTable(
-    // A Run is attached to exactly one parent, a Mission or a generic Job.
+    // A Run is attached to exactly one parent, a Mission or a generic Job, or is
+    // Standalone (ADR-087: neither, with a `recipeGeneration` pin).
     // Each shape requires its own id and only admits `null` (never an id) for
     // the other one, so `run.missionId` / `run.jobId` stay indexable (an absent
     // field is undefined in the index). Convex has no "never" validator;
@@ -526,6 +525,30 @@ export default defineSchema({
       v.object({
         // Generic Job execution parent (issue #595).
         jobId: v.id("jobs"),
+        missionId: v.optional(v.null()),
+        sourceJobId: v.optional(v.null()),
+        ...runSharedFields,
+      }),
+      v.object({
+        // Standalone Run (ADR-087): no Mission, no Job; the pin is the parent.
+        recipeGeneration: v.object({
+          // Transitional (ADR-088): removed once `stripRecipeGenerationFamily` has run everywhere.
+          familyId: v.optional(v.id("creativeFamilies")),
+          // The free idea and the Sources the generation reads, pinned only so the Run and its retries read the same input.
+          idea: v.optional(v.string()),
+          sourceIds: v.optional(v.array(v.id("sources"))),
+          instructions: v.optional(v.string()),
+          // 1 for the first try, +1 per retry after a refused result.
+          tryCount: v.number(),
+          // The first Run of the generation (itself for the first try): links the tries as one operation.
+          generationId: v.optional(v.id("runs")),
+          // What made the previous result invalid, handed to the next try.
+          feedback: v.optional(v.string()),
+        }),
+        // The validated result, shown for review; its shape belongs to Recipe Generation.
+        recipeProposal: v.optional(v.any()),
+        // The Recipe created from the proposal (one proposal creates at most one Recipe).
+        recipeId: v.optional(v.id("productionRecipes")),
         missionId: v.optional(v.null()),
         sourceJobId: v.optional(v.null()),
         ...runSharedFields,
@@ -556,6 +579,11 @@ export default defineSchema({
     // Callers keep only Runs with a `missionId` (Runs of Missions).
     .index("by_instance_template_status_completed", ["instanceId", "templateId", "status", "completedAt"])
     .index("by_dispatch_command", ["dispatchCommandId"])
+    // Standalone Runs of a Project for a Creative Family (Recipe Generation).
+    .index("by_instance_family", ["instanceId", "recipeGeneration.familyId"])
+    // The tries of one generation, and (tryCount 1) the latest generations of a Project.
+    .index("by_generation", ["recipeGeneration.generationId"])
+    .index("by_instance_try", ["instanceId", "recipeGeneration.tryCount"])
     // The Trace list (#205): a Project's Runs, newest first, for any Agent and
     // status, without a per-Agent scan.
     .index("by_instance_created", ["instanceId", "createdAt"]),
@@ -573,7 +601,8 @@ export default defineSchema({
     report: v.string(),
     consolidatedMemory: v.string(),
     references: v.object({
-      familyIds: v.array(v.id("creativeFamilies")),
+      // Kept for the Reviews written before ADR-088; a new Review references no family.
+      familyIds: v.optional(v.array(v.id("creativeFamilies"))),
       recipeIds: v.array(v.id("productionRecipes")),
       publicationIds: v.array(v.id("publications")),
     }),
@@ -627,7 +656,9 @@ export default defineSchema({
     // The contents of a plan.
     .index("by_plan", ["planId"])
     // Existing quantity: `approved` of a format within a date range; and the calendar by date.
-    .index("by_instance_status_plannedAt", ["instanceId", "status", "plannedAt"]),
+    .index("by_instance_status_plannedAt", ["instanceId", "status", "plannedAt"])
+    // The contents still to be produced with a Recipe, before deleting it.
+    .index("by_recipe_status_plannedAt", ["recipeId", "status", "plannedAt"]),
   jobs: defineTable({
     ownerId: v.string(),
     instanceId: v.string(),
@@ -745,17 +776,19 @@ export default defineSchema({
     // Matches (or confirms the absence of) a proposed slug for an Instance —
     // fully index-served lookup, no `.filter()`.
     .index("by_instance_slug", ["instanceId", "slug"]),
-  // A Production Recipe (issue #137): how to reproduce a Creative Family's
-  // mechanic, written for one Mission type of one Template. Identity only; its
+  // A Production Recipe (issue #137, ADR-088): a reusable creative method,
+  // written for one Mission type of one Template. Identity only; its
   // content lives in `productionRecipeVersions`.
   productionRecipes: defineTable({
     instanceId: v.string(),
-    creativeFamilyId: v.id("creativeFamilies"),
+    // Transitional (ADR-088): a recipe has no Creative Family; removed once `dropRecipeFamily` has run everywhere.
+    creativeFamilyId: v.optional(v.id("creativeFamilies")),
     templateId: v.string(),
     missionType: v.string(),
     name: v.string(),
     description: v.string(),
-    status: recipeStatusV,
+    // Transitional: a recipe has no status since archiving was replaced by deletion; removed once `dropRecipeStatus` has run everywhere.
+    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
   })
     .index("by_instance_family", ["instanceId", "creativeFamilyId"])
     // The Create Mission picker: a Project's recipes for one Mission type of one Template.
@@ -839,11 +872,10 @@ export default defineSchema({
     producedAt: v.optional(v.number()),
     publishedAt: v.optional(v.number()),
     productionMissionId: v.optional(v.id("missions")),
-    // The routing decision (ADR-076): which producing Mission type was chosen
-    // for this Source, why, and whether a human still has to approve it.
-    routing: v.optional(routingDecisionV),
-    // The producer the user picked by hand on the Sources page ("Routed to").
-    // Produce routes the Source to it instead of letting the router choose.
+    // Transitional (ADR-089): Source routing is gone and nothing reads or writes the fields below
+    // (`selectedAt`, `producedAt`, `publishedAt`, `productionMissionId`, `routing`, `routeTo`); `dropSourceProduction`
+    // clears them and they leave the schema once it has run.
+    routing: v.optional(v.any()),
     routeTo: v.optional(v.object({ templateId: v.string(), missionType: v.string() })),
     // The page's `og:image`, copied into storage (the CDN URLs expire). Set by
     // `source_thumbnails`; `thumbnailTriedAt` records that a fetch was attempted.

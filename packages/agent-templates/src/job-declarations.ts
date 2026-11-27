@@ -1,4 +1,4 @@
-const JOB_TYPE_NAMES = ["source_ingestion", "source_scoring", "source_routing", "strategic_review", "content_planning"] as const;
+const JOB_TYPE_NAMES = ["source_ingestion", "source_scoring", "strategic_review", "content_planning"] as const;
 type JobTypeName = string;
 
 export function isPlainObject(raw: unknown): raw is Record<string, unknown> {

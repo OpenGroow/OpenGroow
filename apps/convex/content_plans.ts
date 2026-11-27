@@ -50,7 +50,6 @@ export async function resolveItem(
   const recipeId = ctx.db.normalizeId("productionRecipes", item.recipeId);
   const recipe = recipeId ? await ctx.db.get(recipeId) : null;
   if (!recipe || recipe.instanceId !== run.instanceId) return { ok: false, errors: [`${at}: recipeId does not name a Recipe of this Project.`] };
-  if (recipe.status !== "active") return { ok: false, errors: [`${at}: the Recipe is archived.`] };
   if (recipe.missionType !== item.missionType) {
     return { ok: false, errors: [`${at}: the Recipe is written for Mission type "${recipe.missionType}", not "${item.missionType}".`] };
   }

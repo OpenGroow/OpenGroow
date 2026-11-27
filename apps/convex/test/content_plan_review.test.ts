@@ -34,7 +34,6 @@ const producer = () => {
 type T = ReturnType<typeof convexTest>;
 let t: T;
 let restoreRegistry: () => void;
-let familyId: Id<"creativeFamilies">;
 let recipeId: Id<"productionRecipes">;
 let sourceId: Id<"sources">;
 
@@ -49,8 +48,7 @@ beforeEach(async () => {
       instanceId: INSTANCE, adapter: "example", url: "https://publisher.example.com", updatedAt: 1,
       targets: [{ target: "social:example", channelService: "instagram" }, { target: "blog:example" }],
     } as never);
-    familyId = await ctx.db.insert("creativeFamilies", { instanceId: INSTANCE, slug: "f", name: "Reaction", description: "d" });
-    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, creativeFamilyId: familyId, templateId: "producer-cpv", missionType: "make_video", name: "Reel recipe", description: "d", status: "active" } as never);
+    recipeId = await ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "producer-cpv", missionType: "make_video", name: "Reel recipe", description: "d" } as never);
     sourceId = await ctx.db.insert("sources", { instanceId: INSTANCE, ownerId: OWNER.subject, templateId: "producer-cpv", sourceId: "s", label: "Article 1", family: "f", marketing: {}, status: "ready", origin: "example", capturedAt: 1, createdAt: 1, analysis: {} } as never);
   });
 });
@@ -94,7 +92,7 @@ describe("content_plan_review.current", () => {
     expect(await stranger().query(api.content_plan_review.current, { instanceId: INSTANCE })).toBeNull();
   });
 
-  it("returns the draft with its contents, Recipe, Creative Family and Source resolved", async () => {
+  it("returns the draft with its contents, Recipe and Source resolved", async () => {
     const planId = await plan();
     await content(planId, { plannedAt: "2030-03-08", title: "Later" });
     await content(planId, { plannedAt: "2030-03-06", title: "Sooner", intent: "explore" });
@@ -104,7 +102,7 @@ describe("content_plan_review.current", () => {
     expect(draft.contents.map((c) => c.title)).toEqual(["Sooner", "Later"]);
     expect(draft.contents[0]).toMatchObject({
       kind: "video", intent: "explore", brief: "A brief", rationale: "Why",
-      recipe: { id: recipeId, name: "Reel recipe" }, creativeFamily: { id: familyId, name: "Reaction" }, source: { id: sourceId, label: "Article 1" },
+      recipe: { id: recipeId, name: "Reel recipe" }, source: { id: sourceId, label: "Article 1" },
     });
     expect(draft.contents[0]).not.toHaveProperty("ownerId");
     expect(draft.quantities).toEqual([{ kind: "video", count: 2 }]);
@@ -123,14 +121,14 @@ describe("content_plan_review.current", () => {
     expect(draft.contents[0]!.publishTargets).toEqual([{ target: "gone:example", uncertain: false, unavailable: true }]);
   });
 
-  it("tolerates a Recipe, Family or Source that is gone", async () => {
+  it("tolerates a Recipe or Source that is gone", async () => {
     await content(await plan());
     await t.run(async (ctx) => {
       await ctx.db.delete(sourceId);
       await ctx.db.delete(recipeId);
     });
     const draft = (await owner().query(api.content_plan_review.current, { instanceId: INSTANCE }))!;
-    expect(draft.contents[0]).toMatchObject({ recipe: null, creativeFamily: null, source: null });
+    expect(draft.contents[0]).toMatchObject({ recipe: null, source: null });
   });
 });
 
@@ -158,7 +156,7 @@ describe("content_plan_review.planDetail", () => {
     const contents = (await owner().query(api.content_plan_review.planDetail, { planId }))!;
     expect(contents.map((c) => [c.title, c.status])).toEqual([["Sooner", "rejected"], ["Later", "approved"]]);
     expect(contents[0]).toMatchObject({
-      recipe: { id: recipeId, name: "Reel recipe" }, creativeFamily: { id: familyId, name: "Reaction" }, source: { id: sourceId, label: "Article 1" },
+      recipe: { id: recipeId, name: "Reel recipe" }, source: { id: sourceId, label: "Article 1" },
       publishTargets: [{ target: "social:example", uncertain: true, reason: expect.any(String), service: "instagram", adapter: "example", label: "@example" }],
     });
     expect(contents[0]).not.toHaveProperty("ownerId");
