@@ -315,7 +315,7 @@ export type ContentPlanningTargetsInfo = {
 } | null;
 
 /**
- * Pure renderer for the content-planning-targets provider: the Planning period and, per format, the
+ * Pure renderer for the content-planning-targets provider: the Planning period and, per Content Type, the
  * target, the approved contents already planned in the period, the quantity still to plan and the
  * destinations. The Agent plans at most the remaining quantity and never names destinations itself.
  */
@@ -326,9 +326,9 @@ export function renderContentPlanningTargetsSection(info: ContentPlanningTargets
     "",
     `Planning period: ${info.periodStart} to ${info.periodEnd} (UTC dates, both included)`,
     "",
-    "OpenGroow fixed the period and the quantities below when the Run started. Every `plannedAt` must be a date inside the period. Plan at most the remaining quantity of each format and none for a format whose remaining quantity is 0. Do not state Publish targets: OpenGroow takes them from this list, so choose Recipes compatible with every destination of the format.",
+    "OpenGroow fixed the period and the quantities below when the Run started. Every `plannedAt` must be a date inside the period. Plan at most the remaining quantity of each Content Type and none for a Content Type whose remaining quantity is 0. Do not state Publish targets: OpenGroow takes them from this list, so choose Recipes compatible with every destination of the Content Type.",
     "",
-    "| Format | Target | Already planned | Remaining | Publish targets |",
+    "| Content Type | Target | Already planned | Remaining | Publish targets |",
     "| --- | --- | --- | --- | --- |",
     ...info.targets.map((t) => `| ${singleLine(t.kind)} | ${t.target} | ${t.existing} | ${t.remaining} | ${t.publishTargets.map(singleLine).join(", ")} |`),
     "",

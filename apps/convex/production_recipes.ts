@@ -56,13 +56,13 @@ async function installedVersions(ctx: QueryCtx, instanceId: string, templateId: 
 }
 
 /**
- * Throws unless an installed version of the Template has this Mission type and it declares the provider.
+ * Throws unless an installed version of the Template has this Mission type and it is creative there (ADR-091).
  * The one target rule, shared by Recipe creation and Recipe Generation.
  */
 export async function requireValidTarget(ctx: QueryCtx, instanceId: string, templateId: string, missionType: string) {
   const versions = await installedVersions(ctx, instanceId, templateId);
   if (versions.length === 0) throw new Error(`Template "${templateId}" is not installed`);
-  // The newest version declaring the provider decides; none declaring it gives the current one's refusal.
+  // The newest version where the type is creative decides; none gives the current version's refusal.
   const template = versions.find((t) => isRecipeTarget(t.manifest, missionType)) ?? versions[versions.length - 1]!;
   validateRecipeTarget(template.manifest, missionType);
 }

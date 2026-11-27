@@ -8,7 +8,7 @@ import { readOwnerId, requireOwnedRow } from "./instance_ownership.js";
 import { channelOf, projectPublishers } from "./project_publishers.js";
 
 // Editing a draft Content Plan (ADR-086, issue #180). The user may change a title, a brief, a date, the Recipe (another
-// one of the same Mission type, so format and quota never change) and the Publish targets (only by removing), or remove
+// one of the same Mission type, so Content Type and quota never change) and the Publish targets (only by removing), or remove
 // a proposal (it becomes `rejected`, kept for history). Each edit is revalidated by the same rules as persistence
 // (limits and dates from content_plan_rules, Recipe and Agent checks as in content_plans) and refused outside `draft`.
 
@@ -54,7 +54,7 @@ export const update = mutation({
       patch.plannedAt = args.plannedAt;
     }
     if (args.recipeId !== undefined) {
-      // The very rules of persistence and approval: Recipe, Agent, Source requirement, pinned format, Publisher compatibility.
+      // The very rules of persistence and approval: Recipe, Agent, Source requirement, pinned Content Type, Publisher compatibility.
       const carried = await pinsOf(ctx, plan);
       if (!carried) throw new Error(NO_PINS_MESSAGE);
       const outcome = await resolveItem(
@@ -63,7 +63,7 @@ export const update = mutation({
         "The Recipe", await projectPublishers(ctx, content.instanceId),
       );
       if (!outcome.ok) throw new Error(outcome.errors.join(" "));
-      if (outcome.value.kind !== content.kind) throw new Error(`The Recipe produces format "${outcome.value.kind}", not "${content.kind}".`);
+      if (outcome.value.kind !== content.kind) throw new Error(`The Recipe produces Content Type "${outcome.value.kind}", not "${content.kind}".`);
       patch.recipeId = args.recipeId;
     }
     if (args.publishTargets !== undefined) {

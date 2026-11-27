@@ -144,10 +144,10 @@ describe("content_plan_edit.update", () => {
     expect((await row(withSource))!.recipeId).toBe(sourced);
   });
 
-  it("refuses a Recipe whose format has no production target in the plan", async () => {
+  it("refuses a Recipe whose Content Type has no Production target in the plan", async () => {
     const id = await content(await plan(), { missionType: "make_post", kind: "image" });
     const post = await t.run((ctx) => ctx.db.insert("productionRecipes", { instanceId: INSTANCE, templateId: "producer-cpe", missionType: "make_post", name: "Post", description: "d" } as never));
-    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: post })).rejects.toThrow(/no production target/);
+    await expect(owner().mutation(api.content_plan_edit.update, { contentId: id, recipeId: post })).rejects.toThrow(/Content Type "image" has no Production target/);
   });
 
   it("refuses to remove the Publish targets that are still available, leaving only gone channels", async () => {

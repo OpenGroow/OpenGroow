@@ -72,7 +72,7 @@ export async function resolveItem(
   const declaration = publishDeclarationFor(template?.manifest, item.missionType);
   if (!manifestType || !declaration) return { ok: false, errors: [`${at}: Mission type "${item.missionType}" declares no publishing, so it has no Content Type and cannot be planned.`] };
   const pinned = pins.targets.find((entry) => entry.kind === declaration.kind);
-  if (!pinned) return { ok: false, errors: [`${at}: format "${declaration.kind}" has no production target.`] };
+  if (!pinned) return { ok: false, errors: [`${at}: Content Type "${declaration.kind}" has no Production target.`] };
 
   const errors: string[] = [];
   if (contentTypeOf(manifestType, template?.manifest.contextProviders).sourceRequired && item.sourceId === undefined) errors.push(`${at}: Mission type "${item.missionType}" needs a Source (sourceId).`);
@@ -82,7 +82,7 @@ export async function resolveItem(
     if (!source || source.instanceId !== run.instanceId) errors.push(`${at}: sourceId does not name a Source of this Project.`);
   }
 
-  // The destinations are the user's pinned ones for this format; a channel removed since is left out.
+  // The destinations are the user's pinned ones for this Content Type; a channel removed since is left out.
   const publishTargets: string[] = [];
   const uncertain: Array<{ target: string; reason: string }> = [];
   for (const target of pinned.publishTargets) {
@@ -94,7 +94,7 @@ export async function resolveItem(
     else if (capability.level === "uncertain") uncertain.push({ target, reason: capability.reason ?? "" });
   }
   // A content is never kept without a destination: every pinned channel may have been removed since dispatch.
-  if (publishTargets.length === 0) errors.push(`${at}: no Publish target of format "${declaration.kind}" is available any more.`);
+  if (publishTargets.length === 0) errors.push(`${at}: no Publish target of Content Type "${declaration.kind}" is available any more.`);
   return errors.length > 0 ? { ok: false, errors } : { ok: true, value: { kind: declaration.kind, publishTargets }, uncertain };
 }
 
@@ -132,7 +132,7 @@ export async function persistContentPlan(ctx: MutationCtx, run: Doc<"runs">, env
   if (errors.length === 0) {
     for (const [kind, count] of countByKind(resolved)) {
       const remaining = pins.targets.find((entry) => entry.kind === kind)?.remaining ?? 0;
-      if (count > remaining) errors.push(`Format "${kind}": ${count} contents proposed but only ${remaining} remain to plan.`);
+      if (count > remaining) errors.push(`Content Type "${kind}": ${count} contents proposed but only ${remaining} remain to plan.`);
     }
   }
   if (errors.length > 0) return invalid(errors);

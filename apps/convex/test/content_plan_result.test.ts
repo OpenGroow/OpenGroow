@@ -132,7 +132,7 @@ describe("destinations", () => {
 });
 
 describe("a valid result", () => {
-  it("creates one draft plan with proposed contents, fills publish targets and format, and settles the Job", async () => {
+  it("creates one draft plan with proposed contents, fills publish targets and Content Type, and settles the Job", async () => {
     const runId = await startRun();
     const run = await getRun(runId);
     const envelope = { rationale: "The plan", items: [await item(), await item({ title: "Second", plannedAt: "2030-03-11", intent: "explore", publishTargets: ["evil:x"] })] };
@@ -272,10 +272,10 @@ describe("an invalid result", () => {
     expect(await getRun(runId)).toMatchObject({ status: "failed", errorMessage: expect.stringContaining("no active Agent") });
     expect(await plans()).toHaveLength(0);
   });
-  it("rejects a format with no pinned target", async () => {
-    await fails({ rationale: "r", items: [await item({ missionType: "make_post", recipeId: await recipe("make_post") })] }, /format "image" has no production target/);
+  it("rejects a Content Type with no pinned target", async () => {
+    await fails({ rationale: "r", items: [await item({ missionType: "make_post", recipeId: await recipe("make_post") })] }, /Content Type "image" has no Production target/);
   });
-  it("rejects more contents of a format than remain", async () => {
+  it("rejects more contents of a Content Type than remain", async () => {
     await fails({ rationale: "r", items: [await item(), await item(), await item()] }, /3 contents proposed but only 2 remain/);
   });
   it("rejects a missing Source where the Mission type needs one, and a Source of another Project", async () => {
