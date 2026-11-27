@@ -3,7 +3,8 @@ import { convexTest } from "convex-test";
 import { isTemplateVersionRunnable } from "@opengroow/agent-templates";
 import schema from "../schema";
 import { getTemplateRegistry } from "../template_registry";
-import { installTemplatePackage } from "../template_registry_store";
+import { installTemplatePackage, offerTemplateUpdate } from "../template_registry_store";
+import { storeOutdatedVersion } from "./helpers/outdated_version";
 import { collectTemplateWorkspaceFiles } from "../project_agents/template_workspace_files";
 import {
   readClawPackageFixture,
@@ -53,10 +54,28 @@ describe("installing a version 2 package", () => {
   });
 });
 
+describe("installing a version 1 package", () => {
+  it.each(["local_folder", "linked_folder", "hub", "git"] as const)("refuses a %s install with the way out, storing nothing", async (origin) => {
+    const t = convexTest(schema, modules);
+    await expect(install(t, legacy(), origin)).rejects.toThrow(/schemaVersion 1.*update it to schemaVersion 2/);
+    expect(await resolve(t, "@acme/legacy")).toBeFalsy();
+  });
+
+  it("refuses it as an update offer, storing nothing", async () => {
+    const t = convexTest(schema, modules);
+    await t.run((ctx) => storeOutdatedVersion(ctx, { projectId: PROJECT, files: legacy() }));
+    const update = withFile(legacy(), "package.json", JSON.stringify({ name: "@acme/legacy", version: "2.0.0", openclaw: { claw: "CLAW.md" } }));
+    await expect(t.run((ctx) => offerTemplateUpdate(ctx, { projectId: PROJECT, files: update, origin: "hub" }))).rejects.toThrow(
+      /update it to schemaVersion 2/,
+    );
+    expect(await resolve(t, "@acme/legacy", "2.0.0")).toBeFalsy();
+  });
+});
+
 describe("stored versions", () => {
   it("still resolves a stored version 1, outdated, with its history readable", async () => {
     const t = convexTest(schema, modules);
-    await install(t, legacy(), "local_folder");
+    await t.run((ctx) => storeOutdatedVersion(ctx, { projectId: PROJECT, files: legacy() }));
     const template = await resolve(t, "@acme/legacy", "1.0.0");
     expect(template?.manifest.missionTypes?.map((m) => m.type)).toEqual(["write_post", "moderate"]);
     expect(template?.missionAgentsMd?.write_post).toContain("Write the post");

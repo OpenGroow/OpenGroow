@@ -13,6 +13,7 @@ import schema from "./schema";
 import { MAX_GENERATION_SOURCES, isReadableSource } from "./recipe_generation_shared.js";
 import { describe as describeHubPackage } from "./hub_package_kinds";
 import { provisionCurrentTemplate } from "./bundled_recipes";
+import { isTemplateVersionRunnable } from "@opengroow/agent-templates/schema-version";
 
 export const migrations = new Migrations(components.migrations, { schema });
 
@@ -336,8 +337,12 @@ export const renameCarouselTemplateIdInRuns = migrations.define({
  */
 export const provisionBundledRecipes = migrations.define({
   table: "installedTemplates",
+  // Each runnable row parses a whole package: keep the batches small.
+  batchSize: 10,
   migrateOne: async (ctx, installed) => {
-    if (installed.current) await provisionCurrentTemplate(ctx, installed.projectId, installed.templateId);
+    // An outdated version ships no recipes: decided from the stored manifest, before any package file is read.
+    if (!installed.current || !isTemplateVersionRunnable(installed.manifest)) return;
+    await provisionCurrentTemplate(ctx, installed.projectId, installed.templateId);
   },
 });
 

@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import { clawPackageToTemplate, outboundUrlProblem, scopeReservationProblem, type ClawPackageFiles } from "@opengroow/agent-templates";
 import type { ProjectId } from "@opengroow/agent-templates/registry";
+import {
+  CURRENT_PROFILE_SCHEMA_VERSION,
+  isTemplateVersionRunnable,
+  profileSchemaVersionOf,
+} from "@opengroow/agent-templates/schema-version";
 import type { AgentManifest } from "@opengroow/agent-templates/types";
 import { buildUpdatePlan, isNewerVersion, type UpdatePlan } from "@opengroow/agent-templates/update-plan";
 import type { MutationCtx, QueryCtx } from "./_generated/server.js";
@@ -159,6 +164,12 @@ export async function validatePackage(files: readonly PackageFile[]): Promise<Va
   const converted = clawPackageToTemplate(clawFiles);
   if (!converted.ok) throw new ConvexError(converted.reason);
   const manifest: AgentManifest = converted.template.manifest;
+  // ADR-091: version 1 is read only for the versions already stored (resolve), never accepted as a new package.
+  if (!isTemplateVersionRunnable(manifest)) {
+    throw new ConvexError(
+      `${manifest.id} declares profile schemaVersion ${profileSchemaVersionOf(manifest)}, which is outdated: update it to schemaVersion ${CURRENT_PROFILE_SCHEMA_VERSION} ("schemaVersion: ${CURRENT_PROFILE_SCHEMA_VERSION}" in profiles/opengroow.yml, a kind on every Mission type and the recipes of each creative one) and install it again`,
+    );
+  }
   return { version: readPackageVersion(clawFiles), manifest, templateId: manifest.id, digest: await computePackageDigest(files) };
 }
 

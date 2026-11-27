@@ -5,6 +5,7 @@ import { runToCompletion } from "@convex-dev/migrations";
 import { api, components, internal } from "../_generated/api";
 import schema from "../schema";
 import { insertInstance } from "./instance_fixture";
+import { storeOutdatedVersion } from "./helpers/outdated_version";
 import { installTemplatePackage, offerTemplateUpdate, applyStagedUpdate, listUpdateOffers } from "../template_registry_store";
 import {
   readClawPackageFixture,
@@ -134,9 +135,11 @@ describe("provisioning", () => {
     expect(list.map((r) => r.latestVersion)).toEqual([1, 1]);
   });
 
-  it("a Template version below 2 provisions nothing", async () => {
+  it("a stored Template version below 2 provisions nothing, on activation or by the backfill", async () => {
     const { t, owner } = await setup();
-    await install(t, readClawPackageFixture("legacy"));
+    await t.run((ctx) => storeOutdatedVersion(ctx, { projectId: PROJECT, files: readClawPackageFixture("legacy") }));
+    await t.mutation(internal.bundled_recipes.provisionCurrent, { projectId: PROJECT, templateId: "@acme/legacy" });
+    await t.run((ctx) => runToCompletion(ctx, components.migrations, internal.migrations.provisionBundledRecipes));
     expect(await recipes(owner)).toHaveLength(0);
   });
 });
