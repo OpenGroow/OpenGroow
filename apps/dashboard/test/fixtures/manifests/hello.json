@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "id": "@opengroow/hello",
   "name": "Hello Agent",
   "description": "A minimal demo agent that reads its run file and writes a success result.",

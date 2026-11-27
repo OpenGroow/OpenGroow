@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "id": "@opengroow/engagement",
   "name": "Engagement Agent",
   "description": "A generic engagement agent used as a test package. It processes a feed of posts in time-bounded sessions (see `sessionDurationMs`); daily rhythm is managed by OpenGroow Schedules.",

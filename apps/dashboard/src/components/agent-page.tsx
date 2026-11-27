@@ -13,6 +13,7 @@ import { useRuntimeInstanceId } from "@/src/hooks/use-runtime-instance-id";
 import { ActivationDialog } from "@/src/components/activation-dialog";
 import { AgentOverviewMissions } from "@/src/components/agent-overview-missions";
 import { AgentVersionCard } from "@/src/components/agent-version-card";
+import { OutdatedTemplateNotice, isTemplateOutdated } from "@/src/components/outdated-template-notice";
 import { AvailableMissionTypes } from "@/src/components/available-mission-types";
 import { McpUrlOverrides } from "@/src/components/mcp-url-overrides";
 import { Button } from "@/components/ui/button";
@@ -307,7 +308,8 @@ function AgentSettingsContent({
       {overridableMcpUrls ? (
         <McpUrlOverrides instanceId={instanceId} manifest={manifest} />
       ) : null}
-      <AgentVersionCard projectId={instanceId} templateId={manifest.id} />
+      {isTemplateOutdated(manifest) ? <OutdatedTemplateNotice className="max-w-3xl" /> : null}
+      <AgentVersionCard projectId={instanceId} templateId={manifest.id} outdated={isTemplateOutdated(manifest)} />
       <AgentDangerZone
         name={manifest.name}
         active={active}

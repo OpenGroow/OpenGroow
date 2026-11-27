@@ -24,7 +24,7 @@ const ORIGIN_LABEL: Record<string, string> = {
  * version is offered, then reviewed and applied through
  * its update plan. Other origins are not checked: their label is shown instead.
  */
-export function AgentVersionCard({ projectId, templateId }: { projectId: string; templateId: string }) {
+export function AgentVersionCard({ projectId, templateId, outdated = false }: { projectId: string; templateId: string; outdated?: boolean }) {
   const installs = useQuery(api.project_templates.origins, { projectId });
   const offers = useQuery(api.project_templates.updates, { projectId });
   const checkHubUpdates = useAction(api.project_templates_node.checkHubUpdates);
@@ -68,6 +68,7 @@ export function AgentVersionCard({ projectId, templateId }: { projectId: string;
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-2xl font-semibold text-foreground">{install.version}</span>
               {!fromHub ? <StatusBadge tone="neutral" label={ORIGIN_LABEL[install.origin] ?? install.origin} /> : null}
+              {outdated ? <StatusBadge tone="warning" label="Outdated" /> : null}
               {checking ? <StatusBadge tone="progress" label="Checking…" /> : null}
               {offer ? <StatusBadge tone="info" label={`${offer.availableVersion} available`} /> : null}
               {!offer && check?.status === "upToDate" ? <StatusBadge tone="active" label="Up to date" /> : null}

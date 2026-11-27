@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 2,
   "id": "@opengroow/openmontage-agent",
   "name": "Reel producer fixture",
   "description": "A reel producer fixture.",
@@ -22,6 +23,7 @@
   "missionTypes": [
     {
       "type": "create_reel",
+      "kind": "operational",
       "label": "Create reel",
       "agentsMd": "create_reel.md",
       "contextProviders": [

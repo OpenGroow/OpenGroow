@@ -12,6 +12,7 @@ import type { InstanceRecord } from "@/src/components/instance-workspace.types";
 import { ActivationDialog } from "@/src/components/activation-dialog";
 import { NoProviderNotice } from "@/src/components/no-provider-notice";
 import { AddAgentDialog } from "@/src/components/add-agent-dialog";
+import { OutdatedTemplateNotice, isTemplateOutdated } from "@/src/components/outdated-template-notice";
 import { CheckTemplateUpdatesButton, TemplateUpdatesPanel } from "@/src/components/template-updates-panel";
 import { devActivationDefaults } from "@/src/utils/dev-activation-defaults";
 import { flatConfig } from "@/src/utils/agent-requirements";
@@ -98,6 +99,8 @@ export function InstanceAgentsContent({
     return mergeTemplatesWithAgents(manifests, records).filter((card) => added.has(card.templateId));
   }, [manifests, agentRecords]);
 
+  const outdatedNames = cards.filter((card) => isTemplateOutdated(card.manifest)).map((card) => card.manifest.name);
+
   async function handleAdd(templateId: string, userConfig: Record<string, string>) {
     if (!runtimeInstanceId) throw new Error("This Project's runtime is not ready yet.");
     const result = await addAgent({ instanceId: runtimeInstanceId, templateId, userConfig, timezone: browserTimezone() });
@@ -171,6 +174,8 @@ export function InstanceAgentsContent({
         headerActions={<CheckTemplateUpdatesButton projectId={decodedInstanceId} />}
         notice={<NoProviderNotice projectId={decodedInstanceId} />}
       />
+
+      {outdatedNames.length > 0 ? <OutdatedTemplateNotice names={outdatedNames} /> : null}
 
       <TemplateUpdatesPanel projectId={decodedInstanceId} />
 

@@ -154,6 +154,31 @@ describe("InstanceMissionsContent — mission list", () => {
     expect(document.body.textContent).toContain("1 selected");
   });
 
+  it("explains why Create Mission is unavailable for an outdated Template and blocks the submit", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "project_agents.listByInstance") return [{ templateId: "@opengroow/seo", openclawAgentName: "seo", status: "active" }];
+      return undefined;
+    });
+
+    await render([{ ...seoManifest, schemaVersion: 1 }, videoManifest]);
+
+    expect(document.querySelector('[data-testid="outdated-template-notice"]')?.textContent).toMatch(/outdated.*update/i);
+    const submit = document.querySelector('form button[type="submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it("shows no outdated notice in Create Mission for a current Template", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "project_agents.listByInstance") return [{ templateId: "@opengroow/seo", openclawAgentName: "seo", status: "active" }];
+      return undefined;
+    });
+
+    await render();
+
+    expect(document.querySelector('[data-testid="outdated-template-notice"]')).toBeNull();
+    expect((document.querySelector('form button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("titles the page Missions and never says 'Instance'", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "missions.listActiveByInstance") return [];

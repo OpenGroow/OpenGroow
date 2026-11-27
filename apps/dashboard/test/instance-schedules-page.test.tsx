@@ -473,6 +473,36 @@ describe("InstanceSchedulesContent", () => {
     expect(document.querySelector('button[data-action="more"]')).toBeTruthy();
   });
 
+  it("says an outdated Template must be updated to resume, and offers no Run now for its Schedule", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "schedules.listByInstance") return [makeSchedule()];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+
+    await render([{ ...seoManifest, schemaVersion: 1 }, socialEngagementManifest]);
+
+    expect(document.body.textContent).toContain("Template outdated, update to resume");
+    const runNow = document.querySelector('button[data-action="run-now"]') as HTMLButtonElement;
+    expect(runNow.disabled).toBe(true);
+    expect(document.querySelector('[data-testid="run-now-blocked"]')?.textContent).toMatch(/outdated.*update/i);
+    // Pausing and resuming stay available: the Schedule keeps its own status.
+    expect(document.querySelector('button[data-action="pause"]')).toBeTruthy();
+  });
+
+  it("shows no outdated label for a Schedule of a current Template", async () => {
+    useQueryMock.mockImplementation((key: string) => {
+      if (key === "schedules.listByInstance") return [makeSchedule()];
+      if (key === "project_agents.listByInstance") return [];
+      return undefined;
+    });
+
+    await render();
+
+    expect(document.body.textContent).not.toContain("Template outdated");
+    expect((document.querySelector('button[data-action="run-now"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("reveals a day-of-month control when the monthly unit is selected", async () => {
     useQueryMock.mockImplementation((key: string) => {
       if (key === "schedules.listByInstance") return [];
