@@ -19,7 +19,7 @@ const OWNER = { name: "Owner", email: "o@example.com", tokenIdentifier: "test|ow
 const STRANGER = { name: "S", email: "s@example.com", tokenIdentifier: "test|stranger-cpd", subject: "stranger-cpd" };
 const NOW = Date.UTC(2030, 2, 4, 10, 0, 0);
 
-const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, ...extra });
+const mission = (type: string, extra: Record<string, unknown> = {}) => ({ type, label: type, agentsMd: `${type}.md`, kind: "creative", ...extra });
 const producer = () => {
   const base = loadFixtureTemplate("strategy-capable");
   return {

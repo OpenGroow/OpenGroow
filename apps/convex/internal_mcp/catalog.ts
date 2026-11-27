@@ -2,7 +2,7 @@ import type { InternalMcpToolName } from "@opengroow/agent-templates";
 import { DEFAULT_WINDOW_DAYS, MAX_WINDOW_DAYS, listPublicationReadings, resolveWindow, summarizeProject } from "../analytics_summary.js";
 import { summarizeByRecipe } from "../analytics_recipe.js";
 import { recipeCatalog } from "../recipe_usage.js";
-import { listPlannedContents, listSources, missionTypeFormats, formatOf } from "../planning_reads.js";
+import { listPlannedContents, listSources, missionTypeContentTypes, contentTypeOf } from "../planning_reads.js";
 import { getProductionRecipe, getSource, listGenerationSources, pinnedGeneration } from "../recipe_generation_reads.js";
 import { isRecipeTarget } from "../production_recipe_rules.js";
 import { readStrategicMemory } from "../strategic_reviews.js";
@@ -39,7 +39,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
     .withIndex("by_instance_status", (q) => q.eq("instanceId", scope.instanceId).eq("status", "active"))
     .take(100);
   const registry = getTemplateRegistry(ctx);
-  const types: ({ templateId: string; templateName: string; type: string; label: string; description: string; creative: boolean } & ReturnType<typeof formatOf>)[] = [];
+  const types: ({ templateId: string; templateName: string; type: string; label: string; description: string; creative: boolean } & ReturnType<typeof contentTypeOf>)[] = [];
   for (const agent of agents) {
     const template = await registry.resolve(scope.instanceId, agent.templateId);
     if (!template) continue;
@@ -53,7 +53,7 @@ async function listMissionTypes(ctx: QueryCtx, scope: InternalMcpScope) {
         label: missionType.label,
         description: missionType.description ?? template.manifest.description,
         creative: isRecipeTarget(template.manifest, missionType.type),
-        ...formatOf(missionType as never),
+        ...contentTypeOf(missionType as never),
       });
     }
   }
@@ -129,7 +129,7 @@ async function getBrandCore(ctx: QueryCtx, scope: InternalMcpScope) {
 export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> = {
   list_mission_types: {
     description:
-      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, its format (kind: video, image, carousel, article, or null when it publishes nothing and cannot be planned), the platforms it can publish to (empty: any) and sourceRequired (it needs a Source to be produced) and creative (a Mission of this type requires a Production Recipe, and a recipe can target it).",
+      "List the Mission types this Project can activate right now: the Mission types of its active Agents, minus the ones the operator hid. Each entry has the Template id, the Mission type, its label, a description of what it produces, its Content Type (contentType: video, image, carousel, article, or null when it declares no publishing and cannot be planned), the platforms it can publish to (empty: any) and sourceRequired (it needs a Source to be produced) and creative (a Mission of this type is creative: it requires a Production Recipe, and a recipe can target it; false means operational).",
     inputSchema: NO_ARGUMENTS,
     run: (ctx, scope) => listMissionTypes(ctx, scope),
   },
@@ -189,15 +189,15 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   list_production_recipes: {
     description:
-      "The Project's Production Recipes with their usage, step by step: Missions created with the recipe (even cancelled before any Run), Production Attempts (Runs sent to the Agent) and successful ones, Publications and measured Publications, each over the recipe's lifetime and over the period (by its own date; days, or an explicit from and to), with the last Mission, attempt and publication dates. Includes recipes that never produced a Publication. neverUsedEver and neverPublishedEver are present only when the data read was complete; otherwise they are absent (unknown). `partial` says a read hit its limit, `truncated` that the list was cut.",
+      "The Project's Production Recipes, each with its origin (bundled: shipped by its Template and read-only, a base you may read and copy; custom: written in this Project), isDefault (the Default Recipe of its Mission type, the neutral one that follows the Mission Brief), its contentType and sourceRequired (from its Mission type), and its usage, step by step: Missions created with the recipe (even cancelled before any Run), Production Attempts (Runs sent to the Agent) and successful ones, Publications and measured Publications, each over the recipe's lifetime and over the period (by its own date; days, or an explicit from and to), with the last Mission, attempt and publication dates. Includes recipes that never produced a Publication. neverUsedEver and neverPublishedEver are present only when the data read was complete; otherwise they are absent (unknown). `partial` says a read hit its limit, `truncated` that the list was cut.",
     inputSchema: { type: "object", properties: { days: DAYS_PROPERTY, ...RANGE_PROPERTIES }, additionalProperties: false },
     run: async (ctx, scope, args) => {
       const catalog = await recipeCatalog(ctx, scope.instanceId, windowOf(args));
-      const formatOfRecipe = missionTypeFormats(ctx, scope.instanceId);
+      const contentTypeOfRecipe = missionTypeContentTypes(ctx, scope.instanceId);
       const recipes = await Promise.all(
         catalog.recipes.map(async (recipe) => {
-          const { kind, sourceRequired } = await formatOfRecipe(recipe.templateId, recipe.missionType);
-          return { ...recipe, kind, sourceRequired };
+          const { contentType, sourceRequired } = await contentTypeOfRecipe(recipe.templateId, recipe.missionType);
+          return { ...recipe, contentType, sourceRequired };
         }),
       );
       return { ...catalog, recipes };
@@ -248,7 +248,7 @@ export const INTERNAL_MCP_CATALOG: Record<InternalMcpToolName, InternalMcpTool> 
   },
   list_planned_contents: {
     description:
-      "The Project's Planned Contents (editorial calendar entries) whose planned date falls in a range, by date, bounded. Give both from and to (YYYY-MM-DD, UTC, at most 92 days apart), or neither for the next 30 days from today. Each has its id, Content Plan, kind, Mission type, Recipe, Source, Publish targets, title, brief, date, intent (explore or exploit), rationale and status (proposed, approved, rejected; all by default). truncated says more matched than limit.",
+      "The Project's Planned Contents (editorial calendar entries) whose planned date falls in a range, by date, bounded. Give both from and to (YYYY-MM-DD, UTC, at most 92 days apart), or neither for the next 30 days from today. Each has its id, Content Plan, contentType, Mission type, Recipe, Source, Publish targets, title, brief, date, intent (explore or exploit), rationale and status (proposed, approved, rejected; all by default). truncated says more matched than limit.",
     inputSchema: {
       type: "object",
       properties: {

@@ -2,7 +2,8 @@ import type { Doc, Id } from "./_generated/dataModel.js";
 import type { MutationCtx } from "./_generated/server.js";
 import { publishDeclarationFor } from "@opengroow/agent-templates";
 import { countByKind } from "./content_plan_counts.js";
-import { formatOf } from "./planning_reads.js";
+import { assertRecipeCompatible } from "./mission_recipe.js";
+import { contentTypeOf } from "./planning_reads.js";
 import { parseContentPlanEnvelope, type PlannedItem } from "./content_plan_rules.js";
 import { capabilityOfTarget, channelOf, projectPublishers, type ProjectPublisher } from "./project_publishers.js";
 import { getTemplateRegistry } from "./template_registry.js";
@@ -60,15 +61,21 @@ export async function resolveItem(
   if (!agent || agent.status !== "active" || (agent.hiddenMissionTypes ?? []).includes(item.missionType)) {
     return { ok: false, errors: [`${at}: no active Agent offers Mission type "${item.missionType}".`] };
   }
+  // The one Recipe Compatibility rule of Mission creation: same Project, Template and Mission type, and the type is creative.
+  try {
+    await assertRecipeCompatible(ctx, { instanceId: run.instanceId, templateId: recipe.templateId, type: item.missionType, pinnedVersion: undefined, recipeId: recipe._id });
+  } catch (error) {
+    return { ok: false, errors: [`${at}: ${error instanceof Error ? error.message : "the Recipe is not compatible"}.`] };
+  }
   const template = await getTemplateRegistry(ctx).resolve(run.instanceId, recipe.templateId);
   const manifestType = template?.manifest.missionTypes?.find((entry) => entry.type === item.missionType);
   const declaration = publishDeclarationFor(template?.manifest, item.missionType);
-  if (!manifestType || !declaration) return { ok: false, errors: [`${at}: Mission type "${item.missionType}" does not publish a format.`] };
+  if (!manifestType || !declaration) return { ok: false, errors: [`${at}: Mission type "${item.missionType}" declares no publishing, so it has no Content Type and cannot be planned.`] };
   const pinned = pins.targets.find((entry) => entry.kind === declaration.kind);
   if (!pinned) return { ok: false, errors: [`${at}: format "${declaration.kind}" has no production target.`] };
 
   const errors: string[] = [];
-  if (formatOf(manifestType, template?.manifest.contextProviders).sourceRequired && item.sourceId === undefined) errors.push(`${at}: Mission type "${item.missionType}" needs a Source (sourceId).`);
+  if (contentTypeOf(manifestType, template?.manifest.contextProviders).sourceRequired && item.sourceId === undefined) errors.push(`${at}: Mission type "${item.missionType}" needs a Source (sourceId).`);
   if (item.sourceId !== undefined) {
     const sourceId = ctx.db.normalizeId("sources", item.sourceId);
     const source = sourceId ? await ctx.db.get(sourceId) : null;
